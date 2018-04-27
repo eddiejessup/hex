@@ -23,6 +23,7 @@ library
                      , bytestring
                      , binary
                      , binary-strict
+                     , split
   default-language:    Haskell2010
 
 executable hex-exe
@@ -46,7 +47,6 @@ executable tfm-exe
                      , bytestring
                      , binary
                      , binary-strict
-                     , split
   default-language:    Haskell2010
 
 test-suite hex-test
