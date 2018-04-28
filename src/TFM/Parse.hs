@@ -62,6 +62,25 @@ getBCPL = do
     len <- getWord8Int
     BSG.getByteString len
 
+get4Word8Ints :: BSG.Get (Int, Int, Int, Int)
+get4Word8Ints = do
+    b1:b2:b3:b4:[] <- CM.replicateM 4 getWord8Int
+    return (b1, b2, b3, b4)
+
+getPos :: TFM -> Table -> Int -> Int
+getPos tfm tbl iWords = tablePointerPos tfm tbl + wordToByte iWords
+
+getSubContents :: TFM -> Table -> Int -> BS.ByteString -> BS.ByteString
+getSubContents tfm tbl iWords contents = BS.drop (getPos tfm tbl iWords) contents
+
+getFixWordAt :: TFM -> BS.ByteString -> Table -> Int -> Either String Double
+getFixWordAt tfm contents tbl iWords =
+    fst $ BSG.runGet getFixWord $ getSubContents tfm tbl iWords contents
+
+get4Word8IntsAt :: TFM -> BS.ByteString -> Table -> Int -> Either String (Int, Int, Int, Int)
+get4Word8IntsAt tfm contents tbl iWords =
+    fst $ BSG.runGet get4Word8Ints $ getSubContents tfm tbl iWords contents
+
 -- Utility to simplify lookup of integers from a map.
 certainIntLookup :: (Integral b, Ord a) => M.Map a b -> a -> Int
 certainIntLookup tmap tbl = fromIntegral $ fromJust $ M.lookup tbl tmap
@@ -127,16 +146,17 @@ newTFM = do
 
     let nrChars = largestCharCode - smallestCharCode + 1
 
-    -- Assemble the inferred lengths of the tables into maps from them, to
-    -- their length and position.
-    let tableLengthsWordsLst = (Header, headerDataLengthWords)
+        -- Assemble the inferred lengths of the tables into maps from them, to
+        -- their length and position.
+        tableLengthsWordsLst = (Header, headerDataLengthWords)
                                : (CharacterInfo, nrChars)
                                : zip laterTables laterLengths
-    let tableLengthsWords = M.fromList(tableLengthsWordsLst)
-    let tablePointers = M.mapWithKey (\tbl _ -> tablePos tableLengthsWords tbl) tableLengthsWords
+        tableLengthsWords = M.fromList(tableLengthsWordsLst)
+        tablePointers = M.mapWithKey (\tbl _ -> tablePos tableLengthsWords tbl) tableLengthsWords
 
-    -- Check the inferred file length matches expectations.
-    let validationFileLength = tablePointerEnd tablePointers tableLengthsWords maxBound
+        -- Check the inferred file length matches expectations.
+        validationFileLength = tablePointerEnd tablePointers tableLengthsWords maxBound
+
     CM.when (validationFileLength /= (wordToByte fileLengthWords)) $
         error ("Invalid TFM File " ++ (show validationFileLength) ++ " " ++ (show fileLengthWords))
 
@@ -236,45 +256,44 @@ data MathExtensionParams = MathExtensionParams { defaultRuleThickness :: Double
                                                } deriving (Show)
 
 readMathSymbolParams :: BS.ByteString -> BSG.Get (Maybe MathSymbolParams)
-readMathSymbolParams scheme = if scheme `elem` mathSymbolSchemes
-        then do
-            num1:num2:num3:denom1:denom2:sup1:sup2:sup3:sub1:sub2:supdrop:subdrop:delim1:delim2:axisHeight:[] <- CM.replicateM 15 getFixWord
-            return $ Just MathSymbolParams { num1=num1
-                                           , num2=num2
-                                           , num3=num3
-                                           , denom1=denom1
-                                           , denom2=denom2
-                                           , sup1=sup1
-                                           , sup2=sup2
-                                           , sup3=sup3
-                                           , sub1=sub1
-                                           , sub2=sub2
-                                           , supdrop=supdrop
-                                           , subdrop=subdrop
-                                           , delim1=delim1
-                                           , delim2=delim2
-                                           , axisHeight=axisHeight
-                                           }
-        else return Nothing
+readMathSymbolParams scheme =
+    if scheme `elem` mathSymbolSchemes then do
+        num1:num2:num3:denom1:denom2:sup1:sup2:sup3:sub1:sub2:supdrop:subdrop:delim1:delim2:axisHeight:[] <- CM.replicateM 15 getFixWord
+        return $ Just MathSymbolParams { num1=num1
+                                       , num2=num2
+                                       , num3=num3
+                                       , denom1=denom1
+                                       , denom2=denom2
+                                       , sup1=sup1
+                                       , sup2=sup2
+                                       , sup3=sup3
+                                       , sub1=sub1
+                                       , sub2=sub2
+                                       , supdrop=supdrop
+                                       , subdrop=subdrop
+                                       , delim1=delim1
+                                       , delim2=delim2
+                                       , axisHeight=axisHeight
+                                       }
+    else return Nothing
 
 readMathExtensionParams :: BS.ByteString -> BSG.Get (Maybe MathExtensionParams)
 readMathExtensionParams scheme = if scheme `elem` mathExtensionSchemes
-        then do
-            defaultRuleThickness <- getFixWord
-            bigOpSpacing <- CM.replicateM 5 getFixWord
-            return $ Just MathExtensionParams { defaultRuleThickness=defaultRuleThickness
-                                              , bigOpSpacing=bigOpSpacing
-                                              }
-        else return Nothing
+    then do
+        defaultRuleThickness <- getFixWord
+        bigOpSpacing <- CM.replicateM 5 getFixWord
+        return $ Just MathExtensionParams { defaultRuleThickness=defaultRuleThickness
+                                          , bigOpSpacing=bigOpSpacing
+                                          }
+    else return Nothing
 
 readFontParams :: TFM -> Headers -> BSG.Get (Either String FontParams)
 readFontParams tfm tfmHeads = do
     BSG.skip $ tablePointerPos tfm FontParameter
-    let scheme = (characterCodingScheme tfmHeads)
-
+    let scheme = characterCodingScheme tfmHeads
     if scheme == (pack "TeX math italic")
-        then return $ Left "Unsupported character coding scheme"
-        else return $ Right ()
+        then fail "Unsupported character coding scheme"
+        else return ()
 
     extraSpace:quad:xHeight:spaceShrink:spaceStretch:spacing:slant:[] <- CM.replicateM 7 getFixWord
 
@@ -384,51 +403,42 @@ getLigKernOperation :: (Int -> Either String LigKernOp) -> Int -> Int -> Either 
 getLigKernOperation readKern op remain =
     if op >= kernOp
         then readKern $ 256 * (op - kernOp) + remain
-        else Right LigatureOp { ligatureChar=remain
-                            , charsToPassOver=op `shift` 2
-                            , deleteCurrentChar=(op .&. 0x02) == 0
-                            , deleteNextChar=(op .&. 0x01) == 0
-                            }
+        else return LigatureOp { ligatureChar=remain
+                               , charsToPassOver=op `shift` 2
+                               , deleteCurrentChar=(op .&. 0x02) == 0
+                               , deleteNextChar=(op .&. 0x01) == 0
+                               }
 
 analyzeLigKernInstr :: (Int -> Either String LigKernOp) -> Int -> Int -> Int -> Int -> Either String LigKernInstr
-analyzeLigKernInstr readKern skip next op remain =
-    let operation = getLigKernOperation readKern op remain
-    in case operation of Left s -> Left s
-                         Right o -> Right LigKernInstr { stop=skip >= 128
-                                                  , nextChar=next
-                                                  , operation=o }
+analyzeLigKernInstr readKern skip next op remain = do
+    operation <- getLigKernOperation readKern op remain
+    return LigKernInstr { stop=skip >= 128
+                        , nextChar=next
+                        , operation=operation }
 
 getKern :: TFM -> BS.ByteString -> (Int -> Either String LigKernOp)
-getKern tfm contents iWords =
-    let
-        kernTblPos = tablePointerPos tfm Kern
-        kernPos = kernTblPos + wordToByte iWords
-        kernContents = BS.drop kernPos contents
-        (size, _) = BSG.runGet getFixWord kernContents
-    in
-        case size of Left s -> Left s
-                     Right s -> Right KernOp { size=s }
+getKern tfm contents iWords = do
+    size <- getFixWordAt tfm contents Kern iWords
+    return KernOp { size=size }
 
 
 readLigKerns :: TFM -> BS.ByteString -> Either String [Either String LigKernInstr]
 readLigKerns tfm contents
-    | firstSkipByte == 255 = Left "Sorry, right boundary characters are not supported"
-    | firstSkipByte > 128 = Left "Sorry, large LigKern arrays are not supported"
-    | lastSkipByte == 255 = Left "Sorry, left boundary characters are not supported"
-    | otherwise = Right ligKerns
+    | firstSkipByte == 255 = fail "Sorry, right boundary characters are not supported"
+    | firstSkipByte > 128 = fail "Sorry, large LigKern arrays are not supported"
+    | lastSkipByte == 255 = fail "Sorry, left boundary characters are not supported"
+    | otherwise = return ligKerns
     where
         ligKernTblPos = tablePointerPos tfm LigKern
-        contentsLigKernOnwards = BS.drop ligKernTblPos contents
-        ligKernBytes = BS.unpack contentsLigKernOnwards
-        ligKernInts = fmap fromIntegral ligKernBytes
-        ligKernIntSets = chunksOf 4 ligKernInts
-        readSet = readInstrSet ligKernIntSets
-
-        (firstSkipByte, _, _, _) = readSet 0
-
         ligKernTblLengthWords = tableLength tfm LigKern
-        (lastSkipByte, _, _, _) = readSet (ligKernTblLengthWords - 1)
+
+        contentsLigKernOnwards = BS.drop ligKernTblPos contents
+        instrSets = chunksOf 4 . fmap fromIntegral $ BS.unpack contentsLigKernOnwards
+        readSet = readInstrSet instrSets
+        sets = fmap readSet [0..ligKernTblLengthWords - 1]
+
+        (firstSkipByte, _, _, _) = head sets
+        (lastSkipByte, _, _, _) = last sets
 
         kernGetter = getKern tfm contents
-        sets = fmap readSet [0..ligKernTblLengthWords - 1]
         ligKerns = fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets

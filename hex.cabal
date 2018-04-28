@@ -18,6 +18,7 @@ library
   exposed-modules:     Lib
                      , Cat
                      , TFM.Parse
+                     , TFM.Character
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , bytestring
