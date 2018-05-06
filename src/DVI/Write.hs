@@ -305,8 +305,8 @@ data ArgVal = U1 W.Word8 | U2 W.Word16 | U4 W.Word32
 data Argument = Argument { name :: String
                          , val :: ArgVal } deriving (Show)
 
-data EncodableInstruction = EncodableInstruction { op :: Operation
-                                                 , arguments :: [Argument] }
+data EncodableInstruction = EncodableInstruction{op :: Operation
+                                                , arguments :: [Argument]}
                           deriving (Show)
 
 class Encodable a where  
@@ -401,6 +401,12 @@ pickSizeOp (op1b:op2b:op3b:op4b:[]) signed n = do
 pickSizeOpSigned ops n = pickSizeOp ops True n
 pickSizeOpUnsigned ops n = pickSizeOp ops False n
 
+getVarByteInstruction :: [Operation] -> String -> Int -> Bool -> Either String EncodableInstruction
+getVarByteInstruction ops name n signed = do
+    (op, argVal) <- pickSizeOp ops signed n
+    let arg = Argument {name=name, val=argVal}
+    return EncodableInstruction{op=op, arguments=[arg]}
+
 -- Encoding abstract instructions.
 
 longSelectFontOps = [ Select1ByteFontNr
@@ -415,12 +421,14 @@ getSelectFontNrInstruction fontNr = do
         shortOp = toEnum $ fontNr + (fromEnum SelectFontNr0)
         fontNrArg = Argument {name="font_number", val=argVal}
         (op, args) = if fontNr < 64 then (shortOp, []) else (longOp, [fontNrArg])
-    return EncodableInstruction { op=op, arguments=args }
+    return EncodableInstruction{op=op, arguments=args }
 
 getSimpleEncInstruction :: Operation -> EncodableInstruction
-getSimpleEncInstruction op = EncodableInstruction { op=op, arguments=[] }
+getSimpleEncInstruction op = EncodableInstruction{op=op, arguments=[]}
 
 endPageInstruction = getSimpleEncInstruction EndPage
+pushInstruction = getSimpleEncInstruction Push
+popInstruction = getSimpleEncInstruction Pop
 
 -- isOp instruction = (op instruction ==)
 
@@ -448,7 +456,7 @@ getBeginPageInstruction lastBeginPoint =
         lastBeginPointArg = Argument {name="last_begin_page_pointer", val=S4 $ fromIntegral lastBeginPoint}
         args = boringArgs ++ [lastBeginPointArg]
     in
-        EncodableInstruction { op=BeginPage, arguments=args }
+        EncodableInstruction{op=BeginPage, arguments=args }
 
 -- Define font.
 
@@ -471,7 +479,7 @@ getDefineFontInstruction fontNr fontPath scaleFactor designSize fontChecksum = d
                , Argument { name="file_name_length", val=U1 $ fromIntegral $ length fileName }
                , Argument { name="font_path", val=S fontPath } ]
     if fontPath == (dirPath ++ fileName) then return () else fail $ "Split path badly: " ++ fontPath ++ " not equal to (" ++ dirPath ++ ", " ++ fileName ++ ")"
-    return EncodableInstruction { op=op, arguments=args }
+    return EncodableInstruction{op=op, arguments=args }
 
 -- Put or set characters.
 
@@ -492,11 +500,8 @@ getCharacterInstruction charNr True = do
         shortOp = toEnum $ charNr + (fromEnum SetChar0)
         charNrArg = Argument {name="char_nr", val=charNrArgVal}
         (op, args) = if charNr < 128 then (shortOp, []) else (longOp, [charNrArg])
-    return EncodableInstruction { op=op, arguments=args }
-getCharacterInstruction charNr False = do
-    (op, charNrArgVal) <- pickSizeOpUnsigned putCharOps charNr
-    let charNrArg = Argument {name="char_nr", val=charNrArgVal}
-    return EncodableInstruction { op=op, arguments=[charNrArg] }
+    return EncodableInstruction{op=op, arguments=args }
+getCharacterInstruction charNr False = getVarByteInstruction putCharOps "char_nr" charNr False
 
 -- Encode abstract instructions.
 
@@ -504,10 +509,10 @@ data Instruction =
       Character {charNr :: Int, move :: Bool}
     | Rule {height :: Int, width :: Int, move :: Bool}
     | BeginNewPage
-    | MoveRight {size :: Int}
+    | MoveRight {distance :: Int}
     | MoveRightW
     | MoveRightX
-    | MoveDown {size :: Int}
+    | MoveDown {distance :: Int}
     | MoveDownY
     | MoveDownZ
     -- Fonts.
@@ -518,18 +523,37 @@ data Instruction =
     | PopStack
     | DoSpecial {cmd :: String}
 
-encodeInstructions :: [Instruction]  -> Int -> Either String ([EncodableInstruction], Maybe Int, [Int])
-encodeInstructions [] magnification = Right ([getPreambleInstr magnification], Nothing, [])
+moveRightOps = [ Right1Byte
+               , Right2Byte
+               , Right3Byte
+               , Right4Byte ]
+
+moveDownOps = [ Down1Byte
+              , Down2Byte
+              , Down3Byte
+              , Down4Byte ]
+
+getMoveInstruction right dist = getVarByteInstruction (if right then moveRightOps else moveDownOps) "distance" dist True
+
+-- History: (Encodable instructions, selected font number, begin-page pointers, stack depth, max stack depth)
+encodeInstructions :: [Instruction]  -> Int -> Either String ([EncodableInstruction], Maybe Int, [Int], Int, Int)
+encodeInstructions [] magnification = Right ([getPreambleInstr magnification], Nothing, [], 0, 0)
 encodeInstructions (this:rest) magnification = do
-    (restEncodeds, restCurrentFontNr, restBeginPagePointers) <- encodeInstructions rest magnification
+    (restEncodeds, restCurrentFontNr, restBeginPagePointers, restStackDepth, restMaxStackDepth) <- encodeInstructions rest magnification
     (thisEncodeds, thisCurrentFontNr, thisBeginPagePointers) <- case this of
-        SelectFont fontNr -> case getSelectFontNrInstruction fontNr of Left s -> fail s
-                                                                       Right instr -> return ([instr], Just fontNr, restBeginPagePointers)
+        SelectFont{fontNr=fontNr} -> case getSelectFontNrInstruction fontNr of Left s -> fail s
+                                                                               Right instr -> return ([instr], Just fontNr, restBeginPagePointers)
         Character{charNr=charNr, move=move} -> do
             charInstr <- getCharacterInstruction charNr move
             return ([charInstr], restCurrentFontNr, restBeginPagePointers)
-        Rule{} -> return ([], restCurrentFontNr, restBeginPagePointers)
-        BeginNewPage{} -> do
+        Rule{width=w, height=h, move=move} -> let
+                op = if move then SetRule else PutRule
+                args = [ Argument{name="height", val=U4 $ fromIntegral h}
+                       , Argument{name="width", val=U4 $ fromIntegral w} ]
+                instr = EncodableInstruction{op=op, arguments=args}
+            in
+                return ([instr], restCurrentFontNr, restBeginPagePointers)
+        BeginNewPage -> do
             let
                 endRet = case restBeginPagePointers of [] -> []
                                                        _ -> [endPageInstruction]
@@ -541,12 +565,16 @@ encodeInstructions (this:rest) magnification = do
                     Right instr -> return [instr]
                 Nothing -> return []
             return (fontRet ++ [beginPageInstr] ++ endRet, restCurrentFontNr, newBeginPagePointer:restBeginPagePointers)
-        MoveRight{} -> return ([], restCurrentFontNr, restBeginPagePointers)
-        MoveRightW{} -> return ([], restCurrentFontNr, restBeginPagePointers)
-        MoveRightX{} -> return ([], restCurrentFontNr, restBeginPagePointers)
-        MoveDown{} -> return ([], restCurrentFontNr, restBeginPagePointers)
-        MoveDownY{} -> return ([], restCurrentFontNr, restBeginPagePointers)
-        MoveDownZ{} -> return ([], restCurrentFontNr, restBeginPagePointers)
+        MoveRight{distance=dist} -> do
+            instr <- getMoveInstruction True dist
+            return ([instr], restCurrentFontNr, restBeginPagePointers)
+        MoveRightW{} -> fail "Not implemented"
+        MoveRightX{} -> fail "Not implemented"
+        MoveDown{distance=dist} -> do
+            instr <- getMoveInstruction False dist
+            return ([instr], restCurrentFontNr, restBeginPagePointers)
+        MoveDownY{} -> fail "Not implemented"
+        MoveDownZ{} -> fail "Not implemented"
         DefineFont{fontInfo=info, fontPath=path, fontNr=nr, scaleFactorRatio=scaleRatio} -> do
             let
                 headers = TFMM.headers info
@@ -556,10 +584,14 @@ encodeInstructions (this:rest) magnification = do
                 scaleFactor = floor $ designSizeRaw * scaleRatio
             defineFontInstruction <- getDefineFontInstruction nr path scaleFactor designSize checksum
             return ([defineFontInstruction], restCurrentFontNr, restBeginPagePointers)
-        PushStack{} -> return ([], restCurrentFontNr, restBeginPagePointers)
-        PopStack{} -> return ([], restCurrentFontNr, restBeginPagePointers)
-        DoSpecial{} -> return ([], restCurrentFontNr, restBeginPagePointers)
-    return (thisEncodeds ++ restEncodeds, thisCurrentFontNr, thisBeginPagePointers)
+        PushStack -> return ([pushInstruction], restCurrentFontNr, restBeginPagePointers)
+        PopStack -> return ([popInstruction], restCurrentFontNr, restBeginPagePointers)
+        DoSpecial{} -> fail "Not implemented"
+    let thisStackDepth = restStackDepth + case this of PushStack -> 1
+                                                       PopStack -> -1
+                                                       other -> 0
+        thisMaxStackDepth = max thisStackDepth restMaxStackDepth
+    return (thisEncodeds ++ restEncodeds, thisCurrentFontNr, thisBeginPagePointers, thisStackDepth, thisMaxStackDepth)
 
 -- Document.
 
@@ -619,15 +651,12 @@ getPostPostambleInstr postamblePointer =
 
 encodeDocument :: [Instruction] -> Int -> Either String [EncodableInstruction]
 encodeDocument instrs magnification = do
-    (mundaneInstrs, _, beginPagePointers) <- encodeInstructions instrs magnification
+    (mundaneInstrs, _, beginPagePointers, _, maxStackDepth) <- encodeInstructions instrs magnification
     let
-        -- TODO: Max stack depth
-        (maxPageHeightPlusDepth, maxPageWidth, maxStackDepth) = (1, 1, 1)
+        (maxPageHeightPlusDepth, maxPageWidth) = (1, 1)
         postambleInstr = getPostambleInstr beginPagePointers magnification maxPageHeightPlusDepth maxPageWidth maxStackDepth
-        -- TODO: Postamble pointer.
         finishedInstrs = [endPageInstruction] ++ mundaneInstrs
         postamblePointer = encLength finishedInstrs
         postPostambleInstr = getPostPostambleInstr postamblePointer
         fontDefinitions = filter (\instr -> (op instr) `elem` defineFontOps) mundaneInstrs
-
     return $ [postPostambleInstr] ++ fontDefinitions ++ [postambleInstr] ++ finishedInstrs

@@ -1,2 +1,5 @@
 .stack-work/
 .DS_Store
+*.dvi
+*.pdf
+*.ps

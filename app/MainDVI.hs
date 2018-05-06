@@ -64,9 +64,16 @@ main = do
     Right fontInfo <- TFMM.readTFM "cmr10.tfm"
     -- let (Right dviDocF) = DVIW.defineFont fontInfo fontPath 1 1.0 dviDoc
 
-    let instrs = [ DVIW.Character {charNr=90, move=True}
+    let instrs = [ DVIW.Character{charNr=80, move=True}
+                 , DVIW.PopStack
+                 , DVIW.PushStack
+                 , DVIW.PushStack
+                 , DVIW.MoveDown{distance=20000000}
+                 , DVIW.Rule{height=100000, width=5000000, move=True}
+                 , DVIW.MoveRight{distance=5000000}
+                 , DVIW.Character{charNr=90, move=True}
                  , DVIW.SelectFont 1
-                 , DVIW.DefineFont {fontInfo=fontInfo, fontPath=fontPath, fontNr=1, scaleFactorRatio=1.0}
+                 , DVIW.DefineFont{fontInfo=fontInfo, fontPath=fontPath, fontNr=1, scaleFactorRatio=1.0}
                  , DVIW.BeginNewPage ]
     let Right encInstrs = DVIW.encodeDocument instrs 1000
 
