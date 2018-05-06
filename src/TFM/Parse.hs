@@ -42,14 +42,14 @@ mathSymbolSchemes = map pack ["TeX math symbols"]
 mathExtensionSchemes = map pack ["TeX math extension", "euler substitutions only"]
 
 -- Convert a quantity in units of words, into the equivalent in bytes.
-wordToByte :: (Num a) => (a -> a)
+wordToByte :: (Num a) => a -> a
 wordToByte = (*4)
 
 -- Read a floating point value.
 getFixWord :: BSG.Get Double
 getFixWord = do
     nr <- BSG.getWord32be
-    return ((fromIntegral nr) * fixWordScale)
+    return $ (fromIntegral nr) * fixWordScale
 
 -- Read integers encoded as big-endian byte sequences.
 getWord16beInt = fmap fromIntegral BSG.getWord16be
