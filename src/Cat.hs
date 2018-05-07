@@ -2,6 +2,7 @@ module Cat where
 
 import qualified Data.Map as Map
 import qualified Data.Char as C
+import Data.Maybe (fromJust)
 
 data NestedList a = Elem a | List [NestedList a] deriving (Show, Eq)
 
@@ -51,10 +52,11 @@ defaultCatCode char
     | char `elem` ['A'..'Z'] = Letter
     | otherwise = Other
 
-toCatCode :: Map.Map Char CatCode -> Char -> CatCode
-toCatCode m c = lookupCat
-    where
-        Just lookupCat = Map.lookup c m
+chrs = fmap C.chr [0..127]
+defaultCharCatMap = Map.fromList $ zip chrs $ fmap Cat.defaultCatCode chrs
+
+toCatCode :: Ord a => Map.Map a b -> a -> b
+toCatCode m c = fromJust $ Map.lookup c m
 
 extractCharCat :: (Char -> CatCode) -> [Char] -> (CharCat, [Char])
 extractCharCat f (c:cs) = (CharCat {char=c, cat=f c, len=1}, cs)

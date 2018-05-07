@@ -2,10 +2,8 @@
 
 module Main where
 
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BLS
-import Data.ByteString.Builder (toLazyByteString, lazyByteStringHex, byteStringHex)
-import Data.Binary.Strict.Get as BSG
+import Data.ByteString.Builder (toLazyByteString, lazyByteStringHex)
 import Data.Binary (encode)
 import Data.List (intercalate)
 import qualified Data.Word as W

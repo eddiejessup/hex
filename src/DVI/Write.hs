@@ -522,6 +522,7 @@ data Instruction =
     | PushStack
     | PopStack
     | DoSpecial {cmd :: String}
+    deriving (Show)
 
 moveRightOps = [ Right1Byte
                , Right2Byte
