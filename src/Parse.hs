@@ -63,25 +63,38 @@ isDiscardable a =
   -- HMathOff _ -> True
     _ -> False
 
-setHList :: HListElement -> [B.HBoxElement]
--- Vertical material inside a Horizontal list.
-setHList (HVBox v) = [B.HVBox v]
--- Horizontal material inside a Horizontal list. Like a fixed B.HBox.
-setHList (HHBox h) = [B.HHBox h]
-setHList (HGlue Glue {dimen = d}) = [B.HGlue $ B.SetGlue d]
-setHList (HPenalty _) = []
-setHList (HRule a) = [B.HRule a]
-setHList (HKern a) = [B.HKern a]
-setHList (HFontDefinition a) = [B.HFontDefinition a]
-setHList (HFontSelection a) = [B.HFontSelection a]
-setHList (HCharacter a) = [B.HCharacter a]
+glueDiff :: LineStatus -> Glue -> Int
+glueDiff NaturallyGood _ = 0
+-- Note: I made this logic up.
+glueDiff OverFull Glue{shrink=shr} = -shr
+glueDiff (TooFull InfiniteGlueRatio) Glue{shrink=shr} = -shr
+glueDiff (TooBare InfiniteGlueRatio) Glue{stretch=str} = str
+glueDiff (TooFull (FiniteGlueRatio r)) Glue{shrink=shr} = round $ -(r * fromIntegral shr)
+glueDiff (TooBare (FiniteGlueRatio r)) Glue{stretch=str} = round $ r * fromIntegral str
 
-simpleHSet :: [HListElement] -> VListElement
-simpleHSet cs = VHBox $ B.HBox{contents=concatMap setHList cs, desiredLength=B.Natural}
+setGlue :: LineStatus -> Glue -> B.SetGlue
+setGlue ls g@Glue{dimen=d} = B.SetGlue $ d + glueDiff ls g
+
+setHElem :: LineStatus -> HListElement -> [B.HBoxElement]
+setHElem ls (HGlue g) = [B.HGlue $ setGlue ls g]
+setHElem _ (HPenalty _) = []
+setHElem _ (HVBox v) = [B.HVBox v]
+setHElem _ (HHBox h) = [B.HHBox h]
+setHElem _ (HRule a) = [B.HRule a]
+setHElem _ (HKern a) = [B.HKern a]
+setHElem _ (HFontDefinition a) = [B.HFontDefinition a]
+setHElem _ (HFontSelection a) = [B.HFontSelection a]
+setHElem _ (HCharacter a) = [B.HCharacter a]
+
+simpleHSet :: Int -> [HListElement] -> VListElement
+simpleHSet desiredWidth cs =
+  let
+    lineStatus = lineGlueSetRatio desiredWidth cs
+    setContents = concatMap (setHElem lineStatus) cs
+  in VHBox $ B.HBox{contents=setContents, desiredLength=B.To desiredWidth}
 
 setVList :: VListElement -> [B.VBoxElement]
 setVList (VVBox v) = [B.VVBox v]
--- Horizontal material inside a Vertical list. Like a paragraph.
 setVList (VHBox h) = [B.VHBox h]
 setVList (VGlue Glue {dimen = d}) = [B.VGlue $ B.SetGlue d]
 setVList (VFontDefinition a) = [B.VFontDefinition a]
@@ -254,7 +267,7 @@ bestRoute desiredWidth tolerance linePenalty cs =
       HGlue _ -> init cs
       _ -> cs
 
-    finisher = [HPenalty $ Penalty 10000, HGlue Glue{dimen=0, stretch=0, shrink=100000}, HPenalty $ Penalty $ -10000]
+    finisher = [HPenalty $ Penalty 10000, HGlue Glue{dimen=0, stretch=10000000, shrink=0}, HPenalty $ Penalty $ -10000]
     csFinished = cs ++ finisher
     breaks = allBreaks cs
     badnesses = fmap (\Break{before=bef, after=aft, item=br} -> lineBadness desiredWidth bef) breaks
@@ -277,7 +290,7 @@ superRoute :: Int -> Int -> Int -> [HListElement] -> [VListElement]
 superRoute _ _ _ [] = []
 superRoute desiredWidth tolerance linePenalty cs =
   let breaks = allBreaks cs
-      breakRoutes = fmap (\Break{before=bef, after=aft, item=br} -> [simpleHSet bef, VGlue Glue{dimen=400000, stretch=0, shrink=0}, simpleHSet aft]) breaks
+      breakRoutes = fmap (\Break{before=bef, after=aft, item=br} -> [simpleHSet desiredWidth bef, VGlue Glue{dimen=400000, stretch=0, shrink=0}, simpleHSet desiredWidth aft]) breaks
       spacedRoutes = intersperse [VGlue Glue {dimen = 1600000, stretch=0, shrink=0}] breakRoutes
   in concat spacedRoutes
 
@@ -323,7 +336,7 @@ extractVElems s (a@Lex.CharCat {}:rest) = do
     tolerance = 200
     linePenalty = 10
     bestRouteLists = contents <$> bestRoute width tolerance linePenalty hConts
-    bestRouteBoxes = fmap simpleHSet bestRouteLists
+    bestRouteBoxes = fmap (simpleHSet width) bestRouteLists
     route = intersperse (VGlue Glue {dimen = 400000, stretch=0, shrink=0}) bestRouteBoxes
     -- route = superRoute width tolerance linePenalty cs
 
