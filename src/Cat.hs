@@ -7,6 +7,7 @@ import Data.Maybe (fromJust)
 data NestedList a = Elem a | List [NestedList a] deriving (Show, Eq)
 
 contents :: NestedList a -> [NestedList a]
+contents (Elem x) = [Elem x]
 contents (List x) = x
 
 insert :: NestedList a -> Int -> NestedList a -> NestedList a

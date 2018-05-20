@@ -3,12 +3,12 @@ module TFM.Parse where
 import qualified Data.ByteString as BS
 import Data.ByteString.Char8 (pack)
 import qualified Data.Binary.Strict.Get as BSG
-import qualified Data.Word as W
 import qualified Data.Map as M
 import Data.List.Split (chunksOf)
 import Data.Bits ((.&.), shift)
 import Data.Maybe (fromJust)
 import qualified Control.Monad as CM
+import Data.Ratio ((%))
 
 -- Sections within the file containing different bits of information.
 data Table =
@@ -24,35 +24,45 @@ data Table =
     | FontParameter
     deriving (Show, Eq, Enum, Ord, Bounded)
 
-nrTables = length [Header ..]
 -- The minimum length of the header.
+headerDataLengthWordsMin :: Int
 headerDataLengthWordsMin = 18
 -- The position where the header starts.
+headerPointerBytes :: Int
 headerPointerBytes = 24
 -- The length of the character coding scheme and font family sections,
 -- respectively.
+characterCodingSchemeLength :: Int
 characterCodingSchemeLength = 40
+familyLength :: Int
 familyLength = 20
 -- The increment by which real numbers can be specified.
-fixWordScale = 2 ^^ (-20)
+fixWordScale :: Rational
+fixWordScale = 1 % (2 ^ (20 :: Integer))
 
 -- Character coding schemes that should have the corresponding extra sets of
 -- font parameters.
-mathSymbolSchemes = map pack ["TeX math symbols"]
-mathExtensionSchemes = map pack ["TeX math extension", "euler substitutions only"]
+mathSymbolSchemes :: [BS.ByteString]
+mathSymbolSchemes = fmap pack ["TeX math symbols"]
+mathExtensionSchemes :: [BS.ByteString]
+mathExtensionSchemes = fmap pack ["TeX math extension", "euler substitutions only"]
 
 -- Convert a quantity in units of words, into the equivalent in bytes.
 wordToByte :: (Num a) => a -> a
 wordToByte = (*4)
 
 -- Read a floating point value.
-getFixWord :: BSG.Get Double
+getFixWord :: BSG.Get Rational
 getFixWord = do
     nr <- BSG.getWord32be
-    return $ (fromIntegral nr) * fixWordScale
+    return $ fromIntegral nr * fixWordScale
 
 -- Read integers encoded as big-endian byte sequences.
+getWord32beInt :: BSG.Get Int
+getWord32beInt = fmap fromIntegral BSG.getWord32be
+getWord16beInt :: BSG.Get Int
 getWord16beInt = fmap fromIntegral BSG.getWord16be
+getWord8Int :: BSG.Get Int
 getWord8Int = fmap fromIntegral BSG.getWord8
 
 -- Read a string that's encoded as an integer, followed by that number of
@@ -64,16 +74,16 @@ getBCPL = do
 
 get4Word8Ints :: BSG.Get (Int, Int, Int, Int)
 get4Word8Ints = do
-    b1:b2:b3:b4:[] <- CM.replicateM 4 getWord8Int
+    [b1, b2, b3, b4] <- CM.replicateM 4 getWord8Int
     return (b1, b2, b3, b4)
 
 getPos :: TFM -> Table -> Int -> Int
 getPos tfm tbl iWords = tablePointerPos tfm tbl + wordToByte iWords
 
 getSubContents :: TFM -> Table -> Int -> BS.ByteString -> BS.ByteString
-getSubContents tfm tbl iWords contents = BS.drop (getPos tfm tbl iWords) contents
+getSubContents tfm tbl iWords = BS.drop (getPos tfm tbl iWords)
 
-getFixWordAt :: TFM -> BS.ByteString -> Table -> Int -> Either String Double
+getFixWordAt :: TFM -> BS.ByteString -> Table -> Int -> Either String Rational
 getFixWordAt tfm contents tbl iWords =
     fst $ BSG.runGet getFixWord $ getSubContents tfm tbl iWords contents
 
@@ -134,42 +144,42 @@ data TFM = TFM { fileLengthWords :: Int
 newTFM :: BSG.Get TFM
 newTFM = do
     -- Read and set table lengths.
-    fileLengthWords <- getWord16beInt
+    _fileLengthWords <- getWord16beInt
     headerDataLengthWordsRead <- getWord16beInt
-    let headerDataLengthWords = max headerDataLengthWordsRead headerDataLengthWordsMin
-    smallestCharCode <- getWord16beInt
-    largestCharCode <- getWord16beInt
+    let _headerDataLengthWords = max headerDataLengthWordsRead headerDataLengthWordsMin
+    _smallestCharCode <- getWord16beInt
+    _largestCharCode <- getWord16beInt
 
     -- Read the lengths of all tables after and including the 'Width' table.
     let laterTables = filter (>=Width) [minBound..]
-    laterLengths <- mapM (\_ -> getWord16beInt) laterTables
+    laterLengths <- mapM (const getWord16beInt) laterTables
 
-    let nrChars = largestCharCode - smallestCharCode + 1
+    let nrChars = _largestCharCode - _smallestCharCode + 1
 
         -- Assemble the inferred lengths of the tables into maps from them, to
         -- their length and position.
-        tableLengthsWordsLst = (Header, headerDataLengthWords)
+        tableLengthsWordsLst = (Header, _headerDataLengthWords)
                                : (CharacterInfo, nrChars)
                                : zip laterTables laterLengths
-        tableLengthsWords = M.fromList(tableLengthsWordsLst)
-        tablePointers = M.mapWithKey (\tbl _ -> tablePos tableLengthsWords tbl) tableLengthsWords
+        _tableLengthsWords = M.fromList tableLengthsWordsLst
+        _tablePointers = M.mapWithKey (\tbl _ -> tablePos _tableLengthsWords tbl) _tableLengthsWords
 
         -- Check the inferred file length matches expectations.
-        validationFileLength = tablePointerEnd tablePointers tableLengthsWords maxBound
+        validationFileLength = tablePointerEnd _tablePointers _tableLengthsWords maxBound
 
-    CM.when (validationFileLength /= (wordToByte fileLengthWords)) $
-        error ("Invalid TFM File " ++ (show validationFileLength) ++ " " ++ (show fileLengthWords))
+    CM.when (validationFileLength /= wordToByte _fileLengthWords) $
+        fail $ "Invalid TFM File " ++ show validationFileLength ++ " " ++ show _fileLengthWords
 
-    return TFM { fileLengthWords=fileLengthWords
-               , headerDataLengthWords=headerDataLengthWords
-               , smallestCharCode=smallestCharCode
-               , largestCharCode=largestCharCode
-               , tableLengthsWords=tableLengthsWords
-               , tablePointers=tablePointers }
+    return TFM { fileLengthWords=_fileLengthWords
+               , headerDataLengthWords=_headerDataLengthWords
+               , smallestCharCode=_smallestCharCode
+               , largestCharCode=_largestCharCode
+               , tableLengthsWords=_tableLengthsWords
+               , tablePointers=_tablePointers }
 
 -- The information stored in the header table of a TFM file.
 data Headers = Headers { checksum :: Int
-                       , designFontSize :: Double
+                       , designFontSize :: Rational
                        , characterCodingScheme :: BS.ByteString
                        , family :: BS.ByteString } deriving (Show)
 
@@ -178,8 +188,8 @@ readHeader tfm = do
     BSG.skip $ tablePointerPos tfm Header
 
     -- Read header[0 ... 1], containing the checksum and design size.
-    checksum <- fmap fromIntegral BSG.getWord32be
-    designFontSize <- getFixWord
+    _checksum <- getWord32beInt
+    _designFontSize <- getFixWord
     -- Store our current position.
     postDesignPos <- BSG.bytesRead
 
@@ -190,7 +200,7 @@ readHeader tfm = do
     -- scheme.
     -- If we haven't yet reached the character info table, then assume a
     -- character coding scheme is given.
-    characterCodingScheme <- if postDesignPos < charInfoPos
+    _characterCodingScheme <- if postDesignPos < charInfoPos
         then getBCPL else return BS.empty
     -- Compute where the next section should start, and where we actually are,
     -- and skip past the difference.
@@ -201,7 +211,7 @@ readHeader tfm = do
     -- Read header[12 ... 16] if present, containing the font family.
     -- If we still haven't reached the character info table, then assume a
     -- font family is given.
-    family <- if postSchemePos < charInfoPos
+    _family <- if postSchemePos < charInfoPos
         then getBCPL else return BS.empty
     -- Again, skip past any remaining data until the next section.
     let postFamilyPos = postSchemePos + familyLength
@@ -210,7 +220,7 @@ readHeader tfm = do
 
     -- Read header[12 ... 16] if present, containing random bits.
     -- We don't actually use these for anything now.
-    if postFamilyPos < charInfoPos
+    _ <- if postFamilyPos < charInfoPos
         then sequence [ BSG.getWord8 -- Seven-bit safe flag.
                       , BSG.getWord8 -- Unknown.
                       , BSG.getWord8 ] -- 'Face'.
@@ -219,97 +229,97 @@ readHeader tfm = do
 
     -- Don't read header [18 ... whatever]
 
-    return Headers { checksum=checksum
-                   , designFontSize=designFontSize
-                   , characterCodingScheme=characterCodingScheme
-                   , family=family }
+    return Headers { checksum=_checksum
+                   , designFontSize=_designFontSize
+                   , characterCodingScheme=_characterCodingScheme
+                   , family=_family }
 
 -- Define some structures containing core parameters of the font, and some
 -- optional extra sets of parameters.
-data FontParams = FontParams { slant :: Double
-                             , spacing :: Double
-                             , spaceStretch :: Double
-                             , spaceShrink :: Double
-                             , xHeight :: Double
-                             , quad :: Double
-                             , extraSpace :: Double
+data FontParams = FontParams { slant :: Rational
+                             , spacing :: Rational
+                             , spaceStretch :: Rational
+                             , spaceShrink :: Rational
+                             , xHeight :: Rational
+                             , quad :: Rational
+                             , extraSpace :: Rational
                              , mathSymbolParams :: Maybe MathSymbolParams
                              , mathExtensionParams :: Maybe MathExtensionParams
                              } deriving (Show)
-data MathSymbolParams = MathSymbolParams { num1 :: Double
-                                         , num2 :: Double
-                                         , num3 :: Double
-                                         , denom1 :: Double
-                                         , denom2 :: Double
-                                         , sup1 :: Double
-                                         , sup2 :: Double
-                                         , sup3 :: Double
-                                         , sub1 :: Double
-                                         , sub2 :: Double
-                                         , supdrop :: Double
-                                         , subdrop :: Double
-                                         , delim1 :: Double
-                                         , delim2 :: Double
-                                         , axisHeight :: Double } deriving (Show)
-data MathExtensionParams = MathExtensionParams { defaultRuleThickness :: Double
-                                               , bigOpSpacing :: [Double]
+data MathSymbolParams = MathSymbolParams { num1 :: Rational
+                                         , num2 :: Rational
+                                         , num3 :: Rational
+                                         , denom1 :: Rational
+                                         , denom2 :: Rational
+                                         , sup1 :: Rational
+                                         , sup2 :: Rational
+                                         , sup3 :: Rational
+                                         , sub1 :: Rational
+                                         , sub2 :: Rational
+                                         , supdrop :: Rational
+                                         , subdrop :: Rational
+                                         , delim1 :: Rational
+                                         , delim2 :: Rational
+                                         , axisHeight :: Rational } deriving (Show)
+data MathExtensionParams = MathExtensionParams { defaultRuleThickness :: Rational
+                                               , bigOpSpacing :: [Rational]
                                                } deriving (Show)
 
 readMathSymbolParams :: BS.ByteString -> BSG.Get (Maybe MathSymbolParams)
 readMathSymbolParams scheme =
     if scheme `elem` mathSymbolSchemes then do
-        num1:num2:num3:denom1:denom2:sup1:sup2:sup3:sub1:sub2:supdrop:subdrop:delim1:delim2:axisHeight:[] <- CM.replicateM 15 getFixWord
-        return $ Just MathSymbolParams { num1=num1
-                                       , num2=num2
-                                       , num3=num3
-                                       , denom1=denom1
-                                       , denom2=denom2
-                                       , sup1=sup1
-                                       , sup2=sup2
-                                       , sup3=sup3
-                                       , sub1=sub1
-                                       , sub2=sub2
-                                       , supdrop=supdrop
-                                       , subdrop=subdrop
-                                       , delim1=delim1
-                                       , delim2=delim2
-                                       , axisHeight=axisHeight
+        [_num1, _num2, _num3, _denom1, _denom2, _sup1, _sup2, _sup3, _sub1, _sub2,
+         _supdrop, _subdrop, _delim1, _delim2, _axisHeight] <- CM.replicateM 15 getFixWord
+        return $ Just MathSymbolParams { num1=_num1
+                                       , num2=_num2
+                                       , num3=_num3
+                                       , denom1=_denom1
+                                       , denom2=_denom2
+                                       , sup1=_sup1
+                                       , sup2=_sup2
+                                       , sup3=_sup3
+                                       , sub1=_sub1
+                                       , sub2=_sub2
+                                       , supdrop=_supdrop
+                                       , subdrop=_subdrop
+                                       , delim1=_delim1
+                                       , delim2=_delim2
+                                       , axisHeight=_axisHeight
                                        }
     else return Nothing
 
 readMathExtensionParams :: BS.ByteString -> BSG.Get (Maybe MathExtensionParams)
 readMathExtensionParams scheme = if scheme `elem` mathExtensionSchemes
     then do
-        defaultRuleThickness <- getFixWord
-        bigOpSpacing <- CM.replicateM 5 getFixWord
-        return $ Just MathExtensionParams { defaultRuleThickness=defaultRuleThickness
-                                          , bigOpSpacing=bigOpSpacing
+        _defaultRuleThickness <- getFixWord
+        _bigOpSpacing <- CM.replicateM 5 getFixWord
+        return $ Just MathExtensionParams { defaultRuleThickness=_defaultRuleThickness
+                                          , bigOpSpacing=_bigOpSpacing
                                           }
     else return Nothing
 
-readFontParams :: TFM -> Headers -> BSG.Get (Either String FontParams)
+readFontParams :: TFM -> Headers -> BSG.Get FontParams
 readFontParams tfm tfmHeads = do
     BSG.skip $ tablePointerPos tfm FontParameter
     let scheme = characterCodingScheme tfmHeads
-    if scheme == (pack "TeX math italic")
-        then fail "Unsupported character coding scheme"
-        else return ()
+    CM.when (scheme == pack "TeX math italic") $
+      fail "Unsupported character coding scheme"
 
-    extraSpace:quad:xHeight:spaceShrink:spaceStretch:spacing:slant:[] <- CM.replicateM 7 getFixWord
+    [_extraSpace, _quad, _xHeight, _spaceShrink, _spaceStretch, _spacing, _slant] <- CM.replicateM 7 getFixWord
 
     -- Read parameters relating to math symbols and extensions, if present.
-    mathSymbolParams <- readMathSymbolParams scheme
-    mathExtensionParams <- readMathExtensionParams scheme
+    _mathSymbolParams <- readMathSymbolParams scheme
+    _mathExtensionParams <- readMathExtensionParams scheme
 
-    return $ Right FontParams { slant=slant
-                              , spacing=spacing
-                              , spaceStretch=spaceStretch
-                              , spaceShrink=spaceShrink
-                              , xHeight=xHeight
-                              , quad=quad
-                              , extraSpace=extraSpace
-                              , mathSymbolParams=mathSymbolParams
-                              , mathExtensionParams=mathExtensionParams
+    return FontParams { slant=_slant
+                              , spacing=_spacing
+                              , spaceStretch=_spaceStretch
+                              , spaceShrink=_spaceShrink
+                              , xHeight=_xHeight
+                              , quad=_quad
+                              , extraSpace=_extraSpace
+                              , mathSymbolParams=_mathSymbolParams
+                              , mathExtensionParams=_mathExtensionParams
                               }
 
 
@@ -379,6 +389,7 @@ readFontParams tfm tfmHeads = do
 -- instruction is encountered during program execution, it denotes an
 -- unconditional halt, without performing a ligature command.
 
+kernOp :: Int
 kernOp =  128
 
 data LigKernOp = LigatureOp { ligatureChar :: Int
@@ -386,7 +397,7 @@ data LigKernOp = LigatureOp { ligatureChar :: Int
                             , deleteCurrentChar :: Bool
                             , deleteNextChar :: Bool
                             }
-                | KernOp { size :: Double }
+                | KernOp { size :: Rational }
                 deriving (Show)
 
 data LigKernInstr = LigKernInstr { stop :: Bool
@@ -396,7 +407,7 @@ data LigKernInstr = LigKernInstr { stop :: Bool
 readInstrSet :: [[Int]] -> Int -> (Int, Int, Int, Int)
 readInstrSet sets i =
     let
-        w:x:y:z:[] = sets !! i
+        [w, x, y, z] = sets !! i
     in (w, x, y, z)
 
 getLigKernOperation :: (Int -> Either String LigKernOp) -> Int -> Int -> Either String LigKernOp
@@ -411,23 +422,25 @@ getLigKernOperation readKern op remain =
 
 analyzeLigKernInstr :: (Int -> Either String LigKernOp) -> Int -> Int -> Int -> Int -> Either String LigKernInstr
 analyzeLigKernInstr readKern skip next op remain = do
-    operation <- getLigKernOperation readKern op remain
+    _operation <- getLigKernOperation readKern op remain
     return LigKernInstr { stop=skip >= 128
                         , nextChar=next
-                        , operation=operation }
+                        , operation=_operation }
 
 getKern :: TFM -> BS.ByteString -> (Int -> Either String LigKernOp)
 getKern tfm contents iWords = do
-    size <- getFixWordAt tfm contents Kern iWords
-    return KernOp { size=size }
+    _size <- getFixWordAt tfm contents Kern iWords
+    return KernOp { size=_size }
 
 
-readLigKerns :: TFM -> BS.ByteString -> Either String [Either String LigKernInstr]
+readLigKerns :: TFM -> BS.ByteString -> Either String [LigKernInstr]
 readLigKerns tfm contents
     | firstSkipByte == 255 = fail "Sorry, right boundary characters are not supported"
     | firstSkipByte > 128 = fail "Sorry, large LigKern arrays are not supported"
     | lastSkipByte == 255 = fail "Sorry, left boundary characters are not supported"
-    | otherwise = return ligKerns
+    | otherwise = do
+        let kernGetter = getKern tfm contents
+        mapM (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
     where
         ligKernTblPos = tablePointerPos tfm LigKern
         ligKernTblLengthWords = tableLength tfm LigKern
@@ -439,6 +452,3 @@ readLigKerns tfm contents
 
         (firstSkipByte, _, _, _) = head sets
         (lastSkipByte, _, _, _) = last sets
-
-        kernGetter = getKern tfm contents
-        ligKerns = fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets

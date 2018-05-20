@@ -12,7 +12,7 @@ import qualified TFM.Main as TFMM
 import qualified Cat
 import qualified Lex
 import qualified Box
-import qualified Paragraph
+import qualified Parse
 
 main = do
     contents <- readFile "test.tex"
@@ -29,18 +29,19 @@ main = do
     -- Get some tokens.
     let charCats = Cat.process charToCat contents
     let tokens = Lex.process charCats
+    let state = Parse.State {currentFontInfo=Nothing}
 
     -- putStrLn $ List.intercalate "\n" $ fmap show tokens
 
-    let (vListElems, remain) = Paragraph.extractVElems tokens
-    let vList = Paragraph.VVList Paragraph.VList{contents=vListElems, desiredLength=Paragraph.Natural}
+    (endState, vListElems, _) <- Parse.extractVElems state tokens
+    let vList = Parse.VVList Parse.VList{contents=vListElems, desiredLength=Parse.Natural}
     let vBoxElems = Box.setVList vList
 
     -- putStrLn $ List.intercalate "\n" $ fmap show vBoxElems
 
-    instrs <- Box.toDVI vBoxElems
+    let instrs = Box.toDVI vBoxElems
 
-    putStrLn $ List.intercalate "\n" $ fmap show (instrs)
+    -- putStrLn $ List.intercalate "\n" $ fmap show (instrs)
 
     let Right encInstrs = DVIW.encodeDocument (reverse instrs) 1000
 

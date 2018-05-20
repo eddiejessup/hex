@@ -16,16 +16,16 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Cat
-                     , Paragraph
+                     , Parse
+                     , Unit
                      , Lex
                      , Box
                      , TFM.Parse
                      , TFM.Character
                      , TFM.Main
                      , DVI.Write
-                     , DVI.Unit
   build-depends:       base >= 4.7 && < 5
-                     , containers
+                     , containers >= 0.5.11.0
                      , bytestring
                      , binary
                      , binary-strict
@@ -40,7 +40,7 @@ executable hex-exe
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , hex
-                     , containers
+                     , containers >= 0.5.11.0
                      , transformers
                      , bytestring
   default-language:    Haskell2010
@@ -51,7 +51,7 @@ executable tfm-exe
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , hex
-                     , containers
+                     , containers >= 0.5.11.0
                      , transformers
                      , bytestring
                      , binary
@@ -64,7 +64,7 @@ executable dvi-exe
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , hex
-                     , containers
+                     , containers >= 0.5.11.0
                      , transformers
                      , bytestring
                      , binary

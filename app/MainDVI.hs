@@ -59,7 +59,7 @@ main = do
     -- print $ DVIW.beginPage dviDoc
 
     let fontPath = "cmr10"
-    Right fontInfo <- TFMM.readTFM "cmr10.tfm"
+    fontInfo <- TFMM.readTFM "cmr10.tfm"
     -- let (Right dviDocF) = DVIW.defineFont fontInfo fontPath 1 1.0 dviDoc
 
     let instrs = [ DVIW.Character{charNr=80, move=True}

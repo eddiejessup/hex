@@ -4,24 +4,14 @@
 module DVI.Write where
 
 import qualified Data.ByteString.Lazy as BLS
-import qualified Data.ByteString as BS
-import Data.ByteString.Char8 (pack)
 import qualified Data.Binary as B
-import qualified Data.Binary.Strict.Get as BSG
 import qualified Data.Word as W
 import qualified Data.Int as I
-import qualified Data.Map as M
-import Data.List.Split (chunksOf)
-import Data.Bits ((.&.), shift)
-import Data.Maybe (fromJust)
-import Data.Either.Extra (fromRight')
-import qualified Control.Monad as CM
-import Data.Char (ord, chr)
-import System.FilePath (splitFileName, normalise)
-import Debug.Trace (trace, traceShow, traceShowId)
-import qualified DVI.Unit as DVIU
+import Data.Char (ord)
+import System.FilePath (splitFileName)
 
-import qualified TFM.Parse as TFMP
+import qualified Unit as U
+
 import qualified TFM.Main as TFMM
 
 data Operation =
@@ -338,7 +328,10 @@ instance Encodable a => Encodable [a] where
 encLengths :: (Functor f, Encodable a) => f a -> f Int
 encLengths = fmap encLength
 
+lagCumSum :: (Num a) => [a] -> [a]
 lagCumSum = scanl (+) 0
+
+cumSum :: (Num a) => [a] -> [a]
 cumSum = scanl1 (+)
 
 encStarts :: Encodable a => [a] -> [Int]
@@ -358,7 +351,7 @@ isSignedNrExpressibleInNBits n nrBits =
         (minSignedVal <= n) && (n <= maxSignedVal)
 
 getBytesNeededUnsigned :: Int -> Int
-getBytesNeededUnsigned n = 1 + (floor (logBase 256.0 $ fromIntegral $ abs n))
+getBytesNeededUnsigned n = 1 + (floor ((logBase 256.0 $ fromIntegral $ abs n) :: Double))
 
 getBytesNeeded :: Bool -> Int -> Either String Int
 getBytesNeeded _ 0 = return 1
@@ -386,26 +379,31 @@ buildIntArgVal signed n = do
         b -> fail $ "Cannot handle this number of bytes: " ++ (show b)
 
 pickSizeOp :: [a] -> Bool -> Int -> Either String (a, ArgVal)
-pickSizeOp (op1b:op2b:op3b:op4b:[]) signed n = do
-    argVal <- buildIntArgVal signed n
-    op <- case argVal of
-        U1 _ -> return op1b
-        S1 _ -> return op1b
-        U2 _ -> return op2b
-        S2 _ -> return op2b
-        U4 _ -> return op4b
-        S4 _ -> return op4b
-        v -> fail $ "No operation to go with this argument value: " ++ (show v)
-    return (op, argVal)
+pickSizeOp ops signed n = case ops of
+    (op1b:op2b:_:op4b:[]) -> do
+        argVal <- buildIntArgVal signed n
+        _op <- case argVal of
+            U1 _ -> return op1b
+            S1 _ -> return op1b
+            U2 _ -> return op2b
+            S2 _ -> return op2b
+            U4 _ -> return op4b
+            S4 _ -> return op4b
+            v -> fail $ "No operation to go with this argument value: " ++ (show v)
+        return (_op, argVal)
+    _ -> fail "Only four operations supported"
 
+pickSizeOpSigned :: [a] -> Int -> Either String (a, ArgVal)
 pickSizeOpSigned ops n = pickSizeOp ops True n
+
+pickSizeOpUnsigned :: [a] -> Int -> Either String (a, ArgVal)
 pickSizeOpUnsigned ops n = pickSizeOp ops False n
 
 getVarByteInstruction :: [Operation] -> String -> Int -> Bool -> Either String EncodableInstruction
-getVarByteInstruction ops name n signed = do
-    (op, argVal) <- pickSizeOp ops signed n
-    let arg = Argument {name=name, val=argVal}
-    return EncodableInstruction{op=op, arguments=[arg]}
+getVarByteInstruction ops _name n signed = do
+    (_op, argVal) <- pickSizeOp ops signed n
+    let arg = Argument {name=_name, val=argVal}
+    return EncodableInstruction{op=_op, arguments=[arg]}
 
 -- Encoding abstract instructions.
 
@@ -516,7 +514,7 @@ data Instruction =
     | MoveDownY
     | MoveDownZ
     -- Fonts.
-    | DefineFont {fontInfo :: TFMM.TexFont, fontPath :: FilePath, fontNr :: Int, scaleFactorRatio :: Double}
+    | DefineFont {fontInfo :: TFMM.TexFont, fontPath :: FilePath, fontNr :: Int, scaleFactorRatio :: Rational}
     | SelectFont {fontNr :: Int}
     -- Other.
     | PushStack
@@ -578,9 +576,8 @@ encodeInstructions (this:rest) magnification = do
         MoveDownZ{} -> fail "Not implemented"
         DefineFont{fontInfo=info, fontPath=path, fontNr=nr, scaleFactorRatio=scaleRatio} -> do
             let
-                headers = TFMM.headers info
-                checksum = TFMP.checksum headers
-                designSizeRaw = DVIU.pointToScaledPoint $ TFMP.designFontSize headers
+                checksum = TFMM.checksum info
+                designSizeRaw = U.pointToScaledPoint $ TFMM.designFontSize info
                 designSize = floor designSizeRaw
                 scaleFactor = floor $ designSizeRaw * scaleRatio
             defineFontInstruction <- getDefineFontInstruction nr path scaleFactor designSize checksum

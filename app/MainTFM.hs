@@ -13,9 +13,9 @@ main = do
     let (fontParams, _) = BSG.runGet (TFMP.readFontParams tfm headers) contents
     let (Right ligKerns) = TFMP.readLigKerns tfm contents
     let characters = TFMC.readCharInfos tfm contents
-    -- print headers
-    -- print fontParams
-    print ligKerns
+    print headers
+    print fontParams
+    -- print ligKerns
     -- print characters
     -- print $ TFMP.tableLength tfm TFMP.Kern
     -- print $ TFMP.tablePointerPos tfm TFMP.Kern

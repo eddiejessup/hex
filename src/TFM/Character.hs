@@ -2,9 +2,10 @@
 
 module TFM.Character where
 
-import qualified Data.ByteString as BS
-import Data.Bits ((.&.), shiftR)
-import qualified TFM.Parse as TFMP
+import           Data.Bits          (shiftR, (.&.))
+import qualified Data.ByteString    as BS
+import qualified Data.IntMap.Strict as IntMap
+import qualified TFM.Parse          as TFMP
 
 -- The character info array contains, for each character, six fields packed
 -- into four bytes:
@@ -37,18 +38,18 @@ import qualified TFM.Parse as TFMP
 --   arbitrarily large. The pieces are specified in 'exten[remainder]'.
 -- """
 
-data Character = Character { code :: Int
-                           , width :: Double
-                           , height :: Double
-                           , depth :: Double
-                           , italicCorrection :: Double
-                           , special :: Maybe CharacterSpecial
+data Character = Character { code             :: Int
+                           , width            :: Rational
+                           , height           :: Rational
+                           , depth            :: Rational
+                           , italicCorrection :: Rational
+                           , special          :: Maybe CharacterSpecial
                            } deriving (Show)
 
-data CharacterSpecial = ExtensibleRecipe { top :: Int
+data CharacterSpecial = ExtensibleRecipe { top      :: Int
                                            , middle :: Int
                                            , bottom :: Int
-                                           , repeat :: Int }
+                                           , repeater :: Int }
                       | LigKernIndex { index :: Int }
                       | NextLargerChar { code :: Int }
                       deriving (Show)
@@ -56,8 +57,8 @@ data CharacterSpecial = ExtensibleRecipe { top :: Int
 data Tag = Plain | LigKern | Chain | Extensible deriving (Enum, Ord, Eq, Show)
 
 readCharInfo :: TFMP.TFM -> BS.ByteString -> Int -> Either String Character
-readCharInfo tfm contents c = do
-    let charIdx = c - TFMP.smallestCharCode tfm
+readCharInfo tfm contents _code = do
+    let charIdx = _code - TFMP.smallestCharCode tfm
     (widthIdx, heightDepthByte, italicTagByte, remainder) <- TFMP.get4Word8IntsAt tfm contents TFMP.CharacterInfo charIdx
     let
         heightIdx = heightDepthByte `shiftR` 4
@@ -65,29 +66,31 @@ readCharInfo tfm contents c = do
         italicIdx = italicTagByte `shiftR` 6
         tag = italicTagByte .&. 0x3
         -- Get a dimension from some dimension table, at some index
-        getDim = \tbl i -> if i == 0 then return 0.0 else TFMP.getFixWordAt tfm contents tbl i
-    width <- getDim TFMP.Width widthIdx
-    height <- getDim TFMP.Height heightIdx
-    depth <- getDim TFMP.Depth depthIdx
-    italicCorrection <- getDim TFMP.ItalicCorrection italicIdx
+        getDim tbl i = if i == 0 then return 0 else TFMP.getFixWordAt tfm contents tbl i
+    _width <- getDim TFMP.Width widthIdx
+    _height <- getDim TFMP.Height heightIdx
+    _depth <- getDim TFMP.Depth depthIdx
+    _italicCorrection <- getDim TFMP.ItalicCorrection italicIdx
     -- If the character is special, get its particular extra attributes.
-    special <- case toEnum tag of
+    _special <- case toEnum tag of
         Plain -> return Nothing
         LigKern -> return $ Just LigKernIndex { index=remainder }
         Chain -> return $ Just NextLargerChar { code=remainder }
         Extensible -> do
-            (top, middle, bottom, repeat) <- TFMP.get4Word8IntsAt tfm contents TFMP.ExtensibleCharacter remainder
-            return $ Just ExtensibleRecipe { top=top
-                                           , middle=middle
-                                           , bottom=bottom
-                                           , repeat=repeat }
-    return Character { code=c
-                     , width=width
-                     , height=height
-                     , depth=depth
-                     , italicCorrection=italicCorrection
-                     , special=special }
+            (_top, _middle, _bottom, _repeater) <- TFMP.get4Word8IntsAt tfm contents TFMP.ExtensibleCharacter remainder
+            return $ Just ExtensibleRecipe { top=_top
+                                           , middle=_middle
+                                           , bottom=_bottom
+                                           , repeater=_repeater }
+    return Character { code=_code
+                     , width=_width
+                     , height=_height
+                     , depth=_depth
+                     , italicCorrection=_italicCorrection
+                     , special=_special }
 
 
-readCharInfos :: TFMP.TFM -> BS.ByteString -> [Either String Character]
-readCharInfos tfm contents = fmap (readCharInfo tfm contents) [TFMP.smallestCharCode tfm..TFMP.largestCharCode tfm]
+readCharInfos :: TFMP.TFM -> BS.ByteString -> Either String (IntMap.IntMap Character)
+readCharInfos tfm contents = do
+  charList <- mapM (readCharInfo tfm contents) [TFMP.smallestCharCode tfm..TFMP.largestCharCode tfm]
+  return $ IntMap.fromList $ fmap (\c@Character{code=i} -> (i, c)) charList
