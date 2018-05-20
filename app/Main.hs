@@ -34,18 +34,19 @@ main = do
     -- putStrLn $ List.intercalate "\n" $ fmap show tokens
 
     (endState, vListElems, _) <- Parse.extractVElems state tokens
-    let vList = Parse.VVList Parse.VList{contents=vListElems, desiredLength=Parse.Natural}
-    let vBoxElems = Box.setVList vList
+    let vBoxElems = Parse.simpleVSet vListElems
+
+    let pages = [Box.Page vBoxElems, Box.Page vBoxElems]
 
     -- putStrLn $ List.intercalate "\n" $ fmap show vBoxElems
 
-    let instrs = Box.toDVI vBoxElems
+    let instrs = Box.toDVI pages
 
-    -- putStrLn $ List.intercalate "\n" $ fmap show (instrs)
+    -- putStrLn $ List.intercalate "\n" $ fmap show instrs
 
     let Right encInstrs = DVIW.encodeDocument (reverse instrs) 1000
 
-    -- putStrLn $ List.intercalate "\n" $ fmap show (reverse encInstrs)
+    -- -- putStrLn $ List.intercalate "\n" $ fmap show (reverse encInstrs)
 
     BLS.writeFile "out.dvi" $ DVIW.encode $ reverse encInstrs
 
