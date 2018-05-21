@@ -83,8 +83,6 @@ data Page = Page [VBoxElement]
 
 class Dimensioned a where
   naturalWidth :: a -> Int
-  stretchability :: a -> Int
-  shrinkability :: a -> Int
 
 instance Dimensioned HBoxElement where
   naturalWidth (HVBox v) = naturalWidth v
@@ -96,9 +94,6 @@ instance Dimensioned HBoxElement where
   naturalWidth (HFontSelection _) = 0
   naturalWidth (HCharacter Character{width=w}) = w
 
-  stretchability = const 0
-  shrinkability = const 0
-
 instance Dimensioned VBoxElement where
   naturalWidth (VVBox v) = naturalWidth v
   naturalWidth (VHBox h) = naturalWidth h
@@ -108,9 +103,6 @@ instance Dimensioned VBoxElement where
   naturalWidth (VFontDefinition _) = 0
   naturalWidth (VFontSelection _) = 0
 
-  stretchability = const 0
-  shrinkability = const 0
-
 instance Dimensioned VBox where
   naturalWidth VBox{contents=cs, desiredLength=d} =
     case d of
@@ -118,8 +110,6 @@ instance Dimensioned VBox where
       To to -> to
       -- TODO.
       -- Spread spread -> 1010
-  stretchability = const 0
-  shrinkability = const 0
 
 instance Dimensioned HBox where
   naturalWidth HBox{contents=cs, desiredLength=d} =
@@ -128,8 +118,6 @@ instance Dimensioned HBox where
       To to -> to
       -- TODO.
       -- Spread spread -> 1010
-  stretchability = const 0
-  shrinkability = const 0
 
 class DVIAble a where
   toDVI :: a -> [DVIW.Instruction]

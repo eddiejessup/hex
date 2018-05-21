@@ -13,6 +13,7 @@ import qualified Cat
 import qualified Lex
 import qualified Box
 import qualified Parse
+import qualified Setting
 
 main = do
     contents <- readFile "test.tex"
@@ -34,7 +35,7 @@ main = do
     -- putStrLn $ List.intercalate "\n" $ fmap show tokens
 
     (endState, vListElems, _) <- Parse.extractVElems state tokens
-    let vBoxElems = Parse.simpleVSet vListElems
+    let vBoxElems = Setting.simpleVSet vListElems
 
     let pages = [Box.Page vBoxElems, Box.Page vBoxElems]
 
