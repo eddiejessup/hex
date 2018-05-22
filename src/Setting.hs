@@ -3,10 +3,10 @@
 
 module Setting where
 
-import Data.List (intersperse, minimumBy)
+import Data.List (intersperse, minimumBy, zip4)
 import Data.List.Index (imap)
 import Data.Maybe (isNothing)
-
+import qualified Debug.Trace as T
 import Box (Dimensioned, naturalWidth)
 import qualified Box as B
 
@@ -143,12 +143,12 @@ hGlues cs = [ g | (HGlue g) <- cs]
 
 addGlueFlex :: GlueFlex -> [Int] -> [Int]
 addGlueFlex GlueFlex{factor=f, order=_order} fs =
-  let extraElems = length fs - (_order + 1)
+  let extraElems = (_order + 1) - length fs
       fsPad = if extraElems < 0 then fs else fs ++ replicate extraElems 0
   in imap (\i x -> if i == _order then x + f else x) fsPad
 
 sumGlueFlexes :: [GlueFlex] -> [Int]
-sumGlueFlexes = foldr addGlueFlex [0]
+sumGlueFlexes = foldr addGlueFlex []
 
 listFlex :: [Glue] -> ListFlex
 listFlex gs =
@@ -191,32 +191,38 @@ instance Dimensioned VListElement where
   naturalWidth (VFontDefinition _) = 0
   naturalWidth (VFontSelection _) = 0
 
+data GlueRatio = FiniteGlueRatio {factor :: Double, order :: Int} | InfiniteGlueRatio deriving Show
+
+data LineStatus = NaturallyGood | TooFull GlueRatio | TooBare GlueRatio | OverFull deriving Show
+
 glueSetRatio :: Int -> ListFlex -> LineStatus
 glueSetRatio excessLength ListFlex{stretch=stretches, shrink=shrinks} =
-  case compare excessLength 0 of
+  let
+    flexes = if excessLength > 0 then shrinks else stretches
+    flex = last flexes
+    order = length flexes - 1
+    gRatio = (fromIntegral excessLength) / (fromIntegral flex)
+  in case compare excessLength 0 of
     EQ -> NaturallyGood
-    LT -> TooBare $ case head stretches of
-      0 -> InfiniteGlueRatio
-      str -> FiniteGlueRatio $ -((fromIntegral excessLength) / (fromIntegral str))
-    GT -> case head shrinks of
-      0 -> TooFull InfiniteGlueRatio
-      shr -> case compare excessLength shr of
-        GT -> OverFull
-        _ -> TooFull $ FiniteGlueRatio $ (fromIntegral excessLength) / (fromIntegral shr)
+    LT -> case stretches of
+      [] -> TooBare InfiniteGlueRatio
+      strs -> TooBare FiniteGlueRatio{factor=(-gRatio), order=order}
+    GT -> case shrinks of
+      [] -> TooFull InfiniteGlueRatio
+      shrs -> if (order == 0 && excessLength > flex)
+        then OverFull
+        else TooFull FiniteGlueRatio{factor=gRatio, order=order}
 
 badness :: LineStatus -> Int
 badness g = case g of
-  -- TODO: This should actually be infinity, not 1 million.
-  OverFull -> 1000000
-  NaturallyGood -> 0
-  TooFull (FiniteGlueRatio r) -> min 10000 $ round $ (r^(3 :: Int)) * 100
-  TooBare (FiniteGlueRatio r) -> min 10000 $ round $ (r^(3 :: Int)) * 100
-  TooFull InfiniteGlueRatio -> 10000
-  TooBare InfiniteGlueRatio -> 10000
-
-data GlueRatio = FiniteGlueRatio Double | InfiniteGlueRatio deriving Show
-
-data LineStatus = NaturallyGood | TooFull GlueRatio | TooBare GlueRatio | OverFull deriving Show
+    -- TODO: This should actually be infinity, not 1 million.
+    OverFull -> 1000000
+    NaturallyGood -> 0
+    TooFull (FiniteGlueRatio{factor=r, order=_order}) -> eq r
+    TooBare (FiniteGlueRatio{factor=r, order=_order}) -> eq r
+    TooFull InfiniteGlueRatio -> 10000
+    TooBare InfiniteGlueRatio -> 10000
+  where eq r = min 10000 $ round $ (r^(3 :: Int)) * 100
 
 lineGlueSetRatio :: Int -> [HListElement] -> LineStatus
 lineGlueSetRatio desiredWidth cs = glueSetRatio (naturalWidth cs - desiredWidth) (flex cs)
@@ -241,15 +247,14 @@ bestRoute desiredWidth tolerance linePenalty cs =
     csTrimmed = case last cs of
       HGlue _ -> init cs
       _ -> cs
-
-    -- finisher = []
-    finisher = [HPenalty $ Penalty 10000, HGlue Glue{dimen=0, stretch=GlueFlex{factor=10000000, order=0}, shrink=noGlueFlex}, HPenalty $ Penalty $ -10000]
-    csFinished = csTrimmed ++ finisher
+    suffix = [HPenalty $ Penalty 10000, HGlue Glue{dimen=0, stretch=GlueFlex{factor=10000000, order=0}, shrink=noGlueFlex}, HPenalty $ Penalty $ -10000]
+    csFinished = csTrimmed ++ suffix
     breaks = allBreaks csFinished
     -- badnesses = fmap (\Break{before=bef, after=aft, item=br} -> lineBadness desiredWidth bef) breaks
     -- ratios = fmap (\Break{before=bef, after=aft, item=br} -> lineGlueSetRatio desiredWidth bef) breaks
     -- considerables = fmap (isConsiderableAsLine tolerance desiredWidth) breaks
-    -- mmm = zip3 badnesses ratios considerables
+    -- lineFlexes = fmap (\Break{before=bef, after=aft, item=br} -> flex bef) breaks
+    -- mmm = zip4 badnesses ratios considerables lineFlexes
 
     -- considerableBreaks = T.traceShow mmm $ filter (isConsiderableAsLine tolerance desiredWidth) breaks
     considerableBreaks = filter (isConsiderableAsLine tolerance desiredWidth) breaks
@@ -273,11 +278,12 @@ superRoute desiredWidth cs =
 glueDiff :: LineStatus -> Glue -> Int
 glueDiff NaturallyGood _ = 0
 -- Note: I made this logic up.
+-- Note: Not checking for order or stretch/shrink direction here yet, broken.
 glueDiff OverFull Glue{shrink=GlueFlex{factor=shr}} = -shr
 glueDiff (TooFull InfiniteGlueRatio) Glue{shrink=GlueFlex{factor=shr}} = -shr
 glueDiff (TooBare InfiniteGlueRatio) Glue{stretch=GlueFlex{factor=str}} = str
-glueDiff (TooFull (FiniteGlueRatio r)) Glue{shrink=GlueFlex{factor=shr}} = round $ -(r * fromIntegral shr)
-glueDiff (TooBare (FiniteGlueRatio r)) Glue{stretch=GlueFlex{factor=str}} = round $ r * fromIntegral str
+glueDiff (TooFull (FiniteGlueRatio{factor=r, order=rOrder})) Glue{shrink=GlueFlex{factor=shr, order=gOrder}} = round $ -(r * fromIntegral shr)
+glueDiff (TooBare (FiniteGlueRatio{factor=r, order=rOrder})) Glue{stretch=GlueFlex{factor=str, order=gOrder}} = round $ r * fromIntegral str
 
 setGlue :: LineStatus -> Glue -> B.SetGlue
 setGlue ls g@Glue{dimen=d} = B.SetGlue $ d + glueDiff ls g
