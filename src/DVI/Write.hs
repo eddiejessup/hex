@@ -7,17 +7,14 @@ module DVI.Write where
 import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BLS
 import Data.Char (ord)
-import qualified Data.FixedLength as FIX
-import Data.FixedLength ((!:))
 import qualified Data.Int as I
 import qualified Data.Word as W
 import System.FilePath (splitFileName)
-import qualified Type.Data.Num.Unary.Literal as LIT
 import qualified Unit as U
 
 import qualified TFM.Main as TFMM
 
-type FourList a = FIX.T LIT.U4 a
+type Fourple a = (a, a, a, a)
 
 data Operation
     -- 0 to 127: set that character number.
@@ -383,50 +380,32 @@ buildIntArgVal signed n = do
     4 -> return $ S4 $ fromIntegral n
     b -> fail $ "Cannot handle this number of bytes: " ++ show b
 
-pickSizeOp :: FourList a -> Bool -> Int -> Either String (a, ArgVal)
-pickSizeOp ops signed n = do
+pickSizeOp :: Fourple a -> Bool -> Int -> Either String (a, ArgVal)
+pickSizeOp (op1, op2, _, op4) signed n = do
   argVal <- buildIntArgVal signed n
-  ix <-
+  _op <-
     case argVal of
-      U1 _ -> return FIX.i0
-      S1 _ -> return FIX.i0
-      U2 _ -> return FIX.i1
-      S2 _ -> return FIX.i1
-      U4 _ -> return FIX.i3
-      S4 _ -> return FIX.i3
+      U1 _ -> return op1
+      S1 _ -> return op1
+      U2 _ -> return op2
+      S2 _ -> return op2
+      U4 _ -> return op4
+      S4 _ -> return op4
       v -> fail $ "No operation to go with this argument value: " ++ show v
-  return (FIX.index ix ops, argVal)
+  return (_op, argVal)
 
--- pickSizeOp :: FourList a -> Bool -> Int -> Either String (a, ArgVal)
--- pickSizeOp ops signed n = case ops of
---     -- (op1b !: op2b !: _ !: op4b !: FIX.end)
---      -> do
---         argVal <- buildIntArgVal signed n
---         _op <- case argVal of
---             U1 _ -> return op1b
---             S1 _ -> return op1b
---             U2 _ -> return op2b
---             S2 _ -> return op2b
---             LIT.U4 _ -> return op4b
---             S4 _ -> return op4b
---             v -> fail $ "No operation to go with this argument value: " ++ (show v)
---         return (_op, argVal)
---     _ -> fail "Only four operations supported"
-pickSizeOpUnsigned :: FourList a -> Int -> Either String (a, ArgVal)
+pickSizeOpUnsigned :: Fourple a -> Int -> Either String (a, ArgVal)
 pickSizeOpUnsigned ops = pickSizeOp ops False
 
-getVarByteInstruction :: FourList Operation -> String -> Int -> Bool -> Either String EncodableInstruction
+getVarByteInstruction :: Fourple Operation -> String -> Int -> Bool -> Either String EncodableInstruction
 getVarByteInstruction ops _name n signed = do
   (_op, argVal) <- pickSizeOp ops signed n
   let arg = Argument {name = _name, val = argVal}
   return EncodableInstruction {op = _op, arguments = [arg]}
 
 -- Encoding abstract instructions.
-longSelectFontOps :: FourList Operation
-longSelectFontOps =
-  Select1ByteFontNr !: Select2ByteFontNr !: Select3ByteFontNr !:
-  Select4ByteFontNr !:
-  FIX.end
+longSelectFontOps :: Fourple Operation
+longSelectFontOps = (Select1ByteFontNr, Select2ByteFontNr, Select3ByteFontNr, Select4ByteFontNr)
 
 getSelectFontNrInstruction :: Int -> Either String EncodableInstruction
 getSelectFontNrInstruction fNr = do
@@ -468,11 +447,15 @@ getBeginPageInstruction lastBeginPoint =
   in EncodableInstruction {op = BeginPage, arguments = args}
 
 -- Define font.
-defineFontOps :: FourList Operation
-defineFontOps =
-  Define1ByteFontNr !: Define2ByteFontNr !: Define3ByteFontNr !:
-  Define4ByteFontNr !:
-  FIX.end
+defineFontOps :: Fourple Operation
+defineFontOps = (Define1ByteFontNr, Define2ByteFontNr, Define3ByteFontNr, Define4ByteFontNr)
+
+-- Ugly convenience to ease checking if an operation defines a font.
+defineFontOpsLst :: [Operation]
+defineFontOpsLst =
+    let (w, x, y, z) = defineFontOps
+    in [w, x, y, z]
+
 
 getDefineFontInstruction ::
      Int -> FilePath -> Int -> Int -> Int -> Either String EncodableInstruction
@@ -502,13 +485,11 @@ getDefineFontInstruction fNr fPath scaleFactor designSize fontChecksum = do
   return EncodableInstruction {op = _op, arguments = args}
 
 -- Put or set characters.
-setCharOps :: FourList Operation
-setCharOps =
-  Set1ByteChar !: Set2ByteChar !: Set3ByteChar !: Set4ByteChar !: FIX.end
+setCharOps :: Fourple Operation
+setCharOps = (Set1ByteChar, Set2ByteChar, Set3ByteChar, Set4ByteChar)
 
-putCharOps :: FourList Operation
-putCharOps =
-  Put1ByteChar !: Put2ByteChar !: Put3ByteChar !: Put4ByteChar !: FIX.end
+putCharOps :: Fourple Operation
+putCharOps = (Put1ByteChar, Put2ByteChar, Put3ByteChar, Put4ByteChar)
 
 getCharacterInstruction :: Int -> Bool -> Either String EncodableInstruction
 getCharacterInstruction code True = do
@@ -548,11 +529,11 @@ data Instruction
   | DoSpecial { cmd :: String }
   deriving (Show)
 
-moveRightOps :: FourList Operation
-moveRightOps = Right1Byte !: Right2Byte !: Right3Byte !: Right4Byte !: FIX.end
+moveRightOps :: Fourple Operation
+moveRightOps = (Right1Byte, Right2Byte, Right3Byte, Right4Byte)
 
-moveDownOps :: FourList Operation
-moveDownOps = Down1Byte !: Down2Byte !: Down3Byte !: Down4Byte !: FIX.end
+moveDownOps :: Fourple Operation
+moveDownOps = (Down1Byte, Down2Byte, Down3Byte, Down4Byte)
 
 getMoveInstruction :: Bool -> Int -> Either String EncodableInstruction
 getMoveInstruction right dist = getVarByteInstruction (if right then moveRightOps else moveDownOps) "distance" dist True
@@ -744,8 +725,7 @@ encodeDocument instrs magnification = do
       finishedInstrs = endPageInstruction:mundaneInstrs
       postamblePointer = encLength finishedInstrs
       postPostambleInstr = getPostPostambleInstr postamblePointer
-      fontDefinitions =
-        filter (\instr -> op instr `elem` defineFontOps) mundaneInstrs
+      fontDefinitions = filter (\instr -> op instr `elem` defineFontOpsLst) mundaneInstrs
   return $
     [postPostambleInstr] ++
     fontDefinitions ++ [postambleInstr] ++ finishedInstrs
