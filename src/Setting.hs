@@ -5,10 +5,14 @@ module Setting where
 
 import Data.List (intersperse, minimumBy, zip4)
 import Data.List.Index (imap)
-import Data.Maybe (isNothing)
+import Data.Maybe (isNothing, mapMaybe)
 import qualified Debug.Trace as T
 import Box (Dimensioned, naturalWidth)
 import qualified Box as B
+import Control.Applicative (liftA2)
+
+tenK :: Int
+tenK = 10000
 
 data GlueFlex = GlueFlex {factor :: Int, order :: Int} deriving Show
 
@@ -17,6 +21,9 @@ noGlueFlex = GlueFlex{factor=0, order=0}
 
 finiteGlueFlex :: Int -> GlueFlex
 finiteGlueFlex f = GlueFlex f 0
+
+filFlex :: GlueFlex
+filFlex = GlueFlex{factor=1, order=1}
 
 data ListFlex = ListFlex { stretch :: [Int], shrink :: [Int] } deriving Show
 
@@ -57,7 +64,13 @@ data VListElement
   | VFontSelection B.FontSelection
   deriving (Show)
 
-data Adjacency a = Adjacency (Maybe a, a, Maybe a) deriving Show
+filGlue :: Glue
+filGlue = Glue{dimen=0, stretch=filFlex, shrink=noGlueFlex}
+
+hFilGlue :: HListElement
+hFilGlue = HGlue filGlue
+
+newtype Adjacency a = Adjacency (Maybe a, a, Maybe a) deriving Show
 
 toAdjacents :: Maybe a -> [a] -> [Adjacency a]
 toAdjacents _ [] = []
@@ -70,39 +83,16 @@ fromAdjacent (Adjacency (_, a, _)) = a
 fromAdjacents :: [Adjacency a] -> [a]
 fromAdjacents = fmap fromAdjacent
 
-isDiscardable :: HListElement -> Bool
-isDiscardable a =
-  case a of
-    HGlue _ -> True
-    HKern _ -> True
-  -- HLeaders _ -> True
-    HPenalty _ -> True
-  -- HMathOn _ -> True
-  -- HMathOff _ -> True
-    _ -> False
-
 data BreakItem = GlueBreak Glue
                 | KernBreak B.Kern
                 | PenaltyBreak Penalty
                 | NoBreak
                 deriving Show
 
-data Break = Break { before :: [HListElement],
-                     after :: [HListElement],
-                     item :: BreakItem }
+data Break a = Break { before :: [a],
+                       after :: [a],
+                       item :: BreakItem }
            deriving Show
-
-toBreakItem :: Adjacency HListElement -> Maybe BreakItem
-  -- TODO: Add math formula conditions.
-toBreakItem (Adjacency a) = case a of
-  (Just x, HGlue g, _) -> if isDiscardable x then Nothing else Just $ GlueBreak g
-  (_, HKern k, Just HGlue{}) -> Just $ KernBreak k
-  (_, HPenalty p, _) -> Just $ PenaltyBreak p
-  -- TODO: Discretionary break and Math-off.
-  _ -> Nothing
-
-isBreakItem :: Adjacency HListElement -> Bool
-isBreakItem = isNothing . toBreakItem
 
 breakPenalty :: BreakItem -> Int
 breakPenalty (GlueBreak _) = 0
@@ -110,36 +100,35 @@ breakPenalty (KernBreak _) = 0
 breakPenalty NoBreak = 0
 breakPenalty (PenaltyBreak (Penalty p)) = p
 
-trimBeforeBreak :: [HListElement] -> HListElement -> [HListElement]
-trimBeforeBreak _before b = case b of
-  -- Include the break item in the pre-break list, unless it is glue.
-  HGlue _ -> _before
-  x -> _before ++ [x]
+class ListElement a where
+  toGlue :: a -> Maybe Glue
+  isDiscardable :: a -> Bool
+  toBreakItem :: Adjacency a -> Maybe BreakItem
 
-trimAfterBreak :: [Adjacency HListElement] -> [HListElement]
-trimAfterBreak = fromAdjacents .
-  dropWhile
-    (\ adj ->
-     isDiscardable (fromAdjacent adj) && not (isBreakItem adj))
+isGlue :: ListElement a => a -> Bool
+isGlue = isNothing . toGlue
 
-allBreaksInner :: [Break] -> [HListElement] -> [Adjacency HListElement] -> [Break]
+isBreakItem :: ListElement a => Adjacency a -> Bool
+isBreakItem = isNothing . toBreakItem
+
+allBreaksInner :: ListElement a => [Break a] -> [a] -> [Adjacency a] -> [Break a]
 allBreaksInner breaksAccum seen [] = Break{before=seen, after=[], item=NoBreak}:breaksAccum
 allBreaksInner breaksAccum seen ((thisAdj@(Adjacency (_, this, _))):rest) =
   let
+    trimBeforeBreak bef b = bef ++ if isGlue b then [] else [b]
+    -- Bit pretentious: fAnd maps two functions 'f' and 'g' into one
+    -- function whose result is 'f x && g x'.
+    fAnd = liftA2 (&&)
+    discardAfterBreak = fAnd (isDiscardable . fromAdjacent) (not . isBreakItem)
+    trimAfterBreak = fromAdjacents . dropWhile discardAfterBreak
     newBreaksAccum = case toBreakItem thisAdj of
       Nothing -> breaksAccum
       Just b -> Break{before=trimBeforeBreak seen this, after=trimAfterBreak rest, item=b}:breaksAccum
   in
     allBreaksInner newBreaksAccum (seen ++ [this]) rest
 
-allBreaks :: [HListElement] -> [Break]
+allBreaks :: ListElement a => [a] -> [Break a]
 allBreaks cs = allBreaksInner [] [] (toAdjacents Nothing cs)
-
-vGlues :: [VListElement] -> [Glue]
-vGlues cs = [ g | (VGlue g) <- cs]
-
-hGlues :: [HListElement] -> [Glue]
-hGlues cs = [ g | (HGlue g) <- cs]
 
 addGlueFlex :: GlueFlex -> [Int] -> [Int]
 addGlueFlex GlueFlex{factor=f, order=_order} fs =
@@ -147,22 +136,47 @@ addGlueFlex GlueFlex{factor=f, order=_order} fs =
       fsPad = if extraElems < 0 then fs else fs ++ replicate extraElems 0
   in imap (\i x -> if i == _order then x + f else x) fsPad
 
-sumGlueFlexes :: [GlueFlex] -> [Int]
-sumGlueFlexes = foldr addGlueFlex []
-
 listFlex :: [Glue] -> ListFlex
 listFlex gs =
-  let (strs, shrs) = unzip [ (str, shr) | Glue{stretch=str, shrink=shr} <- gs]
+  let
+    (strs, shrs) = unzip [ (str, shr) | Glue{stretch=str, shrink=shr} <- gs]
+    sumGlueFlexes = foldr addGlueFlex []
   in ListFlex {stretch=sumGlueFlexes strs, shrink=sumGlueFlexes shrs}
 
-class ElementList a where
-  flex :: a -> ListFlex
+flex :: (ListElement a) => [a] -> ListFlex
+flex = listFlex . (mapMaybe toGlue)
 
-instance ElementList [VListElement] where
-  flex = listFlex . vGlues
+instance ListElement VListElement where
+  toGlue (VGlue g) = Just g
+  toGlue _ = Nothing
 
-instance ElementList [HListElement] where
-  flex = listFlex . hGlues
+  isDiscardable (VGlue _) = True
+  isDiscardable (VKern _) = True
+  isDiscardable (VPenalty _) = True
+  isDiscardable _ = False
+
+  toBreakItem (Adjacency a) = case a of
+    (Just x, VGlue g, _) -> if isDiscardable x then Nothing else Just $ GlueBreak g
+    (_, VKern k, Just VGlue{}) -> Just $ KernBreak k
+    (_, VPenalty p, _) -> Just $ PenaltyBreak p
+    _ -> Nothing
+
+instance ListElement HListElement where
+  toGlue (HGlue g) = Just g
+  toGlue _ = Nothing
+
+  isDiscardable (HGlue _) = True
+  isDiscardable (HKern _) = True
+  isDiscardable (HPenalty _) = True
+  isDiscardable _ = False
+
+    -- TODO: Add math formula conditions.
+  toBreakItem (Adjacency a) = case a of
+    (Just x, HGlue g, _) -> if isDiscardable x then Nothing else Just $ GlueBreak g
+    (_, HKern k, Just (HGlue _)) -> Just $ KernBreak k
+    (_, HPenalty p, _) -> Just $ PenaltyBreak p
+    -- TODO: Discretionary break and Math-off.
+    _ -> Nothing
 
 instance Dimensioned [VListElement] where
   naturalWidth cs = maximum $ fmap naturalWidth cs
@@ -198,31 +212,35 @@ data LineStatus = NaturallyGood | TooFull GlueRatio | TooBare GlueRatio | OverFu
 glueSetRatio :: Int -> ListFlex -> LineStatus
 glueSetRatio excessLength ListFlex{stretch=stretches, shrink=shrinks} =
   let
-    flexes = if excessLength > 0 then shrinks else stretches
-    flex = last flexes
-    order = length flexes - 1
-    gRatio = (fromIntegral excessLength) / (fromIntegral flex)
-  in case compare excessLength 0 of
+    regime = compare excessLength 0
+    flexes = if regime == GT then shrinks else stretches
+    _flex = last flexes
+    _order = length flexes - 1
+    finiteFlex = _order == 0
+    gRatio = fromIntegral excessLength / fromIntegral _flex
+  in case regime of
     EQ -> NaturallyGood
     LT -> case stretches of
       [] -> TooBare InfiniteGlueRatio
-      strs -> TooBare FiniteGlueRatio{factor=(-gRatio), order=order}
+      _ -> TooBare FiniteGlueRatio{factor= -gRatio, order=_order}
     GT -> case shrinks of
       [] -> TooFull InfiniteGlueRatio
-      shrs -> if (order == 0 && excessLength > flex)
+      _ -> if finiteFlex && excessLength > _flex
         then OverFull
-        else TooFull FiniteGlueRatio{factor=gRatio, order=order}
+        else
+          let gRatioShrink = if finiteFlex then min gRatio 1.0 else gRatio
+          in TooFull FiniteGlueRatio{factor=gRatioShrink, order=_order}
 
 badness :: LineStatus -> Int
 badness g = case g of
     -- TODO: This should actually be infinity, not 1 million.
     OverFull -> 1000000
     NaturallyGood -> 0
-    TooFull (FiniteGlueRatio{factor=r, order=_order}) -> eq r
-    TooBare (FiniteGlueRatio{factor=r, order=_order}) -> eq r
-    TooFull InfiniteGlueRatio -> 10000
-    TooBare InfiniteGlueRatio -> 10000
-  where eq r = min 10000 $ round $ (r^(3 :: Int)) * 100
+    TooFull FiniteGlueRatio{factor=r, order=_order} -> eq r
+    TooBare FiniteGlueRatio{factor=r, order=_order} -> eq r
+    TooFull InfiniteGlueRatio -> tenK
+    TooBare InfiniteGlueRatio -> tenK
+  where eq r = min tenK $ round $ (r^(3 :: Int)) * 100
 
 lineGlueSetRatio :: Int -> [HListElement] -> LineStatus
 lineGlueSetRatio desiredWidth cs = glueSetRatio (naturalWidth cs - desiredWidth) (flex cs)
@@ -230,15 +248,24 @@ lineGlueSetRatio desiredWidth cs = glueSetRatio (naturalWidth cs - desiredWidth)
 lineBadness :: Int -> [HListElement] -> Int
 lineBadness desiredWidth cs = badness $ lineGlueSetRatio desiredWidth cs
 
-isConsiderableAsLine :: Int -> Int -> Break -> Bool
-isConsiderableAsLine tolerance desiredWidth Break{before=bef, item=br} = (breakPenalty br < 10000) && (lineBadness desiredWidth bef <= tolerance)
+isConsiderableAsLine :: Int -> Int -> Break HListElement -> Bool
+isConsiderableAsLine tolerance desiredWidth Break{before=bef, item=br} =
+  let
+    penaltyConsiderable = breakPenalty br < tenK
+    lineFlexConsiderable = lineBadness desiredWidth bef <= tolerance
+  in penaltyConsiderable && lineFlexConsiderable
 
 data Line = Line { contents :: [HListElement],
                    breakItem :: BreakItem }
            deriving Show
 
 lineDemerit :: Int -> Int -> Line -> Int
-lineDemerit linePenalty desiredWidth Line{contents=cs, breakItem=br} = (breakPenalty br)^(2 :: Int) + (linePenalty + (lineBadness desiredWidth cs))^(2 :: Int)
+lineDemerit linePenalty desiredWidth Line{contents=cs, breakItem=br} =
+  let
+    breakDemerit = (breakPenalty br)^(2 :: Int)
+    lineDemerit = (linePenalty + (lineBadness desiredWidth cs))^(2 :: Int)
+  in
+    breakDemerit + lineDemerit
 
 bestRoute :: Int -> Int -> Int -> [HListElement] -> [Line]
 bestRoute _ _ _ [] = []
@@ -247,7 +274,7 @@ bestRoute desiredWidth tolerance linePenalty cs =
     csTrimmed = case last cs of
       HGlue _ -> init cs
       _ -> cs
-    suffix = [HPenalty $ Penalty 10000, HGlue Glue{dimen=0, stretch=GlueFlex{factor=10000000, order=0}, shrink=noGlueFlex}, HPenalty $ Penalty $ -10000]
+    suffix = [HPenalty $ Penalty tenK, hFilGlue, HPenalty $ Penalty $ -tenK]
     csFinished = csTrimmed ++ suffix
     breaks = allBreaks csFinished
     -- badnesses = fmap (\Break{before=bef, after=aft, item=br} -> lineBadness desiredWidth bef) breaks
@@ -275,15 +302,19 @@ superRoute desiredWidth cs =
       spacedRoutes = intersperse [VGlue Glue {dimen = 1600000, stretch=noGlueFlex, shrink=noGlueFlex}] breakRoutes
   in concat spacedRoutes
 
+factMod :: Int -> Int -> Double -> Int -> Int
+factMod setOrder glueOrder r f = if setOrder == glueOrder then round (r * fromIntegral f) else 0
+
 glueDiff :: LineStatus -> Glue -> Int
 glueDiff NaturallyGood _ = 0
 -- Note: I made this logic up.
 -- Note: Not checking for order or stretch/shrink direction here yet, broken.
 glueDiff OverFull Glue{shrink=GlueFlex{factor=shr}} = -shr
-glueDiff (TooFull InfiniteGlueRatio) Glue{shrink=GlueFlex{factor=shr}} = -shr
-glueDiff (TooBare InfiniteGlueRatio) Glue{stretch=GlueFlex{factor=str}} = str
-glueDiff (TooFull (FiniteGlueRatio{factor=r, order=rOrder})) Glue{shrink=GlueFlex{factor=shr, order=gOrder}} = round $ -(r * fromIntegral shr)
-glueDiff (TooBare (FiniteGlueRatio{factor=r, order=rOrder})) Glue{stretch=GlueFlex{factor=str, order=gOrder}} = round $ r * fromIntegral str
+-- No flexibility implies no flex. Not that there should be anything to flex!
+glueDiff (TooFull InfiniteGlueRatio) _ = 0
+glueDiff (TooBare InfiniteGlueRatio) _ = 0
+glueDiff (TooFull FiniteGlueRatio{factor=r, order=setOrder}) Glue{shrink=GlueFlex{factor=f, order=glueOrder}} = -(factMod setOrder glueOrder r f)
+glueDiff (TooBare FiniteGlueRatio{factor=r, order=setOrder}) Glue{stretch=GlueFlex{factor=f, order=glueOrder}} = factMod setOrder glueOrder r f
 
 setGlue :: LineStatus -> Glue -> B.SetGlue
 setGlue ls g@Glue{dimen=d} = B.SetGlue $ d + glueDiff ls g
