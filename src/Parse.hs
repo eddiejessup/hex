@@ -54,14 +54,11 @@ extractVElems s (a@Lex.CharCat {}:rest) = do
     width = 28000000
     tolerance = 200
     linePenalty = 10
-    bestRouteLists = S.contents <$> S.bestRoute width tolerance linePenalty hConts
-    bestRouteBoxes = fmap (S.simpleHSet width) bestRouteLists
-    route = intersperse (S.VGlue S.Glue {dimen = 400000, stretch=S.noGlueFlex, shrink=S.noGlueFlex}) bestRouteBoxes
-    -- route = superRoute width tolerance linePenalty cs
-
+    lineBoxes = S.setParagraph width tolerance linePenalty hConts
+    paraBoxes = intersperse (S.VGlue S.Glue{dimen = 400000, stretch=S.noGlueFlex, shrink=S.noGlueFlex}) lineBoxes
     down = S.VGlue S.Glue {dimen = 1000000, stretch = S.noGlueFlex, shrink = S.noGlueFlex}
   (sNextNext, nextResult, vRemain) <- extractVElems sNext hRemain
-  return (sNextNext, route ++ [down] ++ nextResult, vRemain)
+  return (sNextNext, paraBoxes ++ [down] ++ nextResult, vRemain)
 extractVElems s (Lex.ControlSequenceCall {name = name}:rest)
   | name == "font" = do
     fontInfo <- TFMM.readTFM "cmr10.tfm"

@@ -13,6 +13,7 @@ import Control.Applicative (liftA2)
 
 tenK :: Int
 tenK = 10000
+oneMillion = 1000000
 
 data GlueFlex = GlueFlex {factor :: Int, order :: Int} deriving Show
 
@@ -115,7 +116,6 @@ allBreaksInner :: ListElement a => [Break a] -> [a] -> [Adjacency a] -> [Break a
 allBreaksInner breaksAccum seen [] = Break{before=seen, after=[], item=NoBreak}:breaksAccum
 allBreaksInner breaksAccum seen ((thisAdj@(Adjacency (_, this, _))):rest) =
   let
-    trimBeforeBreak bef b = bef ++ if isGlue b then [] else [b]
     -- Bit pretentious: fAnd maps two functions 'f' and 'g' into one
     -- function whose result is 'f x && g x'.
     fAnd = liftA2 (&&)
@@ -123,12 +123,15 @@ allBreaksInner breaksAccum seen ((thisAdj@(Adjacency (_, this, _))):rest) =
     trimAfterBreak = fromAdjacents . dropWhile discardAfterBreak
     newBreaksAccum = case toBreakItem thisAdj of
       Nothing -> breaksAccum
-      Just b -> Break{before=trimBeforeBreak seen this, after=trimAfterBreak rest, item=b}:breaksAccum
+      Just b -> Break{before=if isGlue this then seen else this:seen, after=trimAfterBreak rest, item=b}:breaksAccum
   in
-    allBreaksInner newBreaksAccum (seen ++ [this]) rest
+    allBreaksInner newBreaksAccum (this:seen) rest
 
 allBreaks :: ListElement a => [a] -> [Break a]
-allBreaks cs = allBreaksInner [] [] (toAdjacents Nothing cs)
+allBreaks cs =
+  let
+    res = allBreaksInner [] [] (toAdjacents Nothing cs)
+  in fmap (\b@Break{before=bef} -> b{before=reverse bef}) res
 
 addGlueFlex :: GlueFlex -> [Int] -> [Int]
 addGlueFlex GlueFlex{factor=f, order=_order} fs =
@@ -178,18 +181,21 @@ instance ListElement HListElement where
     -- TODO: Discretionary break and Math-off.
     _ -> Nothing
 
+contentWidths :: (ListElement a, Dimensioned a) => [a] -> [Int]
+contentWidths = fmap naturalWidth
+
 instance Dimensioned [VListElement] where
-  naturalWidth cs = maximum $ fmap naturalWidth cs
+  naturalWidth = maximum . contentWidths
 
 instance Dimensioned [HListElement] where
-  naturalWidth cs = sum $ fmap naturalWidth cs
+  naturalWidth = sum . contentWidths
 
 instance Dimensioned HListElement where
   naturalWidth (HVBox v) = naturalWidth v
   naturalWidth (HHBox h) = naturalWidth h
-  naturalWidth (HRule B.Rule{width=w}) = w
-  naturalWidth (HGlue Glue{dimen=d}) = d
-  naturalWidth (HKern B.Kern{dimen=d}) = d
+  naturalWidth (HRule r) = naturalWidth r
+  naturalWidth (HGlue g) = dimen g
+  naturalWidth (HKern k) = B.kernDimen k
   naturalWidth (HPenalty _) = 0
   naturalWidth (HFontDefinition _) = 0
   naturalWidth (HFontSelection _) = 0
@@ -198,7 +204,7 @@ instance Dimensioned HListElement where
 instance Dimensioned VListElement where
   naturalWidth (VVBox v) = naturalWidth v
   naturalWidth (VHBox h) = naturalWidth h
-  naturalWidth (VRule B.Rule{width=w}) = w
+  naturalWidth (VRule r) = naturalWidth r
   naturalWidth (VGlue _) = 0
   naturalWidth (VKern _) = 0
   naturalWidth (VPenalty _) = 0
@@ -231,10 +237,10 @@ glueSetRatio excessLength ListFlex{stretch=stretches, shrink=shrinks} =
           let gRatioShrink = if finiteFlex then min gRatio 1.0 else gRatio
           in TooFull FiniteGlueRatio{factor=gRatioShrink, order=_order}
 
-badness :: LineStatus -> Int
-badness g = case g of
+lineStatusBadness :: LineStatus -> Int
+lineStatusBadness g = case g of
     -- TODO: This should actually be infinity, not 1 million.
-    OverFull -> 1000000
+    OverFull -> oneMillion
     NaturallyGood -> 0
     TooFull FiniteGlueRatio{factor=r, order=_order} -> eq r
     TooBare FiniteGlueRatio{factor=r, order=_order} -> eq r
@@ -245,54 +251,70 @@ badness g = case g of
 lineGlueSetRatio :: Int -> [HListElement] -> LineStatus
 lineGlueSetRatio desiredWidth cs = glueSetRatio (naturalWidth cs - desiredWidth) (flex cs)
 
-lineBadness :: Int -> [HListElement] -> Int
-lineBadness desiredWidth cs = badness $ lineGlueSetRatio desiredWidth cs
+isConsiderableAsLine :: Int -> Int -> (Line, [HListElement], Int) -> Bool
+isConsiderableAsLine tolerance desiredWidth (Line{breakItem=br}, aft, bad) =
+  breakPenalty br < tenK && bad <= tolerance
 
-isConsiderableAsLine :: Int -> Int -> Break HListElement -> Bool
-isConsiderableAsLine tolerance desiredWidth Break{before=bef, item=br} =
-  let
-    penaltyConsiderable = breakPenalty br < tenK
-    lineFlexConsiderable = lineBadness desiredWidth bef <= tolerance
-  in penaltyConsiderable && lineFlexConsiderable
+data Line = Line {contents :: [HListElement], breakItem :: BreakItem, status :: LineStatus}
 
-data Line = Line { contents :: [HListElement],
-                   breakItem :: BreakItem }
-           deriving Show
+data Route = Route {lines :: [Line], demerit :: Int }
 
-lineDemerit :: Int -> Int -> Line -> Int
-lineDemerit linePenalty desiredWidth Line{contents=cs, breakItem=br} =
+lineDemerit :: Int -> Int -> BreakItem -> Int
+lineDemerit linePenalty bad br =
   let
     breakDemerit = (breakPenalty br)^(2 :: Int)
-    lineDemerit = (linePenalty + (lineBadness desiredWidth cs))^(2 :: Int)
+    lineDemerit = (linePenalty + bad)^(2 :: Int)
   in
     breakDemerit + lineDemerit
 
-bestRoute :: Int -> Int -> Int -> [HListElement] -> [Line]
-bestRoute _ _ _ [] = []
+breakToLine :: Int -> Break HListElement -> (Line, [HListElement])
+breakToLine desiredWidth Break{before=bef, item=br, after=aft} =
+  let
+    stat = lineGlueSetRatio desiredWidth bef
+  in (Line{contents=bef, status=stat, breakItem=br}, aft)
+
+bestRoute :: Int -> Int -> Int -> [HListElement] -> Route
+bestRoute _ _ _ [] = Route {lines=[], demerit=0}
 bestRoute desiredWidth tolerance linePenalty cs =
   let
+    -- Add extra bits to finish the list.
     csTrimmed = case last cs of
       HGlue _ -> init cs
       _ -> cs
     suffix = [HPenalty $ Penalty tenK, hFilGlue, HPenalty $ Penalty $ -tenK]
     csFinished = csTrimmed ++ suffix
+
     breaks = allBreaks csFinished
-    -- badnesses = fmap (\Break{before=bef, after=aft, item=br} -> lineBadness desiredWidth bef) breaks
-    -- ratios = fmap (\Break{before=bef, after=aft, item=br} -> lineGlueSetRatio desiredWidth bef) breaks
-    -- considerables = fmap (isConsiderableAsLine tolerance desiredWidth) breaks
-    -- lineFlexes = fmap (\Break{before=bef, after=aft, item=br} -> flex bef) breaks
-    -- mmm = zip4 badnesses ratios considerables lineFlexes
+    linedBreaks = fmap (breakToLine desiredWidth) breaks
+    linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, lineStatusBadness $ status ln)) linedBreaks
+    goodLinedBaddedBreaks = filter (isConsiderableAsLine tolerance desiredWidth) linedBaddedBreaks
+    addDemerit (ln@Line{breakItem=br}, aft, bad) = (ln, aft, lineDemerit linePenalty bad br)
+    goodLinedDemeredBreaks = fmap addDemerit goodLinedBaddedBreaks
 
-    -- considerableBreaks = T.traceShow mmm $ filter (isConsiderableAsLine tolerance desiredWidth) breaks
-    considerableBreaks = filter (isConsiderableAsLine tolerance desiredWidth) breaks
-    subBestRoute Break{before=bef, after=aft, item=br} = Line{contents=bef, breakItem=br}:bestRoute desiredWidth tolerance linePenalty aft
-    bestConsiderableRoutes = fmap subBestRoute considerableBreaks
+    subBestRoute (ln, aft, thisDemerit) =
+      let
+        Route{lines=subLines, demerit=subDemerit} = bestRoute desiredWidth tolerance linePenalty aft
+      in
+        Route{lines=ln:subLines, demerit=subDemerit + thisDemerit}
 
-    routeDemerit = sum . fmap (lineDemerit linePenalty desiredWidth)
-    compareRoutes a b = compare (routeDemerit a) (routeDemerit b)
+    bestGoodRoutes = fmap subBestRoute goodLinedDemeredBreaks
+    -- TODO: Can we avoid this repetition using lift?
+    compareRoutes a b = compare (demerit a) (demerit b)
+  in case goodLinedBaddedBreaks of
+    -- Should this be cs or csFinished?
+    [] -> Route{lines=[Line{contents=cs, status=OverFull, breakItem=NoBreak}], demerit= -1}
+    _ -> minimumBy compareRoutes bestGoodRoutes
 
-    best = minimumBy compareRoutes $ [Line{contents=cs, breakItem=NoBreak}]:bestConsiderableRoutes
-  in best
+setParagraph :: Int -> Int -> Int -> [HListElement] -> [VListElement]
+setParagraph desiredWidth tolerance linePenalty cs =
+  let
+    Route{lines=lns} = bestRoute desiredWidth tolerance linePenalty cs
+    setLine Line{contents=lncs, status=stat} =
+      let
+        setContents = concatMap (setHElem stat) lncs
+      in VHBox B.HBox{contents=setContents, desiredLength=B.To desiredWidth}
+  in
+    fmap setLine lns
 
 superRoute :: Int -> [HListElement] -> [VListElement]
 superRoute _ [] = []

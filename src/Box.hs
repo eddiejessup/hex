@@ -20,7 +20,7 @@ data Rule = Rule
   } deriving (Show)
 
 data Kern = Kern
-  { dimen :: Int
+  { kernDimen :: Int
   } deriving (Show)
 
 data FontDefinition = FontDefinition
@@ -43,7 +43,7 @@ data Character = Character
   } deriving (Show)
 
 data SetGlue = SetGlue
-  { dimen :: Int
+  { glueDimen :: Int
   } deriving (Show)
 
 data VBox = VBox
@@ -84,12 +84,15 @@ data Page = Page [VBoxElement]
 class Dimensioned a where
   naturalWidth :: a -> Int
 
+instance Dimensioned Rule where
+  naturalWidth Rule{width=w} = w
+
 instance Dimensioned HBoxElement where
   naturalWidth (HVBox v) = naturalWidth v
   naturalWidth (HHBox h) = naturalWidth h
-  naturalWidth (HRule Rule{width=w}) = w
-  naturalWidth (HGlue SetGlue{dimen=d}) = d
-  naturalWidth (HKern Kern{dimen=d}) = d
+  naturalWidth (HRule r) = naturalWidth r
+  naturalWidth (HGlue g) = glueDimen g
+  naturalWidth (HKern k) = kernDimen k
   naturalWidth (HFontDefinition _) = 0
   naturalWidth (HFontSelection _) = 0
   naturalWidth (HCharacter Character{width=w}) = w
@@ -97,7 +100,7 @@ instance Dimensioned HBoxElement where
 instance Dimensioned VBoxElement where
   naturalWidth (VVBox v) = naturalWidth v
   naturalWidth (VHBox h) = naturalWidth h
-  naturalWidth (VRule Rule{width=w}) = w
+  naturalWidth (VRule r) = naturalWidth r
   naturalWidth (VGlue _) = 0
   naturalWidth (VKern _) = 0
   naturalWidth (VFontDefinition _) = 0
@@ -163,8 +166,8 @@ instance DVIAble HBoxElement where
     -- TODO: Move by amount dependent on contents.
   toDVI (HHBox e) = [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveRight {distance = 200000}]
     -- TODO: Rule.
-  toDVI (HGlue SetGlue {dimen = d}) = [DVIW.MoveRight {distance = d}]
-  toDVI (HKern Kern {dimen = d}) = [DVIW.MoveRight {distance = d}]
+  toDVI (HGlue g) = [DVIW.MoveRight {distance = glueDimen g}]
+  toDVI (HKern k) = [DVIW.MoveRight {distance = kernDimen k}]
   toDVI (HFontDefinition e@FontDefinition {}) = toDVI e
   toDVI (HFontSelection e@FontSelection {}) = toDVI e
   toDVI (HCharacter e@Character {}) = toDVI e
@@ -175,8 +178,8 @@ instance DVIAble VBoxElement where
     -- TODO: Move by amount dependent on contents.
   toDVI (VHBox e) = [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveDown {distance = 200000}]
     -- TODO: Rule.
-  toDVI (VGlue SetGlue {dimen = d}) = [DVIW.MoveDown {distance = d}]
-  toDVI (VKern Kern {dimen = d}) = [DVIW.MoveDown {distance = d}]
+  toDVI (VGlue g) = [DVIW.MoveDown {distance = glueDimen g}]
+  toDVI (VKern k) = [DVIW.MoveDown {distance = kernDimen k}]
   toDVI (VFontDefinition e) = toDVI e
   toDVI (VFontSelection e) = toDVI e
 
