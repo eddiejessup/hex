@@ -19,6 +19,7 @@ library
                      , Setting
                      , Parse
                      , Unit
+                     , Adjacent
                      , Lex
                      , Box
                      , TFM.Parse

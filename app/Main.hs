@@ -34,10 +34,8 @@ main = do
 
     -- putStrLn $ List.intercalate "\n" $ fmap show tokens
 
-    (endState, vListElems, _) <- Parse.extractVElems state tokens
-    let vBoxElems = Setting.simpleVSet vListElems
 
-    let pages = [Box.Page vBoxElems, Box.Page vBoxElems]
+    (stateEnd, pages) <- Parse.extractPages state tokens []
 
     -- putStrLn $ List.intercalate "\n" $ fmap show vBoxElems
 
