@@ -2,41 +2,40 @@
 
 module Main where
 
-import qualified Data.Map as Map
-import qualified Data.List as List
+import qualified Data.IntMap.Strict as IMap
 import qualified Data.Char as C
 import qualified Data.ByteString.Lazy as BLS
 
 import qualified DVI.Write as DVIW
-import qualified TFM.Main as TFMM
 import qualified Cat
 import qualified Lex
 import qualified Box
 import qualified Parse
-import qualified Setting
 import qualified Command
 
+main :: IO ()
 main = do
   contents <- readFile "test.tex"
 
+  let contentsCode = fmap C.ord contents
+
   let
       -- Add in some useful extras beyond the technical defaults.
-      extras = [('^', Cat.Superscript)]
-      usableMap = foldl (\m (k, v) -> Map.insert k v m) Cat.defaultCharCatMap extras
-      charToCat = Cat.toCatCode usableMap
+      extras = [(94, Cat.Superscript)]
+      usableMap = foldl (\m (k, v) -> IMap.insert k v m) Cat.defaultCharCatMap extras
 
   -- Get some char-cats.
-  let charCats = Cat.process charToCat contents
+  let charCats = Cat.extractAll usableMap contentsCode
 
   -- Get some tokens.
-  let tokens = Lex.process charCats
+  let tokens = Lex.extractAllInit charCats
 
   -- Get some commands.
-  let commands = Command.process tokens
+  let commands = Command.extractAll tokens
 
   let state = Parse.State {currentFontInfo=Nothing}
 
-  (stateEnd, pages) <- Parse.extractPages state commands []
+  (_, pages) <- Parse.extractPages state commands []
 
   -- putStrLn $ List.intercalate "\n" $ fmap show vBoxElems
 

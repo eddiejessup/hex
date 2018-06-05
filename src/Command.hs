@@ -2,9 +2,8 @@
 
 module Command where
 
-import qualified Data.Char as C
+import Data.List.Split (chop)
 
-import qualified Cat
 import qualified Lex
 
 data Axis = Horizontal | Vertical
@@ -72,13 +71,24 @@ data Command
   -- | AddDiscretionaryText
   -- | ShiftMathMode
 
-process :: [Lex.LexToken] -> [Command]
-process [] = []
-process (Lex.CharCat Cat.CharCat {char = char, cat = cat}:rest)
-  | cat `elem` [Cat.Letter, Cat.Other] = AddCharacter{method=ExplicitChar, code=C.ord char} : process rest
-  | cat == Cat.Space = AddSpace ExplicitSpace : process rest
-  | otherwise = process rest
-process (Lex.ControlSequenceCall {name = name}:rest)
-  | name == "par" = StartParagraph{indent=True} : process rest
-  | name == "font" = (Assign $ NonMacroAssign SelectFont) : process rest
-  | otherwise = process rest
+extractCommand :: [Lex.Token] -> ([Command], [Lex.Token])
+extractCommand [] = ([], [])
+extractCommand (Lex.CharCat{cat=Lex.BeginGroup}:rest) = ([], rest)
+extractCommand (Lex.CharCat{cat=Lex.EndGroup}:rest) = ([], rest)
+extractCommand (Lex.CharCat{cat=Lex.MathShift}:rest) = ([], rest)
+extractCommand (Lex.CharCat{cat=Lex.AlignTab}:rest) = ([], rest)
+extractCommand (Lex.CharCat{cat=Lex.Parameter}:rest) = ([], rest)
+extractCommand (Lex.CharCat{cat=Lex.Superscript}:rest) = ([], rest)
+extractCommand (Lex.CharCat{cat=Lex.Subscript}:rest) = ([], rest)
+extractCommand (Lex.CharCat{cat=Lex.Space}:rest) = ([AddSpace ExplicitSpace], rest)
+extractCommand (Lex.CharCat{char=char, cat=Lex.Letter}:rest) = ([AddCharacter{method=ExplicitChar, code=char}], rest)
+extractCommand (Lex.CharCat{char=char, cat=Lex.Other}:rest) = ([AddCharacter{method=ExplicitChar, code=char}], rest)
+extractCommand (Lex.CharCat{cat=Lex.Active}:rest) = ([], rest)
+extractCommand (Lex.ControlSequence (Lex.ControlWord name):rest)
+  | name == "par" = ([StartParagraph{indent=True}], rest)
+  | name == "font" = ([Assign $ NonMacroAssign SelectFont], rest)
+  | otherwise = ([], rest)
+extractCommand (Lex.ControlSequence (Lex.ControlSymbol _):rest) = ([], rest)
+
+extractAll :: [Lex.Token] -> [Command]
+extractAll toks = concat $ chop extractCommand toks

@@ -1,82 +1,74 @@
 module Cat where
 
-import qualified Data.Map as Map
-import qualified Data.Char as C
-import Data.Maybe (fromJust)
+import qualified Data.IntMap.Strict as IMap
+import Data.List.Split (chop)
 
-data NestedList a = Elem a | List [NestedList a] deriving (Show, Eq)
+data CatCode
+  = Escape
+  | BeginGroup
+  | EndGroup
+  | MathShift
+  | AlignTab
+  | EndOfLine
+  | Parameter
+  | Superscript
+  | Subscript
+  | Ignored
+  | Space
+  | Letter
+  | Other
+  | Active
+  | Comment
+  | Invalid
+  deriving (Show, Eq, Enum)
 
-contents :: NestedList a -> [NestedList a]
-contents (Elem x) = [Elem x]
-contents (List x) = x
+type CharCode = Int
 
-insert :: NestedList a -> Int -> NestedList a -> NestedList a
-insert (List x) 0 y = List $ y:x
-insert (List (x:xs)) n y = List $ x:contents (insert (List xs) (n - 1) y)
+data CharCat = CharCat
+  { char :: CharCode
+  , cat :: CatCode
+  } deriving (Show)
 
-down :: NestedList a -> NestedList a
-down ls = case ls of Elem a -> Elem a
-                     List (x:xs) -> down x
+type CharCatMap = IMap.IntMap CatCode
 
-data CatCode = Escape
-             | BeginGroup
-             | EndGroup
-             | MathShift
-             | AlignTab
-             | EndOfLine
-             | Parameter
-             | Superscript
-             | Subscript
-             | Ignored
-             | Space
-             | Letter
-             | Other
-             | Active
-             | Comment
-             | Invalid
-             deriving (Show, Eq, Enum)
-
-data CharCat = CharCat {char :: Char, cat :: CatCode, len :: Int} deriving (Show)
-
-defaultCatCode :: Char -> CatCode
-defaultCatCode char
-    | char == '\\' = Escape
-    | char == ' ' = Space
-    | char == '%' = Comment
-    -- Null
-    | C.ord char == 0 = Ignored
+defaultCatCode :: CharCode -> CatCode
+defaultCatCode n
+  | n == 92 = Escape -- '\'
+  | n == 32 = Space -- ' '
+  | n == 37 = Comment -- '%'
+  | n == 0 = Ignored -- Null
     -- NON-STANDARD
-    | C.ord char == 10 = EndOfLine
-    | C.ord char == 13 = EndOfLine
-    | C.ord char == 127 = Invalid
-    | char `elem` ['a'..'z'] = Letter
-    | char `elem` ['A'..'Z'] = Letter
-    | otherwise = Other
+  | n == 10 = EndOfLine
+  | n == 13 = EndOfLine
+  | n == 127 = Invalid
+  | n `elem` [97 .. 122] = Letter -- 'a' to 'z'.
+  | n `elem` [65 .. 90] = Letter -- 'A' to 'Z'.
+  | otherwise = Other
 
-chrs = fmap C.chr [0..127]
-defaultCharCatMap = Map.fromList $ zip chrs $ fmap Cat.defaultCatCode chrs
+defaultCharCatMap :: CharCatMap
+defaultCharCatMap = IMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127]
 
-toCatCode :: Ord a => Map.Map a b -> a -> b
-toCatCode m c = fromJust $ Map.lookup c m
+catLookup :: CharCatMap -> CharCode -> CatCode
+catLookup m n = IMap.findWithDefault Invalid n m
 
-extractCharCat :: (Char -> CatCode) -> [Char] -> (CharCat, [Char])
-extractCharCat f (c:cs) = (CharCat {char=c, cat=f c, len=1}, cs)
-
-extractCharCatTrio :: (Char -> CatCode) -> [Char] -> (CharCat, [Char])
-extractCharCatTrio toCat (cOne:cTwo:cThree:cs) =
+extractCharCat :: (CharCode -> CatCode) -> [CharCode] -> ([CharCat], [CharCode])
+extractCharCat toCat (n1:n2:n3:rest)
     -- Next two characters must be identical, and have category
     -- 'Superscript', and triod character mustn't have category 'EndOfLine'.
-    if (toCat cOne == Superscript) && (cOne == cTwo) && (toCat cThree /= EndOfLine)
-        then
-            let
-                nThree = C.ord cThree
-                cThreeTriod = C.chr (if nThree < 64 then nThree + 64 else nThree - 64)
-            in (CharCat {char=cThreeTriod, cat=toCat cThreeTriod, len=3}, cs)
-        else extractCharCat toCat (cOne:cTwo:cThree:cs)
-extractCharCatTrio toCat cs = extractCharCat toCat cs
+ = 
+  let
+    cat1 = toCat n1
+    n3Triod = if n3 < 64 then n3 + 64 else n3 - 64
+    charCatTriod = CharCat {char = n3Triod, cat = toCat n3Triod}
+    charCatSimple = CharCat {char = n1, cat = cat1}
+  in
+    if (cat1 == Superscript) &&
+       (n1 == n2) &&
+       (toCat n3 /= EndOfLine)
+    then ([charCatTriod], rest)
+    else ([charCatSimple], n2:n3:rest)
+extractCharCat toCat (n1:rest) = ([CharCat {char = n1, cat = toCat n1}], rest)
+extractCharCat _ [] = ([], [])
 
-process :: (Char -> CatCode) -> [Char] -> [CharCat]
-process _ [] = []
-process f cs = gotCC : process f remainChars
-    where
-        (gotCC, remainChars) = extractCharCatTrio f cs
+extractAll :: CharCatMap -> [CharCode] -> [CharCat]
+extractAll m cs = concat $ chop (extractCharCat $ catLookup m) cs

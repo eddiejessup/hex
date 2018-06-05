@@ -2,80 +2,116 @@
 
 module Lex where
 
+import qualified Data.Char as C
+
 import qualified Cat
 
-data LexToken = CharCat Cat.CharCat
-              | ControlSequenceCall {name :: String, len :: Int }
-              deriving (Show)
+data ControlSequence
+  = ControlSymbol Char
+  | ControlWord String
+  deriving (Show)
 
-data LexState = SkippingBlanks | LineMiddle | LineBegin deriving (Eq)
+-- Not all Catcodes make it past the lexer, which we can represent in the
+-- type system.
+data LexCatCode
+  = BeginGroup
+  | EndGroup
+  | MathShift
+  | AlignTab
+  | Parameter
+  | Superscript
+  | Subscript
+  | Space
+  | Letter
+  | Other
+  | Active
+  deriving (Show)
 
-tokeniseCatCodes =
-    [ Cat.BeginGroup
-    , Cat.EndGroup
-    , Cat.MathShift
-    , Cat.AlignTab
-    , Cat.Parameter
-    , Cat.Superscript
-    , Cat.Subscript
-    , Cat.Letter
-    , Cat.Other
-    , Cat.Active ]
+data Token
+  = CharCat {char :: Cat.CharCode, cat :: LexCatCode}
+  | ControlSequence ControlSequence
+  deriving (Show)
 
-collectUntil :: (a -> Bool) -> [a] -> ([a], [a])
-collectUntil tester (this:rest) =
-    if tester this
-    then
-        ([], rest)
-    else
-        let (restBefore, after) = collectUntil tester rest
-        in
-            (this:restBefore, after)
+data LexState
+  = SkippingBlanks
+  | LineMiddle
+  | LineBegin
+  deriving (Eq)
 
-extractLexTokens :: [Cat.CharCat] -> LexState -> [LexToken]
-extractLexTokens [] _ = []
-extractLexTokens (this@Cat.CharCat{cat=cat, len=len}:rest) state
-    | cat == Cat.Escape =
-        let
-            ccNameFirst:remainCharCatsFirst = rest
-            catNameFirst = Cat.cat ccNameFirst
-            nextState =
-                if catNameFirst `elem` [Cat.Space, Cat.Letter]
-                    then SkippingBlanks
-                    else LineMiddle
-            (ccNameRest, nextCharCats) =
-                if catNameFirst == Cat.Letter
-                    then collectUntil ((Cat.Letter /=) . Cat.cat) remainCharCatsFirst
-                    else ([], remainCharCatsFirst)
-            csCCs = ccNameFirst:ccNameRest
-            csName = map Cat.char csCCs
-            tokLength = sum $ map Cat.len (this:csCCs)
-            tok = ControlSequenceCall {name=csName, len=tokLength}
-        in
-            tok:extractLexTokens nextCharCats nextState
-    | cat `elem` tokeniseCatCodes =
-        (CharCat this):extractRest LineMiddle
-    | cat == Cat.Comment =
-        let
-            (_, nextCharCats) = collectUntil ((Cat.EndOfLine ==) . Cat.cat) rest
-        in
-            extractLexTokens nextCharCats LineBegin
-    | (state == SkippingBlanks) && (cat `elem` [Cat.Space, Cat.EndOfLine]) =
-        extractRest SkippingBlanks
-    | (state == LineBegin) && (cat == Cat.Space) =
-        extractRest LineBegin
-    -- Empty line: Make a paragraph.
-    | (state == LineBegin) && (cat == Cat.EndOfLine) =
-        let
-            tok = ControlSequenceCall {name="par", len=Cat.len this}
-        in
-            tok:extractRest LineBegin
-    | (state == LineMiddle) && (cat `elem` [Cat.Space, Cat.EndOfLine]) =
-        let
-            nextState = if cat == Cat.Space then SkippingBlanks else LineBegin
-            tok = CharCat Cat.CharCat {Cat.char=' ', Cat.cat=Cat.Space, Cat.len=Cat.len this}
-        in tok:extractRest nextState
-    where
-        extractRest = extractLexTokens rest
+spaceTok :: Token
+-- 32 means ' '.
+spaceTok = CharCat{char=32, cat=Space}
 
-process charCats = extractLexTokens charCats LineBegin
+extractToken :: LexState -> [Cat.CharCat] -> ([Token], LexState, [Cat.CharCat])
+extractToken state [] = ([], state, [])
+-- Control sequence: Grab it.
+extractToken _ (Cat.CharCat{cat=Cat.Escape}:rest) =
+    let
+        ccNameFirst:remainCharCatsFirst = rest
+        catNameFirst = Cat.cat ccNameFirst
+        (cs, remainCharCats) = if catNameFirst == Cat.Letter
+            then let
+                (ccNameRest, remainCharCatsWord) = break ((Cat.Letter /=) . Cat.cat) remainCharCatsFirst
+                cwName = fmap (C.chr . Cat.char) (ccNameFirst:ccNameRest)
+            in (ControlWord cwName, remainCharCatsWord)
+            else (ControlSymbol $ (C.chr . Cat.char) ccNameFirst, remainCharCatsFirst)
+        nextState = if catNameFirst `elem` [Cat.Space, Cat.Letter] then SkippingBlanks else LineMiddle
+    in
+        ([ControlSequence cs], nextState, remainCharCats)
+-- Comment: Ignore rest of line.
+extractToken _ (Cat.CharCat{cat=Cat.Comment}:rest) =
+    ([], LineBegin, dropWhile ((Cat.EndOfLine /=) . Cat.cat) rest)
+-- Space at the start of a line: Ignore.
+extractToken LineBegin (Cat.CharCat{cat=Cat.Space}:rest) =
+    ([], LineBegin, rest)
+-- Empty line: Make a paragraph.
+extractToken LineBegin (Cat.CharCat{cat=Cat.EndOfLine}:rest) =
+    ([ControlSequence $ ControlWord "par"], LineBegin, rest)
+-- Simple tokeniser cases
+extractToken _ (Cat.CharCat{char=n, cat=Cat.BeginGroup}:rest)
+    = ([CharCat{char=n, cat=BeginGroup}], LineMiddle, rest)
+extractToken _ (Cat.CharCat{char=n, cat=Cat.EndGroup}:rest)
+    = ([CharCat{char=n, cat=EndGroup}], LineMiddle, rest)
+extractToken _ (Cat.CharCat{char=n, cat=Cat.MathShift}:rest)
+    = ([CharCat{char=n, cat=MathShift}], LineMiddle, rest)
+extractToken _ (Cat.CharCat{char=n, cat=Cat.AlignTab}:rest)
+    = ([CharCat{char=n, cat=AlignTab}], LineMiddle, rest)
+extractToken _ (Cat.CharCat{char=n, cat=Cat.Parameter}:rest)
+    = ([CharCat{char=n, cat=Parameter}], LineMiddle, rest)
+extractToken _ (Cat.CharCat{char=n, cat=Cat.Superscript}:rest)
+    = ([CharCat{char=n, cat=Superscript}], LineMiddle, rest)
+extractToken _ (Cat.CharCat{char=n, cat=Cat.Subscript}:rest)
+    = ([CharCat{char=n, cat=Subscript}], LineMiddle, rest)
+extractToken _ (Cat.CharCat{char=n, cat=Cat.Letter}:rest)
+    = ([CharCat{char=n, cat=Letter}], LineMiddle, rest)
+extractToken _ (Cat.CharCat{char=n, cat=Cat.Other}:rest)
+    = ([CharCat{char=n, cat=Other}], LineMiddle, rest)
+extractToken _ (Cat.CharCat{char=n, cat=Cat.Active}:rest)
+    = ([CharCat{char=n, cat=Active}], LineMiddle, rest)
+-- Space, or end of line, while skipping blanks: Ignore.
+extractToken SkippingBlanks (Cat.CharCat{cat=Cat.Space}:rest)
+    = ([], SkippingBlanks, rest)
+extractToken SkippingBlanks (Cat.CharCat{cat=Cat.EndOfLine}:rest)
+    = ([], SkippingBlanks, rest)
+-- Space in middle of line: Make a space token and start skipping blanks.
+extractToken LineMiddle (Cat.CharCat{cat=Cat.Space}:rest)
+    = ([spaceTok], SkippingBlanks, rest)
+-- End of line in middle of line: Make a space token and go to line begin.
+extractToken LineMiddle (Cat.CharCat{cat=Cat.EndOfLine}:rest)
+    = ([spaceTok], LineBegin, rest)
+-- Ignored: Ignore.
+extractToken state (Cat.CharCat{cat=Cat.Ignored}:rest)
+    = ([], state, rest)
+-- Invalid: Print error message and ignore.
+-- TODO: TeXbook says to print an error message in this case.
+extractToken state (Cat.CharCat{cat=Cat.Invalid}:rest)
+    = ([], state, rest)
+
+extractAll :: LexState -> [Cat.CharCat] -> [Token]
+extractAll _ [] = []
+extractAll s ccs =
+    let (thisToks, nextS, nextCCs) = extractToken s ccs
+    in thisToks ++ extractAll nextS nextCCs
+
+extractAllInit :: [Cat.CharCat] -> [Token]
+extractAllInit = extractAll LineBegin

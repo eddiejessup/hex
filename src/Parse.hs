@@ -26,11 +26,6 @@ character state code = do
 -- Returns: state, paragraph's-worth of h-list elements, remaining commands.
 extractParagraph :: State -> [C.Command] -> IO (State, [S.BreakableHListElem], [C.Command])
 extractParagraph s [] = return (s, [], [])
--- extractParagraph s (Lex.CharCat Cat.CharCat {char = char, cat = cat}:comsRest)
--- | cat `elem` [Cat.Letter, Cat.Other] = do
-  -- | cat == Cat.Space = do
--- extractParagraph s (Lex.ControlSequenceCall {name = name}:comsRest)
-  -- | name == "par" = 
 extractParagraph s (C.AddCharacter{code=i}:comsRest) = do
   extra <- case character s i of
     Just c -> return [S.HCharacter c]
