@@ -14,39 +14,40 @@ import qualified Lex
 import qualified Box
 import qualified Parse
 import qualified Setting
+import qualified Command
 
 main = do
-    contents <- readFile "test.tex"
+  contents <- readFile "test.tex"
 
-    let
-        -- Add in some useful extras beyond the technical defaults.
-        extras = [('^', Cat.Superscript)]
-        usableMap = foldl (\m (k, v) -> Map.insert k v m) Cat.defaultCharCatMap extras
-        charToCat = Cat.toCatCode usableMap
+  let
+      -- Add in some useful extras beyond the technical defaults.
+      extras = [('^', Cat.Superscript)]
+      usableMap = foldl (\m (k, v) -> Map.insert k v m) Cat.defaultCharCatMap extras
+      charToCat = Cat.toCatCode usableMap
 
-    -- Char-cat some stuff.
-    -- print $ Cat.process charToCat contents
+  -- Get some char-cats.
+  let charCats = Cat.process charToCat contents
 
-    -- Get some tokens.
-    let charCats = Cat.process charToCat contents
-    let tokens = Lex.process charCats
-    let state = Parse.State {currentFontInfo=Nothing}
+  -- Get some tokens.
+  let tokens = Lex.process charCats
 
-    -- putStrLn $ List.intercalate "\n" $ fmap show tokens
+  -- Get some commands.
+  let commands = Command.process tokens
 
+  let state = Parse.State {currentFontInfo=Nothing}
 
-    (stateEnd, pages) <- Parse.extractPages state tokens []
+  (stateEnd, pages) <- Parse.extractPages state commands []
 
-    -- putStrLn $ List.intercalate "\n" $ fmap show vBoxElems
+  -- putStrLn $ List.intercalate "\n" $ fmap show vBoxElems
 
-    let instrs = Box.toDVI pages
+  let instrs = Box.toDVI pages
 
-    -- putStrLn $ List.intercalate "\n" $ fmap show instrs
+  -- putStrLn $ List.intercalate "\n" $ fmap show instrs
 
-    let Right encInstrs = DVIW.encodeDocument (reverse instrs) 1000
+  let Right encInstrs = DVIW.encodeDocument (reverse instrs) 1000
 
-    -- -- putStrLn $ List.intercalate "\n" $ fmap show (reverse encInstrs)
+  -- -- putStrLn $ List.intercalate "\n" $ fmap show (reverse encInstrs)
 
-    BLS.writeFile "out.dvi" $ DVIW.encode $ reverse encInstrs
+  BLS.writeFile "out.dvi" $ DVIW.encode $ reverse encInstrs
 
-    return ()
+  return ()
