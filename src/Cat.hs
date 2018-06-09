@@ -70,5 +70,8 @@ extractCharCat toCat (n1:n2:n3:rest)
 extractCharCat toCat (n1:rest) = ([CharCat {char = n1, cat = toCat n1}], rest)
 extractCharCat _ [] = ([], [])
 
-extractAll :: CharCatMap -> [CharCode] -> [CharCat]
-extractAll m cs = concat $ chop (extractCharCat $ catLookup m) cs
+extractAll :: (CharCode -> CatCode) -> [CharCode] -> [CharCat]
+extractAll toCat cs = concat $ chop (extractCharCat toCat) cs
+
+extractAllMap :: CharCatMap -> [CharCode] -> [CharCat]
+extractAllMap m = extractAll $ catLookup m

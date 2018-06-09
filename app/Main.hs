@@ -25,7 +25,7 @@ main = do
       usableMap = foldl (\m (k, v) -> IMap.insert k v m) Cat.defaultCharCatMap extras
 
   -- Get some char-cats.
-  let charCats = Cat.extractAll usableMap contentsCode
+  let charCats = Cat.extractAllMap usableMap contentsCode
 
   -- Get some tokens.
   let tokens = Lex.extractAllInit charCats

@@ -332,14 +332,7 @@ bestRoute :: Int -> Int -> Int -> [BreakableHListElem] -> Route
 bestRoute _ _ _ [] = Route {lines=[], demerit=0}
 bestRoute desiredWidth tolerance linePenalty cs =
   let
-    -- Add extra bits to finish the list.
-    csTrimmed = case last cs of
-      HGlue _ -> init cs
-      _ -> cs
-    suffix = [HPenalty $ Penalty tenK, hFilGlue, HPenalty $ Penalty $ -tenK]
-    csFinished = csTrimmed ++ suffix
-
-    breaks = allBreaks csFinished
+    breaks = allBreaks cs
     linedBreaks = fmap (breakToLine desiredWidth) breaks
     linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, listStatusBadness $ status ln)) linedBreaks
     goodLinedBaddedBreaks = filter (isConsiderableAsLine tolerance) linedBaddedBreaks
@@ -356,17 +349,25 @@ bestRoute desiredWidth tolerance linePenalty cs =
     -- TODO: Can we avoid this repetition using lift?
     compareRoutes a b = compare (demerit a) (demerit b)
   in case goodLinedBaddedBreaks of
-    -- Should this be cs or csFinished?
     [] -> Route{lines=[Line{contents=cs, status=OverFull, breakItem=NoBreak}], demerit= -1}
     _ -> minimumBy compareRoutes bestGoodRoutes
 
 setListElems :: SettableListElem a b => ListStatus -> [a] -> [b]
 setListElems stat = concatMap (setElem stat)
 
+-- Note: contents are expected to be in reverse order.
 setParagraph :: Int -> Int -> Int -> [BreakableHListElem] -> [BreakableVListElem]
-setParagraph desiredWidth tolerance linePenalty cs =
+setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
   let
-    Route{lines=lns} = bestRoute desiredWidth tolerance linePenalty cs
+    -- Add extra bits to finish the list.
+    -- Remove the final item if it's glue.
+    csTrimmed = case end of
+      HGlue _ -> rest
+      _ -> cs
+    -- Append \penalty10k \hfil \penalty-10k.
+    csFinished = (HPenalty $ Penalty $ -tenK):hFilGlue:(HPenalty $ Penalty tenK):csTrimmed
+
+    Route{lines=lns} = bestRoute desiredWidth tolerance linePenalty $ reverse csFinished
     setLine Line{contents=lncs, status=stat} = VHBox B.HBox{contents=setListElems stat lncs, desiredLength=B.To desiredWidth}
   in
     fmap setLine lns
