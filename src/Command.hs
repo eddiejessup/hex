@@ -91,7 +91,7 @@ data Command
   -- | Write
   -- | AddWhatsit
   -- | AddPenalty
-  -- | AddKern
+  | AddKern Int
   -- | AddMathKern
   -- | RemoveLastPenalty
   -- | RemoveLastKern
@@ -116,26 +116,38 @@ data Command
   -- | ShiftMathMode
   deriving Show
 
-extractCommand :: Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> (Command, [Cat.CharCode], Lex.LexState)
-extractCommand ccMap lexState0 cs
+extractCommandInner :: Cat.CharCatMap -> Lex.LexState -> Lex.Token -> [Cat.CharCode] -> Maybe (Command, [Cat.CharCode], Lex.LexState)
+extractCommandInner ccMap lexState tok1 cs
   | Lex.CharCat{cat=Lex.Space} <- tok1 =
-    (AddSpace ExplicitSpace, rest, lexState1)
+    Just (AddSpace ExplicitSpace, cs, lexState)
   | Lex.CharCat{char=char, cat=Lex.Letter} <- tok1 =
-    (AddCharacter{method=ExplicitChar, code=char}, rest, lexState1)
+    Just (AddCharacter{method=ExplicitChar, code=char}, cs, lexState)
   | Lex.CharCat{char=char, cat=Lex.Other} <- tok1 =
-    (AddCharacter{method=ExplicitChar, code=char}, rest, lexState1)
-  | Lex.ControlSequence (Lex.ControlWord "par") <- tok1
-    = (StartParagraph{indent=True}, rest, lexState1)
-  | Lex.ControlSequence (Lex.ControlWord "font") <- tok1
-    = (Assign {assignment=SelectFont, global=False}, rest, lexState1)
-  where
-    (tok1, lexState1, rest) = Lex.extractToken ccMap lexState0 cs
+    Just (AddCharacter{method=ExplicitChar, code=char}, cs, lexState)
+  | Lex.ControlSequence (Lex.ControlWord "par") <- tok1 =
+    Just (StartParagraph{indent=True}, cs, lexState)
+  | Lex.ControlSequence (Lex.ControlWord "dfont") <- tok1 =
+    Just (Assign {assignment=DefineFont, global=False}, cs, lexState)
+  | Lex.ControlSequence (Lex.ControlWord "sfont") <- tok1 =
+    Just (Assign {assignment=SelectFont, global=False}, cs, lexState)
+  | Lex.ControlSequence (Lex.ControlWord "relax") <- tok1 =
+    Just (Relax, cs, lexState)
+  | Lex.ControlSequence (Lex.ControlWord "kern") <- tok1 =
+    Just (AddKern 2000000, cs, lexState)
+
+extractCommand :: Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (Command, [Cat.CharCode], Lex.LexState)
+extractCommand _ _ [] = Nothing
+extractCommand ccMap lexState0 cs = do
+  (tok1, lexState1, rest) <- Lex.extractToken ccMap lexState0 cs
+  extractCommandInner ccMap lexState1 tok1 rest
 
 extractAllInner :: Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> [Command]
 extractAllInner _ _ [] = []
 extractAllInner ccMap state cs =
-    let (thisCom, rest, nextState) = extractCommand ccMap state cs
-    in thisCom:extractAllInner ccMap nextState rest
+  case extractCommand ccMap state cs of
+    Nothing -> []
+    Just (thisCom, rest, nextState) ->
+      thisCom:extractAllInner ccMap nextState rest
 
 extractAll :: Cat.CharCatMap -> [Cat.CharCode] -> [Command]
-extractAll ccMap cs = extractAllInner ccMap Lex.LineBegin cs
+extractAll ccMap = extractAllInner ccMap Lex.LineBegin

@@ -2,7 +2,7 @@
 
 module Main where
 
-import qualified Data.IntMap.Strict as IMap
+import qualified Data.IntMap.Strict as IMAP
 import qualified Data.Char as C
 import qualified Data.ByteString.Lazy as BLS
 import qualified Data.List as List
@@ -23,7 +23,7 @@ main = do
   let
       -- Add in some useful extras beyond the technical defaults.
       extras = [(94, Cat.Superscript)]
-      usableMap = foldl (\m (k, v) -> IMap.insert k v m) Cat.defaultCharCatMap extras
+      usableMap = foldl (\m (k, v) -> IMAP.insert k v m) Cat.defaultCharCatMap extras
 
   -- Get some char-cats.
   let charCats = Cat.extractAll usableMap contentsCode
@@ -36,11 +36,9 @@ main = do
   let coms = Command.extractAll usableMap contentsCode
   -- putStrLn $ List.intercalate "\n" $ fmap show coms
 
-  let state = Parse.State {currentFontInfo=Nothing}
+  pages <- Parse.extractPages Parse.newState [] usableMap Lex.LineBegin contentsCode
 
-  pages <- Parse.extractPages state [] usableMap Lex.LineBegin contentsCode
-
-  -- putStrLn $ show $ pages !! 0
+  -- -- putStrLn $ show $ pages !! 0
 
   let instrs = Box.toDVI pages
   let Right encInstrs = DVIW.encodeDocument (reverse instrs) 1000

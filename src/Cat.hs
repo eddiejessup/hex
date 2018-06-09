@@ -2,6 +2,7 @@ module Cat where
 
 import qualified Data.IntMap.Strict as IMap
 import Data.List.Split (chop)
+import Data.Maybe (catMaybes)
 
 data CatCode
   = Escape
@@ -51,7 +52,8 @@ defaultCharCatMap = IMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127
 catLookup :: CharCatMap -> CharCode -> CatCode
 catLookup m n = IMap.findWithDefault Invalid n m
 
-extractCharCat :: CharCatMap -> [CharCode] -> (CharCat, [CharCode])
+extractCharCat :: CharCatMap -> [CharCode] -> Maybe (CharCat, [CharCode])
+extractCharCat _ [] = Nothing
 extractCharCat ccMap (n1:n2:n3:rest)
     -- Next two characters must be identical, and have category
     -- 'Superscript', and triod character mustn't have category 'EndOfLine'.
@@ -65,9 +67,14 @@ extractCharCat ccMap (n1:n2:n3:rest)
     if (cat1 == Superscript) &&
        (n1 == n2) &&
        (catLookup ccMap n3 /= EndOfLine)
-    then (charCatTriod, rest)
-    else (charCatSimple, n2:n3:rest)
-extractCharCat ccMap (n1:rest) = (CharCat {char = n1, cat = catLookup ccMap n1}, rest)
+    then Just (charCatTriod, rest)
+    else Just (charCatSimple, n2:n3:rest)
+extractCharCat ccMap (n1:rest) = Just (CharCat {char = n1, cat = catLookup ccMap n1}, rest)
 
-extractAll :: CharCatMap -> [CharCode] -> [CharCat]
-extractAll m = chop (extractCharCat m)
+extractAll :: Cat.CharCatMap -> [Cat.CharCode] -> [CharCat]
+extractAll _ [] = []
+extractAll ccMap cs =
+  case extractCharCat ccMap cs of
+    Nothing -> []
+    Just (thisCC, rest) ->
+      thisCC:extractAll ccMap rest
