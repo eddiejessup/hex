@@ -10,6 +10,8 @@ import qualified TFM.Main as TFMM
 import qualified TFM.Character as TFMC
 import qualified Box as B
 import qualified Setting as S
+import qualified Cat
+import qualified Lex
 import qualified Command as C
 
 import qualified Debug.Trace as T
@@ -31,33 +33,34 @@ spaceGlue state = do
     toFlex = S.finiteGlueFlex . toSP
   return S.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
--- Returns: state, paragraph's-worth of h-list elements, remaining commands.
-extractParagraph :: State -> [S.BreakableHListElem] -> [C.Command] -> IO (State, [S.BreakableHListElem], [C.Command])
--- Run out of commands: return the list so far.
-extractParagraph state acc [] = return (state, acc, [])
--- Mundane commands.
-extractParagraph state acc (C.AddCharacter{code=i}:rest) = do
-  charBox <- case characterBox state i of
-    Just c -> return $ S.HCharacter c
-    Nothing -> fail "Could not get character info"
-  extractParagraph state (charBox:acc) rest
-extractParagraph state acc (C.AddSpace{}:rest) = do
-  glue <- case spaceGlue state of
-    Just sg -> return $ S.HGlue sg
-    Nothing -> fail "Could not get space glue"
-  extractParagraph state (glue:acc) rest
--- See a \par: Return to outer mode with completed list.
-extractParagraph state acc (C.StartParagraph{}:rest) = return (state, acc, rest)
--- See something else: Ignore and continue.
-extractParagraph state acc (_:rest) = extractParagraph state acc rest
+extractParagraph :: State -> [S.BreakableHListElem] -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> IO (State, [S.BreakableHListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
+-- Run out of characters: return the list so far.
+extractParagraph state0 acc ccMap0 lexState0 [] = return (state0, acc, ccMap0, lexState0, [])
+extractParagraph state0 acc ccMap0 lexState0 cs
+  | C.AddCharacter{code=i} <- com1 = do
+    charBox <- case characterBox state0 i of
+      Just c -> return $ S.HCharacter c
+      Nothing -> fail "Could not get character info"
+    extractParagraph state0 (charBox:acc) ccMap0 lexState1 rest1
+  | C.AddSpace{} <- com1 = do
+    glue <- case spaceGlue state0 of
+      Just sg -> return $ S.HGlue sg
+      Nothing -> fail "Could not get space glue"
+    extractParagraph state0 (glue:acc) ccMap0 lexState1 rest1
+  -- See com1 \par: Return to outer mode with completed list.
+  | C.StartParagraph{} <- com1 = return (state0, acc, ccMap0, lexState1, rest1)
+  -- See something else: Ignore and continue.
+  | otherwise = extractParagraph state0 acc ccMap0 lexState1 rest1
+  where
+    (com1, rest1, lexState1) = C.extractCommand ccMap0 lexState0 cs
 
-extractBoxedParagraph :: Int -> Int -> Int -> S.Glue -> State -> [C.Command] -> IO (State, [S.BreakableVListElem], [C.Command])
-extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state coms = do
-  (stateNext, hList, comsNext) <- extractParagraph state [] coms
+extractBoxedParagraph :: Int -> Int -> Int -> S.Glue -> State -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> IO (State, [S.BreakableVListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
+extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state ccMap lexState cs = do
+  (stateNext, hList, ccMapNext, lexStateNext, rest) <- extractParagraph state [] ccMap lexState cs
   let
     lineBoxes = S.setParagraph desiredWidth lineTolerance linePenalty hList
     paraBoxes = intersperse (S.VGlue interLineGlue) lineBoxes
-  return (stateNext, paraBoxes, comsNext)
+  return (stateNext, paraBoxes, ccMapNext, lexStateNext, rest)
 
 desiredWidth :: Int
 desiredWidth = 28000000
@@ -82,12 +85,11 @@ startsParagraph C.AddCharacter{} = True
 startsParagraph C.AddSpace{} = True
 startsParagraph _ = False
 
--- Returns: state, a page of set v-box elements, remaining v-list elements, remaining commands.
-extractPage :: State -> [C.Command] -> [S.BreakableVListElem] -> IO (State, B.Page, [S.BreakableVListElem], [C.Command])
-extractPage state [] acc = return (state, B.Page $ S.setListElems S.NaturallyGood acc, [], [])
-extractPage state (a:comsRest) acc
-  | startsParagraph a = do
-    (stateNext, paraBoxes, commandsNext) <- extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state (a:comsRest)
+extractPage :: State -> [S.BreakableVListElem] -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> IO (State, B.Page, [S.BreakableVListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
+extractPage state0 acc ccMap0 lexState0 [] = return (state0, B.Page $ S.setListElems S.NaturallyGood acc, [], ccMap0, lexState0, [])
+extractPage state0 acc ccMap0 lexState0 cs
+  | startsParagraph com1 = do
+    (state2, paraBoxes, ccMap2, lexState2, rest2) <- extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state0 ccMap0 lexState0 cs
     let
       breakItem = S.GlueBreak interParGlue
       extra = paraBoxes ++ [S.VGlue interParGlue]
@@ -99,9 +101,9 @@ extractPage state (a:comsRest) acc
       cost = T.traceShow stat $ S.pageCost pen bad 0
       page = B.Page $ S.setListElems stat acc
     if (cost == S.oneMillion) || (pen <= -S.tenK)
-      then return (stateNext, page, extra, commandsNext)
-      else extractPage stateNext commandsNext (acc ++ extra)
-  | C.Assign (C.NonMacroAssign C.SelectFont) <- a = do
+      then return (state2, page, extra, ccMap2, lexState2, rest2)
+      else extractPage state2 (acc ++ extra) ccMap2 lexState2 rest2
+  | C.Assign {assignment=C.SelectFont} <- com1 = do
     fontInfo <- TFMM.readTFM "cmr10.tfm"
     let fontDef =
           S.VFontDefinition
@@ -113,13 +115,14 @@ extractPage state (a:comsRest) acc
             , scaleFactorRatio = 1.0
             }
         fontSel = S.VFontSelection B.FontSelection {fontNr = 1}
-    extractPage state{currentFontInfo=Just fontInfo} comsRest $ acc ++ [fontDef, fontSel]
-  | otherwise = extractPage state comsRest acc
+    extractPage state0{currentFontInfo=Just fontInfo} (acc ++ [fontDef, fontSel]) ccMap0 lexState1 rest1
+  | otherwise = extractPage state0 acc ccMap0 lexState1 rest1
+  where
+    (com1, rest1, lexState1) = C.extractCommand ccMap0 lexState0 cs
 
--- Returns: state, some pages.
-extractPages :: State -> [C.Command] -> [S.BreakableVListElem] -> IO (State, [B.Page])
-extractPages s [] [] = return (s, [])
-extractPages state commands acc = do
-    (stateNext, page, vListRemain, commandsNext) <- extractPage state commands acc
-    (stateEnd, pagesRest) <- extractPages stateNext commandsNext vListRemain
-    return (stateEnd, page:pagesRest)
+extractPages :: State -> [S.BreakableVListElem] -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> IO [B.Page]
+extractPages state0 [] ccMap0 lexState0 [] = return []
+extractPages state0 acc ccMap0 lexState0 cs = do
+    (state1, page, vListRemain, ccMap1, lexState1, rest1) <- extractPage state0 acc ccMap0 lexState0 cs
+    pagesRest <- extractPages state1 vListRemain ccMap1 lexState1 rest1
+    return $ page:pagesRest

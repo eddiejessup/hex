@@ -79,7 +79,7 @@ data VBoxElem
   | VFontSelection FontSelection
   deriving (Show)
 
-data Page = Page [VBoxElem]
+data Page = Page [VBoxElem] deriving Show
 
 class Dimensioned a where
   naturalWidth :: a -> Int

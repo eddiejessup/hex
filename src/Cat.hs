@@ -51,27 +51,23 @@ defaultCharCatMap = IMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127
 catLookup :: CharCatMap -> CharCode -> CatCode
 catLookup m n = IMap.findWithDefault Invalid n m
 
-extractCharCat :: (CharCode -> CatCode) -> [CharCode] -> ([CharCat], [CharCode])
-extractCharCat toCat (n1:n2:n3:rest)
+extractCharCat :: CharCatMap -> [CharCode] -> (CharCat, [CharCode])
+extractCharCat ccMap (n1:n2:n3:rest)
     -- Next two characters must be identical, and have category
     -- 'Superscript', and triod character mustn't have category 'EndOfLine'.
  = 
   let
-    cat1 = toCat n1
+    cat1 = catLookup ccMap n1
     n3Triod = if n3 < 64 then n3 + 64 else n3 - 64
-    charCatTriod = CharCat {char = n3Triod, cat = toCat n3Triod}
+    charCatTriod = CharCat {char = n3Triod, cat = catLookup ccMap n3Triod}
     charCatSimple = CharCat {char = n1, cat = cat1}
   in
     if (cat1 == Superscript) &&
        (n1 == n2) &&
-       (toCat n3 /= EndOfLine)
-    then ([charCatTriod], rest)
-    else ([charCatSimple], n2:n3:rest)
-extractCharCat toCat (n1:rest) = ([CharCat {char = n1, cat = toCat n1}], rest)
-extractCharCat _ [] = ([], [])
+       (catLookup ccMap n3 /= EndOfLine)
+    then (charCatTriod, rest)
+    else (charCatSimple, n2:n3:rest)
+extractCharCat ccMap (n1:rest) = (CharCat {char = n1, cat = catLookup ccMap n1}, rest)
 
-extractAll :: (CharCode -> CatCode) -> [CharCode] -> [CharCat]
-extractAll toCat cs = concat $ chop (extractCharCat toCat) cs
-
-extractAllMap :: CharCatMap -> [CharCode] -> [CharCat]
-extractAllMap m = extractAll $ catLookup m
+extractAll :: CharCatMap -> [CharCode] -> [CharCat]
+extractAll m = chop (extractCharCat m)

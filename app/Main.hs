@@ -5,6 +5,7 @@ module Main where
 import qualified Data.IntMap.Strict as IMap
 import qualified Data.Char as C
 import qualified Data.ByteString.Lazy as BLS
+import qualified Data.List as List
 
 import qualified DVI.Write as DVIW
 import qualified Cat
@@ -25,28 +26,24 @@ main = do
       usableMap = foldl (\m (k, v) -> IMap.insert k v m) Cat.defaultCharCatMap extras
 
   -- Get some char-cats.
-  let charCats = Cat.extractAllMap usableMap contentsCode
+  let charCats = Cat.extractAll usableMap contentsCode
 
   -- Get some tokens.
-  let tokens = Lex.extractAllInit charCats
+  let tokens = Lex.extractAll usableMap contentsCode
+  -- putStrLn $ List.intercalate "\n" $ fmap show tokens
 
   -- Get some commands.
-  let commands = Command.extractAll tokens
+  let coms = Command.extractAll usableMap contentsCode
+  -- putStrLn $ List.intercalate "\n" $ fmap show coms
 
   let state = Parse.State {currentFontInfo=Nothing}
 
-  (_, pages) <- Parse.extractPages state commands []
+  pages <- Parse.extractPages state [] usableMap Lex.LineBegin contentsCode
 
-  -- putStrLn $ List.intercalate "\n" $ fmap show vBoxElems
+  -- putStrLn $ show $ pages !! 0
 
   let instrs = Box.toDVI pages
-
-  -- putStrLn $ List.intercalate "\n" $ fmap show instrs
-
   let Right encInstrs = DVIW.encodeDocument (reverse instrs) 1000
-
-  -- -- putStrLn $ List.intercalate "\n" $ fmap show (reverse encInstrs)
-
   BLS.writeFile "out.dvi" $ DVIW.encode $ reverse encInstrs
 
   return ()
