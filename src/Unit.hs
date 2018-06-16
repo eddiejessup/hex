@@ -1,6 +1,7 @@
 module Unit where
 
 import Data.Ratio ((%))
+import Text.Printf (printf)
 
 -- Functions related to units used in the TeX world.
 
@@ -40,4 +41,10 @@ pointInScaledPoint :: Integer
 pointInScaledPoint = 2 ^ (16 :: Integer)
 
 pointToScaledPoint :: Rational -> Rational
-pointToScaledPoint a = a * (fromIntegral pointInScaledPoint)
+pointToScaledPoint a = a * fromIntegral pointInScaledPoint
+
+scaledPointToPoint :: Integral a => a -> Double
+scaledPointToPoint a = fromIntegral a / fromIntegral pointInScaledPoint
+
+showSP :: Int -> String
+showSP d = (printf "%.2f" (scaledPointToPoint d)) ++ "pt"

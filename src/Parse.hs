@@ -125,10 +125,10 @@ extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state
   return (stateNext, paraBoxes, ccMapNext, lexStateNext, rest)
 
 desiredWidth :: Int
-desiredWidth = 30000000
+desiredWidth = 30750000
 
 lineTolerance :: Int
-lineTolerance = 200
+lineTolerance = 500
 
 linePenalty :: Int
 linePenalty = 10

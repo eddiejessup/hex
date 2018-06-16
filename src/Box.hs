@@ -3,6 +3,10 @@
 
 module Box where
 
+import qualified Data.Char as C
+
+import qualified Unit
+
 import qualified DVI.Write as DVIW
 
 import qualified TFM.Main as TFMM
@@ -19,9 +23,7 @@ data Rule = Rule
   , depth :: Int
   } deriving (Show)
 
-data Kern = Kern
-  { kernDimen :: Int
-  } deriving (Show)
+newtype Kern = Kern{kernDimen :: Int} deriving (Show)
 
 data FontDefinition = FontDefinition
   { fontNr :: Int
@@ -31,20 +33,22 @@ data FontDefinition = FontDefinition
   , fontInfo :: TFMM.TexFont
   } deriving (Show)
 
-data FontSelection = FontSelection
-  { fontNr :: Int
-  } deriving (Show)
+newtype FontSelection = FontSelection{fontNr :: Int} deriving (Show)
 
 data Character = Character
   { code :: Int
   , width :: Int
   , height :: Int
   , depth :: Int
-  } deriving (Show)
+  }
 
-data SetGlue = SetGlue
-  { glueDimen :: Int
-  } deriving (Show)
+instance Show Character where
+  show c = "'" ++ [C.chr $ code c] ++ "'"
+
+newtype SetGlue = SetGlue{glueDimen :: Int}
+
+instance Show SetGlue where
+  show (SetGlue d) = "[" ++ Unit.showSP d ++ "]"
 
 data VBox = VBox
   { contents :: [VBoxElem]

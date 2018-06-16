@@ -5,12 +5,12 @@
 
 module Setting where
 
-import Data.List (minimumBy)
 import Data.List.Index (imap)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Applicative (liftA2)
 
 import Box (Dimensioned, naturalWidth)
+import qualified Unit
 import qualified Box as B
 import qualified Adjacent as A
 
@@ -23,7 +23,28 @@ hunK = 100000
 oneMillion :: Int
 oneMillion = 1000000
 
-data GlueFlex = GlueFlex {factor :: Int, order :: Int} deriving Show
+data GlueFlex = GlueFlex {factor :: Int, order :: Int}
+
+noFlex :: GlueFlex
+noFlex = GlueFlex 0 0
+
+finiteFlex :: Int -> GlueFlex
+finiteFlex f = GlueFlex f 0
+
+filFlex :: GlueFlex
+filFlex = GlueFlex 1 1
+
+filGlue :: Glue
+filGlue = Glue{dimen=0, stretch=filFlex, shrink=noFlex}
+
+hFilGlue :: BreakableHListElem
+hFilGlue = HGlue filGlue
+
+instance Show GlueFlex where
+  show (GlueFlex 0 0) = "0"
+  show (GlueFlex f 0) = Unit.showSP f
+  show (GlueFlex f n) = show f ++ " fil" ++ show n
+
 data ListFlex = ListFlex { stretch :: [Int], shrink :: [Int] } deriving Show
 
 data BreakItem = GlueBreak Glue
@@ -42,11 +63,18 @@ data Glue = Glue
   { dimen :: Int
   , stretch :: GlueFlex
   , shrink :: GlueFlex
-  } deriving (Show)
+  }
+
+instance Show Glue where
+  show (Glue d (GlueFlex 0 0) (GlueFlex 0 0)) = "{- " ++ Unit.showSP d ++ " -}"
+  show (Glue d str shr) = "{" ++ Unit.showSP d ++ ("+" ++ show str) ++ ("-" ++ show shr) ++ "}"
 
 newtype Penalty = Penalty
   { size :: Int
-  } deriving (Show)
+  }
+
+instance Show Penalty where
+  show (Penalty p) = "|p" ++ show p ++ "|"
 
 -- TODO: WhatsIt, Leaders, Mark, Insertion
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
@@ -61,7 +89,17 @@ data BreakableHListElem
   | HFontDefinition B.FontDefinition
   | HFontSelection B.FontSelection
   | HCharacter B.Character
-  deriving (Show)
+
+instance Show BreakableHListElem where
+  show (HVBox e) = show e
+  show (HHBox e) = show e
+  show (HRule e) = show e
+  show (HGlue e) = show e
+  show (HKern e) = show e
+  show (HPenalty e) = show e
+  show (HFontDefinition e) = show e
+  show (HFontSelection e) = show e
+  show (HCharacter e) = show e
 
 data BreakableVListElem
   = VVBox B.VBox
@@ -91,26 +129,17 @@ data Line = Line
   { contents :: [BreakableHListElem]
   , breakItem :: BreakItem
   , status :: ListStatus
-  } deriving Show
+  } deriving (Show)
 
-data Route = Route {lines :: [Line], demerit :: Int }
+data Route = Route {lines :: [Line], demerit :: Int } deriving (Show)
+
+instance Eq Route where
+  (==) a b = demerit a == demerit b
+
+instance Ord Route where
+  compare a b = compare (demerit a) (demerit b)
 
 data Direction = Horizontal | Vertical
-
-noFlex :: GlueFlex
-noFlex = GlueFlex{factor=0, order=0}
-
-finiteFlex :: Int -> GlueFlex
-finiteFlex f = GlueFlex f 0
-
-filFlex :: GlueFlex
-filFlex = GlueFlex{factor=1, order=1}
-
-filGlue :: Glue
-filGlue = Glue{dimen=0, stretch=filFlex, shrink=noFlex}
-
-hFilGlue :: BreakableHListElem
-hFilGlue = HGlue filGlue
 
 breakPenalty :: BreakItem -> Int
 breakPenalty (GlueBreak _) = 0
@@ -277,7 +306,7 @@ glueSetRatio excessLength ListFlex{stretch=stretches, shrink=shrinks} =
     flexes = if regime == GT then shrinks else stretches
     _flex = last flexes
     _order = length flexes - 1
-    finiteFlex = _order == 0
+    flexIsFinite = _order == 0
     gRatio = fromIntegral excessLength / fromIntegral _flex
   in case regime of
     EQ -> NaturallyGood
@@ -286,10 +315,10 @@ glueSetRatio excessLength ListFlex{stretch=stretches, shrink=shrinks} =
       _ -> TooBare FiniteGlueRatio{factor= -gRatio, order=_order}
     GT -> case shrinks of
       [] -> TooFull InfiniteGlueRatio
-      _ -> if finiteFlex && excessLength > _flex
+      _ -> if flexIsFinite && excessLength > _flex
         then OverFull
         else
-          let gRatioShrink = if finiteFlex then min gRatio 1.0 else gRatio
+          let gRatioShrink = if flexIsFinite then min gRatio 1.0 else gRatio
           in TooFull FiniteGlueRatio{factor=gRatioShrink, order=_order}
 
 listStatusBadness :: ListStatus -> Int
@@ -306,6 +335,7 @@ listStatusBadness g = case g of
 listGlueSetRatio :: (BreakableList [a], BreakableListElem a) => Int -> [a] -> ListStatus
 listGlueSetRatio desiredLength cs =
   glueSetRatio (naturalLength cs - desiredLength) (flex cs)
+  -- T.trace ("nat: " ++ show (naturalLength cs) ++ " des: " ++ show desiredLength ++ "glues: " ++ show (mapMaybe toGlue cs) ++ " flex: " ++ show (flex cs) ++ "ratio: " ++ show (glueSetRatio (naturalLength cs - desiredLength) (flex cs)) ++ "\n") glueSetRatio (naturalLength cs - desiredLength) (flex cs)
 
 isConsiderableAsLine :: Int -> (Line, [BreakableHListElem], Int) -> Bool
 isConsiderableAsLine tolerance (Line{breakItem=br}, _, bad) =
@@ -331,7 +361,8 @@ bestRoute desiredWidth tolerance linePenalty cs =
   let
     breaks = allBreaks cs
     linedBreaks = fmap (breakToLine desiredWidth) breaks
-    linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, T.traceShow (listStatusBadness $ status ln, status ln) listStatusBadness $ status ln)) linedBreaks
+    linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, listStatusBadness $ status ln)) linedBreaks
+    -- linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, T.traceShow (listStatusBadness $ status ln, status ln) listStatusBadness $ status ln)) linedBreaks
     goodLinedBaddedBreaks = filter (isConsiderableAsLine tolerance) linedBaddedBreaks
     addDemerit (ln@Line{breakItem=br}, aft, bad) = (ln, aft, lineDemerit linePenalty bad br)
     goodLinedDemeredBreaks = fmap addDemerit goodLinedBaddedBreaks
@@ -341,27 +372,24 @@ bestRoute desiredWidth tolerance linePenalty cs =
         Route{lines=subLines, demerit=subDemerit} = bestRoute desiredWidth tolerance linePenalty aft
       in
         Route{lines=ln:subLines, demerit=subDemerit + thisDemerit}
-
-    bestGoodRoutes = fmap subBestRoute goodLinedDemeredBreaks
-    -- TODO: Can we avoid this repetition using lift?
-    compareRoutes a b = compare (demerit a) (demerit b)
   in case goodLinedBaddedBreaks of
     [] -> Route{lines=[Line{contents=cs, status=OverFull, breakItem=NoBreak}], demerit= -1}
-    _ -> minimumBy compareRoutes bestGoodRoutes
+    _ -> minimum $ fmap subBestRoute goodLinedDemeredBreaks
 
 setListElems :: SettableListElem a b => ListStatus -> [a] -> [b]
 setListElems stat = concatMap (setElem stat)
 
 -- Note: contents are expected to be in reverse order.
 setParagraph :: Int -> Int -> Int -> [BreakableHListElem] -> [BreakableVListElem]
+setParagraph _ _ _ [] = []
 setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
   let
-    -- Add extra bits to finish the list.
     -- Remove the final item if it's glue.
     csTrimmed = case end of
       HGlue _ -> rest
       _ -> cs
     -- Append \penalty10k \hfil \penalty-10k.
+    -- Add extra bits to finish the list.
     csFinished = (HPenalty $ Penalty $ -tenK):hFilGlue:(HPenalty $ Penalty tenK):csTrimmed
 
     Route{lines=lns} = bestRoute desiredWidth tolerance linePenalty $ reverse csFinished
