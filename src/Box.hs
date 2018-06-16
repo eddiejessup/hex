@@ -11,6 +11,8 @@ import qualified DVI.Write as DVIW
 
 import qualified TFM.Main as TFMM
 
+import qualified Debug.Trace as T
+
 data DesiredLength
   = Natural
   | Spread Int
@@ -212,7 +214,7 @@ instance DVIAble VBoxElem where
     [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveDown {distance = naturalHeight e}]
     -- TODO: Rule.
   toDVI (VGlue g) = [DVIW.MoveDown {distance = glueDimen g}]
-  toDVI (VKern k) = [DVIW.MoveDown {distance = kernDimen k}]
+  toDVI (VKern k) = T.trace "kerndvi" [DVIW.MoveDown {distance = kernDimen k}]
   toDVI (VFontDefinition e) = toDVI e
   toDVI (VFontSelection e) = toDVI e
 

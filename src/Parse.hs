@@ -77,14 +77,15 @@ spaceGlue state = do
     toFlex = S.finiteFlex . toSP
   return S.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
+-- We build a paragraph list in reverse order.
 extractParagraphInner :: State -> [S.BreakableHListElem] -> Cat.CharCatMap -> Lex.LexState -> C.Command -> [Cat.CharCode] -> IO (State, [S.BreakableHListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
 extractParagraphInner state acc ccMap lexState com1 cs
   | C.Assign {assignment=C.DefineFont} <- com1 = do
     (state1, fontDef) <- defineFont state theFontNr
-    extractParagraph state1 (acc ++ [S.HFontDefinition fontDef]) ccMap lexState cs
+    extractParagraph state1 (S.HFontDefinition fontDef:acc) ccMap lexState cs
   | C.Assign {assignment=C.SelectFont} <- com1 = do
     let (state1, fontSel) = selectFont state theFontNr
-    extractParagraph state1 (acc ++ [S.HFontSelection fontSel]) ccMap lexState cs
+    extractParagraph state1 (S.HFontSelection fontSel:acc) ccMap lexState cs
   | isModeIndependent com1 = do
     (state2, ccMap2) <- runAllModeCommand state ccMap com1
     extractParagraph state2 acc ccMap2 lexState cs
@@ -110,6 +111,7 @@ extractParagraph :: State -> [S.BreakableHListElem] -> Cat.CharCatMap -> Lex.Lex
 extractParagraph state acc ccMap lexState [] = return (state, acc, ccMap, lexState, [])
 extractParagraph state acc ccMap lexState cs =
   case C.extractCommand ccMap lexState cs of
+    -- Run out of commands: return the list so far.
     Nothing -> return (state, acc, ccMap, lexState, [])
     Just (com1, rest, lexState1) -> extractParagraphInner state acc ccMap lexState1 com1 rest
 
@@ -121,7 +123,6 @@ extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state
   let
     lineBoxes = S.setParagraph desiredWidth lineTolerance linePenalty hList
     paraBoxes = intersperse (S.VGlue interLineGlue) lineBoxes
-    -- paraBoxes = T.traceShow (lineBoxes !! 0) intersperse (S.VGlue interLineGlue) lineBoxes
   return (stateNext, paraBoxes, ccMapNext, lexStateNext, rest)
 
 desiredWidth :: Int
@@ -148,15 +149,17 @@ extractPageInner :: State -> [S.BreakableVListElem] -> Cat.CharCatMap -> Lex.Lex
 extractPageInner state acc ccMap lexState com1 cs
   | C.Assign {assignment=C.DefineFont} <- com1 = do
     (state1, fontDef) <- defineFont state theFontNr
-    extractPage state1 (acc ++ [S.VFontDefinition fontDef]) ccMap lexState cs
+    extractPage state1 (S.VFontDefinition fontDef:acc) ccMap lexState cs
   | C.Assign {assignment=C.SelectFont} <- com1 = do
     let (state1, fontSel) = selectFont state theFontNr
-    extractPage state1 (acc ++ [S.VFontSelection fontSel]) ccMap lexState cs
+    extractPage state1 (S.VFontSelection fontSel:acc) ccMap lexState cs
   | isModeIndependent com1 = do
     (state1, ccMap2) <- runAllModeCommand state ccMap com1
     extractPage state1 acc ccMap2 lexState cs
   | C.StartParagraph{} <- com1 =
     extractPage state acc ccMap lexState cs
+  | C.AddKern k <- com1 = do
+    T.trace "vkern" extractPage state ((S.VKern $ B.Kern k):acc) ccMap lexState cs
   | otherwise =
     fail $ "Unknown command in vertical mode: " ++ (show com1)
 
@@ -164,24 +167,29 @@ extractPage :: State -> [S.BreakableVListElem] -> Cat.CharCatMap -> Lex.LexState
 extractPage state acc ccMap lexState [] = return (state, B.Page $ S.setListElems S.NaturallyGood acc, [], ccMap, lexState, [])
 extractPage state acc ccMap lexState cs =
   case C.extractCommand ccMap lexState cs of
-    Nothing -> return (state, B.Page $ S.setListElems S.NaturallyGood acc, [], ccMap, lexState, [])
+    -- Expects normal order.
+    Nothing -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], ccMap, lexState, [])
     Just (com1, rest, lexState1) ->
       if startsParagraph com1
         then do
+          -- Paraboxes returned in normal order.
           (state2, paraBoxes, ccMap1, lexState2, rest2) <- extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state ccMap lexState cs
           let
             breakItem = S.GlueBreak interLineGlue
-            extra = paraBoxes ++ [S.VGlue interLineGlue]
+            extra = S.VGlue interLineGlue:reverse paraBoxes
+            accNext = extra ++ acc
             -- TODO: Discard when adding to empty page.
             -- TODO: Keep best rather than taking last.
             pen = S.breakPenalty breakItem
-            stat = S.listGlueSetRatio desiredHeight $ acc ++ extra
+            -- Expects normal order.
+            stat = S.listGlueSetRatio desiredHeight $ reverse accNext
             bad = S.listStatusBadness stat
             cost = T.traceShow stat $ S.pageCost pen bad 0
-            page = B.Page $ S.setListElems stat acc
+            -- Expects normal order.
+            page = B.Page $ reverse $ S.setListElems stat acc
           if (cost == S.oneMillion) || (pen <= -S.tenK)
             then return (state2, page, extra, ccMap1, lexState2, rest2)
-            else extractPage state2 (acc ++ extra) ccMap1 lexState2 rest2
+            else extractPage state2 accNext ccMap1 lexState2 rest2
         else
           extractPageInner state acc ccMap lexState1 com1 rest
 
