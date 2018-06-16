@@ -20,40 +20,24 @@ import Data.Ratio ((%))
 -- For a resolution of 1200 dpi, a pixel measures 21 um.
 
 -- Basic facts.
-bigPointInInch :: Integer
-bigPointInInch = 72
-didotInCicero :: Integer
-didotInCicero = 12
-didotInPoint :: Rational
-didotInPoint = 1157 % 1238
-mmInInch :: Rational
-mmInInch = 254 % 10
-pointInInch :: Rational
-pointInInch = 7227 % 100
-scaledPointInPoint :: Integer
-scaledPointInPoint = 2 ^ (16 :: Integer)
-
--- Derived conversions.
+-- 1 inch is 72 big points.
+inchInBigPoints :: Integer
+inchInBigPoints = 72
+-- 1 cicero is 12 didots.
+ciceroInDidot :: Integer
+ciceroInDidot = 12
+-- 1 point is 1157/1238 didot
+pointIndidot :: Rational
+pointIndidot = 1157 % 1238
+-- 1 inch is 2.54 mm.
 inchInMM :: Rational
-inchInMM = recip mmInInch
-pointInMM :: Rational
-pointInMM = pointInInch * inchInMM
-mmInPoint :: Rational
-mmInPoint = recip pointInMM
-pointInScaledPoint :: Rational
-pointInScaledPoint = 1 % scaledPointInPoint
+inchInMM = 254 % 10
+-- 1 inch is 72.27 points.
+inchInPoint :: Rational
+inchInPoint = 7227 % 100
+-- 1 point is 2^16 scaled points.
+pointInScaledPoint :: Integer
+pointInScaledPoint = 2 ^ (16 :: Integer)
 
-scaledPointToPoint :: Rational -> Rational
-scaledPointToPoint = (pointInScaledPoint *)
 pointToScaledPoint :: Rational -> Rational
-pointToScaledPoint = (fromInteger scaledPointInPoint *)
-
-pointToMM :: Rational -> Rational
-pointToMM = (mmInPoint *)
-mmToPoint :: Rational -> Rational
-mmToPoint = (pointInMM *)
-
-scaledPointToMM :: Rational -> Rational
-scaledPointToMM = pointToMM . scaledPointToPoint
-mmToScaledPoint :: Rational -> Rational
-mmToScaledPoint = pointToScaledPoint . mmToPoint
+pointToScaledPoint a = a * (fromIntegral pointInScaledPoint)

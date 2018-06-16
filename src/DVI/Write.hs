@@ -596,9 +596,9 @@ encodeInstructions (this:rest) magnification = do
                  , scaleFactorRatio = scaleRatio
                  } -> do
         let checksum = TFMM.checksum info
-            designSizeRaw = U.pointToScaledPoint $ TFMM.designFontSize info
-            designSize = floor designSizeRaw
-            scaleFactor = floor $ designSizeRaw * scaleRatio
+            designSizeRaw = U.pointToScaledPoint (TFMM.designFontSize info)
+            designSize = round $ TFMM.designSizeSP info
+            scaleFactor = TFMM.designScaleSP info scaleRatio
         defineFontInstruction <-
           getDefineFontInstruction nr path scaleFactor designSize checksum
         return

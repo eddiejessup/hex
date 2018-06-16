@@ -28,8 +28,11 @@ data TexFont = TexFont { checksum :: Int
                        , characters :: IntMap.IntMap TFMC.Character }
              deriving (Show)
 
-toScaledPoint :: TexFont -> Rational -> Int
-toScaledPoint f = round . U.pointToScaledPoint . (designFontSize f *)
+designSizeSP :: TexFont -> Rational
+designSizeSP = U.pointToScaledPoint . designFontSize
+
+designScaleSP :: TexFont -> Rational -> Int
+designScaleSP f x = round $ designSizeSP f * x
 
 contentsToTFM :: BS.ByteString -> Either String TexFont
 contentsToTFM contents = do

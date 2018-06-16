@@ -130,14 +130,15 @@ instance Dimensioned VBoxElem where
   naturalHeight (VFontSelection _) = 0
 
 instance Dimensioned VBox where
-  naturalWidth VBox{contents=cs, desiredLength=d} =
+  naturalHeight VBox{contents=cs, desiredLength=d} =
     case d of
-      Natural -> maximum $ fmap naturalWidth cs
+      Natural -> sum $ fmap naturalWidth cs
       To to -> to
       -- TODO.
       -- Spread spread -> 1010
-  naturalHeight VBox{contents=cs} =
-    sum $ fmap naturalHeight cs
+
+  naturalWidth VBox{contents=[]} = 0
+  naturalWidth VBox{contents=cs} = maximum $ fmap naturalWidth cs
 
 instance Dimensioned HBox where
   naturalWidth HBox{contents=cs, desiredLength=d} =
@@ -146,8 +147,9 @@ instance Dimensioned HBox where
       To to -> to
       -- TODO.
       -- Spread spread -> 1010
-  naturalHeight HBox{contents=cs} =
-    maximum $ fmap naturalHeight cs
+
+  naturalHeight HBox{contents=[]} = 0
+  naturalHeight HBox{contents=cs} = maximum $ fmap naturalHeight cs
 
 class DVIAble a where
   toDVI :: a -> [DVIW.Instruction]
@@ -188,12 +190,10 @@ instance DVIAble Character where
   toDVI Character {code = c} = [DVIW.Character {charNr = c, move = True}]
 
 instance DVIAble HBoxElem where
-    -- TODO: Move by amount dependent on contents.
   toDVI (HVBox e) =
-    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveRight {distance = 200000}]
-    -- TODO: Move by amount dependent on contents.
+    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveRight {distance = naturalWidth e}]
   toDVI (HHBox e) =
-    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveRight {distance = 200000}]
+    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveRight {distance=naturalWidth e}]
     -- TODO: Rule.
   toDVI (HGlue g) = [DVIW.MoveRight {distance = glueDimen g}]
   toDVI (HKern k) = [DVIW.MoveRight {distance = kernDimen k}]
@@ -202,12 +202,10 @@ instance DVIAble HBoxElem where
   toDVI (HCharacter e@Character {}) = toDVI e
 
 instance DVIAble VBoxElem where
-    -- TODO: Move by amount dependent on contents.
   toDVI (VVBox e) =
-    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveDown {distance = 200000}]
-    -- TODO: Move by amount dependent on contents.
+    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveDown {distance = naturalHeight e}]
   toDVI (VHBox e) =
-    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveDown {distance = 200000}]
+    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveDown {distance = naturalHeight e}]
     -- TODO: Rule.
   toDVI (VGlue g) = [DVIW.MoveDown {distance = glueDimen g}]
   toDVI (VKern k) = [DVIW.MoveDown {distance = kernDimen k}]

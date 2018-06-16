@@ -7,13 +7,14 @@ module Setting where
 
 import Data.List (minimumBy)
 import Data.List.Index (imap)
-import Data.Maybe (isNothing, mapMaybe)
+import Data.Maybe (isJust, mapMaybe)
 import Control.Applicative (liftA2)
-import qualified Debug.Trace as T
 
 import Box (Dimensioned, naturalWidth)
 import qualified Box as B
 import qualified Adjacent as A
+
+import qualified Debug.Trace as T
 
 tenK :: Int
 tenK = 10000
@@ -90,23 +91,23 @@ data Line = Line
   { contents :: [BreakableHListElem]
   , breakItem :: BreakItem
   , status :: ListStatus
-  }
+  } deriving Show
 
 data Route = Route {lines :: [Line], demerit :: Int }
 
 data Direction = Horizontal | Vertical
 
-noGlueFlex :: GlueFlex
-noGlueFlex = GlueFlex{factor=0, order=0}
+noFlex :: GlueFlex
+noFlex = GlueFlex{factor=0, order=0}
 
-finiteGlueFlex :: Int -> GlueFlex
-finiteGlueFlex f = GlueFlex f 0
+finiteFlex :: Int -> GlueFlex
+finiteFlex f = GlueFlex f 0
 
 filFlex :: GlueFlex
 filFlex = GlueFlex{factor=1, order=1}
 
 filGlue :: Glue
-filGlue = Glue{dimen=0, stretch=filFlex, shrink=noGlueFlex}
+filGlue = Glue{dimen=0, stretch=filFlex, shrink=noFlex}
 
 hFilGlue :: BreakableHListElem
 hFilGlue = HGlue filGlue
@@ -135,14 +136,13 @@ instance BreakableList [BreakableHListElem] where
   naturalLength = sum . fmap B.naturalWidth
 
 isGlue :: BreakableListElem a => a -> Bool
-isGlue = isNothing . toGlue
+isGlue = isJust . toGlue
 
 isBreakItem :: BreakableListElem a => A.Adjacency a -> Bool
-isBreakItem = isNothing . toBreakItem
+isBreakItem = isJust . toBreakItem
 
 allBreaksInner :: BreakableListElem a => [Break a] -> [a] -> [A.Adjacency a] -> [Break a]
-allBreaksInner acc seen [] =
-  Break{before=seen, after=[], item=NoBreak}:acc
+allBreaksInner acc seen [] = Break{before=reverse seen, after=[], item=NoBreak}:acc
 allBreaksInner acc seen ((thisAdj@(A.Adjacency (_, this, _))):rest) =
   let
     -- Bit pretentious: fAnd maps two functions 'f' and 'g' into one
@@ -154,15 +154,12 @@ allBreaksInner acc seen ((thisAdj@(A.Adjacency (_, this, _))):rest) =
       Nothing -> acc
       Just b ->
         let bef = if isGlue this then seen else this:seen
-        in Break{before=bef, after=trimAfterBreak rest, item=b}:acc
+        in Break{before=reverse bef, after=trimAfterBreak rest, item=b}:acc
   in
     allBreaksInner newBreaksAccum (this:seen) rest
 
 allBreaks :: BreakableListElem a => [a] -> [Break a]
-allBreaks cs =
-  let
-    res = allBreaksInner [] [] (A.toAdjacents cs)
-  in fmap (\b@Break{before=bef} -> b{before=reverse bef}) res
+allBreaks = allBreaksInner [] [] . A.toAdjacents
 
 addGlueFlex :: GlueFlex -> [Int] -> [Int]
 addGlueFlex GlueFlex{factor=f, order=_order} fs =
@@ -334,7 +331,7 @@ bestRoute desiredWidth tolerance linePenalty cs =
   let
     breaks = allBreaks cs
     linedBreaks = fmap (breakToLine desiredWidth) breaks
-    linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, listStatusBadness $ status ln)) linedBreaks
+    linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, T.traceShow (listStatusBadness $ status ln, status ln) listStatusBadness $ status ln)) linedBreaks
     goodLinedBaddedBreaks = filter (isConsiderableAsLine tolerance) linedBaddedBreaks
     addDemerit (ln@Line{breakItem=br}, aft, bad) = (ln, aft, lineDemerit linePenalty bad br)
     goodLinedDemeredBreaks = fmap addDemerit goodLinedBaddedBreaks
@@ -371,6 +368,7 @@ setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
     setLine Line{contents=lncs, status=stat} = VHBox B.HBox{contents=setListElems stat lncs, desiredLength=B.To desiredWidth}
   in
     fmap setLine lns
+    -- fmap setLine $ T.traceShow (lns !! 0) lns
 
 factMod :: Int -> Int -> Double -> Int -> Int
 factMod setOrder glueOrder r f = if setOrder == glueOrder then round (r * fromIntegral f) else 0

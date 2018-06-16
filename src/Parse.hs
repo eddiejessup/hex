@@ -13,6 +13,7 @@ import qualified Setting as S
 import qualified Cat
 import qualified Lex
 import qualified Command as C
+import qualified Unit
 
 import qualified Debug.Trace as T
 
@@ -64,7 +65,7 @@ theFontNr = 1
 characterBox :: State -> Int -> Maybe B.Character
 characterBox state code = do
   font <- currentFontInfo state
-  let toSP = TFMM.toScaledPoint font
+  let toSP = TFMM.designScaleSP font
   TFMC.Character{width=w, height=h, depth=d} <- IMAP.lookup code $ TFMM.characters font
   return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
 
@@ -72,9 +73,9 @@ spaceGlue :: State -> Maybe S.Glue
 spaceGlue state = do
   font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo state
   let
-    toSP = TFMM.toScaledPoint font
-    toFlex = S.finiteGlueFlex . toSP
-  return S.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
+    toSP = TFMM.designScaleSP font
+    toFlex = S.finiteFlex . toSP
+  return $ T.traceShowId S.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
 extractParagraphInner :: State -> [S.BreakableHListElem] -> Cat.CharCatMap -> Lex.LexState -> C.Command -> [Cat.CharCode] -> IO (State, [S.BreakableHListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
 extractParagraphInner state acc ccMap lexState com1 cs
@@ -112,16 +113,19 @@ extractParagraph state acc ccMap lexState cs =
     Nothing -> return (state, acc, ccMap, lexState, [])
     Just (com1, rest, lexState1) -> extractParagraphInner state acc ccMap lexState1 com1 rest
 
+parIndent = S.HHBox B.HBox{contents=[], desiredLength=B.To $ fromIntegral $ round $ Unit.pointToScaledPoint 20}
+
 extractBoxedParagraph :: Int -> Int -> Int -> S.Glue -> State -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> IO (State, [S.BreakableVListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
 extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state ccMap lexState cs = do
-  (stateNext, hList, ccMapNext, lexStateNext, rest) <- extractParagraph state [] ccMap lexState cs
+  (stateNext, hList, ccMapNext, lexStateNext, rest) <- extractParagraph state [parIndent] ccMap lexState cs
   let
     lineBoxes = S.setParagraph desiredWidth lineTolerance linePenalty hList
     paraBoxes = intersperse (S.VGlue interLineGlue) lineBoxes
+    -- paraBoxes = T.traceShow (lineBoxes !! 0) intersperse (S.VGlue interLineGlue) lineBoxes
   return (stateNext, paraBoxes, ccMapNext, lexStateNext, rest)
 
 desiredWidth :: Int
-desiredWidth = 28000000
+desiredWidth = 30000000
 
 lineTolerance :: Int
 lineTolerance = 200
@@ -130,13 +134,10 @@ linePenalty :: Int
 linePenalty = 10
 
 desiredHeight :: Int
-desiredHeight = 60000000
+desiredHeight = 45000000
 
 interLineGlue :: S.Glue
-interLineGlue = S.Glue{dimen = 400000, stretch=S.noGlueFlex, shrink=S.noGlueFlex}
-
-interParGlue :: S.Glue
-interParGlue = S.Glue {dimen = 1000000, stretch = S.noGlueFlex, shrink = S.noGlueFlex}
+interLineGlue = S.Glue{dimen = 400000, stretch=S.noFlex, shrink=S.noFlex}
 
 startsParagraph :: C.Command -> Bool
 startsParagraph C.AddCharacter{} = True
@@ -169,8 +170,8 @@ extractPage state acc ccMap lexState cs =
         then do
           (state2, paraBoxes, ccMap1, lexState2, rest2) <- extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state ccMap lexState cs
           let
-            breakItem = S.GlueBreak interParGlue
-            extra = paraBoxes ++ [S.VGlue interParGlue]
+            breakItem = S.GlueBreak interLineGlue
+            extra = paraBoxes ++ [S.VGlue interLineGlue]
             -- TODO: Discard when adding to empty page.
             -- TODO: Keep best rather than taking last.
             pen = S.breakPenalty breakItem

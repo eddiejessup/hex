@@ -1,0 +1,322 @@
+## Integers
+
+pretolerance
+    : Badness tolerance before hyphenation
+
+tolerance
+    : Badness tolerance after hyphenation
+
+hbadness
+    : Badness above which bad hboxes will be shown
+
+vbadness
+    : Badness above which bad vboxes will be shown
+
+linepenalty
+    : Amount added to badness of every line in a paragraph
+
+hyphenpenalty
+    : Penalty for line break after discretionary hyphen
+
+exhyphenpenalty
+    : Penalty for line break after explicit hyphen
+
+binoppenalty
+    : Penalty for line break after binary operation
+
+relpenalty
+    : Penalty for line break after math relation
+
+clubpenalty
+    : Penalty for creating a club line at bottom of page
+
+widowpenalty
+    : Penalty for creating a widow line at top of page
+
+displaywidowpenalty
+    : Ditto, before a display
+
+brokenpenalty
+    : Penalty for page break after a hyphenated line
+
+predisplaypenalty
+    : Penalty for page break just before a display
+
+postdisplaypenalty
+    : Penalty for page break just after a display
+
+interlinepenalty
+    : Additional penalty for page break between lines
+
+floatingpenalty
+    : Penalty for insertions that are split
+
+outputpenalty
+    : Penalty at the current page break
+
+doublehyphendemerits
+    : Demerits for consecutive broken lines
+
+finalhyphendemerits
+    : Demerits for a penultimate broken line
+
+adjdemerits
+    : Demerits for adjacent incompatible lines
+
+looseness
+    : Change to the number of lines in a paragraph
+
+pausing
+    : Positive if pausing after each line is read from a file
+
+holdinginserts
+    : Positive if insertions remain dormant in output box
+
+tracingonline
+    : Positive if showing diagnostic info on the terminal
+
+tracingmacros
+    : Positive if showing macros as they are expanded
+
+tracingstats
+    : Positive if showing statistics about memory usage
+
+tracingparagraphs
+    : Positive if showing line-break calculations
+
+tracingpages
+    : Positive if showing page-break calculations
+
+tracingoutput
+    : Positive if showing boxes that are shipped out
+
+tracinglostchars
+    : Positive if showing characters not in the font
+
+tracingcommands
+    : Positive if showing commands before they are executed
+
+tracingrestores
+    : Positive if showing deassignments when groups end
+
+language
+    : The current set of hyphenation rules
+
+uchyph
+    : Positive if hyphenating words beginning with capital letters
+
+lefthyphenmin
+    : Smallest fragment at beginning of hyphenated word
+
+righthyphenmin
+    : Smallest fragment at end of hyphenated word
+
+globaldefs
+    : Nonzero if overriding \global specifications
+
+defaulthyphenchar
+    : \hyphenchar value when a font is loaded
+
+defaultskewchar
+    : \skewchar value when a font is loaded
+
+escapechar
+    : Escape character in the output of control-sequence tokens
+
+endlinechar
+    : Character placed at the right end of an input line
+
+newlinechar
+    : Character that starts a new output line
+
+maxdeadcycles
+    : Upper bound on \deadcycles
+
+hangafter
+    : Hanging indentation changes after this many lines
+
+fam
+    : The current family number
+
+mag
+    : Magnification ratio, times 1000
+
+delimiterfactor
+    : Ratio for variable delimiters, times 1000
+
+time
+    : Current time of day in minutes since midnight
+
+day
+    : Current day of the month
+
+month
+    : Current month of the year
+
+year
+    : Current year of our Lord
+
+showboxbreadth
+    : Maximum items per level when boxes are shown
+
+showboxdepth
+    : Maximum level when boxes are shown
+
+errorcontextlines
+    : Maximum extra context shown when errors occur
+
+
+## Lengths
+
+hfuzz
+    : Maximum overrun before overfull hbox messages occur
+
+vfuzz
+    : Maximum overrun before overfull vbox messages occur
+
+overfullrule
+    : Width of rules appended to overfull boxes
+
+emergencystretch
+    : Reduces badnesses on final pass of line-breaking
+
+hsize
+    : Line width in horizontal mode
+
+vsize
+    : Page height in vertical mode
+
+maxdepth
+    : Maximum depth of boxes on main pages
+
+splitmaxdepth
+    : Maximum depth of boxes on split pages
+
+boxmaxdepth
+    : Maximum depth of boxes on explicit pages
+
+lineskiplimit
+    : Threshold where \baselineskip changes to \lineskip
+
+delimitershortfall
+    : Maximum space not covered by a delimiter
+
+nulldelimiterspace
+    : Width of a null delimiter
+
+scriptspace
+    : Extra space after subscript or superscript
+
+mathsurround
+    : Kerning before and after math in text
+
+predisplaysize
+    : Length of text preceding a display
+
+displaywidth
+    : Length of line for displayed equation
+
+displayindent
+    : Indentation of line for displayed equation
+
+parindent
+    : Width of \indent
+
+hangindent
+    : Amount of hanging indentation
+
+hoffset
+    : Horizontal offset in \shipout
+
+voffset
+    : Vertical offset in \shipout
+
+
+## Glues
+
+baselineskip
+    : Desired glue between baselines
+
+lineskip
+    : Interline glue if \baselineskip isn't feasible
+
+parskip
+    : Extra glue just above paragraphs
+
+abovedisplayskip
+    : Extra glue just above displays
+
+abovedisplayshortskip
+    : Ditto, following short lines
+
+belowdisplayskip
+    : Extra glue just below displays
+
+belowdisplayshortskip
+    : Ditto, following short lines
+
+leftskip
+    : Glue at left of justified lines
+
+rightskip
+    : Glue at right of justified lines
+
+topskip
+    : Glue at top of main pages
+
+splittopskip
+    : Glue at top of split pages
+
+tabskip
+    : Glue between aligned entries
+
+spaceskip
+    : Glue between words, if nonzero
+
+xspaceskip
+    : Glue between sentences, if nonzero
+
+parfillskip
+    : Additional \rightskip at end of paragraphs
+
+
+## Math Glues
+
+thinmuskip
+    : Thin space in math formulas
+
+medmuskip
+    : Medium space in math formulas
+
+thickmuskip
+    : Thick space in math formulas
+
+
+## Token lists
+
+output
+    : The user's output routine
+
+everypar
+    : Tokens to insert when a paragraph begins
+
+everymath
+    : Tokens to insert when math in text begins
+
+everydisplay
+    : Tokens to insert when display math begins
+
+everyhbox
+    : Tokens to insert when an hbox begins
+
+everyvbox
+    : Tokens to insert when a vbox begins
+
+everyjob
+    : Tokens to insert when the job begins
+
+everycr
+    : Tokens to insert after every \cr or nonredundant \crcr
+
+errhelp
+    : Tokens that supplement an \errmessage

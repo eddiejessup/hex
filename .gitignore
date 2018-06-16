@@ -3,3 +3,5 @@
 *.dvi
 *.pdf
 *.ps
+*.log
+support/
