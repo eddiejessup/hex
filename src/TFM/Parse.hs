@@ -305,7 +305,7 @@ readFontParams tfm tfmHeads = do
     CM.when (scheme == pack "TeX math italic") $
       fail "Unsupported character coding scheme"
 
-    [_extraSpace, _quad, _xHeight, _spaceShrink, _spaceStretch, _spacing, _slant] <- CM.replicateM 7 getFixWord
+    [_slant, _spacing, _spaceStretch, _spaceShrink, _xHeight, _quad, _extraSpace] <- CM.replicateM 7 getFixWord
 
     -- Read parameters relating to math symbols and extensions, if present.
     _mathSymbolParams <- readMathSymbolParams scheme

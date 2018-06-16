@@ -10,7 +10,6 @@ import Data.Char (ord)
 import qualified Data.Int as I
 import qualified Data.Word as W
 import System.FilePath (splitFileName)
-import qualified Unit as U
 
 import qualified TFM.Main as TFMM
 
@@ -596,7 +595,6 @@ encodeInstructions (this:rest) magnification = do
                  , scaleFactorRatio = scaleRatio
                  } -> do
         let checksum = TFMM.checksum info
-            designSizeRaw = U.pointToScaledPoint (TFMM.designFontSize info)
             designSize = round $ TFMM.designSizeSP info
             scaleFactor = TFMM.designScaleSP info scaleRatio
         defineFontInstruction <-

@@ -1,8 +1,6 @@
 module Cat where
 
 import qualified Data.IntMap.Strict as IMap
-import Data.List.Split (chop)
-import Data.Maybe (catMaybes)
 
 data CatCode
   = Escape

@@ -36,10 +36,10 @@ currentFontInfo state = do
 
 defineFont :: State -> Int -> IO (State, B.FontDefinition)
 defineFont state nr = do
-    font <- TFMM.readTFM "cmr10.tfm"
+    font <- TFMM.readTFM "support/cmr10.tfm"
     let
-      fontDef = B.FontDefinition { fontNr = theFontNr
-                                 , fontPath = "cmr10.tfm"
+      fontDef = B.FontDefinition { fontNr = nr
+                                 , fontPath = "support/cmr10.tfm"
                                  , fontName = "cmr10"
                                  , fontInfo = font
                                  , scaleFactorRatio = 1.0
@@ -75,7 +75,7 @@ spaceGlue state = do
   let
     toSP = TFMM.designScaleSP font
     toFlex = S.finiteFlex . toSP
-  return $ T.traceShowId S.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
+  return S.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
 extractParagraphInner :: State -> [S.BreakableHListElem] -> Cat.CharCatMap -> Lex.LexState -> C.Command -> [Cat.CharCode] -> IO (State, [S.BreakableHListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
 extractParagraphInner state acc ccMap lexState com1 cs
