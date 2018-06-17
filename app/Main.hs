@@ -17,26 +17,24 @@ import qualified Command
 main :: IO ()
 main = do
   contents <- readFile "test.tex"
-
   let contentsCode = fmap C.ord contents
 
-  let
-      -- Add in some useful extras beyond the technical defaults.
-      extras = [(94, Cat.Superscript)]
-      usableMap = foldl (\m (k, v) -> IMAP.insert k v m) Cat.defaultCharCatMap extras
-
   -- Get some char-cats.
-  let charCats = Cat.extractAll usableMap contentsCode
+  -- let charCats = Cat.extractAll Cat.usableCharCatMap contentsCode
 
   -- Get some tokens.
-  let tokens = Lex.extractAll usableMap contentsCode
+  -- let tokens = Lex.extractAll Cat.usableCharCatMap contentsCode
   -- putStrLn $ List.intercalate "\n" $ fmap show tokens
 
   -- Get some commands.
-  let coms = Command.extractAll usableMap contentsCode
+  -- let coms = Command.extractAllDebug Cat.usableCharCatMap contentsCode
   -- putStrLn $ List.intercalate "\n" $ fmap show coms
 
-  pages <- Parse.extractPages Parse.newState [] usableMap Lex.LineBegin contentsCode
+  let stream = Command.Stream {codes=contentsCode, lexState=Lex.LineBegin, ccMap=Cat.usableCharCatMap}
+
+  -- page <- Parse.extractPage Parse.newState [] stream
+
+  pages <- Parse.extractPages Parse.newState [] stream
 
   -- -- putStrLn $ show $ pages !! 0
 

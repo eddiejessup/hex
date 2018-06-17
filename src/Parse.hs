@@ -55,10 +55,10 @@ isModeIndependent :: C.Command -> Bool
 isModeIndependent C.Relax = True
 isModeIndependent _ = False
 
-runAllModeCommand :: State -> Cat.CharCatMap -> C.Command -> IO (State, Cat.CharCatMap)
-runAllModeCommand state ccMap com
-  | C.Relax <- com = return (state, ccMap)
-  | otherwise = return (state, ccMap)
+runAllModeCommand :: State -> C.Stream -> C.Command -> IO (State, C.Stream)
+runAllModeCommand state stream com
+  | C.Relax <- com = return (state, stream)
+  | otherwise = return (state, stream)
 
 theFontNr = 1
 
@@ -78,52 +78,50 @@ spaceGlue state = do
   return S.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
 -- We build a paragraph list in reverse order.
-extractParagraphInner :: State -> [S.BreakableHListElem] -> Cat.CharCatMap -> Lex.LexState -> C.Command -> [Cat.CharCode] -> IO (State, [S.BreakableHListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
-extractParagraphInner state acc ccMap lexState com1 cs
+extractParagraphInner :: State -> [S.BreakableHListElem] -> C.Stream -> C.Command -> IO (State, [S.BreakableHListElem], C.Stream)
+extractParagraphInner state acc stream com1
   | C.Assign {assignment=C.DefineFont} <- com1 = do
     (state1, fontDef) <- defineFont state theFontNr
-    extractParagraph state1 (S.HFontDefinition fontDef:acc) ccMap lexState cs
+    extractParagraph state1 (S.HFontDefinition fontDef:acc) stream
   | C.Assign {assignment=C.SelectFont} <- com1 = do
     let (state1, fontSel) = selectFont state theFontNr
-    extractParagraph state1 (S.HFontSelection fontSel:acc) ccMap lexState cs
+    extractParagraph state1 (S.HFontSelection fontSel:acc) stream
   | isModeIndependent com1 = do
-    (state2, ccMap2) <- runAllModeCommand state ccMap com1
-    extractParagraph state2 acc ccMap2 lexState cs
+    (state1, streamNext) <- runAllModeCommand state stream com1
+    extractParagraph state1 acc streamNext
   | C.AddCharacter{code=i} <- com1 = do
     charBox <- case characterBox state i of
       Just c -> return $ S.HCharacter c
       Nothing -> fail "Could not get character info"
-    extractParagraph state (charBox:acc) ccMap lexState cs
+    extractParagraph state (charBox:acc) stream
   | C.AddSpace{} <- com1 = do
     glue <- case spaceGlue state of
       Just sg -> return $ S.HGlue sg
       Nothing -> fail "Could not get space glue"
-    extractParagraph state (glue:acc) ccMap lexState cs
+    extractParagraph state (glue:acc) stream
   | C.AddKern k <- com1 = do
-    extractParagraph state ((S.HKern $ B.Kern k):acc) ccMap lexState cs
+    extractParagraph state ((S.HKern $ B.Kern k):acc) stream
   -- See \par: Return to outer mode with completed list.
-  | C.StartParagraph{} <- com1 = return (state, acc, ccMap, lexState, cs)
+  | C.EndParagraph{} <- com1 = return (state, acc, stream)
   -- See something else: Ignore and continue.
   | otherwise = fail $ "Unknown command in horizontal mode: " ++ (show com1)
 
-extractParagraph :: State -> [S.BreakableHListElem] -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> IO (State, [S.BreakableHListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
--- Run out of characters: return the list so far.
-extractParagraph state acc ccMap lexState [] = return (state, acc, ccMap, lexState, [])
-extractParagraph state acc ccMap lexState cs =
-  case C.extractCommand ccMap lexState cs of
+extractParagraph :: State -> [S.BreakableHListElem] -> C.Stream -> IO (State, [S.BreakableHListElem], C.Stream)
+extractParagraph state acc stream =
+  case C.extractCommand stream of
     -- Run out of commands: return the list so far.
-    Nothing -> return (state, acc, ccMap, lexState, [])
-    Just (com1, rest, lexState1) -> extractParagraphInner state acc ccMap lexState1 com1 rest
+    Nothing -> return (state, acc, stream)
+    Just (com1, streamNext) -> extractParagraphInner state acc streamNext com1
 
 parIndent = S.HHBox B.HBox{contents=[], desiredLength=B.To $ fromIntegral $ round $ Unit.pointToScaledPoint 20}
 
-extractBoxedParagraph :: Int -> Int -> Int -> S.Glue -> State -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> IO (State, [S.BreakableVListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
-extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state ccMap lexState cs = do
-  (stateNext, hList, ccMapNext, lexStateNext, rest) <- extractParagraph state [parIndent] ccMap lexState cs
+extractBoxedParagraph :: Int -> Int -> Int -> S.Glue -> State -> C.Stream -> IO (State, [S.BreakableVListElem], C.Stream)
+extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state stream = do
+  (stateNext, hList, streamNext) <- extractParagraph state [parIndent] stream
   let
     lineBoxes = S.setParagraph desiredWidth lineTolerance linePenalty hList
     paraBoxes = intersperse (S.VGlue interLineGlue) lineBoxes
-  return (stateNext, paraBoxes, ccMapNext, lexStateNext, rest)
+  return (stateNext, paraBoxes, streamNext)
 
 desiredWidth :: Int
 desiredWidth = 30750000
@@ -145,35 +143,37 @@ startsParagraph C.AddCharacter{} = True
 startsParagraph C.AddSpace{} = True
 startsParagraph _ = False
 
-extractPageInner :: State -> [S.BreakableVListElem] -> Cat.CharCatMap -> Lex.LexState -> C.Command -> [Cat.CharCode] -> IO (State, B.Page, [S.BreakableVListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
-extractPageInner state acc ccMap lexState com1 cs
+extractPageInner :: State -> [S.BreakableVListElem] -> C.Stream -> C.Command -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
+extractPageInner state acc stream com1
   | C.Assign {assignment=C.DefineFont} <- com1 = do
     (state1, fontDef) <- defineFont state theFontNr
-    extractPage state1 (S.VFontDefinition fontDef:acc) ccMap lexState cs
+    extractPage state1 (S.VFontDefinition fontDef:acc) stream
   | C.Assign {assignment=C.SelectFont} <- com1 = do
     let (state1, fontSel) = selectFont state theFontNr
-    extractPage state1 (S.VFontSelection fontSel:acc) ccMap lexState cs
+    extractPage state1 (S.VFontSelection fontSel:acc) stream
   | isModeIndependent com1 = do
-    (state1, ccMap2) <- runAllModeCommand state ccMap com1
-    extractPage state1 acc ccMap2 lexState cs
-  | C.StartParagraph{} <- com1 =
-    extractPage state acc ccMap lexState cs
-  | C.AddKern k <- com1 = do
-    T.trace "vkern" extractPage state ((S.VKern $ B.Kern k):acc) ccMap lexState cs
+    (state1, streamNext) <- runAllModeCommand state stream com1
+    extractPage state1 acc streamNext
+  -- '\par' does nothing in vertical mode.
+  | C.EndParagraph{} <- com1 =
+    extractPage state acc stream
+  | C.AddKern k <- com1 =
+    extractPage state ((S.VKern $ B.Kern k):acc) stream
   | otherwise =
     fail $ "Unknown command in vertical mode: " ++ (show com1)
 
-extractPage :: State -> [S.BreakableVListElem] -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> IO (State, B.Page, [S.BreakableVListElem], Cat.CharCatMap, Lex.LexState, [Cat.CharCode])
-extractPage state acc ccMap lexState [] = return (state, B.Page $ S.setListElems S.NaturallyGood acc, [], ccMap, lexState, [])
-extractPage state acc ccMap lexState cs =
-  case C.extractCommand ccMap lexState cs of
+extractPage :: State -> [S.BreakableVListElem] -> C.Stream -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
+extractPage state acc stream =
+  case C.extractCommand stream of
     -- Expects normal order.
-    Nothing -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], ccMap, lexState, [])
-    Just (com1, rest, lexState1) ->
+    Nothing -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], stream)
+    Just (com1, streamNext) ->
+      -- If the command shifts to horizontal mode, re-read the stream in
+      -- horizontal mode. Note that we pass 'stream', not 'streamNext'.
       if startsParagraph com1
         then do
           -- Paraboxes returned in normal order.
-          (state2, paraBoxes, ccMap1, lexState2, rest2) <- extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state ccMap lexState cs
+          (stateNext, paraBoxes, streamNextH) <- extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state stream
           let
             breakItem = S.GlueBreak interLineGlue
             extra = S.VGlue interLineGlue:reverse paraBoxes
@@ -184,18 +184,21 @@ extractPage state acc ccMap lexState cs =
             -- Expects normal order.
             stat = S.listGlueSetRatio desiredHeight $ reverse accNext
             bad = S.listStatusBadness stat
-            cost = T.traceShow stat $ S.pageCost pen bad 0
+            cost = S.pageCost pen bad 0
             -- Expects normal order.
             page = B.Page $ reverse $ S.setListElems stat acc
           if (cost == S.oneMillion) || (pen <= -S.tenK)
-            then return (state2, page, extra, ccMap1, lexState2, rest2)
-            else extractPage state2 accNext ccMap1 lexState2 rest2
+            then return (stateNext, page, extra, streamNextH)
+            else extractPage stateNext accNext streamNextH
         else
-          extractPageInner state acc ccMap lexState1 com1 rest
+          extractPageInner state acc streamNext com1
 
-extractPages :: State -> [S.BreakableVListElem] -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> IO [B.Page]
-extractPages state0 [] ccMap0 lexState0 [] = return []
-extractPages state0 acc ccMap0 lexState0 cs = do
-    (state1, page, vListRemain, ccMap1, lexState1, rest1) <- extractPage state0 acc ccMap0 lexState0 cs
-    pagesRest <- extractPages state1 vListRemain ccMap1 lexState1 rest1
-    return $ page:pagesRest
+extractPages :: State -> [S.BreakableVListElem] -> C.Stream -> IO [B.Page]
+extractPages _ _ C.Stream{codes=[]} = return []
+extractPages state acc stream = do
+    (stateNext, page, vListRemain, streamNext) <- extractPage state acc stream
+    if C.atEnd streamNext
+      then return [page]
+      else do
+        pagesRest <- extractPages stateNext vListRemain streamNext
+        return $ page:pagesRest

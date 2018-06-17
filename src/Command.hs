@@ -1,19 +1,28 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Command where
 
 import Data.List.Split (chop)
+import Data.String.Utils (replace)
+import qualified Text.Megaparsec as P
+import Data.Proxy
+import qualified Data.Set as Set
+import qualified Data.Char as C
+import Data.Either.Combinators (rightToMaybe)
 
+import qualified Harden
+import Harden (ParseToken)
 import qualified Lex
 import qualified Cat
 
 data Axis = Horizontal | Vertical
   deriving Show
-data HDirection = Left | Right
+data HDirection = Leftward | Rightward
   deriving Show
-data VDirection = Up | Down
+data VDirection = Upward | Downward
   deriving Show
-data Stream = Out | Err
+data MessageStream = Out | Err
   deriving Show
 
 data CharSource = ExplicitChar | CodeChar | TokenChar
@@ -83,7 +92,7 @@ data Command
   -- | IgnoreSpaces
   -- | SetAfterAssignmentToken
   -- | AddToAfterGroupTokens
-  -- | Message Stream
+  -- | Message MessageStream
   -- | OpenInput
   -- | CloseInput
   -- | OpenOutput
@@ -101,7 +110,7 @@ data Command
   -- | AddLeaders
   -- | AddBox BoxPlacement
   -- | UnpackBox Axis
-  | StartParagraph { indent :: Bool }
+  | EndParagraph { indent :: Bool }
   -- | EndParagraph
   -- | AddGlue Axis
   -- | AddRule Axis
@@ -116,38 +125,143 @@ data Command
   -- | ShiftMathMode
   deriving Show
 
-extractCommandInner :: Cat.CharCatMap -> Lex.LexState -> Lex.Token -> [Cat.CharCode] -> Maybe (Command, [Cat.CharCode], Lex.LexState)
-extractCommandInner ccMap lexState tok1 cs
-  | Lex.CharCat{cat=Lex.Space} <- tok1 =
-    Just (AddSpace ExplicitSpace, cs, lexState)
-  | Lex.CharCat{char=char, cat=Lex.Letter} <- tok1 =
-    Just (AddCharacter{method=ExplicitChar, code=char}, cs, lexState)
-  | Lex.CharCat{char=char, cat=Lex.Other} <- tok1 =
-    Just (AddCharacter{method=ExplicitChar, code=char}, cs, lexState)
-  | Lex.ControlSequence (Lex.ControlWord "par") <- tok1 =
-    Just (StartParagraph{indent=True}, cs, lexState)
-  | Lex.ControlSequence (Lex.ControlWord "dfont") <- tok1 =
-    Just (Assign {assignment=DefineFont, global=False}, cs, lexState)
-  | Lex.ControlSequence (Lex.ControlWord "sfont") <- tok1 =
-    Just (Assign {assignment=SelectFont, global=False}, cs, lexState)
-  | Lex.ControlSequence (Lex.ControlWord "relax") <- tok1 =
-    Just (Relax, cs, lexState)
-  | Lex.ControlSequence (Lex.ControlWord "kern") <- tok1 =
-    Just (AddKern 2000000, cs, lexState)
+extractCommand :: Stream -> Maybe (Command, Stream)
+extractCommand stream = rightToMaybe $ P.parse hParser "" stream
 
-extractCommand :: Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (Command, [Cat.CharCode], Lex.LexState)
-extractCommand _ _ [] = Nothing
-extractCommand ccMap lexState0 cs = do
-  (tok1, lexState1, rest) <- Lex.extractToken ccMap lexState0 cs
-  extractCommandInner ccMap lexState1 tok1 rest
+extractAllInner :: Stream -> [Command]
+extractAllInner stream =
+  case P.parse hParser "" stream of
+    Left _ -> []
+    Right (com, newStream) -> com:extractAllInner newStream
 
-extractAllInner :: Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> [Command]
-extractAllInner _ _ [] = []
-extractAllInner ccMap state cs =
-  case extractCommand ccMap state cs of
-    Nothing -> []
-    Just (thisCom, rest, nextState) ->
-      thisCom:extractAllInner ccMap nextState rest
+extractAllDebug :: Cat.CharCatMap -> [Cat.CharCode] -> [Command]
+extractAllDebug ccMap cs = extractAllInner $ Stream{codes=cs, lexState=Lex.LineBegin, ccMap=ccMap}
 
-extractAll :: Cat.CharCatMap -> [Cat.CharCode] -> [Command]
-extractAll ccMap = extractAllInner ccMap Lex.LineBegin
+instance Ord ParseToken where
+  compare a b = EQ
+
+instance Eq ParseToken where
+  (==) a b = True
+
+type ParseTokens = [ParseToken]
+
+type CharCodes = [Cat.CharCode]
+
+data Stream = Stream { codes :: CharCodes
+                     , lexState :: Lex.LexState
+                     , ccMap :: Cat.CharCatMap }
+
+showSrc :: String -> String
+showSrc s = replace "\n" "\\n" (take 30 s)
+
+instance Show Stream where
+  show Stream{codes=cs, lexState=ls} =
+    (show ls) ++ "; \"" ++ (showSrc $ fmap C.chr cs) ++ "\""
+
+instance P.Stream Stream where
+  type Token Stream = ParseToken
+  -- 'Tokens' is synonymous with 'chunk' containing 'token's.
+  type Tokens Stream = ParseTokens
+
+  -- These basically clarify that, for us, a 'tokens' is a list of type
+  -- 'token'.
+  -- tokenToChunk :: Proxy s -> Token s -> Tokens s
+  -- To make a 'token' into a 'tokens', wrap it in a list.
+  tokenToChunk Proxy = pure
+  -- tokensToChunk :: Proxy s -> [Token s] -> Tokens s
+  -- A list of type 'token' is equivalent to a 'tokens', and vice versa.
+  tokensToChunk Proxy = id
+  -- chunkToTokens :: Proxy s -> Tokens s -> [Token s]
+  chunkToTokens Proxy = id
+
+  -- chunkLength :: Proxy s -> Tokens s -> Int
+  -- The length of a chunk is the number of elements in it (it's a list).
+  chunkLength Proxy = length
+  -- chunkEmpty :: Proxy s -> Tokens s -> Bool
+  -- A chunk is empty if it has no elements.
+  chunkEmpty Proxy = null
+
+  -- Stub implementation: leave position unchanged.
+  advance1 Proxy _ pos _ = pos
+  advanceN Proxy _ pos _ = pos
+
+  -- take1_ :: s -> Maybe (Token s, s)
+  --
+  take1_ (Stream [] _ _) = Nothing
+  take1_ s@(Stream cs lexState0 ccMap) = do
+    (t, lexState1, rest) <- Harden.extractToken ccMap lexState0 cs
+    let s2 = s{codes=rest, lexState=lexState1}
+    return (t, s2)
+
+satisfy f = P.token testTok Nothing
+  where
+    testTok x =
+      if f x
+        then Right x
+        else Left (Nothing, Set.empty)
+
+hParser :: P.Parsec () Stream (Command, Stream)
+hParser = do
+  com <- P.choice commands
+  P.State{stateInput=stream} <- P.getParserState
+  return (com, stream)
+
+
+isEOF :: P.Parsec () Stream Bool
+isEOF = P.atEnd
+
+atEnd :: Stream -> Bool
+atEnd stream = case P.parse isEOF "" stream of
+  (Right x) -> x
+  (Left _) -> False
+
+commands =
+  [ relax
+  , explicitSpace
+  , explicitCharacter
+  , endParagraph
+  , tempDFont
+  , tempSFont
+  -- , kern (AddKern 2000000)
+  ]
+
+-- Commands.
+
+relax = do
+  _ <- satisfy isRelax
+  return Relax
+
+explicitSpace = do
+  _ <- satisfy isSpace
+  return $ AddSpace ExplicitSpace
+
+explicitCharacter = do
+  (Harden.ExplicitCharacter code) <- satisfy isExplicitCharacter
+  return $ AddCharacter{method=ExplicitChar, code=code}
+
+endParagraph = do
+  (Harden.EndParagraph indent) <- satisfy isEndParagraph
+  return $ EndParagraph{indent=indent}
+
+tempDFont = do
+  _ <- satisfy isTempDFont
+  return $ Assign {assignment=DefineFont, global=False}
+
+tempSFont = do
+  _ <- satisfy isTempSFont
+  return $ Assign {assignment=SelectFont, global=False}
+
+-- Token matching.
+
+isRelax Harden.Relax{} = True
+isRelax _ = False
+isSpace Harden.ExplicitSpace{} = True
+isSpace _ = False
+isExplicitCharacter Harden.ExplicitCharacter{} = True
+isExplicitCharacter _ = False
+isEndParagraph Harden.EndParagraph{} = True
+isEndParagraph _ = False
+isTempDFont Harden.TempDFont{} = True
+isTempDFont _ = False
+isTempSFont Harden.TempSFont{} = True
+isTempSFont _ = False

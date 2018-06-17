@@ -335,7 +335,6 @@ listStatusBadness g = case g of
 listGlueSetRatio :: (BreakableList [a], BreakableListElem a) => Int -> [a] -> ListStatus
 listGlueSetRatio desiredLength cs =
   glueSetRatio (naturalLength cs - desiredLength) (flex cs)
-  -- T.trace ("nat: " ++ show (naturalLength cs) ++ " des: " ++ show desiredLength ++ "glues: " ++ show (mapMaybe toGlue cs) ++ " flex: " ++ show (flex cs) ++ "ratio: " ++ show (glueSetRatio (naturalLength cs - desiredLength) (flex cs)) ++ "\n") glueSetRatio (naturalLength cs - desiredLength) (flex cs)
 
 isConsiderableAsLine :: Int -> (Line, [BreakableHListElem], Int) -> Bool
 isConsiderableAsLine tolerance (Line{breakItem=br}, _, bad) =
@@ -355,6 +354,7 @@ breakToLine desiredWidth Break{before=bef, item=br, after=aft} =
     stat = listGlueSetRatio desiredWidth bef
   in (Line{contents=bef, status=stat, breakItem=br}, aft)
 
+-- Expects contents in normal order.
 bestRoute :: Int -> Int -> Int -> [BreakableHListElem] -> Route
 bestRoute _ _ _ [] = Route {lines=[], demerit=0}
 bestRoute desiredWidth tolerance linePenalty cs =
@@ -362,7 +362,6 @@ bestRoute desiredWidth tolerance linePenalty cs =
     breaks = allBreaks cs
     linedBreaks = fmap (breakToLine desiredWidth) breaks
     linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, listStatusBadness $ status ln)) linedBreaks
-    -- linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, T.traceShow (listStatusBadness $ status ln, status ln) listStatusBadness $ status ln)) linedBreaks
     goodLinedBaddedBreaks = filter (isConsiderableAsLine tolerance) linedBaddedBreaks
     addDemerit (ln@Line{breakItem=br}, aft, bad) = (ln, aft, lineDemerit linePenalty bad br)
     goodLinedDemeredBreaks = fmap addDemerit goodLinedBaddedBreaks
@@ -379,7 +378,8 @@ bestRoute desiredWidth tolerance linePenalty cs =
 setListElems :: SettableListElem a b => ListStatus -> [a] -> [b]
 setListElems stat = concatMap (setElem stat)
 
--- Note: contents are expected to be in reverse order.
+-- Expects contents in reverse order.
+-- Returns lines in normal order.
 setParagraph :: Int -> Int -> Int -> [BreakableHListElem] -> [BreakableVListElem]
 setParagraph _ _ _ [] = []
 setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
@@ -396,7 +396,6 @@ setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
     setLine Line{contents=lncs, status=stat} = VHBox B.HBox{contents=setListElems stat lncs, desiredLength=B.To desiredWidth}
   in
     fmap setLine lns
-    -- fmap setLine $ T.traceShow (lns !! 0) lns
 
 factMod :: Int -> Int -> Double -> Int -> Int
 factMod setOrder glueOrder r f = if setOrder == glueOrder then round (r * fromIntegral f) else 0

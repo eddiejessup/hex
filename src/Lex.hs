@@ -36,7 +36,7 @@ data LexState
   = SkippingBlanks
   | LineMiddle
   | LineBegin
-  deriving (Eq)
+  deriving (Eq, Show)
 
 spaceTok :: Token
 -- 32 means ' '.

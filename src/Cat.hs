@@ -47,6 +47,10 @@ defaultCatCode n
 defaultCharCatMap :: CharCatMap
 defaultCharCatMap = IMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127]
 
+-- Add in some useful extras beyond the technical defaults.
+extras = [(94, Cat.Superscript)]
+usableCharCatMap = foldl (\m (k, v) -> IMap.insert k v m) defaultCharCatMap extras
+
 catLookup :: CharCatMap -> CharCode -> CatCode
 catLookup m n = IMap.findWithDefault Invalid n m
 
