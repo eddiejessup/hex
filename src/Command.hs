@@ -12,30 +12,15 @@ import qualified Data.Char as C
 import Data.Either.Combinators (rightToMaybe)
 
 import qualified Harden
-import Harden (ParseToken)
+import Harden (ParseToken, VDirection, MessageStream)
 import qualified Lex
 import qualified Cat
-
-data Axis = Horizontal | Vertical
-  deriving Show
-data HDirection = Leftward | Rightward
-  deriving Show
-data VDirection = Upward | Downward
-  deriving Show
-data MessageStream = Out | Err
-  deriving Show
 
 data CharSource = ExplicitChar | CodeChar | TokenChar
   deriving Show
 
 data Distance = Distance Int
   deriving Show
-
-data LeadersType
-  = Aligned -- \leaders
-  | Centered -- \cleaders
-  | Expanded -- \xleaders
-
 
 -- TODO.
 data ControlSequenceLike = ActiveChar Char | ControlSequence String
@@ -110,7 +95,7 @@ data AllModesCommand
   | AddSpace
   -- | AddBox Box
   -- | AddShiftedBox Distance Box
-  -- | AddFetchedBox Int
+  -- | AddFetchedBox { register :: Int, unwrap, pop :: Bool } -- \box, \copy, \un{v,h}{box,copy}
   -- | AddRule { width, height, depth :: Maybe Distance }
   -- | AddAlignedMaterial DesiredLength AlignmentMaterial
   | StartParagraph { indent :: Bool }
