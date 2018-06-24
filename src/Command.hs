@@ -27,115 +27,123 @@ data MessageStream = Out | Err
 
 data CharSource = ExplicitChar | CodeChar | TokenChar
   deriving Show
-data SpaceSource = ExplicitSpace | ControlSpace
-  deriving Show
-data InsertionType = Insertion | Adjustment
+
+data Distance = Distance Int
   deriving Show
 
--- data Distance = Distance Int
-  -- deriving Show
--- data HDisplacement = HDisplacement HDirection Distance | HDefault
-  -- deriving Show
--- data VDisplacement = VDisplacement VDirection Distance | VDefault
-  -- deriving Show
--- data BoxPlacement = HBox HDisplacement | VBox VDisplacement
+data LeadersType
+  = Aligned -- \leaders
+  | Centered -- \cleaders
+  | Expanded -- \xleaders
+
 
 -- TODO.
-data MacroName = ActiveChar Char | ControlSequence String
-  deriving Show
--- TODO.
-data ParameterText = ParameterText [String]
-  deriving Show
--- TODO.
-data BalancedText = BalancedText [String]
-  deriving Show
+data ControlSequenceLike = ActiveChar Char | ControlSequence String
 
+data AssignmentBody
+  -- = DefineMacro { name :: ControlSequenceLike
+  --               , parameters :: ParameterText
+  --               , contents :: BalancedText
+  --               , long, outer, expanded :: Bool }
+  -- | ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
+  -- | SetVariable VariableAssignment
+  -- | ModifyVariable VariableModification
+  -- | AssignCode { codeType :: CodeType, codeIndex, value :: Int }
+  -- | Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
+  -- | FutureLet { name :: ControlSequenceLike, token1, token2 :: Token}
+  -- TEMP: Dummy label constructor until properly implemented.
+  = SelectFont
+  -- | SelectFont FontDefToken
+  -- | SetFamilyMember {member :: FamilyMember, font :: Font}
+  -- | SetParShape
+  -- | Read
+  -- | DefineBox
+  -- TEMP: Dummy label constructor until properly implemented.
+  | DefineFont
+  -- | DefineFont
+  -- -- Global assignments.
+  -- | SetFontAttribute
+  -- | SetHyphenation
+  -- | SetBoxSize
+  -- | SetInteractionMode
+  -- | SetSpecialVariable
+  deriving Show
 
 data Assignment
-  = DefineMacro { name :: MacroName
-                , parameters :: ParameterText
-                , contents :: BalancedText
-                , long :: Bool
-                , outer :: Bool
-                , expanded :: Bool }
-  | SetVariable
-  | ModifyVariable
-  | AssignCode
-  | Let
-  | ShortDefine
-  | SelectFont
-  | SetFamilyMember
-  | SetParShape
-  | Read
-  | DefineBox
-  | DefineFont
-  -- Global assignments.
-  | SetFontAttribute
-  | SetHyphenation
-  | SetBoxSize
-  | SetInteractionMode
-  | SetSpecialVariable
+  = Assignment { body :: AssignmentBody, global :: Bool }
   deriving Show
 
-data Command
+data AllModesCommand
   = Relax
-  | Assign {assignment :: Assignment, global :: Bool }
+  | Assign Assignment
   -- | LeftBrace
   -- | RightBrace
   -- | BeginGroup
   -- | EndGroup
-  -- | ShowToken
-  -- | ShowBox
+  -- | ShowToken Token
+  -- | ShowBox Int
   -- | ShowLists
-  -- | ShowInternalQuantity
-  -- | ShipOut
+  -- | ShowInternalQuantity InternalQuantity
+  -- | ShipOut Box
   -- | IgnoreSpaces
-  -- | SetAfterAssignmentToken
-  -- | AddToAfterGroupTokens
-  -- | Message MessageStream
-  -- | OpenInput
-  -- | CloseInput
-  -- | OpenOutput
-  -- | CloseOutput
-  -- | Write
-  -- | AddWhatsit
-  -- | AddPenalty
+  -- | SetAfterAssignmentToken Token
+  -- | AddToAfterGroupTokens Tokens
+  -- | ChangeCase VDirection GeneralText
+  -- | Message MessageStream GeneralText
+  -- | OpenInput { streamNr :: Int, fileName :: String }
+  -- | CloseInput { streamNr :: Int }
+  -- | OpenOutput { streamNr :: Int, fileName :: String, immediate :: Bool }
+  -- | CloseOutput { streamNr :: Int, immediate :: Bool }
+  -- | Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
+  -- | AddWhatsit GeneralText
+  -- | AddPenalty Int
   | AddKern Int
-  -- | AddMathKern
   -- | RemoveLastPenalty
   -- | RemoveLastKern
   -- | RemoveLastGlue
-  -- | AddMark
-  -- | AddInsertion InsertionType
-  -- | AddLeaders
-  -- | AddBox BoxPlacement
-  -- | UnpackBox Axis
-  | EndParagraph { indent :: Bool }
-  -- | EndParagraph
-  -- | AddGlue Axis
-  -- | AddRule Axis
-  -- | AddAlignedMaterial Axis
-  -- | End
-  -- | Dump
-  | AddSpace SpaceSource
-  | AddCharacter { method :: CharSource, code :: Int }
-  -- | AddAccent
-  -- | AddItalicCorrection
-  -- | AddDiscretionaryText
-  -- | ShiftMathMode
+  -- | AddMark GeneralText
+  -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
+  -- -- then can 'migrate' out.
+  -- | AddInsertion {nr :: Int, contents :: VModeMaterial}
+  -- | AddGlue Glue
+  -- | AddLeaders {type :: LeadersType, template :: BoxOrRule, glue :: Glue}
+  | AddSpace
+  -- | AddBox Box
+  -- | AddShiftedBox Distance Box
+  -- | AddFetchedBox Int
+  -- | AddRule { width, height, depth :: Maybe Distance }
+  -- | AddAlignedMaterial DesiredLength AlignmentMaterial
+  | StartParagraph { indent :: Bool }
+  | EndParagraph
   deriving Show
 
-extractCommand :: Stream -> Maybe (Command, Stream)
-extractCommand stream = rightToMaybe $ P.parse hParser "" stream
+data VModeCommand
+  = VAllModesCommand AllModesCommand
+  | EnterHMode
+  | End
+  | Dump
+  deriving Show
 
-extractAllInner :: Stream -> [Command]
-extractAllInner stream =
-  case P.parse hParser "" stream of
-    Left _ -> []
-    Right (com, newStream) -> com:extractAllInner newStream
+data HModeCommand
+  = HAllModesCommand AllModesCommand
+  | EnterVMode
+  -- | EnterMathMode
+  -- | AddAdjustment VModeMaterial
+  -- | AddControlSpace
+  | AddCharacter { method :: CharSource, code :: Int }
+  -- | AddAccentedCharacter { accentCode :: Int, targetCode :: Maybe Int, assignments :: [Assignment]}
+  -- | AddItalicCorrection
+  -- | AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
+  deriving Show
 
-extractAllDebug :: Cat.CharCatMap -> [Cat.CharCode] -> [Command]
-extractAllDebug ccMap cs = extractAllInner $ Stream{codes=cs, lexState=Lex.LineBegin, ccMap=ccMap}
+-- extractAllInner :: Stream -> [Command]
+-- extractAllInner stream =
+--   case P.parse hModeCommandParser "" stream of
+--     Left _ -> []
+--     Right (com, newStream) -> com:extractAllInner newStream
+
+-- extractAllDebug :: Cat.CharCatMap -> [Cat.CharCode] -> [Command]
+-- extractAllDebug ccMap cs = extractAllInner $ Stream{codes=cs, lexState=Lex.LineBegin, ccMap=ccMap}
 
 instance Ord ParseToken where
   compare a b = EQ
@@ -200,13 +208,6 @@ satisfy f = P.token testTok Nothing
         then Right x
         else Left (Nothing, Set.empty)
 
-hParser :: P.Parsec () Stream (Command, Stream)
-hParser = do
-  com <- P.choice commands
-  P.State{stateInput=stream} <- P.getParserState
-  return (com, stream)
-
-
 isEOF :: P.Parsec () Stream Bool
 isEOF = P.atEnd
 
@@ -215,50 +216,112 @@ atEnd stream = case P.parse isEOF "" stream of
   (Right x) -> x
   (Left _) -> False
 
-commands =
-  [ relax
-  , explicitSpace
-  , explicitCharacter
-  , endParagraph
-  , tempDFont
-  , tempSFont
-  -- , kern (AddKern 2000000)
+-- HMode.
+
+extractHModeCommand :: Stream -> Maybe (HModeCommand, Stream)
+extractHModeCommand stream = rightToMaybe $ P.parse hModeCommandParser "" stream
+
+hModeCommandParser :: P.Parsec () Stream (HModeCommand, Stream)
+hModeCommandParser = do
+  com <- P.choice hCommands
+  P.State{stateInput=stream} <- P.getParserState
+  return (com, stream)
+
+hCommands =
+  [ hRelax
+  , hAddSpace
+  , hAddCharacter
+  , hStartParagraph
+  , hEndParagraph
+  , hTempDFont
+  , hTempSFont
   ]
 
--- Commands.
+-- HMode Commands.
 
-relax = do
+hRelax = do
   _ <- satisfy isRelax
-  return Relax
+  return $ HAllModesCommand Relax
 
-explicitSpace = do
+hAddSpace = do
   _ <- satisfy isSpace
-  return $ AddSpace ExplicitSpace
+  return $ HAllModesCommand AddSpace
 
-explicitCharacter = do
+hAddCharacter = do
   (Harden.ExplicitCharacter code) <- satisfy isExplicitCharacter
-  return $ AddCharacter{method=ExplicitChar, code=code}
+  return AddCharacter{method=ExplicitChar, code=code}
 
-endParagraph = do
-  (Harden.EndParagraph indent) <- satisfy isEndParagraph
-  return $ EndParagraph{indent=indent}
+hStartParagraph = do
+  (Harden.StartParagraph indent) <- satisfy isStartParagraph
+  return $ HAllModesCommand StartParagraph{indent=indent}
 
-tempDFont = do
+hEndParagraph = do
+  Harden.EndParagraph <- satisfy isEndParagraph
+  return $ HAllModesCommand EndParagraph
+
+hTempDFont = do
   _ <- satisfy isTempDFont
-  return $ Assign {assignment=DefineFont, global=False}
+  return $ HAllModesCommand $ Assign $ Assignment {body=DefineFont, global=False}
 
-tempSFont = do
+hTempSFont = do
   _ <- satisfy isTempSFont
-  return $ Assign {assignment=SelectFont, global=False}
+  return $ HAllModesCommand $ Assign $ Assignment {body=SelectFont , global=False}
+
+-- VMode.
+
+extractVModeCommand :: Stream -> Maybe (VModeCommand, Stream)
+extractVModeCommand stream = rightToMaybe $ P.parse vModeCommandParser "" stream
+
+vModeCommandParser :: P.Parsec () Stream (VModeCommand, Stream)
+vModeCommandParser = do
+  com <- P.choice vCommands
+  P.State{stateInput=stream} <- P.getParserState
+  return (com, stream)
+
+vCommands =
+  [ vRelax
+  , vEndParagraph
+  , vTempDFont
+  , vTempSFont
+  , vEnterHMode
+  ]
+
+-- VMode Commands.
+
+vRelax = do
+  _ <- satisfy isRelax
+  return $ VAllModesCommand Relax
+
+vEndParagraph = do
+  (Harden.EndParagraph) <- satisfy isEndParagraph
+  return $ VAllModesCommand EndParagraph
+
+vTempDFont = do
+  _ <- satisfy isTempDFont
+  return $ VAllModesCommand $ Assign $ Assignment {body=DefineFont, global=False}
+
+vTempSFont = do
+  _ <- satisfy isTempSFont
+  return $ VAllModesCommand $ Assign $ Assignment {body=SelectFont , global=False}
+
+vEnterHMode = do
+  _ <- satisfy startsHMode
+  return EnterHMode
 
 -- Token matching.
 
+startsHMode Harden.ExplicitCharacter{} = True
+-- startsHMode Harden.Char = True
+startsHMode _ = False
+
 isRelax Harden.Relax{} = True
 isRelax _ = False
-isSpace Harden.ExplicitSpace{} = True
+isSpace Harden.Space{} = True
 isSpace _ = False
 isExplicitCharacter Harden.ExplicitCharacter{} = True
 isExplicitCharacter _ = False
+isStartParagraph Harden.StartParagraph{} = True
+isStartParagraph _ = False
 isEndParagraph Harden.EndParagraph{} = True
 isEndParagraph _ = False
 isTempDFont Harden.TempDFont{} = True

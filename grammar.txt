@@ -262,13 +262,13 @@
 <internal-glue>
     <glue-parameter>
     \lastskip
-    <skipdef-token>
-    \skip <8-bit-number>
+    <gluedef-token>
+    \glue <8-bit-number>
 
 <internal-muglue>
     <muglue-parameter>
     \lastskip
-    <muskipdef-token>
+    <mugluedef-token>
     \muskip <8-bit-number>
 
 ## Assignments
@@ -363,12 +363,12 @@
 
 <glue-variable>
     <glue-parameter>
-    <skipdef-token>
-    \skip <8-bit-number>
+    <gluedef-token>
+    \glue <8-bit-number>
 
 <muglue-variable>
     <muglue-parameter>
-    <muskipdef-token>
+    <mugluedef-token>
     \muskip <8-bit-number>
 
 <token-variable>
@@ -532,7 +532,7 @@
 
 ## Commands in vertical mode
 
-<vertical-skip>
+<vertical-glue>
     \vskip <glue>
     \vfil
     \vfill
@@ -555,7 +555,7 @@
     <get-h-box>
     \valign
     \vrule
-    <horizontal-skip>
+    <horizontal-glue>
     \accent
     \discretionary
     \-
@@ -569,8 +569,8 @@
 
 <v-mode-command>
     <all-modes-command>
-    <vertical-skip>
-    <leaders> <box-or-rule> <vertical-skip>
+    <vertical-glue>
+    <leaders> <box-or-rule> <vertical-glue>
     <move-v-box> <dimen> <box>
     <get-v-box> <8-bit-number>
     <horizontal-rule>
@@ -581,7 +581,7 @@
 
 ## Commands in Horizontal mode
 
-<horizontal-skip>
+<horizontal-glue>
     \hskip
     \hfil
     \hfill
@@ -600,17 +600,17 @@
     <get-v-box>
     \halign
     \hrule
-    <vertical-skip>
+    <vertical-glue>
     \end
     \dump
 
 <h-mode-command>
     <all-modes-command>
-    <horizontal-skip>
-    <leaders> <box-or-rule> <horizontal-skip>
+    <horizontal-glue>
+    <leaders> <box-or-rule> <horizontal-glue>
     \ 
     <move-h-box> <dimen> <box>
-    <get-h-box>
+    <get-h-box> <8-bit-number>
     <vertical-rule>
     \valign <box-specification> { <alignment-material> }
     <leave-h-mode-command>

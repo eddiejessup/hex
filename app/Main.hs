@@ -36,7 +36,7 @@ main = do
 
   pages <- Parse.extractPages Parse.newState [] stream
 
-  -- -- putStrLn $ show $ pages !! 0
+  -- putStrLn $ show $ pages !! 0
 
   let instrs = Box.toDVI pages
   let Right encInstrs = DVIW.encodeDocument (reverse instrs) 1000
