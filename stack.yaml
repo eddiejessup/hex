@@ -43,8 +43,9 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - binary-strict-0.4.8.3
-
-allow-newer: true
+- hsdev-0.3.1.3
+- hlint-2.0.15
+- extra-1.6.5
 
 # Override default flag values for local packages and extra-deps
 flags: {

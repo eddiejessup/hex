@@ -35,6 +35,19 @@ data LeadersType
   | Expanded -- \xleaders
   deriving Show
 
+data ModeAttribute
+  = IsVertical
+  | IsHorizontal
+  | IsMath
+  | IsInner
+  deriving Show
+
+data BoxRegisterAttribute
+  = HasVerticalBox
+  | HasHorizontalBox
+  | IsVoid
+  deriving Show
+
 data ParseToken
   -- Starters of commands.
   = Relax -- \relax
@@ -103,51 +116,62 @@ data ParseToken
   | AddRule Axis -- \hrule, \vrule
 
   -- Involved in assignments.
-  -- * Defining variables.
-  -- * * Defining an integer.
+  -- * * Modifying how to apply assignments.
+  |      Global -- \global
+
+  -- * Defining macros.
+  -- * * Modifying how to parse the macro.
+  |      Long -- \long
+  |      Outer -- \outer
+  --     \def, \gdef, \edef (expanded-def), \xdef (global-expanded-def).
+  |      DefineMacro { global, expand :: Bool }
+  -- * * Modifying how to parse the macro.
+
+  -- * Setting variable values.
+  -- * * Setting an integer value.
   -- |      IntegerParameter IntegerParameter -- example: \tolerance
          -- a control sequence representing the contents of an integer
          -- register, such as defined through \countdef.
   |      TokenForInteger
   |      LookupInteger -- \count
-  -- * * Defining a distance (also known as a 'dimen').
+  -- * * Setting a distance (also known as a 'dimen') value.
   -- |      DistanceParameter DistanceParameter -- example: \hsize
          -- a control sequence representing the contents of a distance
          -- register, such as defined through \dimendef.
   |      TokenForDistance
   |      LookupDistance -- \dimen
-  -- * * Defining a glue (also known as a 'skip').
+  -- * * Setting a glue (also known as a 'skip') value.
   -- |      GlueParameter GlueParameter -- example: \lineskip
          -- a control sequence representing the contents of a glue
          -- register, such as defined through \skipdef.
   |      TokenForGlue
   |      LookupGlue -- \skip
-  -- * * Defining a math-glue (also known as a 'muskip' or 'muglue').
+  -- * * Setting a math-glue (also known as a 'muskip' or 'muglue') value.
   -- |      MathGlueParameter MathGlueParameter -- example: \thinmuskip
          -- a control sequence representing the contents of a math-glue
          -- register, such as defined through \muskipdef.
   |      TokenForMathGlue
   |      LookupMathGlue -- \muskip
-  -- * * Defining a token-list.
+  -- * * Setting a token-list value.
   -- |      TokenListParameter TokenListParameter -- example: \everypar
          -- a control sequence representing the contents of a token-list
          -- register, such as defined through \toksdef.
   |      TokenForTokenList
   |      LookupTokenList -- \toks
 
-  -- * Modifying variables with arithmetic.
+  -- * Modifying variable values with arithmetic.
   | Advance -- \advance
   | Multiply -- \multiply
   | Divide -- \divide
 
-  -- * Setting values in code tables.
+  -- * Setting code table values.
   | SetCodeCategory -- \catcode
   | SetCodeMathCategory -- \mathcode
   | SetCodeChangeCase VDirection -- \uccode, \lccode
   | SetCodeSpaceFactor -- \sfcode
   | SetCodeDelimiter -- \delcode
 
-  -- * Aliasing tokens with '\let'.
+  -- * Aliasing tokens.
   | Let -- \let
   | FutureLet -- \futurelet
 
@@ -162,7 +186,7 @@ data ParseToken
   | MacroToMathGlueLookup -- \muskipdef
   | MacroToTokenListLookup -- \toksdef
 
-  -- * Assigning the current font.
+  -- * Setting the current font.
   -- A control sequence representing a particular font, such as defined through
   -- \font.
   | TokenForFont
@@ -184,36 +208,79 @@ data ParseToken
   -- * Defining macros resolving to a font.
   | MacroToFont -- \font
 
+  -- Involved in global assignments.
+
+  -- * Setting properties of a font.
+  | SetFontDimension -- \fontdimen
+  | SetFontHyphenCharacter -- \hyphenchar
+  | SetFontSkewCharacter -- \skewchar
+
+  -- * Configuring hyphenation.
+  | AddHyphenationExceptions -- \hyphenation
+  | SetHyphenationPatterns -- \patterns
+
+  -- * Dealing with box dimensions.
+  | BoxHeight -- \ht
+  | BoxWidth -- \wd
+  | BoxDepth -- \dp
+
+  -- * Setting interaction mode.
+  | SwitchToErrorStopMode -- \errorstopmode
+  | SwitchToScrollMode -- \scrollmode
+  | SwitchToNonStopMode -- \nonstopmode
+  | SwitchToBatchMode -- \batchmode
+
+  -- * Setting special values.
+  -- | SpecialInteger SpecialInteger -- \example: \spacefactor
+  -- | SpecialDistance SpecialDistance -- \example: \pagestretch
+
+  -- Conditions.
+  | CompareIntegers -- \ifnum
+  | CompareDistances -- \ifdim
+  | IfIntegerOdd -- \ifodd
+  | IfInMode ModeAttribute -- \ifvmode, \ifhmode, \ifmmode, \ifinner
+  | IfCharacterCodesEqual -- \if
+  | IfCategoryCodesEqual -- \ifcat
+  | IfTokensEqual -- \ifx
+  | IfBoxRegisterIs BoxRegisterAttribute -- \ifvoid, \ifhbox, \ifvbox
+  | IfInputEnded -- \ifeof
+  | IfConst Bool -- \iftrue, \iffalse
+  | IfCase Bool -- \ifcase
+  -- Parts of conditions.
+  | Else -- \else
+  | EndIf -- \fi
+  | Or -- \or
+
   | TempDFont
   | TempSFont
   deriving Show
 
-extractTokenInner :: Cat.CharCatMap -> Lex.LexState -> Lex.Token -> [Cat.CharCode] -> Maybe (ParseToken, Lex.LexState, [Cat.CharCode])
-extractTokenInner ccMap lexState tok1 cs
+extractTokenInner :: Lex.Token -> ParseToken
+extractTokenInner tok1
   | Lex.CharCat{cat=Lex.Space} <- tok1 =
-    Just (Space, lexState, cs)
+    Space
   | Lex.CharCat{char=char, cat=Lex.Letter} <- tok1 =
-    Just (ExplicitCharacter char, lexState, cs)
+    ExplicitCharacter char
   | Lex.CharCat{char=char, cat=Lex.Other} <- tok1 =
-    Just (ExplicitCharacter char, lexState, cs)
+    ExplicitCharacter char
   | Lex.ControlSequence (Lex.ControlWord "par") <- tok1 =
-    Just (EndParagraph, lexState, cs)
+    EndParagraph
   | Lex.ControlSequence (Lex.ControlWord "indent") <- tok1 =
-    Just (StartParagraph{indent=True}, lexState, cs)
+    StartParagraph{indent=True}
   | Lex.ControlSequence (Lex.ControlWord "noindent") <- tok1 =
-    Just (StartParagraph{indent=False}, lexState, cs)
+    StartParagraph{indent=False}
   | Lex.ControlSequence (Lex.ControlWord "relax") <- tok1 =
-    Just (Relax, lexState, cs)
+    Relax
   -- Temporary pragmatism.
   | Lex.ControlSequence (Lex.ControlWord "dfont") <- tok1 =
-    Just (TempDFont, lexState, cs)
+    TempDFont
   | Lex.ControlSequence (Lex.ControlWord "sfont") <- tok1 =
-    Just (TempSFont, lexState, cs)
+    TempSFont
   | otherwise
      = error $ "Unknown lex token: " ++ show tok1
 
 extractToken :: Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (ParseToken, Lex.LexState, [Cat.CharCode])
 extractToken _ _ [] = Nothing
-extractToken ccMap lexState0 cs = do
-  (tok1, lexState1, rest) <- Lex.extractToken ccMap lexState0 cs
-  extractTokenInner ccMap lexState1 tok1 rest
+extractToken ccMap lexState cs = do
+  (lexTok, lexStateNext, rest) <- Lex.extractToken ccMap lexState cs
+  return (extractTokenInner lexTok, lexStateNext, rest)
