@@ -3,16 +3,15 @@
 
 module Command where
 
-import Data.List.Split (chop)
 import Data.String.Utils (replace)
 import qualified Text.Megaparsec as P
 import Data.Proxy
 import qualified Data.Set as Set
 import qualified Data.Char as C
-import Data.Either.Combinators (rightToMaybe)
+import Data.List.NonEmpty (NonEmpty((:|)))
 
 import qualified Harden
-import Harden (ParseToken, VDirection, MessageStream)
+import Harden (ParseToken)
 import qualified Lex
 import qualified Cat
 
@@ -130,11 +129,6 @@ data HModeCommand
 -- extractAllDebug :: Cat.CharCatMap -> [Cat.CharCode] -> [Command]
 -- extractAllDebug ccMap cs = extractAllInner $ Stream{codes=cs, lexState=Lex.LineBegin, ccMap=ccMap}
 
-instance Ord ParseToken where
-  compare a b = EQ
-
-instance Eq ParseToken where
-  (==) a b = True
 
 type ParseTokens = [ParseToken]
 
@@ -181,8 +175,8 @@ instance P.Stream Stream where
   -- take1_ :: s -> Maybe (Token s, s)
   --
   take1_ (Stream [] _ _) = Nothing
-  take1_ s@(Stream cs lexState0 ccMap) = do
-    (t, lexState1, rest) <- Harden.extractToken ccMap lexState0 cs
+  take1_ s@(Stream cs lexState0 _ccMap) = do
+    (t, lexState1, rest) <- Harden.extractToken _ccMap lexState0 cs
     let s2 = s{codes=rest, lexState=lexState1}
     return (t, s2)
 
@@ -191,20 +185,19 @@ satisfy f = P.token testTok Nothing
     testTok x =
       if f x
         then Right x
-        else Left (Nothing, Set.empty)
-
-isEOF :: P.Parsec () Stream Bool
-isEOF = P.atEnd
+        else Left (Just (P.Tokens (x:|[])), Set.empty)
 
 atEnd :: Stream -> Bool
 atEnd stream = case P.parse isEOF "" stream of
   (Right x) -> x
   (Left _) -> False
+  where
+    isEOF = P.atEnd :: P.Parsec () Stream Bool
 
 -- HMode.
 
-extractHModeCommand :: Stream -> Maybe (HModeCommand, Stream)
-extractHModeCommand stream = rightToMaybe $ P.parse hModeCommandParser "" stream
+extractHModeCommand :: Stream -> Either (P.ParseError (P.Token Stream) ()) (HModeCommand, Stream)
+extractHModeCommand stream = P.parse hModeCommandParser "" stream
 
 hModeCommandParser :: P.Parsec () Stream (HModeCommand, Stream)
 hModeCommandParser = do
@@ -225,11 +218,11 @@ hCommands =
 -- HMode Commands.
 
 hRelax = do
-  _ <- satisfy isRelax
+  _ <- satisfy (== Harden.Relax)
   return $ HAllModesCommand Relax
 
 hAddSpace = do
-  _ <- satisfy isSpace
+  _ <- satisfy (== Harden.Space)
   return $ HAllModesCommand AddSpace
 
 hAddCharacter = do
@@ -241,21 +234,21 @@ hStartParagraph = do
   return $ HAllModesCommand StartParagraph{indent=indent}
 
 hEndParagraph = do
-  Harden.EndParagraph <- satisfy isEndParagraph
+  Harden.EndParagraph <- satisfy (== Harden.EndParagraph)
   return $ HAllModesCommand EndParagraph
 
 hTempDFont = do
-  _ <- satisfy isTempDFont
-  return $ HAllModesCommand $ Assign $ Assignment {body=DefineFont, global=False}
+  _ <- satisfy (== Harden.MacroToFont)
+  return $ HAllModesCommand $ Assign Assignment {body=DefineFont, global=False}
 
 hTempSFont = do
-  _ <- satisfy isTempSFont
-  return $ HAllModesCommand $ Assign $ Assignment {body=SelectFont , global=False}
+  _ <- satisfy (== Harden.TokenForFont)
+  return $ HAllModesCommand $ Assign Assignment {body=SelectFont , global=False}
 
 -- VMode.
 
-extractVModeCommand :: Stream -> Maybe (VModeCommand, Stream)
-extractVModeCommand stream = rightToMaybe $ P.parse vModeCommandParser "" stream
+extractVModeCommand :: Stream -> Either (P.ParseError (P.Token Stream) ()) (VModeCommand, Stream)
+extractVModeCommand stream = P.parse vModeCommandParser "" stream
 
 vModeCommandParser :: P.Parsec () Stream (VModeCommand, Stream)
 vModeCommandParser = do
@@ -266,28 +259,28 @@ vModeCommandParser = do
 vCommands =
   [ vRelax
   , vEndParagraph
-  , vTempDFont
-  , vTempSFont
+  , vMacroToFont
+  , vTokenForFont
   , vEnterHMode
   ]
 
 -- VMode Commands.
 
 vRelax = do
-  _ <- satisfy isRelax
+  _ <- satisfy (== Harden.Relax)
   return $ VAllModesCommand Relax
 
 vEndParagraph = do
-  (Harden.EndParagraph) <- satisfy isEndParagraph
+  _ <- satisfy (== Harden.EndParagraph)
   return $ VAllModesCommand EndParagraph
 
-vTempDFont = do
-  _ <- satisfy isTempDFont
-  return $ VAllModesCommand $ Assign $ Assignment {body=DefineFont, global=False}
+vMacroToFont = do
+  _ <- satisfy (== Harden.MacroToFont)
+  return $ VAllModesCommand $ Assign Assignment {body=DefineFont, global=False}
 
-vTempSFont = do
-  _ <- satisfy isTempSFont
-  return $ VAllModesCommand $ Assign $ Assignment {body=SelectFont , global=False}
+vTokenForFont = do
+  _ <- satisfy (== Harden.TokenForFont)
+  return $ VAllModesCommand $ Assign Assignment {body=SelectFont , global=False}
 
 vEnterHMode = do
   _ <- satisfy startsHMode
@@ -295,21 +288,9 @@ vEnterHMode = do
 
 -- Token matching.
 
-startsHMode Harden.ExplicitCharacter{} = True
--- startsHMode Harden.Char = True
+startsHMode (Harden.ExplicitCharacter _) = True
 startsHMode _ = False
-
-isRelax Harden.Relax{} = True
-isRelax _ = False
-isSpace Harden.Space{} = True
-isSpace _ = False
-isExplicitCharacter Harden.ExplicitCharacter{} = True
+isExplicitCharacter (Harden.ExplicitCharacter _) = True
 isExplicitCharacter _ = False
-isStartParagraph Harden.StartParagraph{} = True
+isStartParagraph (Harden.StartParagraph _) = True
 isStartParagraph _ = False
-isEndParagraph Harden.EndParagraph{} = True
-isEndParagraph _ = False
-isTempDFont Harden.TempDFont{} = True
-isTempDFont _ = False
-isTempSFont Harden.TempSFont{} = True
-isTempSFont _ = False

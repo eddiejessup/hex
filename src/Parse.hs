@@ -10,8 +10,6 @@ import qualified TFM.Main as TFMM
 import qualified TFM.Character as TFMC
 import qualified Box as B
 import qualified Setting as S
-import qualified Cat
-import qualified Lex
 import qualified Command as C
 import qualified Unit
 
@@ -114,8 +112,9 @@ extractParagraph :: State -> [S.BreakableHListElem] -> C.Stream -> IO (State, [S
 extractParagraph state acc stream =
   case C.extractHModeCommand stream of
     -- Run out of commands: return the list so far.
-    Nothing -> return (state, acc, stream)
-    Just (com, streamNext) -> extractParagraphInner state acc streamNext com
+    -- Left x -> return (state, acc, stream)
+    Left x -> error $ show x
+    Right (com, streamNext) -> extractParagraphInner state acc streamNext com
 
 parIndent = S.HHBox B.HBox{contents=[], desiredLength=B.To $ fromIntegral $ round $ Unit.pointToScaledPoint 20}
 
@@ -166,10 +165,11 @@ extractPage :: State -> [S.BreakableVListElem] -> C.Stream -> IO (State, B.Page,
 extractPage state acc stream =
   case C.extractVModeCommand stream of
     -- Expects normal order.
-    Nothing -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], stream)
+    Left _ -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], stream)
+    -- Left x -> error $ show x
     -- If the command shifts to horizontal mode, re-read the stream in
     -- horizontal mode. Note that we pass 'stream', not 'streamNext'.
-    Just (C.EnterHMode, _) ->
+    Right (C.EnterHMode, _) ->
       do
         -- Paraboxes returned in normal order.
         (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state stream
@@ -189,7 +189,7 @@ extractPage state acc stream =
         if (cost == S.oneMillion) || (pen <= -S.tenK)
           then return (stateNext, page, extra, streamNext)
           else extractPage stateNext accNext streamNext
-    Just (com, streamNext) ->
+    Right (com, streamNext) ->
       extractPageInner state acc streamNext com
 
 extractPages :: State -> [S.BreakableVListElem] -> C.Stream -> IO [B.Page]
@@ -197,7 +197,7 @@ extractPages _ _ C.Stream{codes=[]} = return []
 extractPages state acc stream = do
     (stateNext, page, vListRemain, streamNext) <- extractPage state acc stream
     if C.atEnd streamNext
-      then return [page]
+      then T.trace "at end" $ return [page]
       else do
         pagesRest <- extractPages stateNext vListRemain streamNext
         return $ page:pagesRest
