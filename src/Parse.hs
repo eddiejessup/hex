@@ -83,63 +83,58 @@ spaceGlue state = do
   return S.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
 -- We build a paragraph list in reverse order.
-extractParagraphInner :: State -> [S.BreakableHListElem] -> C.Stream -> C.HModeCommand -> IO (State, [S.BreakableHListElem], C.Stream)
-extractParagraphInner state acc stream (C.HAllModesCommand aCom)
-  = case aCom of
-    C.Assign C.Assignment{body=C.DefineFont fNr} ->
-      do
-      (state1, fontDef) <- defineFont state fNr
-      extractParagraph state1 (S.HFontDefinition fontDef:acc) stream
-    C.Assign C.Assignment{body=C.SelectFont fNr} ->
-      do
-      let (state1, fontSel) = selectFont state fNr
-      extractParagraph state1 (S.HFontSelection fontSel:acc) stream
-    C.Relax ->
-      extractParagraph state acc stream
-    -- \par: end the current paragraph.
-    C.EndParagraph ->
-      return (state, acc, stream)
-    C.AddKern k ->
-      extractParagraph state ((S.HKern $ B.Kern k):acc) stream
-    -- \indent: An empty box of width \parindent is appended to the current
-    -- list, and the space factor is set to 1000.
-    -- TODO: Space factor.
-    C.StartParagraph True ->
-      extractParagraph state (theParIndent:acc) stream
-    -- \noindent: has no effect in horizontal modes.
-    C.StartParagraph False ->
-      extractParagraph state acc stream
-    C.AddSpace ->
-      do
-      glue <- case spaceGlue state of
-        Just sg -> return $ S.HGlue sg
-        Nothing -> fail "Could not get space glue"
-      extractParagraph state (glue:acc) stream
-    -- _ ->
-    --   fail $ "Unknown all-mode command in horizontal mode: " ++ show aCom
-extractParagraphInner state acc stream C.AddCharacter{code=i}
-  = do
-    charBox <- case characterBox state i of
-      Just c -> return $ S.HCharacter c
-      Nothing -> fail "Could not get character info"
-    extractParagraph state (charBox:acc) stream
--- Inner mode: forbidden.
--- Outer mode: insert the control sequence "\par" into the input. The control
--- sequence's current meaning will be used, which might no longer be the \par
--- primitive.
-extractParagraphInner state acc stream C.LeaveHMode
-  -- TODO: Do something.
-  = T.traceShow stream $ extractParagraph state acc stream
--- extractParagraphInner _ _ _ com
---   = fail $ "Unknown h-mode command in horizontal mode: " ++ show com
-
 extractParagraph :: State -> [S.BreakableHListElem] -> C.Stream -> IO (State, [S.BreakableHListElem], C.Stream)
 extractParagraph state acc stream =
   case C.extractHModeCommand stream of
     -- Run out of commands: return the list so far.
     -- Left x -> return (state, acc, stream)
     Left x -> error $ show x
-    Right (com, streamNext) -> extractParagraphInner state acc streamNext com
+    Right (C.HAllModesCommand aCom, streamNext) ->
+      case aCom of
+        C.Assign C.Assignment{body=C.DefineFont fNr} ->
+          do
+          (state1, fontDef) <- defineFont state fNr
+          extractParagraph state1 (S.HFontDefinition fontDef:acc) streamNext
+        C.Assign C.Assignment{body=C.SelectFont fNr} ->
+          do
+          let (state1, fontSel) = selectFont state fNr
+          extractParagraph state1 (S.HFontSelection fontSel:acc) streamNext
+        C.Relax ->
+          extractParagraph state acc streamNext
+        -- \par: end the current paragraph.
+        C.EndParagraph ->
+          return (state, acc, streamNext)
+        C.AddKern k ->
+          extractParagraph state ((S.HKern $ B.Kern k):acc) streamNext
+        -- \indent: An empty box of width \parindent is appended to the current
+        -- list, and the space factor is set to 1000.
+        -- TODO: Space factor.
+        C.StartParagraph True ->
+          extractParagraph state (theParIndent:acc) streamNext
+        -- \noindent: has no effect in horizontal modes.
+        C.StartParagraph False ->
+          extractParagraph state acc streamNext
+        C.AddSpace ->
+          do
+          glue <- case spaceGlue state of
+            Just sg -> return $ S.HGlue sg
+            Nothing -> fail "Could not get space glue"
+          extractParagraph state (glue:acc) streamNext
+        -- _ ->
+        --   fail $ "Unknown all-mode command in horizontal mode: " ++ show aCom
+    Right (C.AddCharacter{code=i}, streamNext) ->
+      do
+      charBox <- case characterBox state i of
+        Just c -> return $ S.HCharacter c
+        Nothing -> fail "Could not get character info"
+      extractParagraph state (charBox:acc) streamNext
+    Right (C.LeaveHMode, streamNext) ->
+      -- Inner mode: forbidden.
+      -- Outer mode: insert the control sequence "\par" into the input. The control
+      -- sequence's current meaning will be used, which might no longer be the \par
+      -- primitive.
+      -- TODO: Do something.
+      T.traceShow streamNext $ extractParagraph state acc streamNext
 
 extractBoxedParagraph :: Bool -> Int -> Int -> Int -> S.Glue -> State -> C.Stream -> IO (State, [S.BreakableVListElem], C.Stream)
 extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlue state stream = do
@@ -185,7 +180,6 @@ extractPage state acc stream =
     -- (Note that we pass 'stream', not 'streamNext'.)
     Right (C.EnterHMode, _) ->
       addParagraphToPage state acc stream True
-      -- extractPageInner state acc stream (C.VAllModesCommand $ C.StartParagraph True)
     Right (C.VAllModesCommand aCom, streamNext) ->
       case aCom of
         C.Assign C.Assignment{body=C.DefineFont fNr} ->
@@ -210,10 +204,6 @@ extractPage state acc stream =
           extractPage state acc streamNext
         -- _ ->
         --   fail $ "Unknown all-mode command in vertical mode: " ++ show aCom
-    -- extractPageInner _ _ _ com
-    --   = fail $ "Unknown v-mode command in vertical mode: " ++ show com
-
-
 
 extractPages :: State -> [S.BreakableVListElem] -> C.Stream -> IO [B.Page]
 extractPages _ _ C.Stream{codes=[]} = return []
