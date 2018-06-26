@@ -129,9 +129,12 @@ extractParagraph state acc stream =
     Left x -> error $ show x
     Right (com, streamNext) -> extractParagraphInner state acc streamNext com
 
-extractBoxedParagraph :: Int -> Int -> Int -> S.Glue -> State -> C.Stream -> IO (State, [S.BreakableVListElem], C.Stream)
-extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state stream = do
-  (stateNext, hList, streamNext) <- extractParagraph state [theParIndent] stream
+extractBoxedParagraph :: Bool -> Int -> Int -> Int -> S.Glue -> State -> C.Stream -> IO (State, [S.BreakableVListElem], C.Stream)
+extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlue state stream = do
+  let
+    initial True = [theParIndent]
+    initial False = []
+  (stateNext, hList, streamNext) <- extractParagraph state (initial indent) stream
   let
     lineBoxes = S.setParagraph desiredWidth lineTolerance linePenalty hList
     paraBoxes = intersperse (S.VGlue interLineGlue) lineBoxes
@@ -155,25 +158,10 @@ extractPageInner state acc stream (C.VAllModesCommand aCom)
       extractPage state acc stream
     (C.AddKern k) ->
       extractPage state ((S.VKern $ B.Kern k):acc) stream
-    _ ->
-      fail $ "Unknown all-mode command in vertical mode: " ++ show aCom
-extractPageInner _ _ _ com
-  = fail $ "Unknown v-mode command in vertical mode: " ++ show com
-
-extractPage :: State -> [S.BreakableVListElem] -> C.Stream -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
-extractPage state acc stream =
-  case C.extractVModeCommand stream of
-    -- Expects normal order.
-    Left _ -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], stream)
-    -- Left x -> error $ show x
-    -- If the command shifts to horizontal mode, re-read the stream in
-    -- horizontal mode. Note that we pass 'stream', not 'streamNext'.
-    -- TODO: This is implemented wrong, need to do 'indent' command and replace command on the stream.
-    -- Basically, need to support explicit \indent from vmode.
-    Right (C.EnterHMode, _) ->
+    (C.StartParagraph indent) ->
       do
         -- Paraboxes returned in normal order.
-        (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
+        (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph indent theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
         let
           breakItem = S.GlueBreak theInterLineGlue
           extra = S.VGlue theInterLineGlue:reverse paraBoxes
@@ -190,6 +178,22 @@ extractPage state acc stream =
         if (cost == S.oneMillion) || (pen <= -S.tenK)
           then return (stateNext, page, extra, streamNext)
           else extractPage stateNext accNext streamNext
+    _ ->
+      fail $ "Unknown all-mode command in vertical mode: " ++ show aCom
+extractPageInner _ _ _ com
+  = fail $ "Unknown v-mode command in vertical mode: " ++ show com
+
+extractPage :: State -> [S.BreakableVListElem] -> C.Stream -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
+extractPage state acc stream =
+  case C.extractVModeCommand stream of
+    -- Expects normal order.
+    Left _ -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], stream)
+    -- Left x -> error $ show x
+    -- If the command shifts to horizontal mode, run '\indent', and re-read the
+    -- stream as if the commands just seen hadn't been read.
+    -- (Note that we pass 'stream', not 'streamNext'.)
+    Right (C.EnterHMode, _) ->
+      extractPageInner state acc stream (C.VAllModesCommand $ C.StartParagraph True)
     Right (com, streamNext) ->
       extractPageInner state acc streamNext com
 
