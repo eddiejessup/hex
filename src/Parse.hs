@@ -169,6 +169,8 @@ extractPage state acc stream =
     -- Left x -> error $ show x
     -- If the command shifts to horizontal mode, re-read the stream in
     -- horizontal mode. Note that we pass 'stream', not 'streamNext'.
+    -- TODO: This is implemented wrong, need to do 'indent' command and replace command on the stream.
+    -- Basically, need to support explicit \indent from vmode.
     Right (C.EnterHMode, _) ->
       do
         -- Paraboxes returned in normal order.

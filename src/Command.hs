@@ -5,6 +5,7 @@ module Command where
 
 import Data.String.Utils (replace)
 import qualified Text.Megaparsec as P
+import Text.Megaparsec ((<|>))
 import Data.Proxy
 import qualified Data.Set as Set
 import qualified Data.Char as C
@@ -14,6 +15,8 @@ import qualified Harden
 import Harden (ParseToken)
 import qualified Lex
 import qualified Cat
+
+import qualified Debug.Trace as T
 
 data CharSource = ExplicitChar | CodeChar | TokenChar
   deriving Show
@@ -143,7 +146,7 @@ showSrc s = replace "\n" "\\n" (take 30 s)
 
 instance Show Stream where
   show Stream{codes=cs, lexState=ls} =
-    (show ls) ++ "; \"" ++ (showSrc $ fmap C.chr cs) ++ "\""
+    show ls ++ "; \"" ++ showSrc (fmap C.chr cs) ++ "\""
 
 instance P.Stream Stream where
   type Token Stream = ParseToken
@@ -180,6 +183,12 @@ instance P.Stream Stream where
     let s2 = s{codes=rest, lexState=lexState1}
     return (t, s2)
 
+-- Helpers.
+
+type Parser = P.Parsec () Stream
+type ParseError = (P.ParseError (P.Token Stream) ())
+
+satisfy :: (ParseToken -> Bool) -> Parser ParseToken
 satisfy f = P.token testTok Nothing
   where
     testTok x =
@@ -192,95 +201,91 @@ atEnd stream = case P.parse isEOF "" stream of
   (Right x) -> x
   (Left _) -> False
   where
-    isEOF = P.atEnd :: P.Parsec () Stream Bool
+    isEOF = P.atEnd :: Parser Bool
+
+parseWithStream :: Show a => Parser a -> Parser (a, Stream)
+parseWithStream p = do
+  v <- p
+  P.State{stateInput=stream} <- P.getParserState
+  return $ T.traceShow v (v, stream)
+
+easyParse :: Parser a -> Stream -> Either ParseError a
+easyParse p = P.parse p ""
+
+-- All-mode Commands.
+
+cRelax = do
+  _ <- satisfy (== Harden.Relax)
+  return Relax
+
+cStartParagraph = do
+  (Harden.StartParagraph _indent) <- satisfy isStartParagraph
+  return StartParagraph {indent=_indent}
+
+cEndParagraph = do
+  _ <- satisfy (== Harden.EndParagraph)
+  return EndParagraph
+
+cMacroToFont = do
+  _ <- satisfy (== Harden.MacroToFont)
+  return $ Assign Assignment {body=DefineFont, global=False}
+
+cTokenForFont = do
+  _ <- satisfy (== Harden.TokenForFont)
+  return $ Assign Assignment {body=SelectFont , global=False}
+
+cAddSpace = do
+  _ <- satisfy (== Harden.Space)
+  return AddSpace
+
+cCommands :: [Parser AllModesCommand]
+cCommands =
+  [ cRelax
+  , cStartParagraph
+  , cEndParagraph
+  , cMacroToFont
+  , cTokenForFont
+  , cAddSpace
+  ]
+
+allModeCommandParser :: Parser AllModesCommand
+allModeCommandParser = P.choice cCommands
 
 -- HMode.
 
-extractHModeCommand :: Stream -> Either (P.ParseError (P.Token Stream) ()) (HModeCommand, Stream)
-extractHModeCommand stream = P.parse hModeCommandParser "" stream
+extractHModeCommand :: Stream -> Either ParseError (HModeCommand, Stream)
+extractHModeCommand = easyParse hModeCommandParser
 
-hModeCommandParser :: P.Parsec () Stream (HModeCommand, Stream)
-hModeCommandParser = do
-  com <- P.choice hCommands
-  P.State{stateInput=stream} <- P.getParserState
-  return (com, stream)
+hModeCommandParser = parseWithStream $
+  P.choice hCommands
+  <|>
+  (HAllModesCommand <$> allModeCommandParser)
 
 hCommands =
-  [ hRelax
-  , hAddSpace
-  , hAddCharacter
-  , hStartParagraph
-  , hEndParagraph
-  , hTempDFont
-  , hTempSFont
+  [ hAddCharacter
   ]
 
 -- HMode Commands.
 
-hRelax = do
-  _ <- satisfy (== Harden.Relax)
-  return $ HAllModesCommand Relax
-
-hAddSpace = do
-  _ <- satisfy (== Harden.Space)
-  return $ HAllModesCommand AddSpace
-
 hAddCharacter = do
-  (Harden.ExplicitCharacter code) <- satisfy isExplicitCharacter
-  return AddCharacter{method=ExplicitChar, code=code}
+  (Harden.ExplicitCharacter _code) <- satisfy isExplicitCharacter
+  return AddCharacter{method=ExplicitChar, code=_code}
 
-hStartParagraph = do
-  (Harden.StartParagraph indent) <- satisfy isStartParagraph
-  return $ HAllModesCommand StartParagraph{indent=indent}
+-- -- VMode.
 
-hEndParagraph = do
-  Harden.EndParagraph <- satisfy (== Harden.EndParagraph)
-  return $ HAllModesCommand EndParagraph
+extractVModeCommand :: Stream -> Either ParseError (VModeCommand, Stream)
+extractVModeCommand = easyParse vModeCommandParser
 
-hTempDFont = do
-  _ <- satisfy (== Harden.MacroToFont)
-  return $ HAllModesCommand $ Assign Assignment {body=DefineFont, global=False}
-
-hTempSFont = do
-  _ <- satisfy (== Harden.TokenForFont)
-  return $ HAllModesCommand $ Assign Assignment {body=SelectFont , global=False}
-
--- VMode.
-
-extractVModeCommand :: Stream -> Either (P.ParseError (P.Token Stream) ()) (VModeCommand, Stream)
-extractVModeCommand stream = P.parse vModeCommandParser "" stream
-
-vModeCommandParser :: P.Parsec () Stream (VModeCommand, Stream)
-vModeCommandParser = do
-  com <- P.choice vCommands
-  P.State{stateInput=stream} <- P.getParserState
-  return (com, stream)
+vModeCommandParser = parseWithStream $
+  P.choice vCommands
+  <|>
+  (VAllModesCommand <$> allModeCommandParser)
 
 vCommands =
-  [ vRelax
-  , vEndParagraph
-  , vMacroToFont
-  , vTokenForFont
-  , vEnterHMode
+  [ vEnterHMode
   ]
 
 -- VMode Commands.
-
-vRelax = do
-  _ <- satisfy (== Harden.Relax)
-  return $ VAllModesCommand Relax
-
-vEndParagraph = do
-  _ <- satisfy (== Harden.EndParagraph)
-  return $ VAllModesCommand EndParagraph
-
-vMacroToFont = do
-  _ <- satisfy (== Harden.MacroToFont)
-  return $ VAllModesCommand $ Assign Assignment {body=DefineFont, global=False}
-
-vTokenForFont = do
-  _ <- satisfy (== Harden.TokenForFont)
-  return $ VAllModesCommand $ Assign Assignment {body=SelectFont , global=False}
 
 vEnterHMode = do
   _ <- satisfy startsHMode
@@ -288,6 +293,22 @@ vEnterHMode = do
 
 -- Token matching.
 
+-- TODO:
+-- - Letter
+-- - Other-character
+-- - \char
+-- - TokenForCharacter
+-- - AddUnwrappedFetchedBox Horizontal
+-- - AddUnwrappedFetchedBox Horizontal
+-- - AddAlignedMaterial Vertical
+-- - AddRule Vertical
+-- - AddSpecifiedGlue Horizontal
+-- - AddPresetGlue Horizontal
+-- - AddAccentedCharacter
+-- - AddItalicCorrection
+-- - AddDiscretionaryText
+-- - AddDiscretionaryHyphen
+-- - ToggleMathMode
 startsHMode (Harden.ExplicitCharacter _) = True
 startsHMode _ = False
 isExplicitCharacter (Harden.ExplicitCharacter _) = True
