@@ -288,8 +288,13 @@ vModeCommandParser = parseWithStream $
   <|>
   (VAllModesCommand <$> allModeCommandParser)
 
+vEnd = do
+  _ <- satisfy (== Harden.End)
+  return End
+
 vCommands =
   [ vEnterHMode
+  , vEnd
   ]
 
 -- VMode Commands.
@@ -307,8 +312,8 @@ vEnterHMode = do
 -- - AddRule Horizontal
 -- - AddSpecifiedGlue Vertical
 -- - AddPresetGlue Vertical
--- - End
--- - Dump
+endsHMode Harden.End = True
+endsHMode Harden.Dump = True
 endsHMode _ = False
 
 -- TODO:

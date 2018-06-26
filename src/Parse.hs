@@ -93,12 +93,12 @@ extractParagraph state acc stream =
       case aCom of
         C.Assign C.Assignment{body=C.DefineFont fNr} ->
           do
-          (state1, fontDef) <- defineFont state fNr
-          extractParagraph state1 (S.HFontDefinition fontDef:acc) streamNext
+          (stateNext, fontDef) <- defineFont state fNr
+          extractParagraph stateNext (S.HFontDefinition fontDef:acc) streamNext
         C.Assign C.Assignment{body=C.SelectFont fNr} ->
           do
-          let (state1, fontSel) = selectFont state fNr
-          extractParagraph state1 (S.HFontSelection fontSel:acc) streamNext
+          let (stateNext, fontSel) = selectFont state fNr
+          extractParagraph stateNext (S.HFontSelection fontSel:acc) streamNext
         C.Relax ->
           extractParagraph state acc streamNext
         -- \par: end the current paragraph.
@@ -134,7 +134,7 @@ extractParagraph state acc stream =
       -- sequence's current meaning will be used, which might no longer be the \par
       -- primitive.
       -- TODO: Do something.
-      T.traceShow streamNext $ extractParagraph state acc streamNext
+      T.trace "ahhh" extractParagraph state acc streamNext
 
 extractBoxedParagraph :: Bool -> Int -> Int -> Int -> S.Glue -> State -> C.Stream -> IO (State, [S.BreakableVListElem], C.Stream)
 extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlue state stream = do
@@ -147,70 +147,62 @@ extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlu
     paraBoxes = intersperse (S.VGlue interLineGlue) lineBoxes
   return (stateNext, paraBoxes, streamNext)
 
-addParagraphToPage :: State -> [S.BreakableVListElem] -> C.Stream -> Bool -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
-addParagraphToPage state acc stream indent
+addParagraphToPage :: State -> [B.Page] -> [S.BreakableVListElem] -> C.Stream -> Bool -> IO (State, [B.Page], [S.BreakableVListElem], C.Stream)
+addParagraphToPage state pages acc stream indent
   = do
     -- Paraboxes returned in normal order.
     (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph indent theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
     let
       breakItem = S.GlueBreak theInterLineGlue
-      extra = S.VGlue theInterLineGlue:reverse paraBoxes
-      accNext = extra ++ acc
+      accBreak = S.VGlue theInterLineGlue:reverse paraBoxes
+      accNoBreak = accBreak ++ acc
       -- TODO: Discard when adding to empty page.
       -- TODO: Keep best rather than taking last.
       pen = S.breakPenalty breakItem
       -- Expects normal order.
-      stat = S.listGlueSetRatio theDesiredHeight $ reverse accNext
+      stat = S.listGlueSetRatio theDesiredHeight $ reverse accNoBreak
       bad = S.listStatusBadness stat
       cost = S.pageCost pen bad 0
       -- Expects normal order.
       page = B.Page $ reverse $ S.setListElems stat acc
     if (cost == S.oneMillion) || (pen <= -S.tenK)
-      then return (stateNext, page, extra, streamNext)
-          else extractPage stateNext accNext streamNext
+      then extractPages stateNext (page:pages) accBreak streamNext
+      else extractPages stateNext pages accNoBreak streamNext
 
-extractPage :: State -> [S.BreakableVListElem] -> C.Stream -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
-extractPage state acc stream =
+extractPages :: State -> [B.Page] -> [S.BreakableVListElem] -> C.Stream -> IO (State, [B.Page], [S.BreakableVListElem], C.Stream)
+extractPages state pages acc stream =
   case C.extractVModeCommand stream of
     -- Expects normal order.
-    Left _ -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], stream)
-    -- Left x -> error $ show x
+    -- Left _ -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], stream)
+    Left x -> error $ show x
     -- If the command shifts to horizontal mode, run '\indent', and re-read the
     -- stream as if the commands just seen hadn't been read.
     -- (Note that we pass 'stream', not 'streamNext'.)
     Right (C.EnterHMode, _) ->
-      addParagraphToPage state acc stream True
+      addParagraphToPage state pages acc stream True
+    Right (C.End, streamNext) ->
+      do
+      let lastPage = B.Page $ reverse $ S.setListElems S.NaturallyGood acc
+      return (state, lastPage:pages, acc, streamNext)
     Right (C.VAllModesCommand aCom, streamNext) ->
       case aCom of
         C.Assign C.Assignment{body=C.DefineFont fNr} ->
           do
           (stateNext, fontDef) <- defineFont state fNr
-          extractPage stateNext (S.VFontDefinition fontDef:acc) streamNext
+          extractPages stateNext pages (S.VFontDefinition fontDef:acc) streamNext
         C.Assign C.Assignment{body=C.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr
-          extractPage stateNext (S.VFontSelection fontSel:acc) streamNext
+          T.trace "selected font" extractPages stateNext pages (S.VFontSelection fontSel:acc) streamNext
         C.Relax ->
-          extractPage state acc streamNext
+          extractPages state pages acc streamNext
         -- \par does nothing in vertical mode.
         C.EndParagraph ->
-          extractPage state acc streamNext
+          extractPages state pages acc streamNext
         C.AddKern k ->
-          extractPage state ((S.VKern $ B.Kern k):acc) streamNext
+          extractPages state pages ((S.VKern $ B.Kern k):acc) streamNext
         C.StartParagraph indent ->
-          addParagraphToPage state acc streamNext indent
+          addParagraphToPage state pages acc streamNext indent
         -- <space token> has no effect in vertical modes.
         C.AddSpace ->
-          extractPage state acc streamNext
-        -- _ ->
-        --   fail $ "Unknown all-mode command in vertical mode: " ++ show aCom
-
-extractPages :: State -> [S.BreakableVListElem] -> C.Stream -> IO [B.Page]
-extractPages _ _ C.Stream{codes=[]} = return []
-extractPages state acc stream = do
-    (stateNext, page, vListRemain, streamNext) <- extractPage state acc stream
-    if C.atEnd streamNext
-      then T.trace "at end" $ return [page]
-      else do
-        pagesRest <- extractPages stateNext vListRemain streamNext
-        return $ page:pagesRest
+          extractPages state pages acc streamNext

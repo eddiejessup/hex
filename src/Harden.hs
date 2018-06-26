@@ -88,8 +88,8 @@ data ParseToken
   -- | LeftBrace -- {
 
   -- Starters of Vertical-Mode-specific commands.
-  -- | End -- \end
-  -- | Dump -- \dump
+  | End -- \end
+  | Dump -- \dump
 
   -- Starters of Horizontal-Mode-specific commands.
   -- | ControlSpace -- \␣ (a control symbol named ' ')
@@ -285,6 +285,9 @@ extractControlWord "vrule" = AddRule Vertical
 extractControlWord "font" = MacroToFont
 -- Temporary pragmatism.
 extractControlWord "thefont" = TokenForFont theFontNr
+
+extractControlWord "end" = End
+extractControlWord "dump" = Dump
 
 extractTokenInner :: Lex.Token -> ParseToken
 extractTokenInner tok1

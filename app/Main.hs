@@ -2,10 +2,8 @@
 
 module Main where
 
-import qualified Data.IntMap.Strict as IMAP
 import qualified Data.Char as C
 import qualified Data.ByteString.Lazy as BLS
-import qualified Data.List as List
 
 import qualified DVI.Write as DVIW
 import qualified Cat
@@ -34,11 +32,11 @@ main = do
 
   -- page <- Parse.extractPage Parse.newState [] stream
 
-  pages <- Parse.extractPages Parse.newState [] stream
+  (_, pages, _, _) <- Parse.extractPages Parse.newState [] [] stream
 
   -- putStrLn $ show $ pages !! 0
 
-  let instrs = Box.toDVI pages
+  let instrs = Box.toDVI $ reverse pages
   let Right encInstrs = DVIW.encodeDocument (reverse instrs) 1000
   BLS.writeFile "out.dvi" $ DVIW.encode $ reverse encInstrs
 
