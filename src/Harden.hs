@@ -189,7 +189,7 @@ data ParseToken
   -- * Setting the current font.
   -- A control sequence representing a particular font, such as defined through
   -- \font.
-  | TokenForFont
+  | TokenForFont Int
 
   -- * Setting font math-family-member things.
   -- | SetTextSizeFont -- \textfont
@@ -255,6 +255,9 @@ data ParseToken
 instance Ord ParseToken where
   compare _ _ = EQ
 
+theFontNr :: Int
+theFontNr = 1
+
 extractControlWord :: String -> ParseToken
 extractControlWord "relax" = Relax
 extractControlWord "penalty" = AddPenalty
@@ -281,7 +284,7 @@ extractControlWord "vrule" = AddRule Vertical
 
 extractControlWord "font" = MacroToFont
 -- Temporary pragmatism.
-extractControlWord "thefont" = TokenForFont
+extractControlWord "thefont" = TokenForFont theFontNr
 
 extractTokenInner :: Lex.Token -> ParseToken
 extractTokenInner tok1

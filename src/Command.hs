@@ -38,16 +38,13 @@ data AssignmentBody
   -- | AssignCode { codeType :: CodeType, codeIndex, value :: Int }
   -- | Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
   -- | FutureLet { name :: ControlSequenceLike, token1, token2 :: Token}
-  -- TEMP: Dummy label constructor until properly implemented.
-  = SelectFont
-  -- | SelectFont FontDefToken
+  = SelectFont Int
   -- | SetFamilyMember {member :: FamilyMember, font :: Font}
   -- | SetParShape
   -- | Read
   -- | DefineBox
   -- TEMP: Dummy label constructor until properly implemented.
-  | DefineFont
-  -- | DefineFont
+  | DefineFont Int
   -- -- Global assignments.
   -- | SetFontAttribute
   -- | SetHyphenation
@@ -113,7 +110,7 @@ data VModeCommand
 
 data HModeCommand
   = HAllModesCommand AllModesCommand
-  | EnterVMode
+  | LeaveHMode
   -- | EnterMathMode
   -- | AddAdjustment VModeMaterial
   -- | AddControlSpace
@@ -218,6 +215,10 @@ cRelax = do
   _ <- satisfy (== Harden.Relax)
   return Relax
 
+cAddKern = do
+  _ <- satisfy (== Harden.AddKern)
+  return $ AddKern (24 * 2^16)
+
 cStartParagraph = do
   (Harden.StartParagraph _indent) <- satisfy isStartParagraph
   return StartParagraph {indent=_indent}
@@ -228,11 +229,11 @@ cEndParagraph = do
 
 cMacroToFont = do
   _ <- satisfy (== Harden.MacroToFont)
-  return $ Assign Assignment {body=DefineFont, global=False}
+  return $ Assign Assignment {body=DefineFont Harden.theFontNr, global=False}
 
 cTokenForFont = do
-  _ <- satisfy (== Harden.TokenForFont)
-  return $ Assign Assignment {body=SelectFont , global=False}
+  (Harden.TokenForFont n) <- satisfy isTokenForFont
+  return $ Assign Assignment {body=SelectFont n , global=False}
 
 cAddSpace = do
   _ <- satisfy (== Harden.Space)
@@ -241,6 +242,7 @@ cAddSpace = do
 cCommands :: [Parser AllModesCommand]
 cCommands =
   [ cRelax
+  , cAddKern
   , cStartParagraph
   , cEndParagraph
   , cMacroToFont
@@ -262,10 +264,15 @@ hModeCommandParser = parseWithStream $
   (HAllModesCommand <$> allModeCommandParser)
 
 hCommands =
-  [ hAddCharacter
+  [ hLeaveHMode
+  , hAddCharacter
   ]
 
 -- HMode Commands.
+
+hLeaveHMode = do
+  _ <- satisfy endsHMode
+  return LeaveHMode
 
 hAddCharacter = do
   (Harden.ExplicitCharacter _code) <- satisfy isExplicitCharacter
@@ -294,6 +301,17 @@ vEnterHMode = do
 -- Token matching.
 
 -- TODO:
+-- - AddUnwrappedFetchedBox Vertical
+-- - AddUnwrappedFetchedBox Vertical
+-- - AddAlignedMaterial Horizontal
+-- - AddRule Horizontal
+-- - AddSpecifiedGlue Vertical
+-- - AddPresetGlue Vertical
+-- - End
+-- - Dump
+endsHMode _ = False
+
+-- TODO:
 -- - Letter
 -- - Other-character
 -- - \char
@@ -311,7 +329,12 @@ vEnterHMode = do
 -- - ToggleMathMode
 startsHMode (Harden.ExplicitCharacter _) = True
 startsHMode _ = False
+
 isExplicitCharacter (Harden.ExplicitCharacter _) = True
 isExplicitCharacter _ = False
+
+isTokenForFont (Harden.TokenForFont _) = True
+isTokenForFont _ = False
+
 isStartParagraph (Harden.StartParagraph _) = True
 isStartParagraph _ = False

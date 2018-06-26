@@ -23,9 +23,6 @@ data State = State { currentFontNr :: Maybe Int
 newState :: State
 newState = State {currentFontNr=Nothing, fontInfoMap=IMAP.empty}
 
-theFontNr :: Int
-theFontNr = 1
-
 theParIndent :: S.BreakableHListElem
 theParIndent = S.HHBox B.HBox{contents=[], desiredLength=B.To $ fromIntegral (round $ Unit.pointToScaledPoint 20 :: Int)}
 
@@ -89,15 +86,28 @@ spaceGlue state = do
 extractParagraphInner :: State -> [S.BreakableHListElem] -> C.Stream -> C.HModeCommand -> IO (State, [S.BreakableHListElem], C.Stream)
 extractParagraphInner state acc stream (C.HAllModesCommand aCom)
   = case aCom of
-    C.Assign C.Assignment{body=C.DefineFont} ->
+    C.Assign C.Assignment{body=C.DefineFont fNr} ->
       do
-      (state1, fontDef) <- defineFont state theFontNr
+      (state1, fontDef) <- defineFont state fNr
       extractParagraph state1 (S.HFontDefinition fontDef:acc) stream
-    C.Assign C.Assignment{body=C.SelectFont} ->
+    C.Assign C.Assignment{body=C.SelectFont fNr} ->
       do
-      let (state1, fontSel) = selectFont state theFontNr
+      let (state1, fontSel) = selectFont state fNr
       extractParagraph state1 (S.HFontSelection fontSel:acc) stream
     C.Relax ->
+      extractParagraph state acc stream
+    -- \par: end the current paragraph.
+    C.EndParagraph ->
+      return (state, acc, stream)
+    C.AddKern k ->
+      extractParagraph state ((S.HKern $ B.Kern k):acc) stream
+    -- \indent: An empty box of width \parindent is appended to the current
+    -- list, and the space factor is set to 1000.
+    -- TODO: Space factor.
+    C.StartParagraph True ->
+      extractParagraph state (theParIndent:acc) stream
+    -- \noindent: has no effect in horizontal modes.
+    C.StartParagraph False ->
       extractParagraph state acc stream
     C.AddSpace ->
       do
@@ -105,21 +115,23 @@ extractParagraphInner state acc stream (C.HAllModesCommand aCom)
         Just sg -> return $ S.HGlue sg
         Nothing -> fail "Could not get space glue"
       extractParagraph state (glue:acc) stream
-    C.AddKern k ->
-      extractParagraph state ((S.HKern $ B.Kern k):acc) stream
-    -- \par: Return to outer mode with completed list.
-    C.EndParagraph ->
-      return (state, acc, stream)
-    _ ->
-      fail $ "Unknown all-mode command in horizontal mode: " ++ show aCom
+    -- _ ->
+    --   fail $ "Unknown all-mode command in horizontal mode: " ++ show aCom
 extractParagraphInner state acc stream C.AddCharacter{code=i}
   = do
     charBox <- case characterBox state i of
       Just c -> return $ S.HCharacter c
       Nothing -> fail "Could not get character info"
     extractParagraph state (charBox:acc) stream
-extractParagraphInner _ _ _ com
-  = fail $ "Unknown h-mode command in horizontal mode: " ++ show com
+-- Inner mode: forbidden.
+-- Outer mode: insert the control sequence "\par" into the input. The control
+-- sequence's current meaning will be used, which might no longer be the \par
+-- primitive.
+extractParagraphInner state acc stream C.LeaveHMode
+  -- TODO: Do something.
+  = T.traceShow stream $ extractParagraph state acc stream
+-- extractParagraphInner _ _ _ com
+--   = fail $ "Unknown h-mode command in horizontal mode: " ++ show com
 
 extractParagraph :: State -> [S.BreakableHListElem] -> C.Stream -> IO (State, [S.BreakableHListElem], C.Stream)
 extractParagraph state acc stream =
@@ -140,48 +152,27 @@ extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlu
     paraBoxes = intersperse (S.VGlue interLineGlue) lineBoxes
   return (stateNext, paraBoxes, streamNext)
 
-extractPageInner :: State -> [S.BreakableVListElem] -> C.Stream -> C.VModeCommand -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
-extractPageInner state acc stream (C.VAllModesCommand aCom)
-  = case aCom of
-    C.Assign C.Assignment{body=C.DefineFont} ->
-      do
-      (state1, fontDef) <- defineFont state theFontNr
-      extractPage state1 (S.VFontDefinition fontDef:acc) stream
-    C.Assign C.Assignment{body=C.SelectFont} ->
-      do
-      let (state1, fontSel) = selectFont state theFontNr
-      extractPage state1 (S.VFontSelection fontSel:acc) stream
-    C.Relax ->
-      extractPage state acc stream
-  -- \par does nothing in vertical mode.
-    C.EndParagraph ->
-      extractPage state acc stream
-    (C.AddKern k) ->
-      extractPage state ((S.VKern $ B.Kern k):acc) stream
-    (C.StartParagraph indent) ->
-      do
-        -- Paraboxes returned in normal order.
-        (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph indent theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
-        let
-          breakItem = S.GlueBreak theInterLineGlue
-          extra = S.VGlue theInterLineGlue:reverse paraBoxes
-          accNext = extra ++ acc
-          -- TODO: Discard when adding to empty page.
-          -- TODO: Keep best rather than taking last.
-          pen = S.breakPenalty breakItem
-          -- Expects normal order.
-          stat = S.listGlueSetRatio theDesiredHeight $ reverse accNext
-          bad = S.listStatusBadness stat
-          cost = S.pageCost pen bad 0
-          -- Expects normal order.
-          page = B.Page $ reverse $ S.setListElems stat acc
-        if (cost == S.oneMillion) || (pen <= -S.tenK)
-          then return (stateNext, page, extra, streamNext)
+addParagraphToPage :: State -> [S.BreakableVListElem] -> C.Stream -> Bool -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
+addParagraphToPage state acc stream indent
+  = do
+    -- Paraboxes returned in normal order.
+    (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph indent theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
+    let
+      breakItem = S.GlueBreak theInterLineGlue
+      extra = S.VGlue theInterLineGlue:reverse paraBoxes
+      accNext = extra ++ acc
+      -- TODO: Discard when adding to empty page.
+      -- TODO: Keep best rather than taking last.
+      pen = S.breakPenalty breakItem
+      -- Expects normal order.
+      stat = S.listGlueSetRatio theDesiredHeight $ reverse accNext
+      bad = S.listStatusBadness stat
+      cost = S.pageCost pen bad 0
+      -- Expects normal order.
+      page = B.Page $ reverse $ S.setListElems stat acc
+    if (cost == S.oneMillion) || (pen <= -S.tenK)
+      then return (stateNext, page, extra, streamNext)
           else extractPage stateNext accNext streamNext
-    _ ->
-      fail $ "Unknown all-mode command in vertical mode: " ++ show aCom
-extractPageInner _ _ _ com
-  = fail $ "Unknown v-mode command in vertical mode: " ++ show com
 
 extractPage :: State -> [S.BreakableVListElem] -> C.Stream -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
 extractPage state acc stream =
@@ -193,9 +184,36 @@ extractPage state acc stream =
     -- stream as if the commands just seen hadn't been read.
     -- (Note that we pass 'stream', not 'streamNext'.)
     Right (C.EnterHMode, _) ->
-      extractPageInner state acc stream (C.VAllModesCommand $ C.StartParagraph True)
-    Right (com, streamNext) ->
-      extractPageInner state acc streamNext com
+      addParagraphToPage state acc stream True
+      -- extractPageInner state acc stream (C.VAllModesCommand $ C.StartParagraph True)
+    Right (C.VAllModesCommand aCom, streamNext) ->
+      case aCom of
+        C.Assign C.Assignment{body=C.DefineFont fNr} ->
+          do
+          (stateNext, fontDef) <- defineFont state fNr
+          extractPage stateNext (S.VFontDefinition fontDef:acc) streamNext
+        C.Assign C.Assignment{body=C.SelectFont fNr} ->
+          do
+          let (stateNext, fontSel) = selectFont state fNr
+          extractPage stateNext (S.VFontSelection fontSel:acc) streamNext
+        C.Relax ->
+          extractPage state acc streamNext
+        -- \par does nothing in vertical mode.
+        C.EndParagraph ->
+          extractPage state acc streamNext
+        C.AddKern k ->
+          extractPage state ((S.VKern $ B.Kern k):acc) streamNext
+        C.StartParagraph indent ->
+          addParagraphToPage state acc streamNext indent
+        -- <space token> has no effect in vertical modes.
+        C.AddSpace ->
+          extractPage state acc streamNext
+        -- _ ->
+        --   fail $ "Unknown all-mode command in vertical mode: " ++ show aCom
+    -- extractPageInner _ _ _ com
+    --   = fail $ "Unknown v-mode command in vertical mode: " ++ show com
+
+
 
 extractPages :: State -> [S.BreakableVListElem] -> C.Stream -> IO [B.Page]
 extractPages _ _ C.Stream{codes=[]} = return []
