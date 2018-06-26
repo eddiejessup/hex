@@ -23,6 +23,27 @@ data State = State { currentFontNr :: Maybe Int
 newState :: State
 newState = State {currentFontNr=Nothing, fontInfoMap=IMAP.empty}
 
+theFontNr :: Int
+theFontNr = 1
+
+theParIndent :: S.BreakableHListElem
+theParIndent = S.HHBox B.HBox{contents=[], desiredLength=B.To $ fromIntegral (round $ Unit.pointToScaledPoint 20 :: Int)}
+
+theDesiredWidth :: Int
+theDesiredWidth = 30750000
+
+theLineTolerance :: Int
+theLineTolerance = 500
+
+theLinePenalty :: Int
+theLinePenalty = 10
+
+theDesiredHeight :: Int
+theDesiredHeight = 45000000
+
+theInterLineGlue :: S.Glue
+theInterLineGlue = S.Glue{dimen = 400000, stretch=S.noFlex, shrink=S.noFlex}
+
 currentFontInfo :: State -> Maybe TFMM.TexFont
 currentFontInfo state = do
   -- Maybe font number isn't set.
@@ -42,23 +63,12 @@ defineFont state nr = do
                                  , fontInfo = font
                                  , scaleFactorRatio = 1.0
                                  }
-      newState = state{fontInfoMap=IMAP.insert nr font $ fontInfoMap state}
-    return (newState, fontDef)
+      stateNext = state{fontInfoMap=IMAP.insert nr font $ fontInfoMap state}
+    return (stateNext, fontDef)
 
 selectFont :: State -> Int -> (State, B.FontSelection)
 selectFont state n =
   (state{currentFontNr=Just n}, B.FontSelection{fontNr = n})
-
--- isModeIndependent :: C.Command -> Bool
--- isModeIndependent C.Relax = True
--- isModeIndependent _ = False
-
--- runAllModeCommand :: State -> C.Stream -> C.Command -> IO (State, C.Stream)
--- runAllModeCommand state stream com
---   | C.Relax <- com = return (state, stream)
---   | otherwise = return (state, stream)
-
-theFontNr = 1
 
 characterBox :: State -> Int -> Maybe B.Character
 characterBox state code = do
@@ -77,36 +87,39 @@ spaceGlue state = do
 
 -- We build a paragraph list in reverse order.
 extractParagraphInner :: State -> [S.BreakableHListElem] -> C.Stream -> C.HModeCommand -> IO (State, [S.BreakableHListElem], C.Stream)
-extractParagraphInner state acc stream com
-  | C.HAllModesCommand (C.Assign (C.Assignment{body=C.DefineFont})) <- com
-    = do
+extractParagraphInner state acc stream (C.HAllModesCommand aCom)
+  = case aCom of
+    C.Assign C.Assignment{body=C.DefineFont} ->
+      do
       (state1, fontDef) <- defineFont state theFontNr
       extractParagraph state1 (S.HFontDefinition fontDef:acc) stream
-  | C.HAllModesCommand (C.Assign (C.Assignment{body=C.SelectFont})) <- com
-    = do
+    C.Assign C.Assignment{body=C.SelectFont} ->
+      do
       let (state1, fontSel) = selectFont state theFontNr
       extractParagraph state1 (S.HFontSelection fontSel:acc) stream
-  | C.HAllModesCommand C.Relax <- com
-    = extractParagraph state acc stream
-  | C.AddCharacter{code=i} <- com
-    = do
-      charBox <- case characterBox state i of
-        Just c -> return $ S.HCharacter c
-        Nothing -> fail "Could not get character info"
-      extractParagraph state (charBox:acc) stream
-  | C.HAllModesCommand C.AddSpace <- com
-    = do
+    C.Relax ->
+      extractParagraph state acc stream
+    C.AddSpace ->
+      do
       glue <- case spaceGlue state of
         Just sg -> return $ S.HGlue sg
         Nothing -> fail "Could not get space glue"
       extractParagraph state (glue:acc) stream
-  | C.HAllModesCommand (C.AddKern k) <- com
-    = extractParagraph state ((S.HKern $ B.Kern k):acc) stream
-  -- \par: Return to outer mode with completed list.
-  | C.HAllModesCommand C.EndParagraph <- com
-    = return (state, acc, stream)
-  | otherwise
-    = fail $ "Unknown command in horizontal mode: " ++ (show com)
+    C.AddKern k ->
+      extractParagraph state ((S.HKern $ B.Kern k):acc) stream
+    -- \par: Return to outer mode with completed list.
+    C.EndParagraph ->
+      return (state, acc, stream)
+    _ ->
+      fail $ "Unknown all-mode command in horizontal mode: " ++ show aCom
+extractParagraphInner state acc stream C.AddCharacter{code=i}
+  = do
+    charBox <- case characterBox state i of
+      Just c -> return $ S.HCharacter c
+      Nothing -> fail "Could not get character info"
+    extractParagraph state (charBox:acc) stream
+extractParagraphInner _ _ _ com
+  = fail $ "Unknown h-mode command in horizontal mode: " ++ show com
 
 extractParagraph :: State -> [S.BreakableHListElem] -> C.Stream -> IO (State, [S.BreakableHListElem], C.Stream)
 extractParagraph state acc stream =
@@ -116,50 +129,36 @@ extractParagraph state acc stream =
     Left x -> error $ show x
     Right (com, streamNext) -> extractParagraphInner state acc streamNext com
 
-parIndent = S.HHBox B.HBox{contents=[], desiredLength=B.To $ fromIntegral $ round $ Unit.pointToScaledPoint 20}
-
 extractBoxedParagraph :: Int -> Int -> Int -> S.Glue -> State -> C.Stream -> IO (State, [S.BreakableVListElem], C.Stream)
 extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state stream = do
-  (stateNext, hList, streamNext) <- extractParagraph state [parIndent] stream
+  (stateNext, hList, streamNext) <- extractParagraph state [theParIndent] stream
   let
     lineBoxes = S.setParagraph desiredWidth lineTolerance linePenalty hList
     paraBoxes = intersperse (S.VGlue interLineGlue) lineBoxes
   return (stateNext, paraBoxes, streamNext)
 
-desiredWidth :: Int
-desiredWidth = 30750000
-
-lineTolerance :: Int
-lineTolerance = 500
-
-linePenalty :: Int
-linePenalty = 10
-
-desiredHeight :: Int
-desiredHeight = 45000000
-
-interLineGlue :: S.Glue
-interLineGlue = S.Glue{dimen = 400000, stretch=S.noFlex, shrink=S.noFlex}
-
 extractPageInner :: State -> [S.BreakableVListElem] -> C.Stream -> C.VModeCommand -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
-extractPageInner state acc stream com
-  | C.VAllModesCommand (C.Assign (C.Assignment{body=C.DefineFont})) <- com
-    = do
+extractPageInner state acc stream (C.VAllModesCommand aCom)
+  = case aCom of
+    C.Assign C.Assignment{body=C.DefineFont} ->
+      do
       (state1, fontDef) <- defineFont state theFontNr
       extractPage state1 (S.VFontDefinition fontDef:acc) stream
-  | C.VAllModesCommand (C.Assign (C.Assignment{body=C.SelectFont})) <- com
-    = do
+    C.Assign C.Assignment{body=C.SelectFont} ->
+      do
       let (state1, fontSel) = selectFont state theFontNr
       extractPage state1 (S.VFontSelection fontSel:acc) stream
-  | C.VAllModesCommand C.Relax <- com
-    = extractPage state acc stream
+    C.Relax ->
+      extractPage state acc stream
   -- \par does nothing in vertical mode.
-  | C.VAllModesCommand C.EndParagraph <- com =
-    extractPage state acc stream
-  | C.VAllModesCommand (C.AddKern k) <- com =
-    extractPage state ((S.VKern $ B.Kern k):acc) stream
-  | otherwise =
-    fail $ "Unknown command in vertical mode: " ++ (show com)
+    C.EndParagraph ->
+      extractPage state acc stream
+    (C.AddKern k) ->
+      extractPage state ((S.VKern $ B.Kern k):acc) stream
+    _ ->
+      fail $ "Unknown all-mode command in vertical mode: " ++ show aCom
+extractPageInner _ _ _ com
+  = fail $ "Unknown v-mode command in vertical mode: " ++ show com
 
 extractPage :: State -> [S.BreakableVListElem] -> C.Stream -> IO (State, B.Page, [S.BreakableVListElem], C.Stream)
 extractPage state acc stream =
@@ -174,16 +173,16 @@ extractPage state acc stream =
     Right (C.EnterHMode, _) ->
       do
         -- Paraboxes returned in normal order.
-        (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph desiredWidth lineTolerance linePenalty interLineGlue state stream
+        (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
         let
-          breakItem = S.GlueBreak interLineGlue
-          extra = S.VGlue interLineGlue:reverse paraBoxes
+          breakItem = S.GlueBreak theInterLineGlue
+          extra = S.VGlue theInterLineGlue:reverse paraBoxes
           accNext = extra ++ acc
           -- TODO: Discard when adding to empty page.
           -- TODO: Keep best rather than taking last.
           pen = S.breakPenalty breakItem
           -- Expects normal order.
-          stat = S.listGlueSetRatio desiredHeight $ reverse accNext
+          stat = S.listGlueSetRatio theDesiredHeight $ reverse accNext
           bad = S.listStatusBadness stat
           cost = S.pageCost pen bad 0
           -- Expects normal order.
