@@ -9,7 +9,7 @@ import qualified Cat
 data ControlSequence
   = ControlSymbol Char
   | ControlWord String
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- Not all Catcodes make it past the lexer, which we can represent in the
 -- type system.

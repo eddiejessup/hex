@@ -121,16 +121,6 @@ data HModeCommand
   -- | AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
   deriving Show
 
--- extractAllInner :: Stream -> [Command]
--- extractAllInner stream =
---   case P.parse parseHModeCommand "" stream of
---     Left _ -> []
---     Right (com, newStream) -> com:extractAllInner newStream
-
--- extractAllDebug :: Cat.CharCatMap -> [Cat.CharCode] -> [Command]
--- extractAllDebug ccMap cs = extractAllInner $ Stream{codes=cs, lexState=Lex.LineBegin, ccMap=ccMap}
-
-
 type ParseTokens = [ParseToken]
 
 type CharCodes = [Cat.CharCode]
@@ -187,16 +177,25 @@ instance P.Stream Stream where
   --
   take1_ (Stream [] _ _ _) = Nothing
   take1_ stream@(Stream cs [] _lexState _ccMap) = do
-    (pt, lexStateNext, csNext) <- Harden.extractToken _ccMap _lexState cs
+    (pt, lexStateNext, csNext) <- Harden.extractToken True _ccMap _lexState cs
     let streamNext = stream{codes=csNext, lexState=lexStateNext}
     return (pt, streamNext)
   take1_ stream@(Stream _ (lt:lts) _ _) =
-    return (Harden.lexToParseToken lt, stream{lexTokens=lts})
+    return (Harden.lexToParseToken True lt, stream{lexTokens=lts})
 
 -- Helpers.
 
 type Parser = P.Parsec () Stream
 type ParseError = (P.ParseError (P.Token Stream) ())
+type ParseState = P.State Stream
+
+easyRunParser' :: Parser a -> Stream -> (ParseState, Either ParseError a)
+easyRunParser' p stream =
+  let
+    pos = P.SourcePos "" (P.mkPos 0) (P.mkPos 0)
+    state = P.State stream (pos:|[]) 0 (P.mkPos 0)
+  in
+    P.runParser' p state
 
 satisfy :: (ParseToken -> Bool) -> Parser ParseToken
 satisfy f = P.token testTok Nothing
@@ -205,22 +204,6 @@ satisfy f = P.token testTok Nothing
       if f x
         then Right x
         else Left (Just (P.Tokens (x:|[])), Set.empty)
-
-atEnd :: Stream -> Bool
-atEnd stream = case P.parse isEOF "" stream of
-  (Right x) -> x
-  (Left _) -> False
-  where
-    isEOF = P.atEnd :: Parser Bool
-
-parseWithStream :: Show a => Parser a -> Parser (a, Stream)
-parseWithStream p = do
-  v <- p
-  P.State{stateInput=stream} <- P.getParserState
-  return $ T.traceShow v (v, stream)
-
-easyParse :: Parser a -> Stream -> Either ParseError a
-easyParse p = P.parse p ""
 
 -- All-mode Commands.
 
@@ -249,8 +232,9 @@ cEndParagraph = do
 cMacroToFont :: AllModeCommandParser
 cMacroToFont = do
   _ <- satisfy (== Harden.MacroToFont)
+  fontNr <- parseFontNr
   fontPath <- parseFontPath
-  return $ Assign Assignment {body=DefineFont fontPath Harden.theFontNr, global=False}
+  return $ Assign Assignment {body=DefineFont fontPath fontNr, global=False}
 
 cTokenForFont :: AllModeCommandParser
 cTokenForFont = do
@@ -276,6 +260,9 @@ cCommands =
 parseAllModeCommand :: Parser AllModesCommand
 parseAllModeCommand = P.choice cCommands
 
+parseFontNr = do
+  return Harden.theFontNr
+
 parseFontPath = do
   let (Just theFontPath) = parseRelFile "support/cmr10.tfm"
   return theFontPath
@@ -284,11 +271,11 @@ parseFontPath = do
 
 type HModeCommandParser = Parser HModeCommand
 
-extractHModeCommand :: Stream -> Either ParseError (HModeCommand, Stream)
-extractHModeCommand = easyParse parseHModeCommand
+extractHModeCommand :: Stream -> (ParseState, Either ParseError HModeCommand)
+extractHModeCommand = easyRunParser' parseHModeCommand
 
-parseHModeCommand :: Parser (HModeCommand, Stream)
-parseHModeCommand = parseWithStream $
+parseHModeCommand :: Parser HModeCommand
+parseHModeCommand =
   P.choice hCommands
   <|>
   (HAllModesCommand <$> parseAllModeCommand)
@@ -315,11 +302,11 @@ hAddCharacter = do
 
 type VModeCommandParser = Parser VModeCommand
 
-extractVModeCommand :: Stream -> Either ParseError (VModeCommand, Stream)
-extractVModeCommand = easyParse parseVModeCommand
+extractVModeCommand :: Stream -> (ParseState, Either ParseError VModeCommand)
+extractVModeCommand = easyRunParser' parseVModeCommand
 
-parseVModeCommand :: Parser (VModeCommand, Stream)
-parseVModeCommand = parseWithStream $
+parseVModeCommand :: Parser VModeCommand
+parseVModeCommand =
   P.choice vCommands
   <|>
   (VAllModesCommand <$> parseAllModeCommand)

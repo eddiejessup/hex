@@ -250,6 +250,9 @@ data ParseToken
   -- | Else -- \else
   -- | EndIf -- \fi
   -- | Or -- \or
+
+  -- Arguments used when defining new control sequences.
+  | UnexpandedControlSequence Lex.ControlSequence
   deriving (Show, Eq)
 
 instance Ord ParseToken where
@@ -289,21 +292,20 @@ extractControlWord "thefont" = TokenForFont theFontNr
 extractControlWord "end" = End
 extractControlWord "dump" = Dump
 
-lexToParseToken :: Lex.Token -> ParseToken
-lexToParseToken tok1
-  | Lex.CharCat{char=char, cat=Lex.Letter} <- tok1 =
-    ExplicitCharacter char
-  | Lex.CharCat{char=char, cat=Lex.Other} <- tok1 =
-    ExplicitCharacter char
-  | Lex.CharCat{cat=Lex.Space} <- tok1 =
-    Space
-  | Lex.ControlSequence (Lex.ControlWord x) <- tok1 =
-    extractControlWord x
-  | otherwise
-     = error $ "Unknown lex token: " ++ show tok1
+lexToParseToken :: Bool -> Lex.Token -> ParseToken
+lexToParseToken _ Lex.CharCat{char=char, cat=Lex.Letter}
+  = ExplicitCharacter char
+lexToParseToken _ Lex.CharCat{char=char, cat=Lex.Other}
+  = ExplicitCharacter char
+lexToParseToken _ Lex.CharCat{cat=Lex.Space}
+  = Space
+lexToParseToken True (Lex.ControlSequence (Lex.ControlWord x))
+  = extractControlWord x
+lexToParseToken False (Lex.ControlSequence cs)
+  = UnexpandedControlSequence cs
 
-extractToken :: Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (ParseToken, Lex.LexState, [Cat.CharCode])
-extractToken _ _ [] = Nothing
-extractToken ccMap lexState cs = do
+extractToken :: Bool -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (ParseToken, Lex.LexState, [Cat.CharCode])
+extractToken _ _ _ [] = Nothing
+extractToken expand ccMap lexState cs = do
   (lexTok, lexStateNext, rest) <- Lex.extractToken ccMap lexState cs
-  return (lexToParseToken lexTok, lexStateNext, rest)
+  return (lexToParseToken expand lexTok, lexStateNext, rest)

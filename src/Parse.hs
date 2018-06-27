@@ -9,6 +9,7 @@ import System.Directory (doesFileExist)
 import Path ((</>))
 import qualified Path
 import Data.Foldable (asum)
+import qualified Text.Megaparsec as P
 
 import qualified TFM.Main as TFMM
 import qualified TFM.Character as TFMC
@@ -120,11 +121,11 @@ spaceGlue state = do
 -- We build a paragraph list in reverse order.
 extractParagraph :: State -> [S.BreakableHListElem] -> C.Stream -> IO (State, [S.BreakableHListElem], C.Stream)
 extractParagraph state acc stream =
-  case C.extractHModeCommand stream of
+  let (P.State{stateInput=streamNext}, com) = C.extractHModeCommand stream
+  in case com of
     -- Run out of commands: return the list so far.
-    -- Left x -> return (state, acc, stream)
     Left x -> error $ show x
-    Right (C.HAllModesCommand aCom, streamNext) ->
+    Right (C.HAllModesCommand aCom) ->
       case aCom of
         C.Assign C.Assignment{body=C.DefineFont fPath fNr} ->
           do
@@ -157,13 +158,13 @@ extractParagraph state acc stream =
           extractParagraph state (glue:acc) streamNext
         -- _ ->
         --   fail $ "Unknown all-mode command in horizontal mode: " ++ show aCom
-    Right (C.AddCharacter{code=i}, streamNext) ->
+    Right C.AddCharacter{code=i} ->
       do
       charBox <- case characterBox state i of
         Just c -> return $ S.HCharacter c
         Nothing -> fail "Could not get character info"
       extractParagraph state (charBox:acc) streamNext
-    Right (C.LeaveHMode, _) ->
+    Right C.LeaveHMode ->
       -- Inner mode: forbidden. TODO.
       -- Outer mode: insert the control sequence "\par" into the input. The control
       -- sequence's current meaning will be used, which might no longer be the \par
@@ -208,20 +209,21 @@ addParagraphToPage state pages acc stream indent
 
 extractPages :: State -> [B.Page] -> [S.BreakableVListElem] -> C.Stream -> IO (State, [B.Page], [S.BreakableVListElem], C.Stream)
 extractPages state pages acc stream =
-  case C.extractVModeCommand stream of
+  let (P.State{stateInput=streamNext}, com) = C.extractVModeCommand stream
+  in case com of
     -- Expects normal order.
     -- Left _ -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], stream)
     Left x -> error $ show x
     -- If the command shifts to horizontal mode, run '\indent', and re-read the
     -- stream as if the commands just seen hadn't been read.
     -- (Note that we pass 'stream', not 'streamNext'.)
-    Right (C.EnterHMode, _) ->
+    Right C.EnterHMode ->
       addParagraphToPage state pages acc stream True
-    Right (C.End, streamNext) ->
+    Right C.End ->
       do
       let lastPage = B.Page $ reverse $ S.setListElems S.NaturallyGood acc
       return (state, lastPage:pages, acc, streamNext)
-    Right (C.VAllModesCommand aCom, streamNext) ->
+    Right (C.VAllModesCommand aCom) ->
       case aCom of
         C.Assign C.Assignment{body=C.DefineFont fPath fNr} ->
           do
