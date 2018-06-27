@@ -21,7 +21,7 @@ import qualified Debug.Trace as T
 data CharSource = ExplicitChar | CodeChar | TokenChar
   deriving Show
 
-data Distance = Distance Int
+newtype Distance = Distance Int
   deriving Show
 
 -- TODO.
@@ -122,7 +122,7 @@ data HModeCommand
 
 -- extractAllInner :: Stream -> [Command]
 -- extractAllInner stream =
---   case P.parse hModeCommandParser "" stream of
+--   case P.parse parseHModeCommand "" stream of
 --     Left _ -> []
 --     Right (com, newStream) -> com:extractAllInner newStream
 
@@ -135,15 +135,25 @@ type ParseTokens = [ParseToken]
 type CharCodes = [Cat.CharCode]
 
 data Stream = Stream { codes :: CharCodes
+                     , lexTokens :: [Lex.Token]
                      , lexState :: Lex.LexState
                      , ccMap :: Cat.CharCatMap }
+
+newStream :: [Cat.CharCode] -> Stream
+newStream cs = Stream { codes=cs
+                      , lexTokens=[]
+                      , lexState=Lex.LineBegin
+                      , ccMap=Cat.usableCharCatMap }
+
+insertLexToken :: Stream -> Lex.Token -> Stream
+insertLexToken s t = s{lexTokens=t:lexTokens s}
 
 showSrc :: String -> String
 showSrc s = replace "\n" "\\n" (take 30 s)
 
 instance Show Stream where
-  show Stream{codes=cs, lexState=ls} =
-    show ls ++ "; \"" ++ showSrc (fmap C.chr cs) ++ "\""
+  show Stream{codes=cs, lexTokens=ts, lexState=ls} =
+    show ls ++ "; to-lex: " ++ show ts ++ "; \"" ++ showSrc (fmap C.chr cs) ++ "\""
 
 instance P.Stream Stream where
   type Token Stream = ParseToken
@@ -174,11 +184,13 @@ instance P.Stream Stream where
 
   -- take1_ :: s -> Maybe (Token s, s)
   --
-  take1_ (Stream [] _ _) = Nothing
-  take1_ s@(Stream cs lexState0 _ccMap) = do
-    (t, lexState1, rest) <- Harden.extractToken _ccMap lexState0 cs
-    let s2 = s{codes=rest, lexState=lexState1}
-    return (t, s2)
+  take1_ (Stream [] _ _ _) = Nothing
+  take1_ stream@(Stream cs [] _lexState _ccMap) = do
+    (pt, lexStateNext, csNext) <- Harden.extractToken _ccMap _lexState cs
+    let streamNext = stream{codes=csNext, lexState=lexStateNext}
+    return (pt, streamNext)
+  take1_ stream@(Stream _ (lt:lts) _ _) =
+    return (Harden.lexToParseToken lt, stream{lexTokens=lts})
 
 -- Helpers.
 
@@ -211,30 +223,39 @@ easyParse p = P.parse p ""
 
 -- All-mode Commands.
 
+type AllModeCommandParser = Parser AllModesCommand
+
+cRelax :: AllModeCommandParser
 cRelax = do
   _ <- satisfy (== Harden.Relax)
   return Relax
 
+cAddKern :: AllModeCommandParser
 cAddKern = do
   _ <- satisfy (== Harden.AddKern)
-  return $ AddKern (24 * 2^16)
+  return $ AddKern (24 * (2^16))
 
+cStartParagraph :: AllModeCommandParser
 cStartParagraph = do
   (Harden.StartParagraph _indent) <- satisfy isStartParagraph
   return StartParagraph {indent=_indent}
 
+cEndParagraph :: AllModeCommandParser
 cEndParagraph = do
   _ <- satisfy (== Harden.EndParagraph)
   return EndParagraph
 
+cMacroToFont :: AllModeCommandParser
 cMacroToFont = do
   _ <- satisfy (== Harden.MacroToFont)
   return $ Assign Assignment {body=DefineFont Harden.theFontNr, global=False}
 
+cTokenForFont :: AllModeCommandParser
 cTokenForFont = do
   (Harden.TokenForFont n) <- satisfy isTokenForFont
   return $ Assign Assignment {body=SelectFont n , global=False}
 
+cAddSpace :: AllModeCommandParser
 cAddSpace = do
   _ <- satisfy (== Harden.Space)
   return AddSpace
@@ -250,19 +271,23 @@ cCommands =
   , cAddSpace
   ]
 
-allModeCommandParser :: Parser AllModesCommand
-allModeCommandParser = P.choice cCommands
+parseAllModeCommand :: Parser AllModesCommand
+parseAllModeCommand = P.choice cCommands
 
 -- HMode.
 
-extractHModeCommand :: Stream -> Either ParseError (HModeCommand, Stream)
-extractHModeCommand = easyParse hModeCommandParser
+type HModeCommandParser = Parser HModeCommand
 
-hModeCommandParser = parseWithStream $
+extractHModeCommand :: Stream -> Either ParseError (HModeCommand, Stream)
+extractHModeCommand = easyParse parseHModeCommand
+
+parseHModeCommand :: Parser (HModeCommand, Stream)
+parseHModeCommand = parseWithStream $
   P.choice hCommands
   <|>
-  (HAllModesCommand <$> allModeCommandParser)
+  (HAllModesCommand <$> parseAllModeCommand)
 
+hCommands :: [HModeCommandParser]
 hCommands =
   [ hLeaveHMode
   , hAddCharacter
@@ -270,28 +295,30 @@ hCommands =
 
 -- HMode Commands.
 
+hLeaveHMode :: HModeCommandParser
 hLeaveHMode = do
   _ <- satisfy endsHMode
   return LeaveHMode
 
+hAddCharacter :: HModeCommandParser
 hAddCharacter = do
   (Harden.ExplicitCharacter _code) <- satisfy isExplicitCharacter
   return AddCharacter{method=ExplicitChar, code=_code}
 
 -- -- VMode.
 
-extractVModeCommand :: Stream -> Either ParseError (VModeCommand, Stream)
-extractVModeCommand = easyParse vModeCommandParser
+type VModeCommandParser = Parser VModeCommand
 
-vModeCommandParser = parseWithStream $
+extractVModeCommand :: Stream -> Either ParseError (VModeCommand, Stream)
+extractVModeCommand = easyParse parseVModeCommand
+
+parseVModeCommand :: Parser (VModeCommand, Stream)
+parseVModeCommand = parseWithStream $
   P.choice vCommands
   <|>
-  (VAllModesCommand <$> allModeCommandParser)
+  (VAllModesCommand <$> parseAllModeCommand)
 
-vEnd = do
-  _ <- satisfy (== Harden.End)
-  return End
-
+vCommands :: [VModeCommandParser]
 vCommands =
   [ vEnterHMode
   , vEnd
@@ -299,12 +326,23 @@ vCommands =
 
 -- VMode Commands.
 
+vEnd :: VModeCommandParser
+vEnd = do
+  _ <- satisfy (== Harden.End)
+  return End
+
+vEnterHMode :: VModeCommandParser
 vEnterHMode = do
   _ <- satisfy startsHMode
   return EnterHMode
 
 -- Token matching.
 
+type MatchToken = ParseToken -> Bool
+
+endsHMode :: MatchToken
+endsHMode Harden.End = True
+endsHMode Harden.Dump = True
 -- TODO:
 -- - AddUnwrappedFetchedBox Vertical
 -- - AddUnwrappedFetchedBox Vertical
@@ -312,10 +350,10 @@ vEnterHMode = do
 -- - AddRule Horizontal
 -- - AddSpecifiedGlue Vertical
 -- - AddPresetGlue Vertical
-endsHMode Harden.End = True
-endsHMode Harden.Dump = True
 endsHMode _ = False
 
+startsHMode :: MatchToken
+startsHMode (Harden.ExplicitCharacter _) = True
 -- TODO:
 -- - Letter
 -- - Other-character
@@ -332,14 +370,16 @@ endsHMode _ = False
 -- - AddDiscretionaryText
 -- - AddDiscretionaryHyphen
 -- - ToggleMathMode
-startsHMode (Harden.ExplicitCharacter _) = True
 startsHMode _ = False
 
+isExplicitCharacter :: MatchToken
 isExplicitCharacter (Harden.ExplicitCharacter _) = True
 isExplicitCharacter _ = False
 
+isTokenForFont :: MatchToken
 isTokenForFont (Harden.TokenForFont _) = True
 isTokenForFont _ = False
 
+isStartParagraph :: MatchToken
 isStartParagraph (Harden.StartParagraph _) = True
 isStartParagraph _ = False

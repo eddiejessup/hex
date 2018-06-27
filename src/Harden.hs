@@ -289,8 +289,8 @@ extractControlWord "thefont" = TokenForFont theFontNr
 extractControlWord "end" = End
 extractControlWord "dump" = Dump
 
-extractTokenInner :: Lex.Token -> ParseToken
-extractTokenInner tok1
+lexToParseToken :: Lex.Token -> ParseToken
+lexToParseToken tok1
   | Lex.CharCat{char=char, cat=Lex.Letter} <- tok1 =
     ExplicitCharacter char
   | Lex.CharCat{char=char, cat=Lex.Other} <- tok1 =
@@ -306,4 +306,4 @@ extractToken :: Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (Parse
 extractToken _ _ [] = Nothing
 extractToken ccMap lexState cs = do
   (lexTok, lexStateNext, rest) <- Lex.extractToken ccMap lexState cs
-  return (extractTokenInner lexTok, lexStateNext, rest)
+  return (lexToParseToken lexTok, lexStateNext, rest)

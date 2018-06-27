@@ -6,8 +6,6 @@ import qualified Data.Char as C
 import qualified Data.ByteString.Lazy as BLS
 
 import qualified DVI.Write as DVIW
-import qualified Cat
-import qualified Lex
 import qualified Box
 import qualified Parse
 import qualified Command
@@ -28,7 +26,7 @@ main = do
   -- let coms = Command.extractAllDebug Cat.usableCharCatMap contentsCode
   -- putStrLn $ List.intercalate "\n" $ fmap show coms
 
-  let stream = Command.Stream {codes=contentsCode, lexState=Lex.LineBegin, ccMap=Cat.usableCharCatMap}
+  let stream = Command.newStream contentsCode
 
   -- page <- Parse.extractPage Parse.newState [] stream
 

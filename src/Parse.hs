@@ -11,6 +11,7 @@ import qualified TFM.Character as TFMC
 import qualified Box as B
 import qualified Setting as S
 import qualified Command as C
+import qualified Lex
 import qualified Unit
 
 import qualified Debug.Trace as T
@@ -128,13 +129,15 @@ extractParagraph state acc stream =
         Just c -> return $ S.HCharacter c
         Nothing -> fail "Could not get character info"
       extractParagraph state (charBox:acc) streamNext
-    Right (C.LeaveHMode, streamNext) ->
-      -- Inner mode: forbidden.
+    Right (C.LeaveHMode, _) ->
+      -- Inner mode: forbidden. TODO.
       -- Outer mode: insert the control sequence "\par" into the input. The control
       -- sequence's current meaning will be used, which might no longer be the \par
       -- primitive.
-      -- TODO: Do something.
-      T.trace "ahhh" extractParagraph state acc streamNext
+    -- (Note that we pass 'stream', not 'streamNext'.)
+      do
+      let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
+      extractParagraph state acc $ C.insertLexToken stream parToken
 
 extractBoxedParagraph :: Bool -> Int -> Int -> Int -> S.Glue -> State -> C.Stream -> IO (State, [S.BreakableVListElem], C.Stream)
 extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlue state stream = do
