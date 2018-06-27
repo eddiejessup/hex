@@ -39,6 +39,8 @@ library
                      , megaparsec
                      , MissingH
                      , either
+                     , directory
+                     , path
   default-language:    Haskell2010
 
 executable hex-exe

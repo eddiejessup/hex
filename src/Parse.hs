@@ -5,6 +5,10 @@ module Parse where
 
 import qualified Data.IntMap.Strict as IMAP
 import Data.List (intersperse)
+import System.Directory (doesFileExist)
+import Path ((</>))
+import qualified Path
+import Data.Foldable (asum)
 
 import qualified TFM.Main as TFMM
 import qualified TFM.Character as TFMC
@@ -42,6 +46,13 @@ theDesiredHeight = 45000000
 theInterLineGlue :: S.Glue
 theInterLineGlue = S.Glue{dimen = 400000, stretch=S.noFlex, shrink=S.noFlex}
 
+fontDir1 :: AbsPathToDir
+(Just fontDir1) = Path.parseAbsDir "/Users/ejm/projects/hex"
+fontDir2 :: AbsPathToDir
+(Just fontDir2) = Path.parseAbsDir "/Users/ejm/projects/hex/support"
+theFontDirectories :: [AbsPathToDir]
+theFontDirectories = [fontDir1, fontDir2]
+
 currentFontInfo :: State -> Maybe TFMM.TexFont
 currentFontInfo state = do
   -- Maybe font number isn't set.
@@ -51,18 +62,41 @@ currentFontInfo state = do
   -- current font info directly instead of a lookup.
   IMAP.lookup fontNr $ fontInfoMap state
 
-defineFont :: State -> Int -> IO (State, B.FontDefinition)
-defineFont state nr = do
-    font <- TFMM.readTFM "support/cmr10.tfm"
-    let
-      fontDef = B.FontDefinition { fontNr = nr
-                                 , fontPath = "support/cmr10.tfm"
-                                 , fontName = "cmr10"
-                                 , fontInfo = font
-                                 , scaleFactorRatio = 1.0
-                                 }
-      stateNext = state{fontInfoMap=IMAP.insert nr font $ fontInfoMap state}
-    return (stateNext, fontDef)
+type PathToFile b = Path.Path b Path.File
+type RelPathToFile = PathToFile Path.Rel
+type AbsPathToDir = Path.Path Path.Abs Path.Dir
+
+pathIfExists :: PathToFile b -> IO (Maybe (PathToFile b))
+pathIfExists p = do
+  exists <- doesFileExist $ Path.toFilePath p
+  return $ if exists then Just p else Nothing
+
+firstExistingPath :: [PathToFile b] -> IO (Maybe (PathToFile b))
+firstExistingPath ps = asum <$> mapM pathIfExists ps
+
+findFilePath :: RelPathToFile -> [AbsPathToDir] -> IO (Maybe (PathToFile Path.Abs))
+findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs
+
+defineFont :: State -> RelPathToFile -> Int -> IO (State, B.FontDefinition)
+defineFont state fontRelPath nr = do
+    fontPath <- findFilePath fontRelPath theFontDirectories
+    case fontPath of
+      Just p -> do
+        font <- TFMM.readTFMFancy p
+        nonExtName <- Path.setFileExtension "" fontRelPath
+        let fontName = Path.toFilePath $ Path.filename nonExtName
+
+        let
+          fontDef = B.FontDefinition { fontNr = nr
+                                   , fontPath = p
+                                   , fontName = fontName
+                                   , fontInfo = font
+                                   , scaleFactorRatio = 1.0
+                                   }
+          stateNext = state{fontInfoMap=IMAP.insert nr font $ fontInfoMap state}
+        return (stateNext, fontDef)
+      Nothing ->
+        fail "No font found"
 
 selectFont :: State -> Int -> (State, B.FontSelection)
 selectFont state n =
@@ -92,9 +126,9 @@ extractParagraph state acc stream =
     Left x -> error $ show x
     Right (C.HAllModesCommand aCom, streamNext) ->
       case aCom of
-        C.Assign C.Assignment{body=C.DefineFont fNr} ->
+        C.Assign C.Assignment{body=C.DefineFont fPath fNr} ->
           do
-          (stateNext, fontDef) <- defineFont state fNr
+          (stateNext, fontDef) <- defineFont state fPath fNr
           extractParagraph stateNext (S.HFontDefinition fontDef:acc) streamNext
         C.Assign C.Assignment{body=C.SelectFont fNr} ->
           do
@@ -189,9 +223,9 @@ extractPages state pages acc stream =
       return (state, lastPage:pages, acc, streamNext)
     Right (C.VAllModesCommand aCom, streamNext) ->
       case aCom of
-        C.Assign C.Assignment{body=C.DefineFont fNr} ->
+        C.Assign C.Assignment{body=C.DefineFont fPath fNr} ->
           do
-          (stateNext, fontDef) <- defineFont state fNr
+          (stateNext, fontDef) <- defineFont state fPath fNr
           extractPages stateNext pages (S.VFontDefinition fontDef:acc) streamNext
         C.Assign C.Assignment{body=C.SelectFont fNr} ->
           do

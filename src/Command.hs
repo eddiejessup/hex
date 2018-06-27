@@ -10,6 +10,7 @@ import Data.Proxy
 import qualified Data.Set as Set
 import qualified Data.Char as C
 import Data.List.NonEmpty (NonEmpty((:|)))
+import Path (Path, Rel, File, parseRelFile)
 
 import qualified Harden
 import Harden (ParseToken)
@@ -44,7 +45,7 @@ data AssignmentBody
   -- | Read
   -- | DefineBox
   -- TEMP: Dummy label constructor until properly implemented.
-  | DefineFont Int
+  | DefineFont (Path Rel File) Int
   -- -- Global assignments.
   -- | SetFontAttribute
   -- | SetHyphenation
@@ -248,7 +249,8 @@ cEndParagraph = do
 cMacroToFont :: AllModeCommandParser
 cMacroToFont = do
   _ <- satisfy (== Harden.MacroToFont)
-  return $ Assign Assignment {body=DefineFont Harden.theFontNr, global=False}
+  fontPath <- parseFontPath
+  return $ Assign Assignment {body=DefineFont fontPath Harden.theFontNr, global=False}
 
 cTokenForFont :: AllModeCommandParser
 cTokenForFont = do
@@ -273,6 +275,10 @@ cCommands =
 
 parseAllModeCommand :: Parser AllModesCommand
 parseAllModeCommand = P.choice cCommands
+
+parseFontPath = do
+  let (Just theFontPath) = parseRelFile "support/cmr10.tfm"
+  return theFontPath
 
 -- HMode.
 

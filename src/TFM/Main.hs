@@ -3,6 +3,7 @@ module TFM.Main where
 import qualified Data.ByteString as BS
 import qualified Data.Binary.Strict.Get as BSG
 import qualified Data.IntMap.Strict as IntMap
+import Path (Path, Abs, File, toFilePath)
 
 import qualified Unit as U
 
@@ -59,7 +60,10 @@ contentsToTFM contents = do
                    , ligKerns=_ligKerns
                    , characters=_characters }
 
-readTFM :: String -> IO TexFont
+readTFM :: FilePath -> IO TexFont
 readTFM path = do
     contents <- BS.readFile path
     either fail return $ contentsToTFM contents
+
+readTFMFancy :: Path Abs File -> IO TexFont
+readTFMFancy = readTFM . toFilePath

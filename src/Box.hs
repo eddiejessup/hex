@@ -4,11 +4,10 @@
 module Box where
 
 import qualified Data.Char as C
+import Path (Path, Abs, File)
 
 import qualified Unit
-
 import qualified DVI.Write as DVIW
-
 import qualified TFM.Main as TFMM
 
 import qualified Debug.Trace as T
@@ -29,8 +28,8 @@ newtype Kern = Kern{kernDimen :: Int} deriving (Show)
 
 data FontDefinition = FontDefinition
   { fontNr :: Int
-  , fontPath :: FilePath
-  , fontName :: FilePath
+  , fontPath :: Path Abs File
+  , fontName :: String
   , scaleFactorRatio :: Rational
   , fontInfo :: TFMM.TexFont
   } deriving (Show)
@@ -85,7 +84,7 @@ data VBoxElem
   | VFontSelection FontSelection
   deriving (Show)
 
-data Page = Page [VBoxElem] deriving Show
+newtype Page = Page [VBoxElem] deriving Show
 
 class Dimensioned a where
   naturalWidth :: a -> Int
@@ -219,7 +218,7 @@ instance DVIAble VBoxElem where
   toDVI (VFontSelection e) = toDVI e
 
 instance DVIAble Page where
-  toDVI (Page vs) = [DVIW.BeginNewPage] ++ concatMap toDVI vs
+  toDVI (Page vs) = DVIW.BeginNewPage:concatMap toDVI vs
 
 instance DVIAble [Page] where
-  toDVI ps = concatMap toDVI ps
+  toDVI = concatMap toDVI
