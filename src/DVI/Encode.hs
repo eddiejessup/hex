@@ -1,8 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FlexibleInstances, ConstrainedClassMethods #-}
-{-# LANGUAGE DataKinds #-}
 
-module DVI.Write where
+module DVI.Encode where
 
 import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BLS

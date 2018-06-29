@@ -1,247 +1,380 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Parse where
 
-import qualified Data.IntMap.Strict as IMAP
-import Data.List (intersperse)
-import System.Directory (doesFileExist)
-import Path ((</>))
-import qualified Path
-import Data.Foldable (asum)
+import Data.String.Utils (replace)
 import qualified Text.Megaparsec as P
+import Text.Megaparsec ((<|>))
+import Data.Proxy
+import qualified Data.Set as Set
+import qualified Data.Char as C
+import Data.List.NonEmpty (NonEmpty((:|)))
+import Path (Path, Rel, File, parseRelFile)
+import qualified Control.Monad.State.Lazy as MState
 
-import qualified TFM.Main as TFMM
-import qualified TFM.Character as TFMC
-import qualified Box as B
-import qualified Setting as S
-import qualified Command as C
+import qualified Expand
+import Expand (ParseToken)
 import qualified Lex
-import qualified Unit
+import qualified Categorise as Cat
 
-import qualified Debug.Trace as T
+data CharSource = ExplicitChar | CodeChar | TokenChar
+  deriving Show
 
-type FontInfoMap = IMAP.IntMap TFMM.TexFont
+newtype Distance = Distance Int
+  deriving Show
 
-data State = State { currentFontNr :: Maybe Int
-                   , fontInfoMap :: FontInfoMap } deriving Show
+-- TODO.
+data ControlSequenceLike = ActiveChar Char | ControlSequence String
 
-newState :: State
-newState = State {currentFontNr=Nothing, fontInfoMap=IMAP.empty}
+data AssignmentBody
+  -- = DefineMacro { name :: ControlSequenceLike
+  --               , parameters :: ParameterText
+  --               , contents :: BalancedText
+  --               , long, outer, expanded :: Bool }
+  -- | ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
+  -- | SetVariable VariableAssignment
+  -- | ModifyVariable VariableModification
+  -- | AssignCode { codeType :: CodeType, codeIndex, value :: Int }
+  -- | Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
+  -- | FutureLet { name :: ControlSequenceLike, token1, token2 :: Token}
+  = SelectFont Int
+  -- | SetFamilyMember {member :: FamilyMember, font :: Font}
+  -- | SetParShape
+  -- | Read
+  -- | DefineBox
+  -- TEMP: Dummy label constructor until properly implemented.
+  | DefineFont (Path Rel File) Int
+  -- -- Global assignments.
+  -- | SetFontAttribute
+  -- | SetHyphenation
+  -- | SetBoxSize
+  -- | SetInteractionMode
+  -- | SetSpecialVariable
+  deriving Show
 
-theParIndent :: S.BreakableHListElem
-theParIndent = S.HHBox B.HBox{contents=[], desiredLength=B.To $ fromIntegral (round $ Unit.pointToScaledPoint 20 :: Int)}
+data Assignment
+  = Assignment { body :: AssignmentBody, global :: Bool }
+  deriving Show
 
-theDesiredWidth :: Int
-theDesiredWidth = 30750000
+data AllModesCommand
+  = Relax
+  | Assign Assignment
+  -- | LeftBrace
+  -- | RightBrace
+  -- | BeginGroup
+  -- | EndGroup
+  -- | ShowToken Token
+  -- | ShowBox Int
+  -- | ShowLists
+  -- | ShowInternalQuantity InternalQuantity
+  -- | ShipOut Box
+  -- | IgnoreSpaces
+  -- | SetAfterAssignmentToken Token
+  -- | AddToAfterGroupTokens Tokens
+  -- | ChangeCase VDirection GeneralText
+  -- | Message MessageStream GeneralText
+  -- | OpenInput { streamNr :: Int, fileName :: String }
+  -- | CloseInput { streamNr :: Int }
+  -- | OpenOutput { streamNr :: Int, fileName :: String, immediate :: Bool }
+  -- | CloseOutput { streamNr :: Int, immediate :: Bool }
+  -- | Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
+  -- | AddWhatsit GeneralText
+  -- | AddPenalty Int
+  | AddKern Int
+  -- | RemoveLastPenalty
+  -- | RemoveLastKern
+  -- | RemoveLastGlue
+  -- | AddMark GeneralText
+  -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
+  -- -- then can 'migrate' out.
+  -- | AddInsertion {nr :: Int, contents :: VModeMaterial}
+  -- | AddGlue Glue
+  -- | AddLeaders {type :: LeadersType, template :: BoxOrRule, glue :: Glue}
+  | AddSpace
+  -- | AddBox Box
+  -- | AddShiftedBox Distance Box
+  -- | AddFetchedBox { register :: Int, unwrap, pop :: Bool } -- \box, \copy, \un{v,h}{box,copy}
+  -- | AddRule { width, height, depth :: Maybe Distance }
+  -- | AddAlignedMaterial DesiredLength AlignmentMaterial
+  | StartParagraph { indent :: Bool }
+  | EndParagraph
+  deriving Show
 
-theLineTolerance :: Int
-theLineTolerance = 500
+data VModeCommand
+  = VAllModesCommand AllModesCommand
+  | EnterHMode
+  | End
+  | Dump
+  deriving Show
 
-theLinePenalty :: Int
-theLinePenalty = 10
+data HModeCommand
+  = HAllModesCommand AllModesCommand
+  | LeaveHMode
+  -- | EnterMathMode
+  -- | AddAdjustment VModeMaterial
+  -- | AddControlSpace
+  | AddCharacter { method :: CharSource, code :: Int }
+  -- | AddAccentedCharacter { accentCode :: Int, targetCode :: Maybe Int, assignments :: [Assignment]}
+  -- | AddItalicCorrection
+  -- | AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
+  deriving Show
 
-theDesiredHeight :: Int
-theDesiredHeight = 45000000
+type ParseTokens = [ParseToken]
 
-theInterLineGlue :: S.Glue
-theInterLineGlue = S.Glue{dimen = 400000, stretch=S.noFlex, shrink=S.noFlex}
+type CharCodes = [Cat.CharCode]
 
-fontDir1 :: AbsPathToDir
-(Just fontDir1) = Path.parseAbsDir "/Users/ejm/projects/hex"
-fontDir2 :: AbsPathToDir
-(Just fontDir2) = Path.parseAbsDir "/Users/ejm/projects/hex/support"
-theFontDirectories :: [AbsPathToDir]
-theFontDirectories = [fontDir1, fontDir2]
+data Stream = Stream { codes :: CharCodes
+                     , lexTokens :: [Lex.Token]
+                     , lexState :: Lex.LexState
+                     , ccMap :: Cat.CharCatMap }
 
-currentFontInfo :: State -> Maybe TFMM.TexFont
-currentFontInfo state = do
-  -- Maybe font number isn't set.
-  fontNr <- currentFontNr state
-  -- Or maybe there's no font where there should be.
-  -- TODO: I think I can make this case impossible, maybe by storing the
-  -- current font info directly instead of a lookup.
-  IMAP.lookup fontNr $ fontInfoMap state
+newStream :: [Cat.CharCode] -> Stream
+newStream cs = Stream { codes=cs
+                      , lexTokens=[]
+                      , lexState=Lex.LineBegin
+                      , ccMap=Cat.usableCharCatMap }
 
-type PathToFile b = Path.Path b Path.File
-type RelPathToFile = PathToFile Path.Rel
-type AbsPathToDir = Path.Path Path.Abs Path.Dir
+insertLexToken :: Stream -> Lex.Token -> Stream
+insertLexToken s t = s{lexTokens=t:lexTokens s}
 
-pathIfExists :: PathToFile b -> IO (Maybe (PathToFile b))
-pathIfExists p = do
-  exists <- doesFileExist $ Path.toFilePath p
-  return $ if exists then Just p else Nothing
+showSrc :: String -> String
+showSrc s = replace "\n" "\\n" (take 30 s)
 
-firstExistingPath :: [PathToFile b] -> IO (Maybe (PathToFile b))
-firstExistingPath ps = asum <$> mapM pathIfExists ps
+instance Show Stream where
+  show Stream{codes=cs, lexTokens=ts, lexState=ls} =
+    show ls ++ "; to-lex: " ++ show ts ++ "; \"" ++ showSrc (fmap C.chr cs) ++ "\""
 
-findFilePath :: RelPathToFile -> [AbsPathToDir] -> IO (Maybe (PathToFile Path.Abs))
-findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs
+instance P.Stream Stream where
+  type Token Stream = ParseToken
+  -- 'Tokens' is synonymous with 'chunk' containing 'token's.
+  type Tokens Stream = ParseTokens
 
-defineFont :: State -> RelPathToFile -> Int -> IO (State, B.FontDefinition)
-defineFont state fontRelPath nr = do
-    fontPath <- findFilePath fontRelPath theFontDirectories
-    case fontPath of
-      Just p -> do
-        font <- TFMM.readTFMFancy p
-        nonExtName <- Path.setFileExtension "" fontRelPath
-        let fontName = Path.toFilePath $ Path.filename nonExtName
+  -- These basically clarify that, for us, a 'tokens' is a list of type
+  -- 'token'.
+  -- tokenToChunk :: Proxy s -> Token s -> Tokens s
+  -- To make a 'token' into a 'tokens', wrap it in a list.
+  tokenToChunk Proxy = pure
+  -- tokensToChunk :: Proxy s -> [Token s] -> Tokens s
+  -- A list of type 'token' is equivalent to a 'tokens', and vice versa.
+  tokensToChunk Proxy = id
+  -- chunkToTokens :: Proxy s -> Tokens s -> [Token s]
+  chunkToTokens Proxy = id
 
-        let
-          fontDef = B.FontDefinition { fontNr = nr
-                                   , fontPath = p
-                                   , fontName = fontName
-                                   , fontInfo = font
-                                   , scaleFactorRatio = 1.0
-                                   }
-          stateNext = state{fontInfoMap=IMAP.insert nr font $ fontInfoMap state}
-        return (stateNext, fontDef)
-      Nothing ->
-        fail "No font found"
+  -- chunkLength :: Proxy s -> Tokens s -> Int
+  -- The length of a chunk is the number of elements in it (it's a list).
+  chunkLength Proxy = length
+  -- chunkEmpty :: Proxy s -> Tokens s -> Bool
+  -- A chunk is empty if it has no elements.
+  chunkEmpty Proxy = null
 
-selectFont :: State -> Int -> (State, B.FontSelection)
-selectFont state n =
-  (state{currentFontNr=Just n}, B.FontSelection{fontNr = n})
+  -- Stub implementation: leave position unchanged.
+  advance1 Proxy _ pos _ = pos
+  advanceN Proxy _ pos _ = pos
 
-characterBox :: State -> Int -> Maybe B.Character
-characterBox state code = do
-  font <- currentFontInfo state
-  let toSP = TFMM.designScaleSP font
-  TFMC.Character{width=w, height=h, depth=d} <- IMAP.lookup code $ TFMM.characters font
-  return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
+  -- take1_ :: s -> Maybe (Token s, s)
+  --
+  take1_ (Stream [] _ _ _) = Nothing
+  take1_ stream@(Stream cs [] _lexState _ccMap) = do
+    (pt, lexStateNext, csNext) <- Expand.extractToken True _ccMap _lexState cs
+    let streamNext = stream{codes=csNext, lexState=lexStateNext}
+    return (pt, streamNext)
+  take1_ stream@(Stream _ (lt:lts) _ _) =
+    return (Expand.lexToParseToken True lt, stream{lexTokens=lts})
 
-spaceGlue :: State -> Maybe S.Glue
-spaceGlue state = do
-  font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo state
+-- Helpers.
+
+data UserStateContent = UserStateContent
+type UserState = MState.State UserStateContent
+type Parser = P.ParsecT () Stream UserState
+type ParseError = (P.ParseError (P.Token Stream) ())
+type ParseState = P.State Stream
+
+easyRunParser' :: Parser a -> Stream -> (ParseState, Either ParseError a)
+easyRunParser' p stream =
   let
-    toSP = TFMM.designScaleSP font
-    toFlex = S.finiteFlex . toSP
-  return S.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
+    pos = P.SourcePos "" (P.mkPos 1) (P.mkPos 1)
+    parseState = P.State stream (pos:|[]) 0 (P.mkPos 1)
+    (com, _) = MState.runState (P.runParserT' p parseState) UserStateContent
+  in
+    com
 
--- We build a paragraph list in reverse order.
-extractParagraph :: State -> [S.BreakableHListElem] -> C.Stream -> IO (State, [S.BreakableHListElem], C.Stream)
-extractParagraph state acc stream =
-  let (P.State{stateInput=streamNext}, com) = C.extractHModeCommand stream
-  in case com of
-    -- Run out of commands: return the list so far.
-    Left x -> error $ show x
-    Right (C.HAllModesCommand aCom) ->
-      case aCom of
-        C.Assign C.Assignment{body=C.DefineFont fPath fNr} ->
-          do
-          (stateNext, fontDef) <- defineFont state fPath fNr
-          extractParagraph stateNext (S.HFontDefinition fontDef:acc) streamNext
-        C.Assign C.Assignment{body=C.SelectFont fNr} ->
-          do
-          let (stateNext, fontSel) = selectFont state fNr
-          extractParagraph stateNext (S.HFontSelection fontSel:acc) streamNext
-        C.Relax ->
-          extractParagraph state acc streamNext
-        -- \par: end the current paragraph.
-        C.EndParagraph ->
-          return (state, acc, streamNext)
-        C.AddKern k ->
-          extractParagraph state ((S.HKern $ B.Kern k):acc) streamNext
-        -- \indent: An empty box of width \parindent is appended to the current
-        -- list, and the space factor is set to 1000.
-        -- TODO: Space factor.
-        C.StartParagraph True ->
-          extractParagraph state (theParIndent:acc) streamNext
-        -- \noindent: has no effect in horizontal modes.
-        C.StartParagraph False ->
-          extractParagraph state acc streamNext
-        C.AddSpace ->
-          do
-          glue <- case spaceGlue state of
-            Just sg -> return $ S.HGlue sg
-            Nothing -> fail "Could not get space glue"
-          extractParagraph state (glue:acc) streamNext
-        -- _ ->
-        --   fail $ "Unknown all-mode command in horizontal mode: " ++ show aCom
-    Right C.AddCharacter{code=i} ->
-      do
-      charBox <- case characterBox state i of
-        Just c -> return $ S.HCharacter c
-        Nothing -> fail "Could not get character info"
-      extractParagraph state (charBox:acc) streamNext
-    Right C.LeaveHMode ->
-      -- Inner mode: forbidden. TODO.
-      -- Outer mode: insert the control sequence "\par" into the input. The control
-      -- sequence's current meaning will be used, which might no longer be the \par
-      -- primitive.
-    -- (Note that we pass 'stream', not 'streamNext'.)
-      do
-      let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
-      extractParagraph state acc $ C.insertLexToken stream parToken
+satisfy :: (ParseToken -> Bool) -> Parser ParseToken
+satisfy f = P.token testTok Nothing
+  where
+    testTok x =
+      if f x
+        then Right x
+        else Left (Just (P.Tokens (x:|[])), Set.empty)
 
-extractBoxedParagraph :: Bool -> Int -> Int -> Int -> S.Glue -> State -> C.Stream -> IO (State, [S.BreakableVListElem], C.Stream)
-extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlue state stream = do
-  let
-    initial True = [theParIndent]
-    initial False = []
-  (stateNext, hList, streamNext) <- extractParagraph state (initial indent) stream
-  let
-    lineBoxes = S.setParagraph desiredWidth lineTolerance linePenalty hList
-    paraBoxes = intersperse (S.VGlue interLineGlue) lineBoxes
-  return (stateNext, paraBoxes, streamNext)
+-- All-mode Commands.
 
-addParagraphToPage :: State -> [B.Page] -> [S.BreakableVListElem] -> C.Stream -> Bool -> IO (State, [B.Page], [S.BreakableVListElem], C.Stream)
-addParagraphToPage state pages acc stream indent
-  = do
-    -- Paraboxes returned in normal order.
-    (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph indent theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
-    let
-      breakItem = S.GlueBreak theInterLineGlue
-      accBreak = S.VGlue theInterLineGlue:reverse paraBoxes
-      accNoBreak = accBreak ++ acc
-      -- TODO: Discard when adding to empty page.
-      -- TODO: Keep best rather than taking last.
-      pen = S.breakPenalty breakItem
-      -- Expects normal order.
-      stat = S.listGlueSetRatio theDesiredHeight $ reverse accNoBreak
-      bad = S.listStatusBadness stat
-      cost = S.pageCost pen bad 0
-      -- Expects normal order.
-      page = B.Page $ reverse $ S.setListElems stat acc
-    if (cost == S.oneMillion) || (pen <= -S.tenK)
-      then extractPages stateNext (page:pages) accBreak streamNext
-      else extractPages stateNext pages accNoBreak streamNext
+type AllModeCommandParser = Parser AllModesCommand
 
-extractPages :: State -> [B.Page] -> [S.BreakableVListElem] -> C.Stream -> IO (State, [B.Page], [S.BreakableVListElem], C.Stream)
-extractPages state pages acc stream =
-  let (P.State{stateInput=streamNext}, com) = C.extractVModeCommand stream
-  in case com of
-    -- Expects normal order.
-    -- Left _ -> return (state, B.Page $ reverse $ S.setListElems S.NaturallyGood acc, [], stream)
-    Left x -> error $ show x
-    -- If the command shifts to horizontal mode, run '\indent', and re-read the
-    -- stream as if the commands just seen hadn't been read.
-    -- (Note that we pass 'stream', not 'streamNext'.)
-    Right C.EnterHMode ->
-      addParagraphToPage state pages acc stream True
-    Right C.End ->
-      do
-      let lastPage = B.Page $ reverse $ S.setListElems S.NaturallyGood acc
-      return (state, lastPage:pages, acc, streamNext)
-    Right (C.VAllModesCommand aCom) ->
-      case aCom of
-        C.Assign C.Assignment{body=C.DefineFont fPath fNr} ->
-          do
-          (stateNext, fontDef) <- defineFont state fPath fNr
-          extractPages stateNext pages (S.VFontDefinition fontDef:acc) streamNext
-        C.Assign C.Assignment{body=C.SelectFont fNr} ->
-          do
-          let (stateNext, fontSel) = selectFont state fNr
-          T.trace "selected font" extractPages stateNext pages (S.VFontSelection fontSel:acc) streamNext
-        C.Relax ->
-          extractPages state pages acc streamNext
-        -- \par does nothing in vertical mode.
-        C.EndParagraph ->
-          extractPages state pages acc streamNext
-        C.AddKern k ->
-          extractPages state pages ((S.VKern $ B.Kern k):acc) streamNext
-        C.StartParagraph indent ->
-          addParagraphToPage state pages acc streamNext indent
-        -- <space token> has no effect in vertical modes.
-        C.AddSpace ->
-          extractPages state pages acc streamNext
+cRelax :: AllModeCommandParser
+cRelax = do
+  _ <- satisfy (== Expand.Relax)
+  return Relax
+
+cAddKern :: AllModeCommandParser
+cAddKern = do
+  _ <- satisfy (== Expand.AddKern)
+  return $ AddKern (24 * (2^16))
+
+cStartParagraph :: AllModeCommandParser
+cStartParagraph = do
+  (Expand.StartParagraph _indent) <- satisfy isStartParagraph
+  return StartParagraph {indent=_indent}
+
+cEndParagraph :: AllModeCommandParser
+cEndParagraph = do
+  _ <- satisfy (== Expand.EndParagraph)
+  return EndParagraph
+
+cMacroToFont :: AllModeCommandParser
+cMacroToFont = do
+  _ <- satisfy (== Expand.MacroToFont)
+  fontNr <- parseFontNr
+  fontPath <- parseFontPath
+  return $ Assign Assignment {body=DefineFont fontPath fontNr, global=False}
+
+cTokenForFont :: AllModeCommandParser
+cTokenForFont = do
+  (Expand.TokenForFont n) <- satisfy isTokenForFont
+  return $ Assign Assignment {body=SelectFont n , global=False}
+
+cAddSpace :: AllModeCommandParser
+cAddSpace = do
+  _ <- satisfy (== Expand.Space)
+  return AddSpace
+
+cCommands :: [Parser AllModesCommand]
+cCommands =
+  [ cRelax
+  , cAddKern
+  , cStartParagraph
+  , cEndParagraph
+  , cMacroToFont
+  , cTokenForFont
+  , cAddSpace
+  ]
+
+parseAllModeCommand :: Parser AllModesCommand
+parseAllModeCommand = P.choice cCommands
+
+parseFontNr = do
+  return Expand.theFontNr
+
+parseFontPath = do
+  let (Just theFontPath) = parseRelFile "support/cmr10.tfm"
+  return theFontPath
+
+-- HMode.
+
+type HModeCommandParser = Parser HModeCommand
+
+extractHModeCommand :: Stream -> (ParseState, Either ParseError HModeCommand)
+extractHModeCommand = easyRunParser' parseHModeCommand
+
+parseHModeCommand :: Parser HModeCommand
+parseHModeCommand =
+  P.choice hCommands
+  <|>
+  (HAllModesCommand <$> parseAllModeCommand)
+
+hCommands :: [HModeCommandParser]
+hCommands =
+  [ hLeaveHMode
+  , hAddCharacter
+  ]
+
+-- HMode Commands.
+
+hLeaveHMode :: HModeCommandParser
+hLeaveHMode = do
+  _ <- satisfy endsHMode
+  return LeaveHMode
+
+hAddCharacter :: HModeCommandParser
+hAddCharacter = do
+  (Expand.ExplicitCharacter _code) <- satisfy isExplicitCharacter
+  return AddCharacter{method=ExplicitChar, code=_code}
+
+-- -- VMode.
+
+type VModeCommandParser = Parser VModeCommand
+
+extractVModeCommand :: Stream -> (ParseState, Either ParseError VModeCommand)
+extractVModeCommand = easyRunParser' parseVModeCommand
+
+parseVModeCommand :: Parser VModeCommand
+parseVModeCommand =
+  P.choice vCommands
+  <|>
+  (VAllModesCommand <$> parseAllModeCommand)
+
+vCommands :: [VModeCommandParser]
+vCommands =
+  [ vEnterHMode
+  , vEnd
+  ]
+
+-- VMode Commands.
+
+vEnd :: VModeCommandParser
+vEnd = do
+  _ <- satisfy (== Expand.End)
+  return End
+
+vEnterHMode :: VModeCommandParser
+vEnterHMode = do
+  _ <- satisfy startsHMode
+  return EnterHMode
+
+-- Token matching.
+
+type MatchToken = ParseToken -> Bool
+
+endsHMode :: MatchToken
+endsHMode Expand.End = True
+endsHMode Expand.Dump = True
+-- TODO:
+-- - AddUnwrappedFetchedBox Vertical
+-- - AddUnwrappedFetchedBox Vertical
+-- - AddAlignedMaterial Horizontal
+-- - AddRule Horizontal
+-- - AddSpecifiedGlue Vertical
+-- - AddPresetGlue Vertical
+endsHMode _ = False
+
+startsHMode :: MatchToken
+startsHMode (Expand.ExplicitCharacter _) = True
+-- TODO:
+-- - Letter
+-- - Other-character
+-- - \char
+-- - TokenForCharacter
+-- - AddUnwrappedFetchedBox Horizontal
+-- - AddUnwrappedFetchedBox Horizontal
+-- - AddAlignedMaterial Vertical
+-- - AddRule Vertical
+-- - AddSpecifiedGlue Horizontal
+-- - AddPresetGlue Horizontal
+-- - AddAccentedCharacter
+-- - AddItalicCorrection
+-- - AddDiscretionaryText
+-- - AddDiscretionaryHyphen
+-- - ToggleMathMode
+startsHMode _ = False
+
+isExplicitCharacter :: MatchToken
+isExplicitCharacter (Expand.ExplicitCharacter _) = True
+isExplicitCharacter _ = False
+
+isTokenForFont :: MatchToken
+isTokenForFont (Expand.TokenForFont _) = True
+isTokenForFont _ = False
+
+isStartParagraph :: MatchToken
+isStartParagraph (Expand.StartParagraph _) = True
+isStartParagraph _ = False

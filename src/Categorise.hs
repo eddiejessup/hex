@@ -1,4 +1,4 @@
-module Cat where
+module Categorise where
 
 import qualified Data.IntMap.Strict as IMap
 
@@ -48,7 +48,10 @@ defaultCharCatMap :: CharCatMap
 defaultCharCatMap = IMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127]
 
 -- Add in some useful extras beyond the technical defaults.
-extras = [(94, Cat.Superscript)]
+extras :: [(IMap.Key, CatCode)]
+extras = [(94, Superscript)]
+
+usableCharCatMap :: IMap.IntMap CatCode
 usableCharCatMap = foldl (\m (k, v) -> IMap.insert k v m) defaultCharCatMap extras
 
 catLookup :: CharCatMap -> CharCode -> CatCode
@@ -73,7 +76,7 @@ extractCharCat ccMap (n1:n2:n3:rest)
     else Just (charCatSimple, n2:n3:rest)
 extractCharCat ccMap (n1:rest) = Just (CharCat {char = n1, cat = catLookup ccMap n1}, rest)
 
-extractAll :: Cat.CharCatMap -> [Cat.CharCode] -> [CharCat]
+extractAll :: CharCatMap -> [CharCode] -> [CharCat]
 extractAll _ [] = []
 extractAll ccMap cs =
   case extractCharCat ccMap cs of

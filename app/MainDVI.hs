@@ -9,15 +9,15 @@ import Data.List (intercalate)
 import qualified Data.Word as W
 import qualified Data.Int as I
 
-import qualified DVI.Write as DVIW
+import qualified DVI.Encode as DVIE
 
 import qualified TFM.Main as TFMM
 
-showEncArg arg = "\t" ++ (DVIW.name arg) ++ " = " ++ (show $ DVIW.val arg) ++ "\n"
+showEncArg arg = "\t" ++ (DVIE.name arg) ++ " = " ++ (show $ DVIE.val arg) ++ "\n"
 showEncInstr instr =
     let
-        instrS = (show (DVIW.op instr)) ++ " (" ++ (show $ DVIW.encLength instr) ++ ")"
-        argsS = concat $ fmap showEncArg (DVIW.arguments instr)
+        instrS = (show (DVIE.op instr)) ++ " (" ++ (show $ DVIE.encLength instr) ++ ")"
+        argsS = concat $ fmap showEncArg (DVIE.arguments instr)
     in
         instrS ++ "\n" ++ argsS
 showEncInstrs instrs = intercalate "\n" $ fmap showEncInstr $ reverse instrs
@@ -30,52 +30,52 @@ main = do
     -- -- print $ fmap encshow ([2, -2] :: [I.Int8])
     -- -- print $ fmap encshow (["hihi", "hoho"])
     -- -- print $ shower $ encode (-2 :: I.Int16)
-    -- let v = DVIW.S "hih"
-    -- -- let v = DVIW.EncodableArg { DVIW.name="hihi", DVIW.val="yo" }
+    -- let v = DVIE.S "hih"
+    -- -- let v = DVIE.EncodableArg { DVIE.name="hihi", DVIE.val="yo" }
     -- print v
-    -- print $ shower $ DVIW.encode v
+    -- print $ shower $ DVIE.encode v
 
-    -- let a = DVIW.Argument { DVIW.name="hihi", DVIW.val=DVIW.S "hih" }
+    -- let a = DVIE.Argument { DVIE.name="hihi", DVIE.val=DVIE.S "hih" }
     -- print a
-    -- print $ shower $ DVIW.encode a
+    -- print $ shower $ DVIE.encode a
 
-    -- let op = DVIW.BeginPage
+    -- let op = DVIE.BeginPage
     -- print op
-    -- print $ shower $ DVIW.encode op
+    -- print $ shower $ DVIE.encode op
 
     -- let args = [a, a]
     -- print args
-    -- print $ shower $ DVIW.encode args
+    -- print $ shower $ DVIE.encode args
 
-    -- let instr = DVIW.Instruction { op=op, arguments=args }
+    -- let instr = DVIE.Instruction { op=op, arguments=args }
     -- print instr
-    -- print $ shower $ DVIW.encodeInstr instr
-    -- print $ shower $ DVIW.encode instr
-    -- print $ DVIW.encLength instr
+    -- print $ shower $ DVIE.encodeInstr instr
+    -- print $ shower $ DVIE.encode instr
+    -- print $ DVIE.encLength instr
 
-    -- print $ DVIW.encStarts [instr]
+    -- print $ DVIE.encStarts [instr]
 
-    -- print $ DVIW.instrsAndPoints [instr, instr]
-    -- print $ DVIW.beginPage dviDoc
+    -- print $ DVIE.instrsAndPoints [instr, instr]
+    -- print $ DVIE.beginPage dviDoc
 
     let fontPath = "cmr10"
     fontInfo <- TFMM.readTFM "cmr10.tfm"
-    -- let (Right dviDocF) = DVIW.defineFont fontInfo fontPath 1 1.0 dviDoc
+    -- let (Right dviDocF) = DVIE.defineFont fontInfo fontPath 1 1.0 dviDoc
 
-    let instrs = [ DVIW.Character{charNr=80, move=True}
-                 , DVIW.PopStack
-                 , DVIW.PushStack
-                 , DVIW.PushStack
-                 , DVIW.MoveDown{distance=20000000}
-                 , DVIW.Rule{height=100000, width=5000000, move=True}
-                 , DVIW.MoveRight{distance=5000000}
-                 , DVIW.Character{charNr=90, move=True}
-                 , DVIW.SelectFont 1
-                 , DVIW.DefineFont{fontInfo=fontInfo, fontPath=fontPath, fontNr=1, scaleFactorRatio=1.0}
-                 , DVIW.BeginNewPage ]
-    let Right encInstrs = DVIW.encodeDocument instrs 1000
+    let instrs = [ DVIE.Character{charNr=80, move=True}
+                 , DVIE.PopStack
+                 , DVIE.PushStack
+                 , DVIE.PushStack
+                 , DVIE.MoveDown{distance=20000000}
+                 , DVIE.Rule{height=100000, width=5000000, move=True}
+                 , DVIE.MoveRight{distance=5000000}
+                 , DVIE.Character{charNr=90, move=True}
+                 , DVIE.SelectFont 1
+                 , DVIE.DefineFont{fontInfo=fontInfo, fontPath=fontPath, fontNr=1, scaleFactorRatio=1.0}
+                 , DVIE.BeginNewPage ]
+    let Right encInstrs = DVIE.encodeDocument instrs 1000
 
     putStrLn $ showEncInstrs encInstrs
-    BLS.writeFile "out.dvi" $ DVIW.encode $ reverse encInstrs
+    BLS.writeFile "out.dvi" $ DVIE.encode $ reverse encInstrs
 
     return ()

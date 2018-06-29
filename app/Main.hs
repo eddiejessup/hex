@@ -5,10 +5,10 @@ module Main where
 import qualified Data.Char as C
 import qualified Data.ByteString.Lazy as BLS
 
-import qualified DVI.Write as DVIW
-import qualified Box
+import qualified DVI.Encode as DVIE
+import qualified BoxDraw
+import qualified Build
 import qualified Parse
-import qualified Command
 
 main :: IO ()
 main = do
@@ -23,19 +23,19 @@ main = do
   -- putStrLn $ List.intercalate "\n" $ fmap show tokens
 
   -- Get some commands.
-  -- let coms = Command.extractAllDebug Cat.usableCharCatMap contentsCode
+  -- let coms = Parse.extractAllDebug Cat.usableCharCatMap contentsCode
   -- putStrLn $ List.intercalate "\n" $ fmap show coms
 
-  let stream = Command.newStream contentsCode
+  let stream = Parse.newStream contentsCode
 
-  -- page <- Parse.extractPage Parse.newState [] stream
+  -- page <- Build.extractPage Build.newState [] stream
 
-  (_, pages, _, _) <- Parse.extractPages Parse.newState [] [] stream
+  (_, pages, _, _) <- Build.extractPages Build.newState [] [] stream
 
   -- putStrLn $ show $ pages !! 0
 
-  let instrs = Box.toDVI $ reverse pages
-  let Right encInstrs = DVIW.encodeDocument (reverse instrs) 1000
-  BLS.writeFile "out.dvi" $ DVIW.encode $ reverse encInstrs
+  let instrs = BoxDraw.toDVI $ reverse pages
+  let Right encInstrs = DVIE.encodeDocument (reverse instrs) 1000
+  BLS.writeFile "out.dvi" $ DVIE.encode $ reverse encInstrs
 
   return ()

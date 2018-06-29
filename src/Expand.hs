@@ -1,10 +1,10 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Harden where
+module Expand where
 
 import qualified Lex
-import qualified Cat
+import qualified Categorise as Cat
 
 data HDirection = Leftward | Rightward
   deriving (Show, Eq)

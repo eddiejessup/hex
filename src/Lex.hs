@@ -4,7 +4,7 @@ module Lex where
 
 import qualified Data.Char as C
 
-import qualified Cat
+import qualified Categorise as Cat
 
 data ControlSequence
   = ControlSymbol Char
@@ -82,10 +82,10 @@ extractTokenInner ccMap state Cat.CharCat{cat=cat1, char=n} cs
             (contSeq, rest2) = if isLetter cat2
                 then
                     let
-                        (ccsNameRest, rest2) = chopBreak getCC (not . isLetter . Cat.cat) rest
+                        (ccsNameRest, _rest2) = chopBreak getCC (not . isLetter . Cat.cat) rest
                         cwName = fmap (C.chr . Cat.char) (cc2:ccsNameRest)
                     in
-                        (ControlWord cwName, rest2)
+                        (ControlWord cwName, _rest2)
                 else
                     (ControlSymbol $ (C.chr . Cat.char) cc2, rest)
             nextState = case cat2 of

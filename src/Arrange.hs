@@ -3,18 +3,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Setting where
+module Arrange where
 
 import Data.List.Index (imap)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Applicative (liftA2)
 
-import Box (Dimensioned, naturalWidth)
+import BoxDraw (Dimensioned, naturalWidth)
 import qualified Unit
-import qualified Box as B
+import qualified BoxDraw as B
 import qualified Adjacent as A
-
-import qualified Debug.Trace as T
 
 tenK :: Int
 tenK = 10000
@@ -172,7 +170,7 @@ isBreakItem = isJust . toBreakItem
 
 allBreaksInner :: BreakableListElem a => [Break a] -> [a] -> [A.Adjacency a] -> [Break a]
 allBreaksInner acc seen [] = Break{before=reverse seen, after=[], item=NoBreak}:acc
-allBreaksInner acc seen ((thisAdj@(A.Adjacency (_, this, _))):rest) =
+allBreaksInner acc seen (thisAdj@(A.Adjacency (_, this, _)):rest) =
   let
     -- Bit pretentious: fAnd maps two functions 'f' and 'g' into one
     -- function whose result is 'f x && g x'.
@@ -204,7 +202,7 @@ listFlex gs =
   in ListFlex {stretch=sumGlueFlexes strs, shrink=sumGlueFlexes shrs}
 
 flex :: (BreakableListElem a) => [a] -> ListFlex
-flex = listFlex . (mapMaybe toGlue)
+flex = listFlex . mapMaybe toGlue
 
 instance BreakableListElem BreakableVListElem where
   toGlue (VGlue g) = Just g
@@ -343,7 +341,7 @@ isConsiderableAsLine tolerance (Line{breakItem=br}, _, bad) =
 lineDemerit :: Int -> Int -> BreakItem -> Int
 lineDemerit linePenalty bad br =
   let
-    breakDemerit = (breakPenalty br)^(2 :: Int)
+    breakDemerit = breakPenalty br ^ (2 :: Int)
     listDemerit = (linePenalty + bad)^(2 :: Int)
   in
     breakDemerit + listDemerit
@@ -426,13 +424,13 @@ setGlue ls g@Glue{dimen=d} = B.SetGlue $ d + glueDiff ls g
 pageCost :: Int -> Int -> Int -> Int
 -- Break penalty, badness, 'insert penalties'.
 pageCost p b q
-  | (not infiniteB) && vNegP && normalQ = p
+  | not infiniteB && vNegP && normalQ = p
   | normalParams && b < tenK = b + p + q
   | normalParams && b == tenK = hunK
-  | (infiniteB || (not normalQ)) && (not vPosP) = oneMillion
+  | (infiniteB || not normalQ) && not vPosP = oneMillion
   where
     normalQ = q < tenK
     infiniteB = b == oneMillion
     vNegP = p <= -tenK
     vPosP = p >= tenK
-    normalParams = (not vNegP) && (not vPosP) && normalQ
+    normalParams = not vNegP && not vPosP && normalQ

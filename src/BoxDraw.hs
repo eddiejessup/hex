@@ -1,13 +1,13 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Box where
+module BoxDraw where
 
 import qualified Data.Char as C
 import Path (Path, Abs, File)
 
 import qualified Unit
-import qualified DVI.Write as DVIW
+import qualified DVI.Encode as DVIE
 import qualified TFM.Main as TFMM
 
 import qualified Debug.Trace as T
@@ -157,7 +157,7 @@ instance Dimensioned HBox where
   naturalHeight HBox{contents=cs} = maximum $ fmap naturalHeight cs
 
 class DVIAble a where
-  toDVI :: a -> [DVIW.Instruction]
+  toDVI :: a -> [DVIE.Instruction]
 
 instance DVIAble VBox where
   toDVI VBox{contents=cs} = concatMap toDVI cs
@@ -180,7 +180,7 @@ instance DVIAble FontDefinition where
                          , fontInfo = info
                          , scaleFactorRatio = scale
                          }
-   = [ DVIW.DefineFont
+   = [ DVIE.DefineFont
         { fontInfo = info
         , fontPath = name
         , fontNr = fNr
@@ -189,36 +189,36 @@ instance DVIAble FontDefinition where
       ]
 
 instance DVIAble FontSelection where
-  toDVI FontSelection {fontNr = fNr} = [DVIW.SelectFont fNr]
+  toDVI FontSelection {fontNr = fNr} = [DVIE.SelectFont fNr]
 
 instance DVIAble Character where
-  toDVI Character {code = c} = [DVIW.Character {charNr = c, move = True}]
+  toDVI Character {code = c} = [DVIE.Character {charNr = c, move = True}]
 
 instance DVIAble HBoxElem where
   toDVI (HVBox e) =
-    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveRight {distance = naturalWidth e}]
+    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveRight {distance = naturalWidth e}]
   toDVI (HHBox e) =
-    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveRight {distance=naturalWidth e}]
+    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveRight {distance=naturalWidth e}]
     -- TODO: Rule.
-  toDVI (HGlue g) = [DVIW.MoveRight {distance = glueDimen g}]
-  toDVI (HKern k) = [DVIW.MoveRight {distance = kernDimen k}]
+  toDVI (HGlue g) = [DVIE.MoveRight {distance = glueDimen g}]
+  toDVI (HKern k) = [DVIE.MoveRight {distance = kernDimen k}]
   toDVI (HFontDefinition e@FontDefinition {}) = toDVI e
   toDVI (HFontSelection e@FontSelection {}) = toDVI e
   toDVI (HCharacter e@Character {}) = toDVI e
 
 instance DVIAble VBoxElem where
   toDVI (VVBox e) =
-    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveDown {distance = naturalHeight e}]
+    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight e}]
   toDVI (VHBox e) =
-    [DVIW.PushStack] ++ toDVI e ++ [DVIW.PopStack, DVIW.MoveDown {distance = naturalHeight e}]
+    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight e}]
     -- TODO: Rule.
-  toDVI (VGlue g) = [DVIW.MoveDown {distance = glueDimen g}]
-  toDVI (VKern k) = [DVIW.MoveDown {distance = kernDimen k}]
+  toDVI (VGlue g) = [DVIE.MoveDown {distance = glueDimen g}]
+  toDVI (VKern k) = [DVIE.MoveDown {distance = kernDimen k}]
   toDVI (VFontDefinition e) = toDVI e
   toDVI (VFontSelection e) = toDVI e
 
 instance DVIAble Page where
-  toDVI (Page vs) = DVIW.BeginNewPage:concatMap toDVI vs
+  toDVI (Page vs) = DVIE.BeginNewPage:concatMap toDVI vs
 
 instance DVIAble [Page] where
   toDVI = concatMap toDVI
