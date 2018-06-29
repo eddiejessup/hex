@@ -18,6 +18,7 @@ import qualified Arrange as A
 import qualified Parse as P
 import qualified Lex
 import qualified Unit
+import qualified Expand
 
 import qualified Debug.Trace as T
 
@@ -46,6 +47,9 @@ theDesiredHeight = 45000000
 
 theInterLineGlue :: A.Glue
 theInterLineGlue = A.Glue{dimen = 400000, stretch=A.noFlex, shrink=A.noFlex}
+
+csToFontNr :: P.ControlSequenceLike -> Int
+csToFontNr (P.ControlSequence (Lex.ControlWord "thefont")) = Expand.theFontNr
 
 fontDir1 :: AbsPathToDir
 (Just fontDir1) = Path.parseAbsDir "/Users/ejm/projects/hex"
@@ -127,8 +131,9 @@ extractParagraph state acc stream =
     Left x -> error $ show x
     Right (P.HAllModesCommand aCom) ->
       case aCom of
-        P.Assign P.Assignment{body=P.DefineFont fPath fNr} ->
+        P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
+          let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractParagraph stateNext (A.HFontDefinition fontDef:acc) streamNext
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
@@ -225,8 +230,9 @@ extractPages state pages acc stream =
       return (state, lastPage:pages, acc, streamNext)
     Right (P.VAllModesCommand aCom) ->
       case aCom of
-        P.Assign P.Assignment{body=P.DefineFont fPath fNr} ->
+        P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
+          let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractPages stateNext pages (A.VFontDefinition fontDef:acc) streamNext
         P.Assign P.Assignment{body=P.SelectFont fNr} ->

@@ -10,8 +10,6 @@ import qualified Unit
 import qualified DVI.Encode as DVIE
 import qualified TFM.Main as TFMM
 
-import qualified Debug.Trace as T
-
 data DesiredLength
   = Natural
   | Spread Int

@@ -93,7 +93,7 @@ data ParseToken
 
   -- Starters of Horizontal-Mode-specific commands.
   -- | ControlSpace -- \␣ (a control symbol named ' ')
-  | ExplicitCharacter Int -- a code-point indicating a character such as 'a'.
+  | ExplicitCharacter Cat.CharCode -- a code-point indicating a character such as 'a'.
   -- | AddCharacterCode -- \char
   -- | TokenForCharacter -- a control sequence representing a character, such as defined through \chardef.
   -- | AddAccentedCharacter -- \accent
@@ -253,6 +253,7 @@ data ParseToken
 
   -- Arguments used when defining new control sequences.
   | UnexpandedControlSequence Lex.ControlSequence
+  | ActiveCharacter Cat.CharCode
   deriving (Show, Eq)
 
 instance Ord ParseToken where
@@ -287,7 +288,7 @@ extractControlWord "vrule" = AddRule Vertical
 
 extractControlWord "font" = MacroToFont
 -- Temporary pragmatism.
-extractControlWord "thefont" = TokenForFont theFontNr
+extractControlWord "selectfont" = TokenForFont theFontNr
 
 extractControlWord "end" = End
 extractControlWord "dump" = Dump
@@ -299,6 +300,8 @@ lexToParseToken _ Lex.CharCat{char=char, cat=Lex.Other}
   = ExplicitCharacter char
 lexToParseToken _ Lex.CharCat{cat=Lex.Space}
   = Space
+lexToParseToken _ Lex.CharCat{char=char, cat=Lex.Active}
+  = ActiveCharacter char
 lexToParseToken True (Lex.ControlSequence (Lex.ControlWord x))
   = extractControlWord x
 lexToParseToken False (Lex.ControlSequence cs)

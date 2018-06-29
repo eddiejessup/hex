@@ -25,7 +25,11 @@ newtype Distance = Distance Int
   deriving Show
 
 -- TODO.
-data ControlSequenceLike = ActiveChar Char | ControlSequence String
+data ControlSequenceLike = ActiveCharacter Cat.CharCode | ControlSequence Lex.ControlSequence
+  deriving Show
+
+makeCW :: String -> ControlSequenceLike
+makeCW s = ControlSequence $ Lex.ControlWord s
 
 data AssignmentBody
   -- = DefineMacro { name :: ControlSequenceLike
@@ -44,7 +48,7 @@ data AssignmentBody
   -- | Read
   -- | DefineBox
   -- TEMP: Dummy label constructor until properly implemented.
-  | DefineFont (Path Rel File) Int
+  | DefineFont ControlSequenceLike (Path Rel File)
   -- -- Global assignments.
   -- | SetFontAttribute
   -- | SetHyphenation
@@ -127,13 +131,15 @@ type CharCodes = [Cat.CharCode]
 data Stream = Stream { codes :: CharCodes
                      , lexTokens :: [Lex.Token]
                      , lexState :: Lex.LexState
-                     , ccMap :: Cat.CharCatMap }
+                     , ccMap :: Cat.CharCatMap
+                     , expand :: Bool }
 
 newStream :: [Cat.CharCode] -> Stream
 newStream cs = Stream { codes=cs
                       , lexTokens=[]
                       , lexState=Lex.LineBegin
-                      , ccMap=Cat.usableCharCatMap }
+                      , ccMap=Cat.usableCharCatMap
+                      , expand=True }
 
 insertLexToken :: Stream -> Lex.Token -> Stream
 insertLexToken s t = s{lexTokens=t:lexTokens s}
@@ -174,13 +180,13 @@ instance P.Stream Stream where
 
   -- take1_ :: s -> Maybe (Token s, s)
   --
-  take1_ (Stream [] _ _ _) = Nothing
-  take1_ stream@(Stream cs [] _lexState _ccMap) = do
-    (pt, lexStateNext, csNext) <- Expand.extractToken True _ccMap _lexState cs
+  take1_ (Stream [] _ _ _ _) = Nothing
+  take1_ stream@(Stream cs [] _lexState _ccMap _expand) = do
+    (pt, lexStateNext, csNext) <- Expand.extractToken _expand _ccMap _lexState cs
     let streamNext = stream{codes=csNext, lexState=lexStateNext}
     return (pt, streamNext)
-  take1_ stream@(Stream _ (lt:lts) _ _) =
-    return (Expand.lexToParseToken True lt, stream{lexTokens=lts})
+  take1_ stream@(Stream _ (lt:lts) _ _ _expand) =
+    return (Expand.lexToParseToken _expand lt, stream{lexTokens=lts})
 
 -- Helpers.
 
@@ -234,9 +240,9 @@ cEndParagraph = do
 cMacroToFont :: AllModeCommandParser
 cMacroToFont = do
   _ <- satisfy (== Expand.MacroToFont)
-  fontNr <- parseFontNr
+  cs <- parseCSName
   fontPath <- parseFontPath
-  return $ Assign Assignment {body=DefineFont fontPath fontNr, global=False}
+  return $ Assign Assignment {body=DefineFont cs fontPath, global=False}
 
 cTokenForFont :: AllModeCommandParser
 cTokenForFont = do
@@ -262,8 +268,30 @@ cCommands =
 parseAllModeCommand :: Parser AllModesCommand
 parseAllModeCommand = P.choice cCommands
 
-parseFontNr = do
-  return Expand.theFontNr
+suppressExpansion :: Bool -> Stream -> Stream
+suppressExpansion e s = s{expand=e}
+
+setExpansionState :: Bool -> ParseState -> ParseState
+setExpansionState e st@P.State{stateInput=stream} = st{P.stateInput=suppressExpansion e stream}
+
+disableExpansion :: Parser ()
+disableExpansion = P.updateParserState $ setExpansionState False
+enableExpansion :: Parser ()
+enableExpansion = P.updateParserState $ setExpansionState True
+
+parseCSName :: Parser ControlSequenceLike
+parseCSName = do
+  disableExpansion
+  csLike <- parseCSLikeCS <|> parseCSLikeActive
+  enableExpansion
+  return csLike
+  where
+    parseCSLikeActive = do
+      (Expand.ActiveCharacter _code) <- satisfy isActiveCharacter
+      return $ ActiveCharacter _code
+    parseCSLikeCS = do
+      (Expand.UnexpandedControlSequence cs) <- satisfy isUnexpandedControlSequence
+      return $ ControlSequence cs
 
 parseFontPath = do
   let (Just theFontPath) = parseRelFile "support/cmr10.tfm"
@@ -378,3 +406,11 @@ isTokenForFont _ = False
 isStartParagraph :: MatchToken
 isStartParagraph (Expand.StartParagraph _) = True
 isStartParagraph _ = False
+
+isUnexpandedControlSequence :: MatchToken
+isUnexpandedControlSequence (Expand.UnexpandedControlSequence _) = True
+isUnexpandedControlSequence _ = False
+
+isActiveCharacter :: MatchToken
+isActiveCharacter (Expand.ActiveCharacter _) = True
+isActiveCharacter _ = False
