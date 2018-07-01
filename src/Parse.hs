@@ -109,7 +109,7 @@ data VModeCommand
   = VAllModesCommand AllModesCommand
   | EnterHMode
   | End
-  | Dump
+  -- | Dump
   deriving Show
 
 data HModeCommand
@@ -213,6 +213,10 @@ satisfy f = P.token testTok Nothing
         then Right x
         else Left (Just (P.Tokens (x:|[])), Set.empty)
 
+skipOptional p = do
+  _ <- P.optional p
+  return ()
+
 -- All-mode Commands.
 
 type AllModeCommandParser = Parser AllModesCommand
@@ -237,11 +241,13 @@ cEndParagraph = do
   _ <- satisfy (== Expand.EndParagraph)
   return EndParagraph
 
+-- \font <control-sequence> <equals> <file-name> <at-clause>
 cMacroToFont :: AllModeCommandParser
 cMacroToFont = do
   _ <- satisfy (== Expand.MacroToFont)
   cs <- parseCSName
-  fontPath <- parseFontPath
+  skipOptionalEquals
+  fontPath <- parseFileName
   return $ Assign Assignment {body=DefineFont cs fontPath, global=False}
 
 cTokenForFont :: AllModeCommandParser
@@ -251,7 +257,7 @@ cTokenForFont = do
 
 cAddSpace :: AllModeCommandParser
 cAddSpace = do
-  _ <- satisfy (== Expand.Space)
+  _ <- satisfy isSpace
   return AddSpace
 
 cCommands :: [Parser AllModesCommand]
@@ -287,15 +293,29 @@ parseCSName = do
   return csLike
   where
     parseCSLikeActive = do
-      (Expand.ActiveCharacter _code) <- satisfy isActiveCharacter
+      (Expand.CharCat Lex.LexCharCat{char=_code}) <- satisfy isActiveCharacter
       return $ ActiveCharacter _code
     parseCSLikeCS = do
       (Expand.UnexpandedControlSequence cs) <- satisfy isUnexpandedControlSequence
       return $ ControlSequence cs
 
-parseFontPath = do
-  let (Just theFontPath) = parseRelFile "support/cmr10.tfm"
-  return theFontPath
+-- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
+parseFileName = do
+  skipOptionalSpaces
+  nameToks <- P.some $ satisfy isLetterOrDigit
+  let name = fmap (\(Expand.CharCat Lex.LexCharCat{char=c}) -> C.chr c) nameToks
+  _ <- satisfy isSpace
+  case parseRelFile (name ++ ".tfm") of
+    Just p -> return p
+    Nothing -> fail $ "Invalid filename: " ++ name ++ ".tfm"
+
+skipOptionalEquals = do
+  skipOptionalSpaces
+  skipOptional $ satisfy isEquals
+
+-- <optional spaces> = <zero or more spaces>.
+skipOptionalSpaces = P.skipMany $ satisfy isSpace
+
 
 -- HMode.
 
@@ -325,10 +345,10 @@ hLeaveHMode = do
 
 hAddCharacter :: HModeCommandParser
 hAddCharacter = do
-  (Expand.ExplicitCharacter _code) <- satisfy isExplicitCharacter
+  (Expand.CharCat Lex.LexCharCat{char=_code}) <- satisfy isLetterOrOther
   return AddCharacter{method=ExplicitChar, code=_code}
 
--- -- VMode.
+-- VMode.
 
 type VModeCommandParser = Parser VModeCommand
 
@@ -365,7 +385,7 @@ type MatchToken = ParseToken -> Bool
 
 endsHMode :: MatchToken
 endsHMode Expand.End = True
-endsHMode Expand.Dump = True
+-- endsHMode Expand.Dump = True
 -- TODO:
 -- - AddUnwrappedFetchedBox Vertical
 -- - AddUnwrappedFetchedBox Vertical
@@ -376,10 +396,10 @@ endsHMode Expand.Dump = True
 endsHMode _ = False
 
 startsHMode :: MatchToken
-startsHMode (Expand.ExplicitCharacter _) = True
+startsHMode x
+  | isLetterOrOther x = True
+  | otherwise = False
 -- TODO:
--- - Letter
--- - Other-character
 -- - \char
 -- - TokenForCharacter
 -- - AddUnwrappedFetchedBox Horizontal
@@ -393,11 +413,9 @@ startsHMode (Expand.ExplicitCharacter _) = True
 -- - AddDiscretionaryText
 -- - AddDiscretionaryHyphen
 -- - ToggleMathMode
-startsHMode _ = False
 
-isExplicitCharacter :: MatchToken
-isExplicitCharacter (Expand.ExplicitCharacter _) = True
-isExplicitCharacter _ = False
+isLetterOrOther :: MatchToken
+isLetterOrOther x = isLetter x || isOther x
 
 isTokenForFont :: MatchToken
 isTokenForFont (Expand.TokenForFont _) = True
@@ -412,5 +430,45 @@ isUnexpandedControlSequence (Expand.UnexpandedControlSequence _) = True
 isUnexpandedControlSequence _ = False
 
 isActiveCharacter :: MatchToken
-isActiveCharacter (Expand.ActiveCharacter _) = True
+isActiveCharacter (Expand.CharCat Lex.LexCharCat{cat=Lex.Active}) = True
 isActiveCharacter _ = False
+
+-- <space token> = character token of category [space], or a control sequence
+-- or active character \let equal to such.
+isSpace :: MatchToken
+isSpace (Expand.CharCat Lex.LexCharCat{cat=Lex.Space}) = True
+isSpace _ = False
+
+isEquals :: MatchToken
+isEquals (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=61}) = True
+isEquals _ = False
+
+isLetterOrDigit :: MatchToken
+isLetterOrDigit x = isLetter x || isDigit x
+
+isLetter :: MatchToken
+isLetter (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter}) = True
+isLetter _ = False
+
+isOther :: MatchToken
+isOther (Expand.CharCat Lex.LexCharCat{cat=Lex.Other}) = True
+isOther _ = False
+
+isDigit :: MatchToken
+isDigit x = isOctalDigit x || isEightOrNine x
+  where
+    -- '8' or '9'.
+    isEightOrNine (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=56}) = True
+    isEightOrNine (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=57}) = True
+    isEightOrNine _ = False
+
+isOctalDigit :: MatchToken
+isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=48}) = True
+isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=49}) = True
+isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=50}) = True
+isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=51}) = True
+isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=52}) = True
+isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=53}) = True
+isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=54}) = True
+isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=55}) = True
+isOctalDigit _ = False

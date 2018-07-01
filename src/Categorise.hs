@@ -3,22 +3,22 @@ module Categorise where
 import qualified Data.IntMap.Strict as IMap
 
 data CatCode
-  = Escape
-  | BeginGroup
-  | EndGroup
-  | MathShift
-  | AlignTab
-  | EndOfLine
-  | Parameter
-  | Superscript
-  | Subscript
-  | Ignored
-  | Space
-  | Letter
-  | Other
-  | Active
-  | Comment
-  | Invalid
+  = Escape -- 0
+  | BeginGroup -- 1
+  | EndGroup -- 2
+  | MathShift -- 3
+  | AlignTab -- 4
+  | EndOfLine -- 5
+  | Parameter -- 6
+  | Superscript -- 7
+  | Subscript -- 8
+  | Ignored -- 9
+  | Space -- 10
+  | Letter -- 11
+  | Other -- 12
+  | Active -- 13
+  | Comment -- 14
+  | Invalid -- 15
   deriving (Show, Eq, Enum)
 
 type CharCode = Int

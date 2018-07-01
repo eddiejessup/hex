@@ -20,8 +20,6 @@ import qualified Lex
 import qualified Unit
 import qualified Expand
 
-import qualified Debug.Trace as T
-
 type FontInfoMap = IMap.IntMap TFMM.TexFont
 
 data State = State { currentFontNr :: Maybe Int
@@ -127,7 +125,6 @@ extractParagraph :: State -> [A.BreakableHListElem] -> P.Stream -> IO (State, [A
 extractParagraph state acc stream =
   let (PS.State{stateInput=streamNext}, com) = P.extractHModeCommand stream
   in case com of
-    -- Run out of commands: return the list so far.
     Left x -> error $ show x
     Right (P.HAllModesCommand aCom) ->
       case aCom of
@@ -161,8 +158,6 @@ extractParagraph state acc stream =
             Just sg -> return $ A.HGlue sg
             Nothing -> fail "Could not get space glue"
           extractParagraph state (glue:acc) streamNext
-        -- _ ->
-        --   fail $ "Unknown all-mode command in horizontal mode: " ++ show aCom
     Right P.AddCharacter{code=i} ->
       do
       charBox <- case characterBox state i of
@@ -216,8 +211,6 @@ extractPages :: State -> [B.Page] -> [A.BreakableVListElem] -> P.Stream -> IO (S
 extractPages state pages acc stream =
   let (PS.State{stateInput=streamNext}, com) = P.extractVModeCommand stream
   in case com of
-    -- Expects normal order.
-    -- Left _ -> return (state, B.Page $ reverse $ A.setListElems A.NaturallyGood acc, [], stream)
     Left x -> error $ show x
     -- If the command shifts to horizontal mode, run '\indent', and re-read the
     -- stream as if the commands just seen hadn't been read.
@@ -238,7 +231,7 @@ extractPages state pages acc stream =
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr
-          T.trace "selected font" extractPages stateNext pages (A.VFontSelection fontSel:acc) streamNext
+          extractPages stateNext pages (A.VFontSelection fontSel:acc) streamNext
         P.Relax ->
           extractPages state pages acc streamNext
         -- \par does nothing in vertical mode.

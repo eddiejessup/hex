@@ -81,7 +81,6 @@ data ParseToken
   | AddSpecifiedGlue Axis -- \vskip, \hskip
   | AddPresetGlue Axis PresetGlueType -- \{v,h}{fil,fill,filneg,ss}
   -- | AddLeaders LeadersType
-  | Space
   -- | AddAlignedMaterial Axis -- \halign, \valign
   | StartParagraph { indent :: Bool } -- \indent, \noindent
   | EndParagraph -- \par
@@ -89,11 +88,10 @@ data ParseToken
 
   -- Starters of Vertical-Mode-specific commands.
   | End -- \end
-  | Dump -- \dump
+  -- | Dump -- \dump
 
   -- Starters of Horizontal-Mode-specific commands.
   -- | ControlSpace -- \␣ (a control symbol named ' ')
-  | ExplicitCharacter Cat.CharCode -- a code-point indicating a character such as 'a'.
   -- | AddCharacterCode -- \char
   -- | TokenForCharacter -- a control sequence representing a character, such as defined through \chardef.
   -- | AddAccentedCharacter -- \accent
@@ -253,7 +251,9 @@ data ParseToken
 
   -- Arguments used when defining new control sequences.
   | UnexpandedControlSequence Lex.ControlSequence
-  | ActiveCharacter Cat.CharCode
+
+  -- Char-Cats
+  | CharCat Lex.LexCharCat
   deriving (Show, Eq)
 
 instance Ord ParseToken where
@@ -291,17 +291,11 @@ extractControlWord "font" = MacroToFont
 extractControlWord "selectfont" = TokenForFont theFontNr
 
 extractControlWord "end" = End
-extractControlWord "dump" = Dump
+-- extractControlWord "dump" = Dump
 
 lexToParseToken :: Bool -> Lex.Token -> ParseToken
-lexToParseToken _ Lex.CharCat{char=char, cat=Lex.Letter}
-  = ExplicitCharacter char
-lexToParseToken _ Lex.CharCat{char=char, cat=Lex.Other}
-  = ExplicitCharacter char
-lexToParseToken _ Lex.CharCat{cat=Lex.Space}
-  = Space
-lexToParseToken _ Lex.CharCat{char=char, cat=Lex.Active}
-  = ActiveCharacter char
+lexToParseToken _ (Lex.CharCat x)
+  = CharCat x
 lexToParseToken True (Lex.ControlSequence (Lex.ControlWord x))
   = extractControlWord x
 lexToParseToken False (Lex.ControlSequence cs)
