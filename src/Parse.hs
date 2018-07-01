@@ -85,7 +85,7 @@ data AllModesCommand
   -- | Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
   -- | AddWhatsit GeneralText
   -- | AddPenalty Int
-  | AddKern Int
+  | AddKern Number
   -- | RemoveLastPenalty
   -- | RemoveLastKern
   -- | RemoveLastGlue
@@ -103,6 +103,13 @@ data AllModesCommand
   -- | AddAlignedMaterial DesiredLength AlignmentMaterial
   | StartParagraph { indent :: Bool }
   | EndParagraph
+  deriving Show
+
+data UnsignedNumber = IntegerLiteral Int
+  deriving Show
+
+-- (bool: positive?).
+data Number = Number Bool UnsignedNumber
   deriving Show
 
 data VModeCommand
@@ -213,9 +220,32 @@ satisfy f = P.token testTok Nothing
         then Right x
         else Left (Just (P.Tokens (x:|[])), Set.empty)
 
+skipSatisfied :: (ParseToken -> Bool) -> Parser ()
+skipSatisfied f = P.token testTok Nothing
+  where
+    testTok x =
+      if f x
+        then Right ()
+        else Left (Just (P.Tokens (x:|[])), Set.empty)
+
+satisfyThen :: (ParseToken -> Maybe a) -> Parser a
+satisfyThen f = P.token testTok Nothing
+  where
+    testTok x =
+      case f x of
+        Just y -> Right y
+        Nothing -> Left (Just (P.Tokens (x:|[])), Set.empty)
+
+skipOptional :: Parser a -> Parser ()
 skipOptional p = do
   _ <- P.optional p
   return ()
+
+skipOneOptionalSatisfied :: (ParseToken -> Bool) -> Parser ()
+skipOneOptionalSatisfied = skipOptional . skipSatisfied
+
+skipManySatisfied :: (ParseToken -> Bool) -> Parser ()
+skipManySatisfied = P.skipMany . skipSatisfied
 
 -- All-mode Commands.
 
@@ -223,41 +253,93 @@ type AllModeCommandParser = Parser AllModesCommand
 
 cRelax :: AllModeCommandParser
 cRelax = do
-  _ <- satisfy (== Expand.Relax)
+  skipSatisfied (== Expand.Relax)
   return Relax
 
 cAddKern :: AllModeCommandParser
 cAddKern = do
-  _ <- satisfy (== Expand.AddKern)
-  return $ AddKern (24 * (2^16))
+  skipSatisfied (== Expand.AddKern)
+  nr <- parseNumber
+  return $ AddKern nr
+
+digitsToInteger :: Integral n => n -> [n] -> n
+digitsToInteger base = foldl (\a b -> a * base + b) 0
+
+parseNumber = do
+  pos <- isPos <$> parseOptionalSigns
+  uNr <- parseUnsignedNumber
+  return $ Number pos uNr
+  where
+    parseOptionalSigns = P.sepEndBy (satisfyThen signToPos) skipOptionalSpaces
+
+    isPos (True:xs) = isPos xs
+    isPos (False:xs) = not $ isPos xs
+    isPos [] = True
+
+    signToPos (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=43}) = Just True
+    signToPos (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=45}) = Just False
+    signToPos _  = Nothing
+
+-- TODO: parseCoercedInteger
+parseUnsignedNumber = parseNormalInteger
+
+parseNormalInteger =
+  P.choice [ parseIntegerConstant
+           -- TODO:
+           -- , parseInternalInteger
+           -- , parseOctalConstant
+           -- , parseHexadecimalConstant
+           -- , parseCharacterTokenInteger
+           ]
+
+parseIntegerConstant = do
+  digits <- P.some parseDigit
+  skipOneOptionalSpace
+  return $ IntegerLiteral $ digitsToInteger 10 digits
+
+parseDigit = satisfyThen charToDigit
+  where
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=48}) = Just 0
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=49}) = Just 1
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=50}) = Just 2
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=51}) = Just 3
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=52}) = Just 4
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=53}) = Just 5
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=54}) = Just 6
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=55}) = Just 7
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=56}) = Just 8
+    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=57}) = Just 9
+    charToDigit _ = Nothing
 
 cStartParagraph :: AllModeCommandParser
-cStartParagraph = do
-  (Expand.StartParagraph _indent) <- satisfy isStartParagraph
-  return StartParagraph {indent=_indent}
+cStartParagraph = satisfyThen parToCom
+  where
+    parToCom (Expand.StartParagraph _indent) = Just StartParagraph{indent=_indent}
+    parToCom _ = Nothing
 
 cEndParagraph :: AllModeCommandParser
 cEndParagraph = do
-  _ <- satisfy (== Expand.EndParagraph)
+  skipSatisfied (== Expand.EndParagraph)
   return EndParagraph
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
 cMacroToFont :: AllModeCommandParser
 cMacroToFont = do
-  _ <- satisfy (== Expand.MacroToFont)
+  skipSatisfied (== Expand.MacroToFont)
   cs <- parseCSName
   skipOptionalEquals
   fontPath <- parseFileName
   return $ Assign Assignment {body=DefineFont cs fontPath, global=False}
 
 cTokenForFont :: AllModeCommandParser
-cTokenForFont = do
-  (Expand.TokenForFont n) <- satisfy isTokenForFont
-  return $ Assign Assignment {body=SelectFont n , global=False}
+cTokenForFont = satisfyThen tokToCom
+  where
+    tokToCom (Expand.TokenForFont n) = Just $ Assign Assignment {body=SelectFont n , global=False}
+    tokToCom _ = Nothing
 
 cAddSpace :: AllModeCommandParser
 cAddSpace = do
-  _ <- satisfy isSpace
+  skipSatisfied isSpace
   return AddSpace
 
 cCommands :: [Parser AllModesCommand]
@@ -288,33 +370,38 @@ enableExpansion = P.updateParserState $ setExpansionState True
 parseCSName :: Parser ControlSequenceLike
 parseCSName = do
   disableExpansion
-  csLike <- parseCSLikeCS <|> parseCSLikeActive
+  csLike <- satisfyThen parseCSLike
   enableExpansion
   return csLike
   where
-    parseCSLikeActive = do
-      (Expand.CharCat Lex.LexCharCat{char=_code}) <- satisfy isActiveCharacter
-      return $ ActiveCharacter _code
-    parseCSLikeCS = do
-      (Expand.UnexpandedControlSequence cs) <- satisfy isUnexpandedControlSequence
-      return $ ControlSequence cs
+    parseCSLike (Expand.CharCat Lex.LexCharCat{cat=Lex.Active, char=c}) = Just $ ActiveCharacter c
+    parseCSLike (Expand.UnexpandedControlSequence cs) = Just $ ControlSequence cs
+    parseCSLike _ = Nothing
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
 parseFileName = do
   skipOptionalSpaces
-  nameToks <- P.some $ satisfy isLetterOrDigit
-  let name = fmap (\(Expand.CharCat Lex.LexCharCat{char=c}) -> C.chr c) nameToks
-  _ <- satisfy isSpace
+  nameCodes <- P.some $ satisfyThen tokToChar
+  let name = fmap C.chr nameCodes
+  skipSatisfied isSpace
   case parseRelFile (name ++ ".tfm") of
     Just p -> return p
     Nothing -> fail $ "Invalid filename: " ++ name ++ ".tfm"
+  where
+    tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=c}) = Just c
+    tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=c})
+      | isDigit c = Just c
+      | otherwise = Nothing
+    tokToChar _ = Nothing
 
 skipOptionalEquals = do
   skipOptionalSpaces
-  skipOptional $ satisfy isEquals
+  skipOneOptionalSatisfied isEquals
+
+skipOneOptionalSpace = skipOneOptionalSatisfied isSpace
 
 -- <optional spaces> = <zero or more spaces>.
-skipOptionalSpaces = P.skipMany $ satisfy isSpace
+skipOptionalSpaces = skipManySatisfied isSpace
 
 
 -- HMode.
@@ -340,13 +427,17 @@ hCommands =
 
 hLeaveHMode :: HModeCommandParser
 hLeaveHMode = do
-  _ <- satisfy endsHMode
+  skipSatisfied endsHMode
   return LeaveHMode
 
 hAddCharacter :: HModeCommandParser
 hAddCharacter = do
-  (Expand.CharCat Lex.LexCharCat{char=_code}) <- satisfy isLetterOrOther
-  return AddCharacter{method=ExplicitChar, code=_code}
+  c <- satisfyThen charToCode
+  return AddCharacter{method=ExplicitChar, code=c}
+  where
+    charToCode (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=c}) = Just c
+    charToCode (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=c}) = Just c
+    charToCode _ = Nothing
 
 -- VMode.
 
@@ -371,12 +462,12 @@ vCommands =
 
 vEnd :: VModeCommandParser
 vEnd = do
-  _ <- satisfy (== Expand.End)
+  skipSatisfied (== Expand.End)
   return End
 
 vEnterHMode :: VModeCommandParser
 vEnterHMode = do
-  _ <- satisfy startsHMode
+  skipSatisfied startsHMode
   return EnterHMode
 
 -- Token matching.
@@ -421,10 +512,6 @@ isTokenForFont :: MatchToken
 isTokenForFont (Expand.TokenForFont _) = True
 isTokenForFont _ = False
 
-isStartParagraph :: MatchToken
-isStartParagraph (Expand.StartParagraph _) = True
-isStartParagraph _ = False
-
 isUnexpandedControlSequence :: MatchToken
 isUnexpandedControlSequence (Expand.UnexpandedControlSequence _) = True
 isUnexpandedControlSequence _ = False
@@ -443,9 +530,6 @@ isEquals :: MatchToken
 isEquals (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=61}) = True
 isEquals _ = False
 
-isLetterOrDigit :: MatchToken
-isLetterOrDigit x = isLetter x || isDigit x
-
 isLetter :: MatchToken
 isLetter (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter}) = True
 isLetter _ = False
@@ -454,21 +538,18 @@ isOther :: MatchToken
 isOther (Expand.CharCat Lex.LexCharCat{cat=Lex.Other}) = True
 isOther _ = False
 
-isDigit :: MatchToken
 isDigit x = isOctalDigit x || isEightOrNine x
   where
-    -- '8' or '9'.
-    isEightOrNine (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=56}) = True
-    isEightOrNine (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=57}) = True
+    isEightOrNine 56 = True
+    isEightOrNine 57 = True
     isEightOrNine _ = False
 
-isOctalDigit :: MatchToken
-isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=48}) = True
-isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=49}) = True
-isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=50}) = True
-isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=51}) = True
-isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=52}) = True
-isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=53}) = True
-isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=54}) = True
-isOctalDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=55}) = True
+isOctalDigit 48 = True
+isOctalDigit 49 = True
+isOctalDigit 50 = True
+isOctalDigit 51 = True
+isOctalDigit 52 = True
+isOctalDigit 53 = True
+isOctalDigit 54 = True
+isOctalDigit 55 = True
 isOctalDigit _ = False

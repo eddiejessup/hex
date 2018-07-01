@@ -120,6 +120,13 @@ spaceGlue state = do
     toFlex = A.finiteFlex . toSP
   return A.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
+evaluateUNr :: P.UnsignedNumber -> Int
+evaluateUNr (P.IntegerLiteral n) = n
+
+resolveSignedInteger :: Bool -> Int -> Int
+resolveSignedInteger True n = n
+resolveSignedInteger False n = -n
+
 -- We build a paragraph list in reverse order.
 extractParagraph :: State -> [A.BreakableHListElem] -> P.Stream -> IO (State, [A.BreakableHListElem], P.Stream)
 extractParagraph state acc stream =
@@ -142,8 +149,10 @@ extractParagraph state acc stream =
         -- \par: end the current paragraph.
         P.EndParagraph ->
           return (state, acc, streamNext)
-        P.AddKern k ->
-          extractParagraph state ((A.HKern $ B.Kern k):acc) streamNext
+        P.AddKern (P.Number pos uNr) -> do
+          let evaledUNr = evaluateUNr uNr
+          let evaledNr = resolveSignedInteger pos evaledUNr
+          extractParagraph state ((A.HKern $ B.Kern evaledNr):acc) streamNext
         -- \indent: An empty box of width \parindent is appended to the current
         -- list, and the space factor is set to 1000.
         -- TODO: Space factor.
@@ -237,8 +246,10 @@ extractPages state pages acc stream =
         -- \par does nothing in vertical mode.
         P.EndParagraph ->
           extractPages state pages acc streamNext
-        P.AddKern k ->
-          extractPages state pages ((A.VKern $ B.Kern k):acc) streamNext
+        P.AddKern (P.Number pos uNr) -> do
+          let evaledUNr = evaluateUNr uNr
+          let evaledNr = resolveSignedInteger pos evaledUNr
+          extractPages state pages ((A.VKern $ B.Kern evaledNr):acc) streamNext
         P.StartParagraph indent ->
           addParagraphToPage state pages acc streamNext indent
         -- <space token> has no effect in vertical modes.
