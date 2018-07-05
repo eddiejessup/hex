@@ -8,7 +8,7 @@ import qualified Data.ByteString.Lazy as BLS
 import qualified DVI.Encode as DVIE
 import qualified BoxDraw
 import qualified Build
-import qualified Parse
+import Parse.Util (newStream)
 
 main :: IO ()
 main = do
@@ -26,7 +26,7 @@ main = do
   -- let coms = Parse.extractAllDebug Cat.usableCharCatMap contentsCode
   -- putStrLn $ List.intercalate "\n" $ fmap show coms
 
-  let stream = Parse.newStream contentsCode
+  let stream = newStream contentsCode
 
   -- page <- Build.extractPage Build.newState [] stream
 

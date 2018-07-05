@@ -15,10 +15,15 @@ import qualified TFM.Main as TFMM
 import qualified TFM.Character as TFMC
 import qualified BoxDraw as B
 import qualified Arrange as A
-import qualified Parse as P
 import qualified Lex
 import qualified Unit
 import qualified Expand
+
+import Parse.Command (extractHModeCommand, extractVModeCommand)
+import qualified Parse.Command as COM
+import Parse.Util (Stream, insertLexToken)
+import qualified Parse.AST as AST
+
 
 type FontInfoMap = IMap.IntMap TFMM.TexFont
 
@@ -46,8 +51,8 @@ theDesiredHeight = 45000000
 theInterLineGlue :: A.Glue
 theInterLineGlue = A.Glue{dimen = 400000, stretch=A.noFlex, shrink=A.noFlex}
 
-csToFontNr :: P.ControlSequenceLike -> Int
-csToFontNr (P.ControlSequence (Lex.ControlWord "thefont")) = Expand.theFontNr
+csToFontNr :: COM.ControlSequenceLike -> Int
+csToFontNr (COM.ControlSequence (Lex.ControlWord "thefont")) = Expand.theFontNr
 
 fontDir1 :: AbsPathToDir
 (Just fontDir1) = Path.parseAbsDir "/Users/ejm/projects/hex"
@@ -120,60 +125,75 @@ spaceGlue state = do
     toFlex = A.finiteFlex . toSP
   return A.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
-evaluateUNr :: P.UnsignedNumber -> Int
-evaluateUNr (P.IntegerLiteral n) = n
+evaluateNormalInteger :: AST.NormalInteger -> Int
+evaluateNormalInteger (AST.IntegerConstant n) = n
+
+evaluateUNr :: AST.UnsignedNumber -> Int
+evaluateUNr (AST.NormalIntegerAsUNumber n) = evaluateNormalInteger n
+
+evaluateFactor :: AST.Factor -> Int
+evaluateFactor (AST.NormalIntegerFactor n) = evaluateNormalInteger n
+
+lnUnitAsSP :: AST.LengthUnit -> Int
+lnUnitAsSP (AST.PhysicalLengthUnit False AST.Point) = fromIntegral Unit.pointInScaledPoint
+
+evaluateNormalLengthToSP :: AST.NormalLength -> Int
+evaluateNormalLengthToSP (AST.LengthSemiConstant f u) = evaluateFactor f * lnUnitAsSP u
+
+evaluateULnToSP :: AST.UnsignedLength -> Int
+evaluateULnToSP (AST.NormalLengthAsULength nLn) = evaluateNormalLengthToSP nLn
 
 resolveSignedInteger :: Bool -> Int -> Int
 resolveSignedInteger True n = n
 resolveSignedInteger False n = -n
 
 -- We build a paragraph list in reverse order.
-extractParagraph :: State -> [A.BreakableHListElem] -> P.Stream -> IO (State, [A.BreakableHListElem], P.Stream)
+extractParagraph :: State -> [A.BreakableHListElem] -> Stream -> IO (State, [A.BreakableHListElem], Stream)
 extractParagraph state acc stream =
-  let (PS.State{stateInput=streamNext}, com) = P.extractHModeCommand stream
+  let (PS.State{stateInput=streamNext}, com) = extractHModeCommand stream
   in case com of
     Left x -> error $ show x
-    Right (P.HAllModesCommand aCom) ->
+    Right (COM.HAllModesCommand aCom) ->
       case aCom of
-        P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
+        COM.Assign COM.Assignment{body=COM.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractParagraph stateNext (A.HFontDefinition fontDef:acc) streamNext
-        P.Assign P.Assignment{body=P.SelectFont fNr} ->
+        COM.Assign COM.Assignment{body=COM.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr
           extractParagraph stateNext (A.HFontSelection fontSel:acc) streamNext
-        P.Relax ->
+        COM.Relax ->
           extractParagraph state acc streamNext
         -- \par: end the current paragraph.
-        P.EndParagraph ->
+        COM.EndParagraph ->
           return (state, acc, streamNext)
-        P.AddKern (P.Number pos uNr) -> do
-          let evaledUNr = evaluateUNr uNr
-          let evaledNr = resolveSignedInteger pos evaledUNr
-          extractParagraph state ((A.HKern $ B.Kern evaledNr):acc) streamNext
+        COM.AddKern (AST.Length pos uLn) -> do
+          let evaledULnSP = evaluateULnToSP uLn
+          let evaledLnSP = resolveSignedInteger pos evaledULnSP
+          extractParagraph state ((A.HKern $ B.Kern evaledLnSP):acc) streamNext
         -- \indent: An empty box of width \parindent is appended to the current
         -- list, and the space factor is set to 1000.
         -- TODO: Space factor.
-        P.StartParagraph True ->
+        COM.StartParagraph True ->
           extractParagraph state (theParIndent:acc) streamNext
         -- \noindent: has no effect in horizontal modes.
-        P.StartParagraph False ->
+        COM.StartParagraph False ->
           extractParagraph state acc streamNext
-        P.AddSpace ->
+        COM.AddSpace ->
           do
           glue <- case spaceGlue state of
             Just sg -> return $ A.HGlue sg
             Nothing -> fail "Could not get space glue"
           extractParagraph state (glue:acc) streamNext
-    Right P.AddCharacter{code=i} ->
+    Right COM.AddCharacter{code=i} ->
       do
       charBox <- case characterBox state i of
         Just c -> return $ A.HCharacter c
         Nothing -> fail "Could not get character info"
       extractParagraph state (charBox:acc) streamNext
-    Right P.LeaveHMode ->
+    Right COM.LeaveHMode ->
       -- Inner mode: forbidden. TODO.
       -- Outer mode: insert the control sequence "\par" into the input. The control
       -- sequence's current meaning will be used, which might no longer be the \par
@@ -181,9 +201,9 @@ extractParagraph state acc stream =
     -- (Note that we pass 'stream', not 'streamNext'.)
       do
       let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
-      extractParagraph state acc $ P.insertLexToken stream parToken
+      extractParagraph state acc $ insertLexToken stream parToken
 
-extractBoxedParagraph :: Bool -> Int -> Int -> Int -> A.Glue -> State -> P.Stream -> IO (State, [A.BreakableVListElem], P.Stream)
+extractBoxedParagraph :: Bool -> Int -> Int -> Int -> A.Glue -> State -> Stream -> IO (State, [A.BreakableVListElem], Stream)
 extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlue state stream = do
   let
     initial True = [theParIndent]
@@ -194,7 +214,7 @@ extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlu
     paraBoxes = intersperse (A.VGlue interLineGlue) lineBoxes
   return (stateNext, paraBoxes, streamNext)
 
-addParagraphToPage :: State -> [B.Page] -> [A.BreakableVListElem] -> P.Stream -> Bool -> IO (State, [B.Page], [A.BreakableVListElem], P.Stream)
+addParagraphToPage :: State -> [B.Page] -> [A.BreakableVListElem] -> Stream -> Bool -> IO (State, [B.Page], [A.BreakableVListElem], Stream)
 addParagraphToPage state pages acc stream indent
   = do
     -- Paraboxes returned in normal order.
@@ -216,42 +236,42 @@ addParagraphToPage state pages acc stream indent
       then extractPages stateNext (page:pages) accBreak streamNext
       else extractPages stateNext pages accNoBreak streamNext
 
-extractPages :: State -> [B.Page] -> [A.BreakableVListElem] -> P.Stream -> IO (State, [B.Page], [A.BreakableVListElem], P.Stream)
+extractPages :: State -> [B.Page] -> [A.BreakableVListElem] -> Stream -> IO (State, [B.Page], [A.BreakableVListElem], Stream)
 extractPages state pages acc stream =
-  let (PS.State{stateInput=streamNext}, com) = P.extractVModeCommand stream
+  let (PS.State{stateInput=streamNext}, com) = extractVModeCommand stream
   in case com of
     Left x -> error $ show x
     -- If the command shifts to horizontal mode, run '\indent', and re-read the
     -- stream as if the commands just seen hadn't been read.
     -- (Note that we pass 'stream', not 'streamNext'.)
-    Right P.EnterHMode ->
+    Right COM.EnterHMode ->
       addParagraphToPage state pages acc stream True
-    Right P.End ->
+    Right COM.End ->
       do
       let lastPage = B.Page $ reverse $ A.setListElems A.NaturallyGood acc
       return (state, lastPage:pages, acc, streamNext)
-    Right (P.VAllModesCommand aCom) ->
+    Right (COM.VAllModesCommand aCom) ->
       case aCom of
-        P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
+        COM.Assign COM.Assignment{body=COM.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractPages stateNext pages (A.VFontDefinition fontDef:acc) streamNext
-        P.Assign P.Assignment{body=P.SelectFont fNr} ->
+        COM.Assign COM.Assignment{body=COM.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr
           extractPages stateNext pages (A.VFontSelection fontSel:acc) streamNext
-        P.Relax ->
+        COM.Relax ->
           extractPages state pages acc streamNext
         -- \par does nothing in vertical mode.
-        P.EndParagraph ->
+        COM.EndParagraph ->
           extractPages state pages acc streamNext
-        P.AddKern (P.Number pos uNr) -> do
-          let evaledUNr = evaluateUNr uNr
-          let evaledNr = resolveSignedInteger pos evaledUNr
-          extractPages state pages ((A.VKern $ B.Kern evaledNr):acc) streamNext
-        P.StartParagraph indent ->
+        COM.AddKern (AST.Length pos uLn) -> do
+          let evaledULnSP = evaluateULnToSP uLn
+          let evaledLnSP = resolveSignedInteger pos evaledULnSP
+          extractPages state pages ((A.VKern $ B.Kern evaledLnSP):acc) streamNext
+        COM.StartParagraph indent ->
           addParagraphToPage state pages acc streamNext indent
         -- <space token> has no effect in vertical modes.
-        P.AddSpace ->
+        COM.AddSpace ->
           extractPages state pages acc streamNext

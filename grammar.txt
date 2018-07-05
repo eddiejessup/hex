@@ -112,7 +112,7 @@
 
 <unit-of-measure>
     <optional-spaces> <internal-unit>
-    <optional-true> <physical unit> <one-optional-space>
+    <optional-true> <physical-unit> <one-optional-space>
 
 <internal-unit>
     [em] <one-optional-space>
@@ -125,7 +125,7 @@
     [true]
     <empty>
 
-<physical unit>
+<physical-unit>
     [pt]
     [pc]
     [in]

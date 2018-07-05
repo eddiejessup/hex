@@ -47,4 +47,4 @@ scaledPointToPoint :: Integral a => a -> Double
 scaledPointToPoint a = fromIntegral a / fromIntegral pointInScaledPoint
 
 showSP :: Int -> String
-showSP d = (printf "%.2f" (scaledPointToPoint d)) ++ "pt"
+showSP d = printf "%.2f" (scaledPointToPoint d) ++ "pt"
