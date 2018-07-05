@@ -16,7 +16,6 @@ import Parse.Util (Parser, Stream, ParseState, NullParser, ParseError, skipOneOp
 import qualified Parse.Util as PU
 import qualified Parse.Common as PC
 import qualified Parse.Length as PL
-import qualified Parse.Number as PN
 
 -- AST.
 
@@ -203,9 +202,19 @@ parseFileName = do
     Nothing -> fail $ "Invalid filename: " ++ name ++ ".tfm"
   where
     tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=c}) = Just c
-    tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=c})
-      | PN.isDigit c = Just c
-      | otherwise = Nothing
+    -- 'Other' Characters for decimal digits are OK.
+    tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=c}) = case c of
+      48 -> Just c
+      49 -> Just c
+      50 -> Just c
+      51 -> Just c
+      52 -> Just c
+      53 -> Just c
+      54 -> Just c
+      55 -> Just c
+      56 -> Just c
+      57 -> Just c
+      _ -> Nothing
     tokToChar _ = Nothing
 
 tokenForFont :: AllModeCommandParser
