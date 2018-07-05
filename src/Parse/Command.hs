@@ -12,11 +12,13 @@ import qualified Expand
 import qualified Lex
 import qualified Categorise as Cat
 
-import qualified Parse.AST as AST
-import Parse.Util (Parser, Stream, ParseState, NullParser, ParseError, MatchToken, skipOneOptionalSatisfied, easyRunParser', satisfyThen, skipSatisfiedEquals)
+import Parse.Util (Parser, Stream, ParseState, NullParser, ParseError, skipOneOptionalSatisfied, easyRunParser', satisfyThen, skipSatisfiedEquals)
 import qualified Parse.Util as PU
 import qualified Parse.Common as PC
-import qualified Parse.Quantity as PQ
+import qualified Parse.Length as PL
+import qualified Parse.Number as PN
+
+-- AST.
 
 data CharSource = ExplicitChar | CodeChar | TokenChar
   deriving Show
@@ -78,7 +80,7 @@ data AllModesCommand
   -- | Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
   -- | AddWhatsit GeneralText
   -- | AddPenalty Int
-  | AddKern AST.Length
+  | AddKern PL.Length
   -- | RemoveLastPenalty
   -- | RemoveLastKern
   -- | RemoveLastGlue
@@ -117,65 +119,66 @@ data HModeCommand
   -- | AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
   deriving Show
 
+
+-- Entry-points.
+
+extractHModeCommand :: Stream -> (ParseState, Either ParseError HModeCommand)
+extractHModeCommand = easyRunParser' parseHModeCommand
+
+extractVModeCommand :: Stream -> (ParseState, Either ParseError VModeCommand)
+extractVModeCommand = easyRunParser' parseVModeCommand
+
+-- Parse.
+
 -- All-mode Commands.
 
 type AllModeCommandParser = Parser AllModesCommand
 
-cRelax :: AllModeCommandParser
-cRelax = do
+parseAllModeCommand :: Parser AllModesCommand
+parseAllModeCommand = P.choice [ relax
+                               , addKern
+                               , startParagraph
+                               , endParagraph
+                               , macroToFont
+                               , tokenForFont
+                               , addSpace
+                               ]
+
+relax :: AllModeCommandParser
+relax = do
   skipSatisfiedEquals Expand.Relax
   return Relax
 
-cAddKern :: AllModeCommandParser
-cAddKern = do
+addKern :: AllModeCommandParser
+addKern = do
   skipSatisfiedEquals Expand.AddKern
-  ln <- PQ.parseLength
+  ln <- PL.parseLength
   return $ AddKern ln
 
-cStartParagraph :: AllModeCommandParser
-cStartParagraph = satisfyThen parToCom
+startParagraph :: AllModeCommandParser
+startParagraph = satisfyThen parToCom
   where
     parToCom (Expand.StartParagraph _indent) = Just StartParagraph{indent=_indent}
     parToCom _ = Nothing
 
-cEndParagraph :: AllModeCommandParser
-cEndParagraph = do
+endParagraph :: AllModeCommandParser
+endParagraph = do
   skipSatisfiedEquals Expand.EndParagraph
   return EndParagraph
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
-cMacroToFont :: AllModeCommandParser
-cMacroToFont = do
+macroToFont :: AllModeCommandParser
+macroToFont = do
   skipSatisfiedEquals Expand.MacroToFont
   cs <- parseCSName
   skipOptionalEquals
   fontPath <- parseFileName
   return $ Assign Assignment {body=DefineFont cs fontPath, global=False}
 
-cTokenForFont :: AllModeCommandParser
-cTokenForFont = satisfyThen tokToCom
-  where
-    tokToCom (Expand.TokenForFont n) = Just $ Assign Assignment {body=SelectFont n , global=False}
-    tokToCom _ = Nothing
-
-cAddSpace :: AllModeCommandParser
-cAddSpace = do
-  PU.skipSatisfied isSpace
-  return AddSpace
-
-cCommands :: [Parser AllModesCommand]
-cCommands =
-  [ cRelax
-  , cAddKern
-  , cStartParagraph
-  , cEndParagraph
-  , cMacroToFont
-  , cTokenForFont
-  , cAddSpace
-  ]
-
-parseAllModeCommand :: Parser AllModesCommand
-parseAllModeCommand = P.choice cCommands
+skipOptionalEquals :: NullParser
+skipOptionalEquals = do
+  PC.skipOptionalSpaces
+  skipOneOptionalSatisfied PC.isEquals
 
 parseCSName :: Parser ControlSequenceLike
 parseCSName = do
@@ -194,50 +197,59 @@ parseFileName = do
   PC.skipOptionalSpaces
   nameCodes <- P.some $ satisfyThen tokToChar
   let name = fmap C.chr nameCodes
-  PU.skipSatisfied isSpace
+  PU.skipSatisfied PC.isSpace
   case parseRelFile (name ++ ".tfm") of
     Just p -> return p
     Nothing -> fail $ "Invalid filename: " ++ name ++ ".tfm"
   where
     tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=c}) = Just c
     tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=c})
-      | PQ.isDigit c = Just c
+      | PN.isDigit c = Just c
       | otherwise = Nothing
     tokToChar _ = Nothing
 
-skipOptionalEquals :: NullParser
-skipOptionalEquals = do
-  PC.skipOptionalSpaces
-  skipOneOptionalSatisfied isEquals
+tokenForFont :: AllModeCommandParser
+tokenForFont = satisfyThen tokToCom
+  where
+    tokToCom (Expand.TokenForFont n) = Just $ Assign Assignment {body=SelectFont n , global=False}
+    tokToCom _ = Nothing
+
+addSpace :: AllModeCommandParser
+addSpace = do
+  PU.skipSatisfied PC.isSpace
+  return AddSpace
 
 -- HMode.
 
 type HModeCommandParser = Parser HModeCommand
 
-extractHModeCommand :: Stream -> (ParseState, Either ParseError HModeCommand)
-extractHModeCommand = easyRunParser' parseHModeCommand
-
 parseHModeCommand :: Parser HModeCommand
 parseHModeCommand =
-  P.choice hCommands
+  P.choice [ leaveHMode
+           , addCharacter
+           ]
   <|>
   (HAllModesCommand <$> parseAllModeCommand)
 
-hCommands :: [HModeCommandParser]
-hCommands =
-  [ hLeaveHMode
-  , hAddCharacter
-  ]
-
--- HMode Commands.
-
-hLeaveHMode :: HModeCommandParser
-hLeaveHMode = do
+leaveHMode :: HModeCommandParser
+leaveHMode = do
   PU.skipSatisfied endsHMode
   return LeaveHMode
+  where
+    endsHMode Expand.End = True
+    -- endsHMode Expand.Dump = True
+    -- TODO:
+    -- - AddUnwrappedFetchedBox Vertical
+    -- - AddUnwrappedFetchedBox Vertical
+    -- - AddAlignedMaterial Horizontal
+    -- - AddRule Horizontal
+    -- - AddSpecifiedGlue Vertical
+    -- - AddPresetGlue Vertical
+    endsHMode _ = False
 
-hAddCharacter :: HModeCommandParser
-hAddCharacter = do
+
+addCharacter :: HModeCommandParser
+addCharacter = do
   c <- satisfyThen charToCode
   return AddCharacter{method=ExplicitChar, code=c}
   where
@@ -249,95 +261,39 @@ hAddCharacter = do
 
 type VModeCommandParser = Parser VModeCommand
 
-extractVModeCommand :: Stream -> (ParseState, Either ParseError VModeCommand)
-extractVModeCommand = easyRunParser' parseVModeCommand
-
 parseVModeCommand :: Parser VModeCommand
 parseVModeCommand =
-  P.choice vCommands
+  P.choice [ enterHMode
+           , end
+           ]
   <|>
   (VAllModesCommand <$> parseAllModeCommand)
 
-vCommands :: [VModeCommandParser]
-vCommands =
-  [ vEnterHMode
-  , vEnd
-  ]
-
--- VMode Commands.
-
-vEnd :: VModeCommandParser
-vEnd = do
+end :: VModeCommandParser
+end = do
   skipSatisfiedEquals Expand.End
   return End
 
-vEnterHMode :: VModeCommandParser
-vEnterHMode = do
+enterHMode :: VModeCommandParser
+enterHMode = do
   PU.skipSatisfied startsHMode
   return EnterHMode
-
--- Token matching.
-
-endsHMode :: MatchToken
-endsHMode Expand.End = True
--- endsHMode Expand.Dump = True
--- TODO:
--- - AddUnwrappedFetchedBox Vertical
--- - AddUnwrappedFetchedBox Vertical
--- - AddAlignedMaterial Horizontal
--- - AddRule Horizontal
--- - AddSpecifiedGlue Vertical
--- - AddPresetGlue Vertical
-endsHMode _ = False
-
-startsHMode :: MatchToken
-startsHMode x
-  | isLetterOrOther x = True
-  | otherwise = False
--- TODO:
--- - \char
--- - TokenForCharacter
--- - AddUnwrappedFetchedBox Horizontal
--- - AddUnwrappedFetchedBox Horizontal
--- - AddAlignedMaterial Vertical
--- - AddRule Vertical
--- - AddSpecifiedGlue Horizontal
--- - AddPresetGlue Horizontal
--- - AddAccentedCharacter
--- - AddItalicCorrection
--- - AddDiscretionaryText
--- - AddDiscretionaryHyphen
--- - ToggleMathMode
-
-isLetterOrOther :: MatchToken
-isLetterOrOther x = isLetter x || isOther x
-
-isTokenForFont :: MatchToken
-isTokenForFont (Expand.TokenForFont _) = True
-isTokenForFont _ = False
-
-isUnexpandedControlSequence :: MatchToken
-isUnexpandedControlSequence (Expand.UnexpandedControlSequence _) = True
-isUnexpandedControlSequence _ = False
-
-isActiveCharacter :: MatchToken
-isActiveCharacter (Expand.CharCat Lex.LexCharCat{cat=Lex.Active}) = True
-isActiveCharacter _ = False
-
--- <space token> = character token of category [space], or a control sequence
--- or active character \let equal to such.
-isSpace :: MatchToken
-isSpace (Expand.CharCat Lex.LexCharCat{cat=Lex.Space}) = True
-isSpace _ = False
-
-isEquals :: MatchToken
-isEquals (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=61}) = True
-isEquals _ = False
-
-isLetter :: MatchToken
-isLetter (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter}) = True
-isLetter _ = False
-
-isOther :: MatchToken
-isOther (Expand.CharCat Lex.LexCharCat{cat=Lex.Other}) = True
-isOther _ = False
+  where
+    startsHMode x
+      | PC.isLetter x = True
+      | PC.isOther x = True
+      | otherwise = False
+    -- TODO:
+    -- - \char
+    -- - TokenForCharacter
+    -- - AddUnwrappedFetchedBox Horizontal
+    -- - AddUnwrappedFetchedBox Horizontal
+    -- - AddAlignedMaterial Vertical
+    -- - AddRule Vertical
+    -- - AddSpecifiedGlue Horizontal
+    -- - AddPresetGlue Horizontal
+    -- - AddAccentedCharacter
+    -- - AddItalicCorrection
+    -- - AddDiscretionaryText
+    -- - AddDiscretionaryHyphen
+    -- - ToggleMathMode

@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Parse.Quantity where
+module Parse.Number where
 
 import qualified Text.Megaparsec as P
 
@@ -10,11 +10,34 @@ import qualified Lex
 
 import qualified Parse.Util as PU
 import qualified Parse.Common as PC
-import qualified Parse.AST as AST
 
-import Debug.Trace
 
--- Numbers.
+-- AST.
+
+data Number
+  = Number Bool UnsignedNumber
+  deriving Show
+
+data UnsignedNumber
+  = NormalIntegerAsUNumber NormalInteger
+  -- | CoercedInteger CoercedInteger
+  deriving Show
+
+data NormalInteger
+  -- = InternalInteger InternalInteger
+  = IntegerConstant Int
+  deriving Show
+
+-- data CoercedInteger
+--   = InternalLengthAsInt InternalLength
+--   | InternalGlueAsInt InternalGlue
+
+-- data InternalInteger = TODO
+-- data InternalLength = TODO
+-- data InternalGlue = TODO
+
+
+-- Parsing.
 
 digitsToInteger :: Integral n => n -> [n] -> n
 digitsToInteger base = foldl (\a b -> a * base + b) 0
@@ -34,14 +57,14 @@ parseSigns = isPos <$> parseOptionalSigns
 parseNumber = do
   positive <- parseSigns
   uNr <- parseUnsignedNumber
-  return $ AST.Number positive uNr
+  return $ Number positive uNr
 
-parseUnsignedNumber = P.choice [ AST.NormalIntegerAsUNumber <$> parseNormalInteger
-                               -- , AST.CoercedInteger <$> parseCoercedInteger
+parseUnsignedNumber = P.choice [ NormalIntegerAsUNumber <$> parseNormalInteger
+                               -- , CoercedInteger <$> parseCoercedInteger
                                ]
 
-parseNormalInteger = P.choice [ AST.IntegerConstant <$> parseIntegerConstant
-                              -- , AST.InternalInteger <$> parseInternalInteger
+parseNormalInteger = P.choice [ IntegerConstant <$> parseIntegerConstant
+                              -- , InternalInteger <$> parseInternalInteger
                               ]
 
 parseIntegerConstant = do
@@ -82,44 +105,3 @@ isOctalDigit _ = False
 -- parseCoercedInteger = P.choice [ parseInternalLengthAsInt
 --                                , parseInternalGlueAsInt
 --                                ]
-
--- Lengths.
-
-parseLength = do
-  pos <- parseSigns
-  uLn <- parseUnsignedLength
-  return $ AST.Length pos uLn
-
-parseUnsignedLength = P.choice [ AST.NormalLengthAsULength <$> parseNormalLength
-                               -- , AST.CoercedLength <$> parseCoercedLength
-                               ]
-
-parseNormalLength = P.choice [ parseLengthSemiConstant
-                             -- , parseInternalLengthAsNormalLength
-                             ]
-  where
-    parseLengthSemiConstant = do
-      factor <- parseFactor
-      lengthUnit <- parseLengthUnit
-      return $ traceShowId $ AST.LengthSemiConstant factor lengthUnit
-
-parseLengthUnit = P.choice [ parsePhysicalLengthUnit
-                           -- , parseInternalLengthUnitAsLengthUnit
-                           ]
-  where
-    -- parseInternalLengthUnitAsLengthUnit = do
-    --   arg <- parseInternalLengthUnit
-    --   return $ AST.InternalLengthUnit arg
-    parsePhysicalLengthUnit = do
-      -- isTrue <- parseTrueKeyword
-      let isTrue = False
-      unit <- P.choice [ parsePt ]
-      return $ AST.PhysicalLengthUnit isTrue unit
-
-parsePt = do
-  PC.skipKeyword "pt"
-  return AST.Point
-
-parseFactor = P.choice [ AST.NormalIntegerFactor <$> parseNormalInteger
-                       -- TODO: parseRationalConstant
-                       ]

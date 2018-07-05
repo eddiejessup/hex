@@ -27,11 +27,12 @@ library
                      , TFM.Character
                      , TFM.Main
                      , DVI.Encode
+                     , Parse
                      , Parse.Command
-                     , Parse.Quantity
+                     , Parse.Number
+                     , Parse.Length
                      , Parse.Util
                      , Parse.Common
-                     , Parse.AST
   build-depends:       base
                      , ilist
                      , containers
