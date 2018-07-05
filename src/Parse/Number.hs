@@ -108,7 +108,7 @@ parseHexadecimalIntegerDigits :: Parser ([Int], Int)
 parseHexadecimalIntegerDigits = do
   PU.skipSatisfied isDoubleQuote
   digits <- P.some $ PU.satisfyThen charToDigit
-  return (digits, 8)
+  return (digits, 16)
   where
     isDoubleQuote (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=34}) = True
     isDoubleQuote _ = False
