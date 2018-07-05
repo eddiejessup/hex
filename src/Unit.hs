@@ -5,12 +5,6 @@ import Text.Printf (printf)
 
 -- Functions related to units used in the TeX world.
 
--- * 'mm' stands for millimetre
--- * An inch corresponds to 25.4 mm
--- * A 'point' stands for a TeX point. There are 72.27 points in one inch
--- * There are 2^16 'scaled points' in one point
--- * 'DPI' stands for 'dots per inch'.
-
 -- A scaled point is defined as a fraction:
 -- * num = 2.54 * 1e7 = 25400000
 -- * den = 7227 * 2^16 = 473628672
@@ -18,30 +12,69 @@ import Text.Printf (printf)
 
 -- The DVI format's base unit is 100 nm.
 
--- For a resolution of 1200 dpi, a pixel measures 21 um.
-
 -- Basic facts.
--- 1 inch is 72 big points.
-inchInBigPoints :: Integer
-inchInBigPoints = 72
--- 1 cicero is 12 didots.
-ciceroInDidot :: Integer
-ciceroInDidot = 12
--- 1 point is 1157/1238 didot
-pointIndidot :: Rational
-pointIndidot = 1157 % 1238
--- 1 inch is 2.54 mm.
-inchInMM :: Rational
-inchInMM = 254 % 10
+-- 1 pica is 12 points.
+picaInPoint :: Integer
+picaInPoint = 12
 -- 1 inch is 72.27 points.
 inchInPoint :: Rational
 inchInPoint = 7227 % 100
+-- 1 inch is 72 big points.
+inchInBigPoint :: Integer
+inchInBigPoint = 72
+-- 1 inch is 25.4 mm.
+inchInMM :: Rational
+inchInMM = 254 % 10
+-- 1 centimetre is 10 millimetres.
+cmInMM :: Integer
+cmInMM = 10
+-- 1 didot is 1238/1157 points.
+didotInPoint :: Rational
+didotInPoint = 1238 % 1157
+-- 1 cicero is 12 didots.
+ciceroInDidot :: Integer
+ciceroInDidot = 12
 -- 1 point is 2^16 scaled points.
 pointInScaledPoint :: Integer
-pointInScaledPoint = 2 ^ (16 :: Integer)
+pointInScaledPoint = 2 ^ (16 :: Int)
 
-pointToScaledPoint :: Rational -> Rational
-pointToScaledPoint a = a * fromIntegral pointInScaledPoint
+data PhysicalUnit
+  = Point -- 'pt'
+  | Pica -- 'pc'
+  | Inch -- 'in'
+  | BigPoint -- 'bp'
+  | Centimetre -- 'cm'
+  | Millimetre -- 'mm'
+  | Didot -- 'dd'
+  | Cicero -- 'cc'
+  | ScaledPoint -- 'sp'
+  deriving Show
+
+class Length u where
+  inScaledPoint :: u -> Rational
+
+  scaledPointIn :: u -> Rational
+  scaledPointIn = recip . inScaledPoint
+
+  toScaledPoint :: Real n => n -> u -> Rational
+  toScaledPoint n u = realToFrac n * inScaledPoint u
+
+  toScaledPointApprox :: Real n => n -> u -> Int
+  toScaledPointApprox n u = round $ toScaledPoint n u
+
+-- pointToScaledPoint a = a * fromIntegral pointInScaledPoint
+
+instance Length PhysicalUnit where
+    inScaledPoint u = case u of
+        Point -> fromIntegral pointInScaledPoint
+        Pica -> fromIntegral $ picaInPoint * pointInScaledPoint
+        Inch -> inchInPoint * inScaledPoint Point
+        BigPoint -> inchInPoint * inScaledPoint Point / fromIntegral inchInBigPoint
+        Centimetre -> 10 * inScaledPoint Millimetre
+        Millimetre -> inScaledPoint Inch / inchInMM
+        Didot -> didotInPoint * inScaledPoint Point
+        Cicero -> 12 * inScaledPoint Didot
+        ScaledPoint -> 1
 
 scaledPointToPoint :: Integral a => a -> Double
 scaledPointToPoint a = fromIntegral a / fromIntegral pointInScaledPoint

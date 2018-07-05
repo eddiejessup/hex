@@ -30,7 +30,7 @@ data TexFont = TexFont { checksum :: Int
              deriving (Show)
 
 designSizeSP :: TexFont -> Rational
-designSizeSP = U.pointToScaledPoint . designFontSize
+designSizeSP f = U.toScaledPoint (designFontSize f) U.Point
 
 designScaleSP :: TexFont -> Rational -> Int
 designScaleSP f x = round $ designSizeSP f * x

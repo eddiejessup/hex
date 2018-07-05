@@ -7,7 +7,7 @@ import qualified Expand
 import qualified Lex
 import qualified Data.Char as C
 
-import Parse.Util (MatchToken, skipManySatisfied, skipOneOptionalSatisfied, NullParser)
+import Parse.Util (MatchToken, skipManySatisfied, skipOneOptionalSatisfied, Parser, NullParser)
 import qualified Parse.Util as PU
 
 skipOneOptionalSpace :: NullParser
@@ -58,10 +58,8 @@ matchNonActiveCharacterUncased a t@(Expand.CharCat Lex.LexCharCat{char=c})
   = isNonActiveCharacter t && (C.chr c `elem` [C.toUpper a, C.toLower a])
 matchNonActiveCharacterUncased _ _ = False
 
-skipNonActiveCharacterUncased :: Char -> NullParser
-skipNonActiveCharacterUncased = PU.skipSatisfied . matchNonActiveCharacterUncased
-
-skipKeyword :: String -> NullParser
-skipKeyword s = do
+parseKeywordToValue :: String -> b -> Parser b
+parseKeywordToValue s c = do
   skipOptionalSpaces
-  mapM_ skipNonActiveCharacterUncased s
+  mapM_ (PU.skipSatisfied . matchNonActiveCharacterUncased) s
+  return c
