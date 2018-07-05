@@ -4,6 +4,7 @@
 module Parse.Number where
 
 import qualified Text.Megaparsec as P
+import qualified Data.Char as C
 
 import qualified Expand
 import qualified Lex
@@ -69,23 +70,31 @@ parseUnsignedNumber = P.choice [ NormalIntegerAsUNumber <$> parseNormalInteger
                                ]
 
 parseNormalInteger :: Parser NormalInteger
-parseNormalInteger = P.choice [ IntegerConstant <$> parseVaribasedIntegerConstant
-                              -- , IntegerConstant <$> parseCharacterIntegerConstant
+parseNormalInteger = P.choice [ IntegerConstant <$> parseConstant
+                              , IntegerConstant <$> parseCharacter
                               -- , InternalInteger <$> parseInternalInteger
                               ]
+  where
+    parseConstant = do
+      (digits, base) <- P.choice [ parseDecimalIntegerDigits
+                                 , parseHexadecimalIntegerDigits
+                                 , parseOctalIntegerDigits
+                                 ]
+      PC.skipOneOptionalSpace
+      return $ digitsToInteger base digits
+    parseCharacter = do
+      PU.skipSatisfied isBacktick
+      PU.disableExpansion
+      code <- PU.satisfyThen parseCharLike
+      PU.enableExpansion
+      return code
+      where
+        isBacktick (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=96}) = True
+        isBacktick _ = False
 
-parseVaribasedIntegerConstant :: Parser Int
-parseVaribasedIntegerConstant = do
-  (digits, base) <- parseVaribasedIntegerDigits
-  PC.skipOneOptionalSpace
-  return $ digitsToInteger base digits
-
-
-parseVaribasedIntegerDigits :: Parser ([Int], Int)
-parseVaribasedIntegerDigits = P.choice [ parseDecimalIntegerDigits
-                                       , parseHexadecimalIntegerDigits
-                                       , parseOctalIntegerDigits
-                                       ]
+        parseCharLike (Expand.CharCat Lex.LexCharCat{char=c}) = Just c
+        parseCharLike (Expand.UnexpandedControlSequence (Lex.ControlSymbol char)) = Just $ C.ord char
+        parseCharLike _ = Nothing
 
 parseDecimalIntegerDigits :: Parser ([Int], Int)
 parseDecimalIntegerDigits = do
