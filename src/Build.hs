@@ -19,7 +19,7 @@ import qualified Lex
 import qualified Unit
 import qualified Expand
 
-import qualified Parse as PAR
+import qualified Parse as P
 import Parse (Stream, insertLexToken)
 
 
@@ -49,8 +49,8 @@ theDesiredHeight = 45000000
 theInterLineGlue :: A.Glue
 theInterLineGlue = A.Glue{dimen = 400000, stretch=A.noFlex, shrink=A.noFlex}
 
-csToFontNr :: PAR.ControlSequenceLike -> Int
-csToFontNr (PAR.ControlSequence (Lex.ControlWord "thefont")) = Expand.theFontNr
+csToFontNr :: P.ControlSequenceLike -> Int
+csToFontNr (P.ControlSequence (Lex.ControlWord "thefont")) = Expand.theFontNr
 
 fontDir1 :: AbsPathToDir
 (Just fontDir1) = Path.parseAbsDir "/Users/ejm/projects/hex"
@@ -123,75 +123,73 @@ spaceGlue state = do
     toFlex = A.finiteFlex . toSP
   return A.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
-evaluateNormalInteger :: PAR.NormalInteger -> Int
-evaluateNormalInteger (PAR.IntegerConstant n) = n
+evaluateNormalInteger :: P.NormalInteger -> Int
+evaluateNormalInteger (P.IntegerConstant n) = n
 
-evaluateUNr :: PAR.UnsignedNumber -> Int
-evaluateUNr (PAR.NormalIntegerAsUNumber n) = evaluateNormalInteger n
+evaluateUNr :: P.UnsignedNumber -> Int
+evaluateUNr (P.NormalIntegerAsUNumber n) = evaluateNormalInteger n
 
-evaluateFactor :: PAR.Factor -> Int
-evaluateFactor (PAR.NormalIntegerFactor n) = evaluateNormalInteger n
+evaluateFactor :: P.Factor -> Int
+evaluateFactor (P.NormalIntegerFactor n) = evaluateNormalInteger n
 
-lnUnitAsSP :: PAR.LengthUnit -> Int
-lnUnitAsSP (PAR.PhysicalLengthUnit False PAR.Point) = fromIntegral Unit.pointInScaledPoint
+lnUnitAsSP :: P.LengthUnit -> Int
+lnUnitAsSP (P.PhysicalLengthUnit False P.Point) = fromIntegral Unit.pointInScaledPoint
 
-evaluateNormalLengthToSP :: PAR.NormalLength -> Int
-evaluateNormalLengthToSP (PAR.LengthSemiConstant f u) = evaluateFactor f * lnUnitAsSP u
+evaluateNormalLengthToSP :: P.NormalLength -> Int
+evaluateNormalLengthToSP (P.LengthSemiConstant f u) = evaluateFactor f * lnUnitAsSP u
 
-evaluateULnToSP :: PAR.UnsignedLength -> Int
-evaluateULnToSP (PAR.NormalLengthAsULength nLn) = evaluateNormalLengthToSP nLn
+evaluateULnToSP :: P.UnsignedLength -> Int
+evaluateULnToSP (P.NormalLengthAsULength nLn) = evaluateNormalLengthToSP nLn
 
-resolveSignedInteger :: Bool -> Int -> Int
-resolveSignedInteger True n = n
-resolveSignedInteger False n = -n
+evaluateLnToSp :: P.Length -> Int
+evaluateLnToSp (P.Length True uLn) = evaluateULnToSP uLn
+evaluateLnToSp (P.Length False uLn) = -(evaluateULnToSP uLn)
 
 -- We build a paragraph list in reverse order.
 extractParagraph :: State -> [A.BreakableHListElem] -> Stream -> IO (State, [A.BreakableHListElem], Stream)
 extractParagraph state acc stream =
-  let (PS.State{stateInput=streamNext}, com) = PAR.extractHModeCommand stream
+  let (PS.State{stateInput=streamNext}, com) = P.extractHModeCommand stream
   in case com of
     Left x -> error $ show x
-    Right (PAR.HAllModesCommand aCom) ->
+    Right (P.HAllModesCommand aCom) ->
       case aCom of
-        PAR.Assign PAR.Assignment{body=PAR.DefineFont cs fPath} ->
+        P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractParagraph stateNext (A.HFontDefinition fontDef:acc) streamNext
-        PAR.Assign PAR.Assignment{body=PAR.SelectFont fNr} ->
+        P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr
           extractParagraph stateNext (A.HFontSelection fontSel:acc) streamNext
-        PAR.Relax ->
+        P.Relax ->
           extractParagraph state acc streamNext
         -- \par: end the current paragraph.
-        PAR.EndParagraph ->
+        P.EndParagraph ->
           return (state, acc, streamNext)
-        PAR.AddKern (PAR.Length pos uLn) -> do
-          let evaledULnSP = evaluateULnToSP uLn
-          let evaledLnSP = resolveSignedInteger pos evaledULnSP
-          extractParagraph state ((A.HKern $ B.Kern evaledLnSP):acc) streamNext
+        P.AddKern ln ->
+          extractParagraph state ((A.HKern $ B.Kern $ evaluateLnToSp ln):acc) streamNext
         -- \indent: An empty box of width \parindent is appended to the current
         -- list, and the space factor is set to 1000.
         -- TODO: Space factor.
-        PAR.StartParagraph True ->
+        P.StartParagraph True ->
           extractParagraph state (theParIndent:acc) streamNext
         -- \noindent: has no effect in horizontal modes.
-        PAR.StartParagraph False ->
+        P.StartParagraph False ->
           extractParagraph state acc streamNext
-        PAR.AddSpace ->
+        P.AddSpace ->
           do
           glue <- case spaceGlue state of
             Just sg -> return $ A.HGlue sg
             Nothing -> fail "Could not get space glue"
           extractParagraph state (glue:acc) streamNext
-    Right PAR.AddCharacter{code=i} ->
+    Right P.AddCharacter{code=i} ->
       do
       charBox <- case characterBox state i of
         Just c -> return $ A.HCharacter c
         Nothing -> fail "Could not get character info"
       extractParagraph state (charBox:acc) streamNext
-    Right PAR.LeaveHMode ->
+    Right P.LeaveHMode ->
       -- Inner mode: forbidden. TODO.
       -- Outer mode: insert the control sequence "\par" into the input. The control
       -- sequence's current meaning will be used, which might no longer be the \par
@@ -236,40 +234,38 @@ addParagraphToPage state pages acc stream indent
 
 extractPages :: State -> [B.Page] -> [A.BreakableVListElem] -> Stream -> IO (State, [B.Page], [A.BreakableVListElem], Stream)
 extractPages state pages acc stream =
-  let (PS.State{stateInput=streamNext}, com) = PAR.extractVModeCommand stream
+  let (PS.State{stateInput=streamNext}, com) = P.extractVModeCommand stream
   in case com of
     Left x -> error $ show x
     -- If the command shifts to horizontal mode, run '\indent', and re-read the
     -- stream as if the commands just seen hadn't been read.
     -- (Note that we pass 'stream', not 'streamNext'.)
-    Right PAR.EnterHMode ->
+    Right P.EnterHMode ->
       addParagraphToPage state pages acc stream True
-    Right PAR.End ->
+    Right P.End ->
       do
       let lastPage = B.Page $ reverse $ A.setListElems A.NaturallyGood acc
       return (state, lastPage:pages, acc, streamNext)
-    Right (PAR.VAllModesCommand aCom) ->
+    Right (P.VAllModesCommand aCom) ->
       case aCom of
-        PAR.Assign PAR.Assignment{body=PAR.DefineFont cs fPath} ->
+        P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractPages stateNext pages (A.VFontDefinition fontDef:acc) streamNext
-        PAR.Assign PAR.Assignment{body=PAR.SelectFont fNr} ->
+        P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr
           extractPages stateNext pages (A.VFontSelection fontSel:acc) streamNext
-        PAR.Relax ->
+        P.Relax ->
           extractPages state pages acc streamNext
         -- \par does nothing in vertical mode.
-        PAR.EndParagraph ->
+        P.EndParagraph ->
           extractPages state pages acc streamNext
-        PAR.AddKern (PAR.Length pos uLn) -> do
-          let evaledULnSP = evaluateULnToSP uLn
-          let evaledLnSP = resolveSignedInteger pos evaledULnSP
-          extractPages state pages ((A.VKern $ B.Kern evaledLnSP):acc) streamNext
-        PAR.StartParagraph indent ->
+        P.AddKern ln ->
+          extractPages state pages ((A.VKern $ B.Kern $ evaluateLnToSp ln):acc) streamNext
+        P.StartParagraph indent ->
           addParagraphToPage state pages acc streamNext indent
         -- <space token> has no effect in vertical modes.
-        PAR.AddSpace ->
+        P.AddSpace ->
           extractPages state pages acc streamNext
