@@ -123,14 +123,15 @@ spaceGlue state = do
     toFlex = A.finiteFlex . toSP
   return A.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
-evaluateNormalInteger :: P.NormalInteger -> Int
+evaluateNormalInteger :: P.NormalInteger -> Integer
 evaluateNormalInteger (P.IntegerConstant n) = n
 
-evaluateUNr :: P.UnsignedNumber -> Int
+evaluateUNr :: P.UnsignedNumber -> Integer
 evaluateUNr (P.NormalIntegerAsUNumber n) = evaluateNormalInteger n
 
 evaluateFactor :: P.Factor -> Rational
 evaluateFactor (P.NormalIntegerFactor n) = fromIntegral $ evaluateNormalInteger n
+evaluateFactor (P.RationalConstant r) = r
 
 theMag :: Int
 theMag = 1000

@@ -1,10 +1,12 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TupleSections #-}
 
 module Parse.Number where
 
 import qualified Text.Megaparsec as P
 import qualified Data.Char as C
+import Data.Ratio ((%))
 
 import qualified Expand
 import qualified Lex
@@ -12,7 +14,6 @@ import qualified Lex
 import Parse.Util (Parser)
 import qualified Parse.Util as PU
 import qualified Parse.Common as PC
-
 
 -- AST.
 
@@ -28,7 +29,7 @@ data UnsignedNumber
 -- Think: 'un-coerced integer'.
 data NormalInteger
   -- = InternalInteger InternalInteger
-  = IntegerConstant Int
+  = IntegerConstant Integer
   deriving Show
 
 -- data CoercedInteger
@@ -42,8 +43,10 @@ data NormalInteger
 
 -- Parsing.
 
-digitsToInteger :: Integral n => n -> [n] -> n
-digitsToInteger base = foldl (\a b -> a * base + b) 0
+-- Restrict return type, and therefore accumulator, to Integer, to disallow
+-- overflow.
+digitsToInteger :: Integral n => n -> [n] -> Integer
+digitsToInteger base = foldl (\a b -> a * fromIntegral base + fromIntegral b) 0
 
 parseSigns :: Parser Bool
 parseSigns = isPos <$> parseOptionalSigns
@@ -76,9 +79,9 @@ parseNormalInteger = P.choice [ IntegerConstant <$> parseConstant
                               ]
   where
     parseConstant = do
-      (digits, base) <- P.choice [ parseDecimalIntegerDigits
-                                 , parseHexadecimalIntegerDigits
-                                 , parseOctalIntegerDigits
+      (digits, base) <- P.choice [ (, 10) <$> P.some parseDecimalIntegerDigit
+                                 , (, 16) <$> parseHexadecimalIntegerDigits
+                                 , (, 8) <$> parseOctalIntegerDigits
                                  ]
       PC.skipOneOptionalSpace
       return $ digitsToInteger base digits
@@ -92,14 +95,12 @@ parseNormalInteger = P.choice [ IntegerConstant <$> parseConstant
         isBacktick (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=96}) = True
         isBacktick _ = False
 
-        parseCharLike (Expand.CharCat Lex.LexCharCat{char=c}) = Just c
-        parseCharLike (Expand.UnexpandedControlSequence (Lex.ControlSymbol char)) = Just $ C.ord char
+        parseCharLike (Expand.CharCat Lex.LexCharCat{char=c}) = Just $ fromIntegral c
+        parseCharLike (Expand.UnexpandedControlSequence (Lex.ControlSymbol char)) = Just $ fromIntegral $ C.ord char
         parseCharLike _ = Nothing
 
-parseDecimalIntegerDigits :: Parser ([Int], Int)
-parseDecimalIntegerDigits = do
-  digits <- P.some $ PU.satisfyThen charToDigit
-  return (digits, 10)
+parseDecimalIntegerDigit :: Parser Int
+parseDecimalIntegerDigit = PU.satisfyThen charToDigit
   where
     charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=48}) = Just 0
     charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=49}) = Just 1
@@ -113,11 +114,10 @@ parseDecimalIntegerDigits = do
     charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=57}) = Just 9
     charToDigit _ = Nothing
 
-parseHexadecimalIntegerDigits :: Parser ([Int], Int)
+parseHexadecimalIntegerDigits :: Parser [Int]
 parseHexadecimalIntegerDigits = do
   PU.skipSatisfied isDoubleQuote
-  digits <- P.some $ PU.satisfyThen charToDigit
-  return (digits, 16)
+  P.some $ PU.satisfyThen charToDigit
   where
     isDoubleQuote (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=34}) = True
     isDoubleQuote _ = False
@@ -148,11 +148,10 @@ parseHexadecimalIntegerDigits = do
     charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=70}) = Just 15
     charToDigit _ = Nothing
 
-parseOctalIntegerDigits :: Parser ([Int], Int)
+parseOctalIntegerDigits :: Parser [Int]
 parseOctalIntegerDigits = do
   PU.skipSatisfied isSingleQuote
-  digits <- P.some $ PU.satisfyThen charToDigit
-  return (digits, 8)
+  P.some $ PU.satisfyThen charToDigit
   where
     isSingleQuote (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=39}) = True
     isSingleQuote _ = False
@@ -170,3 +169,24 @@ parseOctalIntegerDigits = do
 -- parseCoercedInteger = P.choice [ parseInternalLengthAsInt
 --                                , parseInternalGlueAsInt
 --                                ]
+
+parseRationalConstant :: Parser Rational
+parseRationalConstant = do
+  wholeNr <- decDigitsToInteger <$> P.many parseDecimalIntegerDigit
+  PU.skipSatisfied isDotOrComma
+
+  -- The fractional part represents its integer interpretation, divided by
+  -- the next largest power of 10.
+  -- TODO: If performance matters, maybe we can infer the denominator
+  -- faster from the integer itself than the digits.
+  fracDigits <- P.many parseDecimalIntegerDigit
+  let fraction = fromIntegral (decDigitsToInteger fracDigits) % (10 ^ length fracDigits)
+
+  -- Convert the whole number to a rational, and add it to the fraction.
+  return $ fromIntegral wholeNr + fraction
+  where
+    decDigitsToInteger = digitsToInteger 10
+
+    isDotOrComma (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=44}) = True
+    isDotOrComma (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=46}) = True
+    isDotOrComma _ = False

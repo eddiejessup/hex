@@ -9,7 +9,7 @@ import Unit (PhysicalUnit(..))
 
 import Parse.Util (Parser)
 import qualified Parse.Common as PC
-import Parse.Number (NormalInteger, parseNormalInteger, parseSigns)
+import Parse.Number (NormalInteger, parseNormalInteger, parseRationalConstant, parseSigns)
 
 -- AST.
 
@@ -31,7 +31,10 @@ data NormalLength
 
 data Factor
   = NormalIntegerFactor NormalInteger
-  | DecimalConstant Rational
+  -- Badly named 'decimal constant' in the TeXbook. Granted, it is specified
+  -- with decimal digits, but its main feature is that it can represent
+  -- non-integers.
+  | RationalConstant Rational
   deriving Show
 
 data Unit
@@ -55,7 +58,6 @@ data InternalUnit
 -- Parse.
 
 -- TODO:
--- - Decimal constant
 -- - Internal quantity units
 
 parseLength :: Parser Length
@@ -71,7 +73,7 @@ parseUnsignedLength = P.choice [ NormalLengthAsULength <$> parseNormalLength
 
 parseNormalLength :: Parser NormalLength
 parseNormalLength = P.choice [ parseLengthSemiConstant
-                             -- , parseInternalLengthAsNormalLength
+                             -- , InternalLength <$> parseInternalLength
                              ]
   where
     parseLengthSemiConstant = do
@@ -93,23 +95,31 @@ parseUnit = P.choice [ parsePhysicalUnit
       return $ InternalUnit unit
     parsePhysicalUnit = do
       isTrue <- PC.parseOptionalKeyword "true"
-      -- Use 'try' because keywords with common prefixes lead the parser
-      -- down a blind alley. Could probably refactor to avoid, but it would be
-      -- ugly. Leave optimisation for later.
-      unit <- P.choice [ P.try $ PC.parseKeywordToValue "pt" Point
-                       , P.try $ PC.parseKeywordToValue "pc" Pica
-                       , P.try $ PC.parseKeywordToValue "in" Inch
-                       , P.try $ PC.parseKeywordToValue "bp" BigPoint
-                       , P.try $ PC.parseKeywordToValue "cm" Centimetre
-                       , P.try $ PC.parseKeywordToValue "mm" Millimetre
-                       , P.try $ PC.parseKeywordToValue "dd" Didot
+      -- TODO: Use 'try' because keywords with common prefixes lead the parser
+      -- down a blind alley. Could refactor to avoid, but it would be ugly.
+      -- Leave as later optimisation.
+      -- TODO: Should we omit the last try in such cases?
+      -- NOTE: Can't trim number of 'try's naïvely, because they all suck up
+      -- initial space, which would also need backtracking.
+      unit <- P.choice [ P.try $ PC.parseKeywordToValue "bp" BigPoint
                        , P.try $ PC.parseKeywordToValue "cc" Cicero
+                       , P.try $ PC.parseKeywordToValue "cm" Centimetre
+                       , P.try $ PC.parseKeywordToValue "dd" Didot
+                       , P.try $ PC.parseKeywordToValue "in" Inch
+                       , P.try $ PC.parseKeywordToValue "mm" Millimetre
+                       , P.try $ PC.parseKeywordToValue "pc" Pica
+                       , P.try $ PC.parseKeywordToValue "pt" Point
                        , P.try $ PC.parseKeywordToValue "sp" ScaledPoint
                        ]
       PC.skipOneOptionalSpace
       return $ PhysicalUnit isTrue unit
 
 parseFactor :: Parser Factor
-parseFactor = P.choice [ NormalIntegerFactor <$> parseNormalInteger
-                       -- TODO: parseRationalConstant
+-- NOTE: The order matters here: The TeX grammar seems to be ambiguous: '2.2'
+-- could be parsed as an integer constant, '2', followed by '.2'. We break the
+-- ambiguity by prioritising the rational constant parser.
+-- I don't think this is just a matter of backtracking, because the grammar is
+-- simply ambiguous.
+parseFactor = P.choice [ RationalConstant <$> P.try parseRationalConstant
+                       , NormalIntegerFactor <$> P.try parseNormalInteger
                        ]
