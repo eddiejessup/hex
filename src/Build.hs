@@ -31,7 +31,8 @@ newState :: State
 newState = State {currentFontNr=Nothing, fontInfoMap=IMap.empty}
 
 theParIndent :: A.BreakableHListElem
-theParIndent = A.HHBox B.HBox{contents=[], desiredLength=B.To $ fromIntegral $ Unit.toScaledPointApprox (20 :: Int) Unit.Point}
+theParIndent = A.HHBox B.HBox{contents=[]
+                             , desiredLength=B.To $ fromIntegral $ Unit.toScaledPointApprox (20 :: Int) Unit.Point}
 
 theDesiredWidth :: Int
 theDesiredWidth = 30750000
@@ -128,11 +129,18 @@ evaluateNormalInteger (P.IntegerConstant n) = n
 evaluateUNr :: P.UnsignedNumber -> Int
 evaluateUNr (P.NormalIntegerAsUNumber n) = evaluateNormalInteger n
 
-evaluateFactor :: P.Factor -> Int
-evaluateFactor (P.NormalIntegerFactor n) = evaluateNormalInteger n
+evaluateFactor :: P.Factor -> Rational
+evaluateFactor (P.NormalIntegerFactor n) = fromIntegral $ evaluateNormalInteger n
+
+theMag :: Int
+theMag = 1000
 
 evaluateNormalLengthToSP :: P.NormalLength -> Int
-evaluateNormalLengthToSP (P.LengthSemiConstant f (P.PhysicalUnit False u)) = Unit.toScaledPointApprox (evaluateFactor f) u
+evaluateNormalLengthToSP (P.LengthSemiConstant f (P.PhysicalUnit isTrue u))
+  = Unit.toScaledPointApprox (evalF isTrue) u
+  where
+    evalF False = evaluateFactor f
+    evalF True = evalF False * 1000 / fromIntegral theMag
 
 evaluateULnToSP :: P.UnsignedLength -> Int
 evaluateULnToSP (P.NormalLengthAsULength nLn) = evaluateNormalLengthToSP nLn

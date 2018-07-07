@@ -3,9 +3,12 @@
 
 module Parse.Common where
 
+import qualified Text.Megaparsec as P
+
 import qualified Expand
 import qualified Lex
 import qualified Data.Char as C
+import Data.Maybe (isJust)
 
 import Parse.Util (MatchToken, skipManySatisfied, skipOneOptionalSatisfied, Parser, NullParser)
 import qualified Parse.Util as PU
@@ -58,8 +61,15 @@ matchNonActiveCharacterUncased a t@(Expand.CharCat Lex.LexCharCat{char=c})
   = isNonActiveCharacter t && (C.chr c `elem` [C.toUpper a, C.toLower a])
 matchNonActiveCharacterUncased _ _ = False
 
-parseKeywordToValue :: String -> b -> Parser b
-parseKeywordToValue s c = do
+parseKeyword :: String -> NullParser
+parseKeyword s = do
   skipOptionalSpaces
   mapM_ (PU.skipSatisfied . matchNonActiveCharacterUncased) s
+
+parseOptionalKeyword :: String -> Parser Bool
+parseOptionalKeyword s = isJust <$> P.optional (P.try $ parseKeyword s)
+
+parseKeywordToValue :: String -> b -> Parser b
+parseKeywordToValue s c = do
+  parseKeyword s
   return c

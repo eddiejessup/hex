@@ -25,7 +25,7 @@ data UnsignedLength
 -- Think: 'un-coerced length'.
 data NormalLength
   -- = InternalLength InternalLength
-  -- semi-constant because Factor and Unit can be quite un-constant-like.
+  -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
   = LengthSemiConstant Factor Unit
   deriving Show
 
@@ -56,8 +56,6 @@ data InternalUnit
 
 -- TODO:
 -- - Decimal constant
--- - 'true' for physical units
--- - Physical units beyond 'pt'
 -- - Keyword internal units
 -- - Keyword internal units
 
@@ -91,8 +89,7 @@ parseUnit = P.choice [ parsePhysicalLengthUnit
     --   arg <- parseInternalLengthUnit
     --   return $ InternalUnit arg
     parsePhysicalLengthUnit = do
-      -- isTrue <- parseTrueKeyword
-      let isTrue = False
+      isTrue <- PC.parseOptionalKeyword "true"
       -- Use 'try' because keywords with common prefixes lead the parser
       -- down a blind alley. Could probably refactor to avoid, but it would be
       -- ugly. Leave optimisation for later.
