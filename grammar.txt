@@ -582,7 +582,7 @@
 ## Commands in Horizontal mode
 
 <horizontal-glue>
-    \hskip
+    \hskip <glue>
     \hfil
     \hfill
     \hss

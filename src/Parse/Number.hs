@@ -1,5 +1,4 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TupleSections #-}
 
 module Parse.Number where
@@ -33,8 +32,8 @@ data NormalInteger
   deriving Show
 
 -- data CoercedInteger
---   = InternalLengthAsInt InternalLength
---   | InternalGlueAsInt InternalGlue
+  -- = InternalLengthAsInt InternalLength
+  -- | InternalGlueAsInt InternalGlue
 
 -- data InternalInteger = TODO
 -- data InternalLength = TODO
@@ -63,9 +62,9 @@ parseSigns = isPos <$> parseOptionalSigns
 
 parseNumber :: Parser Number
 parseNumber = do
-  positive <- parseSigns
+  isPositive <- parseSigns
   uNr <- parseUnsignedNumber
-  return $ Number positive uNr
+  return $ Number isPositive uNr
 
 parseUnsignedNumber :: Parser UnsignedNumber
 parseUnsignedNumber = P.choice [ NormalIntegerAsUNumber <$> parseNormalInteger

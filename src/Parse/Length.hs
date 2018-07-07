@@ -1,5 +1,4 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Parse.Length where
 
@@ -62,9 +61,9 @@ data InternalUnit
 
 parseLength :: Parser Length
 parseLength = do
-  pos <- parseSigns
+  isPositive <- parseSigns
   uLn <- parseUnsignedLength
-  return $ Length pos uLn
+  return $ Length isPositive uLn
 
 parseUnsignedLength :: Parser UnsignedLength
 parseUnsignedLength = P.choice [ NormalLengthAsULength <$> parseNormalLength

@@ -1,5 +1,4 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Parse.Common where
 
@@ -61,15 +60,15 @@ matchNonActiveCharacterUncased a t@(Expand.CharCat Lex.LexCharCat{char=c})
   = isNonActiveCharacter t && (C.chr c `elem` [C.toUpper a, C.toLower a])
 matchNonActiveCharacterUncased _ _ = False
 
-parseKeyword :: String -> NullParser
-parseKeyword s = do
+skipKeyword :: String -> NullParser
+skipKeyword s = do
   skipOptionalSpaces
   mapM_ (PU.skipSatisfied . matchNonActiveCharacterUncased) s
 
 parseOptionalKeyword :: String -> Parser Bool
-parseOptionalKeyword s = isJust <$> P.optional (P.try $ parseKeyword s)
+parseOptionalKeyword s = isJust <$> P.optional (P.try $ skipKeyword s)
 
 parseKeywordToValue :: String -> b -> Parser b
 parseKeywordToValue s c = do
-  parseKeyword s
+  skipKeyword s
   return c
