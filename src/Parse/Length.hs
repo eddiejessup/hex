@@ -43,9 +43,9 @@ data Unit
 data InternalUnit
   = Em
   | Ex
-  -- | InternalIntegerLengthUnit InternalInteger
-  -- | InternalLengthLengthUnit InternalLength
-  -- | InternalGlueLengthUnit InternalGlue
+  -- | InternalIntegerUnit InternalInteger
+  -- | InternalLengthUnit InternalLength
+  -- | InternalGlueUnit InternalGlue
   deriving Show
 
 -- data CoercedLength
@@ -56,8 +56,7 @@ data InternalUnit
 
 -- TODO:
 -- - Decimal constant
--- - Keyword internal units
--- - Keyword internal units
+-- - Internal quantity units
 
 parseLength :: Parser Length
 parseLength = do
@@ -81,14 +80,18 @@ parseNormalLength = P.choice [ parseLengthSemiConstant
       return $ LengthSemiConstant factor lengthUnit
 
 parseUnit :: Parser Unit
-parseUnit = P.choice [ parsePhysicalLengthUnit
-                     -- , parseInternalLengthUnitAsLengthUnit
+parseUnit = P.choice [ parsePhysicalUnit
+                     , parseInternalKeywordUnit
+                     -- , parseInternalQuantityUnit
                      ]
   where
-    -- parseInternalLengthUnitAsLengthUnit = do
-    --   arg <- parseInternalLengthUnit
-    --   return $ InternalUnit arg
-    parsePhysicalLengthUnit = do
+    parseInternalKeywordUnit = do
+      unit <- P.choice [ P.try $ PC.parseKeywordToValue "em" Em
+                       , P.try $ PC.parseKeywordToValue "ex" Ex
+                       ]
+      PC.skipOneOptionalSpace
+      return $ InternalUnit unit
+    parsePhysicalUnit = do
       isTrue <- PC.parseOptionalKeyword "true"
       -- Use 'try' because keywords with common prefixes lead the parser
       -- down a blind alley. Could probably refactor to avoid, but it would be
@@ -103,6 +106,7 @@ parseUnit = P.choice [ parsePhysicalLengthUnit
                        , P.try $ PC.parseKeywordToValue "cc" Cicero
                        , P.try $ PC.parseKeywordToValue "sp" ScaledPoint
                        ]
+      PC.skipOneOptionalSpace
       return $ PhysicalUnit isTrue unit
 
 parseFactor :: Parser Factor

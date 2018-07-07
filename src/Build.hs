@@ -135,12 +135,21 @@ evaluateFactor (P.NormalIntegerFactor n) = fromIntegral $ evaluateNormalInteger 
 theMag :: Int
 theMag = 1000
 
+evaluateUnitToSP :: P.Unit -> Rational
+evaluateUnitToSP (P.PhysicalUnit _ u) = Unit.inScaledPoint u
+-- TODO:
+evaluateUnitToSP (P.InternalUnit P.Em) = 10
+evaluateUnitToSP (P.InternalUnit P.Ex) = 10
+
 evaluateNormalLengthToSP :: P.NormalLength -> Int
-evaluateNormalLengthToSP (P.LengthSemiConstant f (P.PhysicalUnit isTrue u))
-  = Unit.toScaledPointApprox (evalF isTrue) u
+evaluateNormalLengthToSP (P.LengthSemiConstant f u@(P.PhysicalUnit isTrue _))
+  = round $ evalF isTrue * evaluateUnitToSP u
   where
     evalF False = evaluateFactor f
     evalF True = evalF False * 1000 / fromIntegral theMag
+evaluateNormalLengthToSP (P.LengthSemiConstant f u)
+  = round $ evaluateFactor f * evaluateUnitToSP u
+
 
 evaluateULnToSP :: P.UnsignedLength -> Int
 evaluateULnToSP (P.NormalLengthAsULength nLn) = evaluateNormalLengthToSP nLn
