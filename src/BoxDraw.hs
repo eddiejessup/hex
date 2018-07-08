@@ -163,7 +163,9 @@ instance DVIAble VBox where
 instance DVIAble HBox where
   toDVI HBox{contents=cs} = concatMap toDVI cs
 
--- TODO: Rule.
+-- TODO: Don't know how to handle depth.
+instance DVIAble Rule where
+  toDVI Rule{width=w, height=h, depth=d} = [DVIE.Rule{height=h + d, width=w, move=True}]
 
 instance DVIAble SetGlue where
   toDVI SetGlue {} = []
@@ -200,9 +202,10 @@ instance DVIAble HBoxElem where
     -- TODO: Rule.
   toDVI (HGlue g) = [DVIE.MoveRight {distance = glueDimen g}]
   toDVI (HKern k) = [DVIE.MoveRight {distance = kernDimen k}]
-  toDVI (HFontDefinition e@FontDefinition {}) = toDVI e
-  toDVI (HFontSelection e@FontSelection {}) = toDVI e
-  toDVI (HCharacter e@Character {}) = toDVI e
+  toDVI (HRule r) = toDVI r
+  toDVI (HFontDefinition e) = toDVI e
+  toDVI (HFontSelection e) = toDVI e
+  toDVI (HCharacter e) = toDVI e
 
 instance DVIAble VBoxElem where
   toDVI (VVBox e) =
@@ -212,6 +215,7 @@ instance DVIAble VBoxElem where
     -- TODO: Rule.
   toDVI (VGlue g) = [DVIE.MoveDown {distance = glueDimen g}]
   toDVI (VKern k) = [DVIE.MoveDown {distance = kernDimen k}]
+  toDVI (VRule r) = toDVI r
   toDVI (VFontDefinition e) = toDVI e
   toDVI (VFontSelection e) = toDVI e
 

@@ -9,7 +9,6 @@ import Path (Path, Rel, File, parseRelFile)
 
 import qualified Expand
 import qualified Lex
-import qualified Categorise as Cat
 
 import Parse.Util (Parser, Stream, ParseState, NullParser, ParseError, skipOneOptionalSatisfied, easyRunParser', satisfyThen, skipSatisfiedEquals)
 import qualified Parse.Util as PU
@@ -20,9 +19,6 @@ import qualified Parse.Glue as PG
 -- AST.
 
 data CharSource = ExplicitChar | CodeChar | TokenChar
-  deriving Show
-
-data ControlSequenceLike = ActiveCharacter Cat.CharCode | ControlSequence Lex.ControlSequence
   deriving Show
 
 data AssignmentBody
@@ -42,7 +38,7 @@ data AssignmentBody
   -- | Read
   -- | DefineBox
   -- TEMP: Dummy label constructor until properly implemented.
-  | DefineFont ControlSequenceLike (Path Rel File)
+  | DefineFont PC.ControlSequenceLike (Path Rel File)
   -- -- Global assignments.
   -- | SetFontAttribute
   -- | SetHyphenation
@@ -56,8 +52,8 @@ data Assignment
   deriving Show
 
 data AllModesCommand
-  = Relax
-  | Assign Assignment
+  = Assign Assignment
+  | Relax
   -- | LeftBrace
   -- | RightBrace
   -- | BeginGroup
@@ -93,7 +89,7 @@ data AllModesCommand
   -- | AddBox Box
   -- | AddShiftedBox Distance Box
   -- | AddFetchedBox { register :: Int, unwrap, pop :: Bool } -- \box, \copy, \un{v,h}{box,copy}
-  -- | AddRule { width, height, depth :: Maybe Distance }
+  | AddRule { width, height, depth :: Maybe PL.Length }
   -- | AddAlignedMaterial DesiredLength AlignmentMaterial
   | StartParagraph { indent :: Bool }
   | EndParagraph
@@ -135,83 +131,52 @@ type AllModeCommandParser = Parser AllModesCommand
 
 parseAllModeCommand :: Expand.Axis -> Parser AllModesCommand
 parseAllModeCommand mode = P.choice [ relax
+                                    , tokenForFont
+                                    , macroToFont
                                     , addKern
                                     , addSpecifiedGlue mode
+                                    , addSpace
+                                    , addRule mode
                                     , startParagraph
                                     , endParagraph
-                                    , macroToFont
-                                    , tokenForFont
-                                    , addSpace
                                     ]
-
-relax :: AllModeCommandParser
-relax = do
-  skipSatisfiedEquals Expand.Relax
-  return Relax
-
-addKern :: AllModeCommandParser
-addKern = do
-  skipSatisfiedEquals Expand.AddKern
-  ln <- PL.parseLength
-  return $ AddKern ln
-
-addSpecifiedGlue :: Expand.Axis -> AllModeCommandParser
-addSpecifiedGlue mode = do
-  PU.skipSatisfied $ checkModeAndToken mode (== Expand.AddSpecifiedGlue)
-  AddGlue <$> PG.parseGlue
 
 checkModeAndToken :: Expand.Axis -> (Expand.ModedCommandParseToken -> Bool) ->
                      Expand.ParseToken -> Bool
 checkModeAndToken m1 chk (Expand.ModedCommand m2 tok) = (m1 == m2) && chk tok
 checkModeAndToken _ _ _ = False
 
-startParagraph :: AllModeCommandParser
-startParagraph = satisfyThen parToCom
-  where
-    parToCom (Expand.StartParagraph _indent) = Just StartParagraph{indent=_indent}
-    parToCom _ = Nothing
+relax :: AllModeCommandParser
+relax = do
+  skipSatisfiedEquals Expand.Relax
+  return Relax
 
-endParagraph :: AllModeCommandParser
-endParagraph = do
-  skipSatisfiedEquals Expand.EndParagraph
-  return EndParagraph
+tokenForFont :: AllModeCommandParser
+tokenForFont = satisfyThen tokToCom
+  where
+    tokToCom (Expand.TokenForFont n) = Just $ Assign Assignment {body=SelectFont n , global=False}
+    tokToCom _ = Nothing
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
 macroToFont :: AllModeCommandParser
 macroToFont = do
   skipSatisfiedEquals Expand.MacroToFont
-  cs <- parseCSName
+  cs <- PC.parseCSName
   skipOptionalEquals
   fontPath <- parseFileName
   return $ Assign Assignment {body=DefineFont cs fontPath, global=False}
-
-skipOptionalEquals :: NullParser
-skipOptionalEquals = do
-  PC.skipOptionalSpaces
-  skipOneOptionalSatisfied PC.isEquals
-
-parseCSName :: Parser ControlSequenceLike
-parseCSName = do
-  PU.disableExpansion
-  csLike <- satisfyThen parseCSLike
-  PU.enableExpansion
-  return csLike
   where
-    parseCSLike (Expand.CharCat Lex.LexCharCat{cat=Lex.Active, char=c}) = Just $ ActiveCharacter c
-    parseCSLike (Expand.UnexpandedControlSequence cs) = Just $ ControlSequence cs
-    parseCSLike _ = Nothing
+    -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
+    parseFileName :: Parser (Path Rel File)
+    parseFileName = do
+      PC.skipOptionalSpaces
+      nameCodes <- P.some $ satisfyThen tokToChar
+      let name = fmap C.chr nameCodes
+      PU.skipSatisfied PC.isSpace
+      case parseRelFile (name ++ ".tfm") of
+        Just p -> return p
+        Nothing -> fail $ "Invalid filename: " ++ name ++ ".tfm"
 
--- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-parseFileName :: Parser (Path Rel File)
-parseFileName = do
-  PC.skipOptionalSpaces
-  nameCodes <- P.some $ satisfyThen tokToChar
-  let name = fmap C.chr nameCodes
-  PU.skipSatisfied PC.isSpace
-  case parseRelFile (name ++ ".tfm") of
-    Just p -> return p
-    Nothing -> fail $ "Invalid filename: " ++ name ++ ".tfm"
-  where
     tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=c}) = Just c
     -- 'Other' Characters for decimal digits are OK.
     tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=c}) = case c of
@@ -228,16 +193,63 @@ parseFileName = do
       _ -> Nothing
     tokToChar _ = Nothing
 
-tokenForFont :: AllModeCommandParser
-tokenForFont = satisfyThen tokToCom
-  where
-    tokToCom (Expand.TokenForFont n) = Just $ Assign Assignment {body=SelectFont n , global=False}
-    tokToCom _ = Nothing
+
+skipOptionalEquals :: NullParser
+skipOptionalEquals = do
+  PC.skipOptionalSpaces
+  skipOneOptionalSatisfied PC.isEquals
+
+addKern :: AllModeCommandParser
+addKern = do
+  skipSatisfiedEquals Expand.AddKern
+  AddKern <$> PL.parseLength
+
+addSpecifiedGlue :: Expand.Axis -> AllModeCommandParser
+addSpecifiedGlue mode = do
+  PU.skipSatisfied $ checkModeAndToken mode (== Expand.AddSpecifiedGlue)
+  AddGlue <$> PG.parseGlue
 
 addSpace :: AllModeCommandParser
-addSpace = do
-  PU.skipSatisfied PC.isSpace
-  return AddSpace
+addSpace = const AddSpace <$> PU.skipSatisfied PC.isSpace
+
+addRule :: Expand.Axis -> AllModeCommandParser
+addRule mode = do
+  PU.skipSatisfied $ checkModeAndToken mode (== Expand.AddRule)
+  let cmd = AddRule{width=Nothing, height=Nothing, depth=Nothing}
+  parseRuleSpecification cmd
+  where
+    parseRuleSpecification cmd = do
+      PC.skipOptionalSpaces
+      x <- P.optional $ P.try $ P.choice [ parseRuleWidth cmd
+                                         , parseRuleHeight cmd
+                                         , parseRuleDepth cmd ]
+      case x of
+        Just newCmd -> parseRuleSpecification newCmd
+        Nothing -> return cmd
+
+    parseRuleWidth cmd = do
+      PC.skipKeyword "width"
+      ln <- PL.parseLength
+      return cmd{width=Just ln}
+
+    parseRuleHeight cmd = do
+      PC.skipKeyword "height"
+      ln <- PL.parseLength
+      return cmd{height=Just ln}
+
+    parseRuleDepth cmd = do
+      PC.skipKeyword "depth"
+      ln <- PL.parseLength
+      return cmd{depth=Just ln}
+
+startParagraph :: AllModeCommandParser
+startParagraph = satisfyThen parToCom
+  where
+    parToCom (Expand.StartParagraph _indent) = Just StartParagraph{indent=_indent}
+    parToCom _ = Nothing
+
+endParagraph :: AllModeCommandParser
+endParagraph = const EndParagraph <$> skipSatisfiedEquals Expand.EndParagraph
 
 -- HMode.
 

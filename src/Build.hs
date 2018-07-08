@@ -172,6 +172,9 @@ evaluateGlue (P.ExplicitGlue dim str shr) =
     shrink=evaluateFlex shr
   }
 
+evaluateKern :: P.Length -> B.Kern
+evaluateKern = B.Kern . evaluateLength
+
 -- We build a paragraph list in reverse order.
 extractParagraph :: State -> [A.BreakableHListElem] -> Stream -> IO (State, [A.BreakableHListElem], Stream)
 extractParagraph state acc stream =
@@ -180,38 +183,51 @@ extractParagraph state acc stream =
     Left x -> error $ show x
     Right (P.HAllModesCommand aCom) ->
       case aCom of
+        P.Relax ->
+          extractParagraph state acc streamNext
+        P.Assign P.Assignment{body=P.SelectFont fNr} ->
+          do
+          let (stateNext, fontSel) = selectFont state fNr
+          extractParagraph stateNext (A.HFontSelection fontSel:acc) streamNext
         P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractParagraph stateNext (A.HFontDefinition fontDef:acc) streamNext
-        P.Assign P.Assignment{body=P.SelectFont fNr} ->
-          do
-          let (stateNext, fontSel) = selectFont state fNr
-          extractParagraph stateNext (A.HFontSelection fontSel:acc) streamNext
-        P.Relax ->
-          extractParagraph state acc streamNext
-        -- \par: end the current paragraph.
-        P.EndParagraph ->
-          return (state, acc, streamNext)
         P.AddKern ln ->
-          extractParagraph state ((A.HKern $ B.Kern $ evaluateLength ln):acc) streamNext
-        -- \indent: An empty box of width \parindent is appended to the current
-        -- list, and the space factor is set to 1000.
-        -- TODO: Space factor.
+          extractParagraph state ((A.HKern $ evaluateKern ln):acc) streamNext
         P.AddGlue g ->
           extractParagraph state (A.HGlue (evaluateGlue g):acc) streamNext
-        P.StartParagraph True ->
-          extractParagraph state (theParIndent:acc) streamNext
-        -- \noindent: has no effect in horizontal modes.
-        P.StartParagraph False ->
-          extractParagraph state acc streamNext
         P.AddSpace ->
           do
           glue <- case spaceGlue state of
             Just sg -> return $ A.HGlue sg
             Nothing -> fail "Could not get space glue"
           extractParagraph state (glue:acc) streamNext
+        -- \indent: An empty box of width \parindent is appended to the current
+        -- list, and the space factor is set to 1000.
+        -- TODO: Space factor.
+        P.AddRule{width=w, height=h, depth=d} -> do
+          let
+            evalW = case w of
+              Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+              Just ln -> evaluateLength ln
+            evalH = case h of
+              Nothing -> Unit.toScaledPointApprox (10 :: Int) Unit.Point
+              Just ln -> evaluateLength ln
+            evalD = case d of
+              Nothing -> 0
+              Just ln -> evaluateLength ln
+            rule = B.Rule{width=evalW, height=evalH, depth=evalD}
+          extractParagraph state (A.HRule rule:acc) streamNext
+        P.StartParagraph True ->
+          extractParagraph state (theParIndent:acc) streamNext
+        -- \noindent: has no effect in horizontal modes.
+        P.StartParagraph False ->
+          extractParagraph state acc streamNext
+        -- \par: end the current paragraph.
+        P.EndParagraph ->
+          return (state, acc, streamNext)
     Right P.AddCharacter{code=i} ->
       do
       charBox <- case characterBox state i of
@@ -279,26 +295,39 @@ extractPages state pages acc stream =
       return (state, lastPage:pages, acc, streamNext)
     Right (P.VAllModesCommand aCom) ->
       case aCom of
+        P.Relax ->
+          extractPages state pages acc streamNext
+        P.Assign P.Assignment{body=P.SelectFont fNr} ->
+          do
+          let (stateNext, fontSel) = selectFont state fNr
+          extractPages stateNext pages (A.VFontSelection fontSel:acc) streamNext
+        -- \par does nothing in vertical mode.
         P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractPages stateNext pages (A.VFontDefinition fontDef:acc) streamNext
-        P.Assign P.Assignment{body=P.SelectFont fNr} ->
-          do
-          let (stateNext, fontSel) = selectFont state fNr
-          extractPages stateNext pages (A.VFontSelection fontSel:acc) streamNext
-        P.Relax ->
-          extractPages state pages acc streamNext
-        -- \par does nothing in vertical mode.
-        P.EndParagraph ->
-          extractPages state pages acc streamNext
         P.AddKern ln ->
-          extractPages state pages ((A.VKern $ B.Kern $ evaluateLength ln):acc) streamNext
+          extractPages state pages ((A.VKern $ evaluateKern ln):acc) streamNext
         P.AddGlue g ->
           extractPages state pages (A.VGlue (evaluateGlue g):acc) streamNext
-        P.StartParagraph indent ->
-          addParagraphToPage state pages acc streamNext indent
         -- <space token> has no effect in vertical modes.
         P.AddSpace ->
+          extractPages state pages acc streamNext
+        P.AddRule{width=w, height=h, depth=d} -> do
+          let
+            evalW = case w of
+              Nothing -> theDesiredWidth
+              Just ln -> evaluateLength ln
+            evalH = case h of
+              Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+              Just ln -> evaluateLength ln
+            evalD = case d of
+              Nothing -> 0
+              Just ln -> evaluateLength ln
+            rule = B.Rule{width=evalW, height=evalH, depth=evalD}
+          extractPages state pages (A.VRule rule:acc) streamNext
+        P.StartParagraph indent ->
+          addParagraphToPage state pages acc streamNext indent
+        P.EndParagraph ->
           extractPages state pages acc streamNext

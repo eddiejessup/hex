@@ -288,8 +288,8 @@ extractControlWord "noindent" = StartParagraph{indent=False}
 
 extractControlWord "par" = EndParagraph
 
-extractControlWord "hrule" = ModedCommand Horizontal AddRule
-extractControlWord "vrule" = ModedCommand Vertical AddRule
+extractControlWord "hrule" = ModedCommand Vertical AddRule
+extractControlWord "vrule" = ModedCommand Horizontal AddRule
 
 extractControlWord "font" = MacroToFont
 -- Temporary pragmatism.
