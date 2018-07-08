@@ -1,5 +1,4 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Expand where
 
@@ -12,14 +11,13 @@ data HDirection = Leftward | Rightward
 data VDirection = Upward | Downward
   deriving (Show, Eq)
 
+data Direction = Forward | Backward
+  deriving (Show, Eq)
+
 data MessageStream = Out | Err
   deriving (Show, Eq)
 
 data Axis = Horizontal | Vertical
-  deriving (Show, Eq)
-
-data AxisDirection
-  = North | East | South | West
   deriving (Show, Eq)
 
 data PresetGlueType
@@ -46,6 +44,15 @@ data BoxRegisterAttribute
   = HasVerticalBox
   | HasHorizontalBox
   | IsVoid
+  deriving (Show, Eq)
+
+data ModedCommandParseToken
+  = AddSpecifiedGlue -- \vskip, \hskip
+  | AddPresetGlue PresetGlueType -- \{v,h}{fil,fill,filneg,ss}
+  -- | AddAlignedMaterial -- \halign, \valign
+  -- | AddShiftedBox Direction -- \moveleft, \moveright, \raise, \lower
+  -- | AddUnwrappedFetchedBox { pop :: Bool } -- \un{v,h}{box,copy}
+  | AddRule -- \hrule, \vrule
   deriving (Show, Eq)
 
 data ParseToken
@@ -78,13 +85,13 @@ data ParseToken
   -- | RemoveLastGlue -- \unskip
   -- | AddMark -- \mark
   -- | AddInsertion -- \insert
-  | AddSpecifiedGlue Axis -- \vskip, \hskip
-  | AddPresetGlue Axis PresetGlueType -- \{v,h}{fil,fill,filneg,ss}
   -- | AddLeaders LeadersType
-  -- | AddAlignedMaterial Axis -- \halign, \valign
   | StartParagraph { indent :: Bool } -- \indent, \noindent
   | EndParagraph -- \par
   -- | LeftBrace -- {
+
+  -- Starters of mode-specific commands with almost mode-independent grammar.
+  | ModedCommand Axis ModedCommandParseToken
 
   -- Starters of Vertical-Mode-specific commands.
   | End -- \end
@@ -108,10 +115,8 @@ data ParseToken
   -- | SplitVBox -- \vsplit
   -- | HBox -- \hbox
   -- | VBox {top :: Bool} -- \vbox, \vtop
-  -- | AddShiftedBox AxisDirection -- \moveleft, \moveright, \raise, \lower
+  -- Direction represents reading direction: forward means right, or down.
   -- | AddFetchedBox { pop :: Bool } -- \box, \copy
-  -- | AddUnwrappedFetchedBox { axis :: Axis, pop :: Bool } -- \un{v,h}{box,copy}
-  | AddRule Axis -- \hrule, \vrule
 
   -- -- Involved in assignments.
   -- -- * * Modifying how to apply assignments.
@@ -267,24 +272,24 @@ extractControlWord "relax" = Relax
 extractControlWord "penalty" = AddPenalty
 extractControlWord "kern" = AddKern
 
-extractControlWord "vskip" = AddSpecifiedGlue Vertical
-extractControlWord "hskip" = AddSpecifiedGlue Horizontal
-extractControlWord "hfil" = AddPresetGlue Horizontal Fil
-extractControlWord "vfil" = AddPresetGlue Vertical Fil
-extractControlWord "hfill" = AddPresetGlue Horizontal Fill
-extractControlWord "vfill" = AddPresetGlue Vertical Fill
-extractControlWord "hfilneg" = AddPresetGlue Horizontal FilNeg
-extractControlWord "vfilneg" = AddPresetGlue Vertical FilNeg
-extractControlWord "hss" = AddPresetGlue Horizontal StretchOrShrink
-extractControlWord "vss" = AddPresetGlue Vertical StretchOrShrink
+extractControlWord "vskip" = ModedCommand Vertical AddSpecifiedGlue
+extractControlWord "hskip" = ModedCommand Horizontal AddSpecifiedGlue
+extractControlWord "hfil" = ModedCommand Horizontal $ AddPresetGlue Fil
+extractControlWord "vfil" = ModedCommand Vertical $ AddPresetGlue Fil
+extractControlWord "hfill" = ModedCommand Horizontal $ AddPresetGlue Fill
+extractControlWord "vfill" = ModedCommand Vertical $ AddPresetGlue Fill
+extractControlWord "hfilneg" = ModedCommand Horizontal $ AddPresetGlue FilNeg
+extractControlWord "vfilneg" = ModedCommand Vertical $ AddPresetGlue FilNeg
+extractControlWord "hss" = ModedCommand Horizontal $ AddPresetGlue StretchOrShrink
+extractControlWord "vss" = ModedCommand Vertical $ AddPresetGlue StretchOrShrink
 
 extractControlWord "indent" = StartParagraph{indent=True}
 extractControlWord "noindent" = StartParagraph{indent=False}
 
 extractControlWord "par" = EndParagraph
 
-extractControlWord "hrule" = AddRule Horizontal
-extractControlWord "vrule" = AddRule Vertical
+extractControlWord "hrule" = ModedCommand Horizontal AddRule
+extractControlWord "vrule" = ModedCommand Vertical AddRule
 
 extractControlWord "font" = MacroToFont
 -- Temporary pragmatism.

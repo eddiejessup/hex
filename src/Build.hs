@@ -120,7 +120,7 @@ spaceGlue state = do
   font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo state
   let
     toSP = TFMM.designScaleSP font
-    toFlex = A.finiteFlex . toSP
+    toFlex = A.finiteFlex . fromIntegral . toSP
   return A.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
 evaluateNormalInteger :: P.NormalInteger -> Integer
@@ -136,28 +136,41 @@ evaluateFactor (P.RationalConstant r) = r
 theMag :: Int
 theMag = 1000
 
-evaluateUnitToSP :: P.Unit -> Rational
-evaluateUnitToSP (P.PhysicalUnit _ u) = Unit.inScaledPoint u
+evaluateUnit :: P.Unit -> Rational
+evaluateUnit (P.PhysicalUnit _ u) = Unit.inScaledPoint u
 -- TODO:
-evaluateUnitToSP (P.InternalUnit P.Em) = 10
-evaluateUnitToSP (P.InternalUnit P.Ex) = 10
+evaluateUnit (P.InternalUnit P.Em) = 10
+evaluateUnit (P.InternalUnit P.Ex) = 10
 
-evaluateNormalLengthToSP :: P.NormalLength -> Int
-evaluateNormalLengthToSP (P.LengthSemiConstant f u@(P.PhysicalUnit isTrue _))
-  = round $ evalF isTrue * evaluateUnitToSP u
+evaluateNormalLength :: P.NormalLength -> Int
+evaluateNormalLength (P.LengthSemiConstant f u@(P.PhysicalUnit isTrue _))
+  = round $ evalF isTrue * evaluateUnit u
   where
     evalF False = evaluateFactor f
     evalF True = evalF False * 1000 / fromIntegral theMag
-evaluateNormalLengthToSP (P.LengthSemiConstant f u)
-  = round $ evaluateFactor f * evaluateUnitToSP u
+evaluateNormalLength (P.LengthSemiConstant f u)
+  = round $ evaluateFactor f * evaluateUnit u
 
+evaluateULength :: P.UnsignedLength -> Int
+evaluateULength (P.NormalLengthAsULength nLn) = evaluateNormalLength nLn
 
-evaluateULnToSP :: P.UnsignedLength -> Int
-evaluateULnToSP (P.NormalLengthAsULength nLn) = evaluateNormalLengthToSP nLn
+evaluateLength :: P.Length -> Int
+evaluateLength (P.Length True uLn) = evaluateULength uLn
+evaluateLength (P.Length False uLn) = -(evaluateULength uLn)
 
-evaluateLnToSp :: P.Length -> Int
-evaluateLnToSp (P.Length True uLn) = evaluateULnToSP uLn
-evaluateLnToSp (P.Length False uLn) = -(evaluateULnToSP uLn)
+evaluateFlex :: Maybe P.Flex -> A.GlueFlex
+evaluateFlex (Just (P.FiniteFlex ln)) = A.GlueFlex{factor=fromIntegral $ evaluateLength ln, order=0}
+evaluateFlex (Just (P.FilFlex (P.FilLength True f ord))) = A.GlueFlex{factor=evaluateFactor f, order=ord}
+evaluateFlex (Just (P.FilFlex (P.FilLength False f ord))) = A.GlueFlex{factor= -(evaluateFactor f), order=ord}
+evaluateFlex Nothing = A.noFlex
+
+evaluateGlue :: P.Glue -> A.Glue
+evaluateGlue (P.ExplicitGlue dim str shr) =
+  A.Glue {
+    dimen=evaluateLength dim,
+    stretch=evaluateFlex str,
+    shrink=evaluateFlex shr
+  }
 
 -- We build a paragraph list in reverse order.
 extractParagraph :: State -> [A.BreakableHListElem] -> Stream -> IO (State, [A.BreakableHListElem], Stream)
@@ -182,10 +195,12 @@ extractParagraph state acc stream =
         P.EndParagraph ->
           return (state, acc, streamNext)
         P.AddKern ln ->
-          extractParagraph state ((A.HKern $ B.Kern $ evaluateLnToSp ln):acc) streamNext
+          extractParagraph state ((A.HKern $ B.Kern $ evaluateLength ln):acc) streamNext
         -- \indent: An empty box of width \parindent is appended to the current
         -- list, and the space factor is set to 1000.
         -- TODO: Space factor.
+        P.AddGlue g ->
+          extractParagraph state (A.HGlue (evaluateGlue g):acc) streamNext
         P.StartParagraph True ->
           extractParagraph state (theParIndent:acc) streamNext
         -- \noindent: has no effect in horizontal modes.
@@ -277,7 +292,9 @@ extractPages state pages acc stream =
         P.EndParagraph ->
           extractPages state pages acc streamNext
         P.AddKern ln ->
-          extractPages state pages ((A.VKern $ B.Kern $ evaluateLnToSp ln):acc) streamNext
+          extractPages state pages ((A.VKern $ B.Kern $ evaluateLength ln):acc) streamNext
+        P.AddGlue g ->
+          extractPages state pages (A.VGlue (evaluateGlue g):acc) streamNext
         P.StartParagraph indent ->
           addParagraphToPage state pages acc streamNext indent
         -- <space token> has no effect in vertical modes.

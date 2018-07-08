@@ -50,7 +50,9 @@ digitsToInteger base = foldl (\a b -> a * fromIntegral base + fromIntegral b) 0
 parseSigns :: Parser Bool
 parseSigns = isPos <$> parseOptionalSigns
   where
-    parseOptionalSigns = P.sepEndBy (PU.satisfyThen signToPos) PC.skipOptionalSpaces
+    parseOptionalSigns = do
+      PC.skipOptionalSpaces
+      P.sepEndBy (PU.satisfyThen signToPos) PC.skipOptionalSpaces
 
     isPos (True:xs) = isPos xs
     isPos (False:xs) = not $ isPos xs

@@ -15,6 +15,7 @@ import Parse.Util (Parser, Stream, ParseState, NullParser, ParseError, skipOneOp
 import qualified Parse.Util as PU
 import qualified Parse.Common as PC
 import qualified Parse.Length as PL
+import qualified Parse.Glue as PG
 
 -- AST.
 
@@ -86,7 +87,7 @@ data AllModesCommand
   -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
   -- -- then can 'migrate' out.
   -- | AddInsertion {nr :: Int, contents :: VModeMaterial}
-  -- | AddGlue Glue
+  | AddGlue PG.Glue
   -- | AddLeaders {type :: LeadersType, template :: BoxOrRule, glue :: Glue}
   | AddSpace
   -- | AddBox Box
@@ -132,15 +133,16 @@ extractVModeCommand = easyRunParser' parseVModeCommand
 
 type AllModeCommandParser = Parser AllModesCommand
 
-parseAllModeCommand :: Parser AllModesCommand
-parseAllModeCommand = P.choice [ relax
-                               , addKern
-                               , startParagraph
-                               , endParagraph
-                               , macroToFont
-                               , tokenForFont
-                               , addSpace
-                               ]
+parseAllModeCommand :: Expand.Axis -> Parser AllModesCommand
+parseAllModeCommand mode = P.choice [ relax
+                                    , addKern
+                                    , addSpecifiedGlue mode
+                                    , startParagraph
+                                    , endParagraph
+                                    , macroToFont
+                                    , tokenForFont
+                                    , addSpace
+                                    ]
 
 relax :: AllModeCommandParser
 relax = do
@@ -152,6 +154,16 @@ addKern = do
   skipSatisfiedEquals Expand.AddKern
   ln <- PL.parseLength
   return $ AddKern ln
+
+addSpecifiedGlue :: Expand.Axis -> AllModeCommandParser
+addSpecifiedGlue mode = do
+  PU.skipSatisfied $ checkModeAndToken mode (== Expand.AddSpecifiedGlue)
+  AddGlue <$> PG.parseGlue
+
+checkModeAndToken :: Expand.Axis -> (Expand.ModedCommandParseToken -> Bool) ->
+                     Expand.ParseToken -> Bool
+checkModeAndToken m1 chk (Expand.ModedCommand m2 tok) = (m1 == m2) && chk tok
+checkModeAndToken _ _ _ = False
 
 startParagraph :: AllModeCommandParser
 startParagraph = satisfyThen parToCom
@@ -237,7 +249,7 @@ parseHModeCommand =
            , addCharacter
            ]
   <|>
-  (HAllModesCommand <$> parseAllModeCommand)
+  (HAllModesCommand <$> parseAllModeCommand Expand.Horizontal)
 
 leaveHMode :: HModeCommandParser
 leaveHMode = do
@@ -275,7 +287,7 @@ parseVModeCommand =
            , end
            ]
   <|>
-  (VAllModesCommand <$> parseAllModeCommand)
+  (VAllModesCommand <$> parseAllModeCommand Expand.Vertical)
 
 end :: VModeCommandParser
 end = do

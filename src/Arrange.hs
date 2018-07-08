@@ -5,7 +5,6 @@
 
 module Arrange where
 
-import Data.List.Index (imap)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Applicative (liftA2)
 
@@ -21,12 +20,12 @@ hunK = 100000
 oneMillion :: Int
 oneMillion = 1000000
 
-data GlueFlex = GlueFlex {factor :: Int, order :: Int}
+data GlueFlex = GlueFlex {factor :: Rational, order :: Int}
 
 noFlex :: GlueFlex
 noFlex = GlueFlex 0 0
 
-finiteFlex :: Int -> GlueFlex
+finiteFlex :: Rational -> GlueFlex
 finiteFlex f = GlueFlex f 0
 
 filFlex :: GlueFlex
@@ -43,8 +42,6 @@ instance Show GlueFlex where
   show (GlueFlex f 0) = Unit.showSP f
   show (GlueFlex f n) = show f ++ " fil" ++ show n
 
-data ListFlex = ListFlex { stretch :: [Int], shrink :: [Int] } deriving Show
-
 data BreakItem = GlueBreak Glue
                 | KernBreak B.Kern
                 | PenaltyBreak Penalty
@@ -57,6 +54,7 @@ data Break a = Break { before :: [a],
            deriving Show
 
 -- Can't have these things in a box, only a list.
+
 data Glue = Glue
   { dimen :: Int
   , stretch :: GlueFlex
@@ -110,17 +108,17 @@ data BreakableVListElem
   | VFontSelection B.FontSelection
   deriving (Show)
 
-data GlueRatio
-  = FiniteGlueRatio { factor :: Double
-                    , order :: Int }
-  | InfiniteGlueRatio
+data Fixable
+  = Fixable GlueFlex
+  | Unfixable
+  deriving (Show)
+
+data LengthJudgment = Full | Bare
   deriving (Show)
 
 data ListStatus
   = NaturallyGood
-  | TooFull GlueRatio
-  | TooBare GlueRatio
-  | OverFull
+  | NaturallyBad LengthJudgment Fixable
   deriving (Show)
 
 data Line = Line
@@ -188,21 +186,22 @@ allBreaksInner acc seen (thisAdj@(A.Adjacency (_, this, _)):rest) =
 allBreaks :: BreakableListElem a => [a] -> [Break a]
 allBreaks = allBreaksInner [] [] . A.toAdjacents
 
-addGlueFlex :: GlueFlex -> [Int] -> [Int]
-addGlueFlex GlueFlex{factor=f, order=_order} fs =
-  let extraElems = (_order + 1) - length fs
-      fsPad = if extraElems < 0 then fs else fs ++ replicate extraElems 0
-  in imap (\i x -> if i == _order then x + f else x) fsPad
+addGlueFlex :: GlueFlex -> GlueFlex -> GlueFlex
+addGlueFlex g1@GlueFlex{factor=f1, order=o1} g2@GlueFlex{factor=f2, order=o2}
+  = case compare o1 o2 of
+    GT -> g1
+    LT -> g2
+    EQ -> g2{factor=f1 + f2}
 
-listFlex :: [Glue] -> ListFlex
-listFlex gs =
-  let
-    (strs, shrs) = unzip [ (str, shr) | Glue{stretch=str, shrink=shr} <- gs]
-    sumGlueFlexes = foldr addGlueFlex []
-  in ListFlex {stretch=sumGlueFlexes strs, shrink=sumGlueFlexes shrs}
-
-flex :: (BreakableListElem a) => [a] -> ListFlex
+flex :: (BreakableListElem a) => [a] -> (GlueFlex, GlueFlex)
 flex = listFlex . mapMaybe toGlue
+  where
+    listFlex :: [Glue] -> (GlueFlex, GlueFlex)
+    listFlex gs =
+      let
+        (strs, shrs) = unzip [ (str, shr) | Glue{stretch=str, shrink=shr} <- gs]
+        sumGlueFlexes = foldr addGlueFlex GlueFlex{factor=0, order=0}
+      in (sumGlueFlexes strs, sumGlueFlexes shrs)
 
 instance BreakableListElem BreakableVListElem where
   toGlue (VGlue g) = Just g
@@ -297,38 +296,42 @@ instance Dimensioned BreakableVListElem where
   naturalHeight (VFontDefinition _) = 0
   naturalHeight (VFontSelection _) = 0
 
-glueSetRatio :: Int -> ListFlex -> ListStatus
-glueSetRatio excessLength ListFlex{stretch=stretches, shrink=shrinks} =
+glueSetRatio :: Int -> (GlueFlex, GlueFlex) -> ListStatus
+glueSetRatio excessLength (_stretch, _shrink) =
   let
     regime = compare excessLength 0
-    flexes = if regime == GT then shrinks else stretches
-    _flex = last flexes
-    _order = length flexes - 1
+    GlueFlex{factor=flexFactor, order=_order} = if regime == GT then _shrink else _stretch
     flexIsFinite = _order == 0
-    gRatio = fromIntegral excessLength / fromIntegral _flex
+    -- The glue ratio is r = [excess length]/[flex]i.
+    gRatio = fromIntegral excessLength / flexFactor
+  -- The natural width x is compared to the desired width w.
   in case regime of
+    -- If x = w, all glue gets its natural width.
     EQ -> NaturallyGood
-    LT -> case stretches of
-      [] -> TooBare InfiniteGlueRatio
-      _ -> TooBare FiniteGlueRatio{factor= -gRatio, order=_order}
-    GT -> case shrinks of
-      [] -> TooFull InfiniteGlueRatio
-      _ -> if flexIsFinite && excessLength > _flex
-        then OverFull
+    -- Otherwise the glue will be modified, by computing a “glue set ratio” r
+    -- and a “glue set order” i
+    LT -> case flexFactor of
+      -- If y0 = y1 = y2 = y3 = 0, there’s no stretchability.
+      0 -> NaturallyBad Bare Unfixable
+      _ -> NaturallyBad Bare (Fixable GlueFlex{factor= -gRatio, order=_order})
+    GT -> case flexFactor of
+      0 -> NaturallyBad Full Unfixable
+      _ ->
+        if flexIsFinite && fromIntegral excessLength > flexFactor
+        then NaturallyBad Full Unfixable
         else
+          -- r is set to 1 if i = 0 and x − w > z0, because the maximum
+          -- shrinkability must not be exceeded.
           let gRatioShrink = if flexIsFinite then min gRatio 1.0 else gRatio
-          in TooFull FiniteGlueRatio{factor=gRatioShrink, order=_order}
+          in NaturallyBad Full (Fixable GlueFlex{factor=gRatioShrink, order=_order})
 
 listStatusBadness :: ListStatus -> Int
-listStatusBadness g = case g of
-    -- TODO: This should actually be infinity, not 1 million.
-    OverFull -> oneMillion
-    NaturallyGood -> 0
-    TooFull FiniteGlueRatio{factor=r, order=_order} -> eq r
-    TooBare FiniteGlueRatio{factor=r, order=_order} -> eq r
-    TooFull InfiniteGlueRatio -> tenK
-    TooBare InfiniteGlueRatio -> tenK
-  where eq r = min tenK $ round $ (r^(3 :: Int)) * 100
+listStatusBadness NaturallyGood = 0
+-- TODO: This should actually be infinity, not 1 million.
+listStatusBadness (NaturallyBad Full Unfixable) = oneMillion
+listStatusBadness (NaturallyBad Bare Unfixable) = tenK
+listStatusBadness (NaturallyBad _ (Fixable GlueFlex{factor=r, order=_order}))
+  = min tenK $ round $ (r^(3 :: Int)) * 100
 
 listGlueSetRatio :: (BreakableList [a], BreakableListElem a) => Int -> [a] -> ListStatus
 listGlueSetRatio desiredLength cs =
@@ -348,9 +351,8 @@ lineDemerit linePenalty bad br =
 
 breakToLine :: Int -> Break BreakableHListElem -> (Line, [BreakableHListElem])
 breakToLine desiredWidth Break{before=bef, item=br, after=aft} =
-  let
-    stat = listGlueSetRatio desiredWidth bef
-  in (Line{contents=bef, status=stat, breakItem=br}, aft)
+  let _status = listGlueSetRatio desiredWidth bef
+  in (Line{contents=bef, status=_status, breakItem=br}, aft)
 
 -- Expects contents in normal order.
 bestRoute :: Int -> Int -> Int -> [BreakableHListElem] -> Route
@@ -370,7 +372,7 @@ bestRoute desiredWidth tolerance linePenalty cs =
       in
         Route{lines=ln:subLines, demerit=subDemerit + thisDemerit}
   in case goodLinedBaddedBreaks of
-    [] -> Route{lines=[Line{contents=cs, status=OverFull, breakItem=NoBreak}], demerit= -1}
+    [] -> Route{lines=[Line{contents=cs, status=NaturallyBad Full Unfixable, breakItem=NoBreak}], demerit= -1}
     _ -> minimum $ fmap subBestRoute goodLinedDemeredBreaks
 
 setListElems :: SettableListElem a b => ListStatus -> [a] -> [b]
@@ -395,19 +397,22 @@ setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
   in
     fmap setLine lns
 
-factMod :: Int -> Int -> Double -> Int -> Int
-factMod setOrder glueOrder r f = if setOrder == glueOrder then round (r * fromIntegral f) else 0
-
+-- Suppose the line order is i, and the glue has natural width u, and
+-- flexibility f_j, corresponding to its amount and order of stretch or shrink
+-- as appropriate.
+-- The glue's width is u, plus: rf if j = i; otherwise 0.
 glueDiff :: ListStatus -> Glue -> Int
 glueDiff NaturallyGood _ = 0
--- Note: I made this logic up.
--- Note: Not checking for order or stretch/shrink direction here yet, broken.
-glueDiff OverFull Glue{shrink=GlueFlex{factor=shr}} = -shr
--- No flexibility implies no flex. Not that there should be anything to flex!
-glueDiff (TooFull InfiniteGlueRatio) _ = 0
-glueDiff (TooBare InfiniteGlueRatio) _ = 0
-glueDiff (TooFull FiniteGlueRatio{factor=r, order=setOrder}) Glue{shrink=GlueFlex{factor=f, order=glueOrder}} = -(factMod setOrder glueOrder r f)
-glueDiff (TooBare FiniteGlueRatio{factor=r, order=setOrder}) Glue{stretch=GlueFlex{factor=f, order=glueOrder}} = factMod setOrder glueOrder r f
+-- Note: I made this logic up. Take a 'do your best' approach.
+glueDiff (NaturallyBad Full Unfixable) Glue{shrink=GlueFlex{factor=f, order=0}} = -(round f)
+glueDiff (NaturallyBad Bare Unfixable) Glue{stretch=GlueFlex{factor=f, order=0}} = round f
+-- TODO: Refactor status to be something like 'Uncomfortable <Over|Under> ...'
+glueDiff (NaturallyBad a (Fixable GlueFlex{factor=r, order=setOrder})) Glue{shrink=shr, stretch=str}
+  | Full <- a = -(scaleFactor shr)
+  | Bare <- a = scaleFactor str
+  where
+    scaleFactor GlueFlex{factor=f, order=glueOrder} =
+      if setOrder == glueOrder then round (r * f) else 0
 
 setGlue :: ListStatus -> Glue -> B.SetGlue
 setGlue ls g@Glue{dimen=d} = B.SetGlue $ d + glueDiff ls g

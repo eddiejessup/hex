@@ -1,7 +1,7 @@
 module Unit where
 
 import Data.Ratio ((%))
-import Text.Printf (printf)
+import Text.Printf (printf, PrintfArg)
 
 -- Functions related to units used in the TeX world.
 
@@ -62,6 +62,9 @@ class Length u where
   toScaledPointApprox :: Real n => n -> u -> Int
   toScaledPointApprox n u = round $ toScaledPoint n u
 
+  fromScaledPoint :: u -> Rational
+  fromScaledPoint = recip . inScaledPoint
+
 -- pointToScaledPoint a = a * fromIntegral pointInScaledPoint
 
 instance Length PhysicalUnit where
@@ -76,8 +79,5 @@ instance Length PhysicalUnit where
         Cicero -> 12 * inScaledPoint Didot
         ScaledPoint -> 1
 
-scaledPointToPoint :: Integral a => a -> Double
-scaledPointToPoint a = fromIntegral a / fromIntegral pointInScaledPoint
-
-showSP :: Int -> String
-showSP d = printf "%.2f" (scaledPointToPoint d) ++ "pt"
+showSP :: Real n => n -> String
+showSP n = printf "%.1f" ((realToFrac n * realToFrac (scaledPointIn Point)) :: Double) ++ "pt"

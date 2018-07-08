@@ -40,13 +40,13 @@ parseGlue = P.choice [ parseExplicitGlue
       return $ ExplicitGlue len stretch shrink
 
 parseFlex :: String -> Parser (Maybe Flex)
-parseFlex s = P.choice [ Just <$> parsePresentFlex
+parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
                        , const Nothing <$> PC.skipOptionalSpaces ]
   where
     parsePresentFlex = do
       PC.skipKeyword s
-      P.choice [ FilFlex <$> parseFilLength
-               , FiniteFlex <$> parseLength ]
+      P.choice [ FilFlex <$> P.try parseFilLength
+               , FiniteFlex <$> P.try parseLength ]
 
 parseFilLength :: Parser FilLength
 parseFilLength = do
