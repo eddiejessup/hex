@@ -7,6 +7,7 @@ module Arrange where
 
 import Data.Maybe (isJust, mapMaybe)
 import Control.Applicative (liftA2)
+import qualified Data.Char as C
 
 import qualified BoxDraw as B
 import BoxDraw (Dimensioned, naturalWidth)
@@ -51,7 +52,7 @@ data BreakItem = GlueBreak Glue
 data Break a = Break { before :: [a],
                        after :: [a],
                        item :: BreakItem }
-           deriving Show
+           -- deriving Show
 
 -- Can't have these things in a box, only a list.
 
@@ -86,6 +87,15 @@ data BreakableHListElem
   | HFontSelection B.FontSelection
   | HCharacter B.Character
 
+-- Just for the purposes of showing the list more compactly.
+data CondensedHListElem
+  = Sentence String
+  | NonSentence BreakableHListElem
+
+instance Show CondensedHListElem where
+  show (Sentence s) = s
+  show (NonSentence x) = show x
+
 instance Show BreakableHListElem where
   show (HVBox e) = show e
   show (HHBox e) = show e
@@ -96,6 +106,15 @@ instance Show BreakableHListElem where
   show (HFontDefinition e) = show e
   show (HFontSelection e) = show e
   show (HCharacter e) = show e
+
+  showList a s = (show $ foldr append [] a) ++ s
+    where
+      append (HCharacter B.Character{code=n}) [] = [Sentence [C.chr n]]
+      append x [] = [NonSentence x]
+      append y r@(x:xs)
+        | HCharacter B.Character{code=n} <- y, (Sentence cs) <- x = Sentence (C.chr n:cs):xs
+        | HCharacter B.Character{code=n} <- y = Sentence [C.chr n]:r
+        | otherwise = NonSentence y:r
 
 data BreakableVListElem
   = VVBox B.VBox
@@ -123,11 +142,10 @@ data ListStatus
 
 data Line = Line
   { contents :: [BreakableHListElem]
-  , breakItem :: BreakItem
   , status :: ListStatus
-  } deriving (Show)
+  }
 
-data Route = Route {lines :: [Line], demerit :: Int } deriving (Show)
+data Route = Route {lines :: [Line], demerit :: Int }
 
 instance Eq Route where
   (==) a b = demerit a == demerit b
@@ -166,26 +184,6 @@ isGlue = isJust . toGlue
 isBreakItem :: BreakableListElem a => A.Adjacency a -> Bool
 isBreakItem = isJust . toBreakItem
 
-allBreaksInner :: BreakableListElem a => [Break a] -> [a] -> [A.Adjacency a] -> [Break a]
-allBreaksInner acc seen [] = Break{before=reverse seen, after=[], item=NoBreak}:acc
-allBreaksInner acc seen (thisAdj@(A.Adjacency (_, this, _)):rest) =
-  let
-    -- Bit pretentious: fAnd maps two functions 'f' and 'g' into one
-    -- function whose result is 'f x && g x'.
-    fAnd = liftA2 (&&)
-    discardAfterBreak = fAnd (isDiscardable . A.fromAdjacent) (not . isBreakItem)
-    trimAfterBreak = A.fromAdjacents . dropWhile discardAfterBreak
-    newBreaksAccum = case toBreakItem thisAdj of
-      Nothing -> acc
-      Just b ->
-        let bef = if isGlue this then seen else this:seen
-        in Break{before=reverse bef, after=trimAfterBreak rest, item=b}:acc
-  in
-    allBreaksInner newBreaksAccum (this:seen) rest
-
-allBreaks :: BreakableListElem a => [a] -> [Break a]
-allBreaks = allBreaksInner [] [] . A.toAdjacents
-
 addGlueFlex :: GlueFlex -> GlueFlex -> GlueFlex
 addGlueFlex g1@GlueFlex{factor=f1, order=o1} g2@GlueFlex{factor=f2, order=o2}
   = case compare o1 o2 of
@@ -217,6 +215,26 @@ instance BreakableListElem BreakableVListElem where
     (_, VKern k, Just VGlue{}) -> Just $ KernBreak k
     (_, VPenalty p, _) -> Just $ PenaltyBreak p
     _ -> Nothing
+
+-- Suppose the line order is i, and the glue has natural width u, and
+-- flexibility f_j, corresponding to its amount and order of stretch or shrink
+-- as appropriate.
+-- The glue's width is u, plus: rf if j = i; otherwise 0.
+glueDiff :: ListStatus -> Glue -> Int
+glueDiff NaturallyGood _ = 0
+-- Note: I made this logic up. Take a 'do your best' approach.
+glueDiff (NaturallyBad Full Unfixable) Glue{shrink=GlueFlex{factor=f}} = -(round f)
+glueDiff (NaturallyBad Bare Unfixable) Glue{stretch=GlueFlex{factor=f}} = round f
+-- TODO: Refactor status to be something like 'Uncomfortable <Over|Under> ...'
+glueDiff (NaturallyBad a (Fixable GlueFlex{factor=r, order=setOrder})) Glue{shrink=shr, stretch=str}
+  | Full <- a = -(scaleFactor shr)
+  | Bare <- a = scaleFactor str
+  where
+    scaleFactor GlueFlex{factor=f, order=glueOrder} =
+      if setOrder == glueOrder then round (r * f) else 0
+
+setGlue :: ListStatus -> Glue -> B.SetGlue
+setGlue ls g@Glue{dimen=d} = B.SetGlue $ d + glueDiff ls g
 
 instance SettableListElem BreakableHListElem B.HBoxElem where
   setElem ls (HGlue g) = [B.HGlue $ setGlue ls g]
@@ -317,7 +335,7 @@ glueSetRatio excessLength (_stretch, _shrink) =
     GT -> case flexFactor of
       0 -> NaturallyBad Full Unfixable
       _ ->
-        if flexIsFinite && fromIntegral excessLength > flexFactor
+        if fromIntegral excessLength > flexFactor
         then NaturallyBad Full Unfixable
         else
           -- r is set to 1 if i = 0 and x − w > z0, because the maximum
@@ -337,22 +355,42 @@ listGlueSetRatio :: (BreakableList [a], BreakableListElem a) => Int -> [a] -> Li
 listGlueSetRatio desiredLength cs =
   glueSetRatio (naturalLength cs - desiredLength) (flex cs)
 
-isConsiderableAsLine :: Int -> (Line, [BreakableHListElem], Int) -> Bool
-isConsiderableAsLine tolerance (Line{breakItem=br}, _, bad) =
-  breakPenalty br < tenK && bad <= tolerance
+setListElems :: SettableListElem a b => ListStatus -> [a] -> [b]
+setListElems _status = concatMap (setElem _status)
 
-lineDemerit :: Int -> Int -> BreakItem -> Int
-lineDemerit linePenalty bad br =
-  let
-    breakDemerit = breakPenalty br ^ (2 :: Int)
-    listDemerit = (linePenalty + bad)^(2 :: Int)
-  in
-    breakDemerit + listDemerit
+-- Line breaking.
 
-breakToLine :: Int -> Break BreakableHListElem -> (Line, [BreakableHListElem])
-breakToLine desiredWidth Break{before=bef, item=br, after=aft} =
-  let _status = listGlueSetRatio desiredWidth bef
-  in (Line{contents=bef, status=_status, breakItem=br}, aft)
+allBreaks :: [BreakableHListElem] -> [Break BreakableHListElem]
+allBreaks = inner [] . A.toAdjacents
+  where
+    -- Bit pretentious: fAnd maps two functions 'f' and 'g' into one
+    -- function whose result is 'f x && g x'.
+    fAnd = liftA2 (&&)
+
+    discardAfterBreak = fAnd (isDiscardable . A.fromAdjacent) (not . isBreakItem)
+    trimAfterBreak = A.fromAdjacents . dropWhile discardAfterBreak
+
+    trimBeforeBreak this seen = if isGlue this then seen else this:seen
+
+    inner seen [] = [Break{before=reverse seen, after=[], item=NoBreak}]
+    inner seen (thisAdj@(A.Adjacency (_, this, _)):rest) =
+      case toBreakItem thisAdj of
+        Nothing ->
+          inner (this:seen) rest
+        Just b ->
+          let
+            brk = Break{before=reverse $ trimBeforeBreak this seen
+                       , after=trimAfterBreak rest, item=b}
+          in
+            brk:inner (this:seen) rest
+
+-- If, once a test has gone from truthy to falsey, we know the test will never
+-- again succeed, we can return early.
+touchyFilter :: (a -> Bool) -> [a] -> [a]
+touchyFilter _ [] = []
+touchyFilter test (x:xs)
+  | test x = x:takeWhile test xs
+  | otherwise = touchyFilter test xs
 
 -- Expects contents in normal order.
 bestRoute :: Int -> Int -> Int -> [BreakableHListElem] -> Route
@@ -360,23 +398,36 @@ bestRoute _ _ _ [] = Route {lines=[], demerit=0}
 bestRoute desiredWidth tolerance linePenalty cs =
   let
     breaks = allBreaks cs
-    linedBreaks = fmap (breakToLine desiredWidth) breaks
-    linedBaddedBreaks = fmap (\(ln, aft) -> (ln, aft, listStatusBadness $ status ln)) linedBreaks
-    goodLinedBaddedBreaks = filter (isConsiderableAsLine tolerance) linedBaddedBreaks
-    addDemerit (ln@Line{breakItem=br}, aft, bad) = (ln, aft, lineDemerit linePenalty bad br)
-    goodLinedDemeredBreaks = fmap addDemerit goodLinedBaddedBreaks
-
-    subBestRoute (ln, aft, thisDemerit) =
+    analyzedBreaks = zip breaks $ analyzeBreak <$> breaks
+    sensibleBreaks = touchyFilter isSensibleLineBreak analyzedBreaks
+    goodAnalyzedBreaks = filter isConsiderableLineBreak sensibleBreaks
+  in case goodAnalyzedBreaks of
+    [] -> Route{lines=[Line{contents=cs, status=NaturallyBad Full Unfixable}], demerit= -1}
+    _ -> minimum $ subBestRoute <$> goodAnalyzedBreaks
+  where
+    subBestRoute (Break{before=bef, after=aft, item=br}, (_status, bad)) =
       let
         Route{lines=subLines, demerit=subDemerit} = bestRoute desiredWidth tolerance linePenalty aft
       in
-        Route{lines=ln:subLines, demerit=subDemerit + thisDemerit}
-  in case goodLinedBaddedBreaks of
-    [] -> Route{lines=[Line{contents=cs, status=NaturallyBad Full Unfixable, breakItem=NoBreak}], demerit= -1}
-    _ -> minimum $ fmap subBestRoute goodLinedDemeredBreaks
+        Route{lines=Line{contents=bef, status=_status}:subLines
+             , demerit=subDemerit + lineDemerit bad br}
 
-setListElems :: SettableListElem a b => ListStatus -> [a] -> [b]
-setListElems _status = concatMap (setElem _status)
+    lineDemerit bad br =
+      let
+        breakDemerit = breakPenalty br ^ (2 :: Int)
+        listDemerit = (linePenalty + bad)^(2 :: Int)
+      in
+        breakDemerit + listDemerit
+
+    analyzeBreak Break{before=bef} =
+      let _status = listGlueSetRatio desiredWidth bef
+      in (_status, listStatusBadness _status)
+
+    isSensibleLineBreak (_, (NaturallyBad Full Unfixable, _)) = False
+    isSensibleLineBreak (_, (_, _)) = True
+
+    isConsiderableLineBreak (Break{item=br}, (_, bad)) =
+      breakPenalty br < tenK && bad <= tolerance
 
 -- Expects contents in reverse order.
 -- Returns lines in normal order.
@@ -396,33 +447,6 @@ setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
     setLine Line{contents=lncs, status=_status} = VHBox B.HBox{contents=setListElems _status lncs, desiredLength=B.To desiredWidth}
   in
     fmap setLine lns
-
--- Suppose the line order is i, and the glue has natural width u, and
--- flexibility f_j, corresponding to its amount and order of stretch or shrink
--- as appropriate.
--- The glue's width is u, plus: rf if j = i; otherwise 0.
-glueDiff :: ListStatus -> Glue -> Int
-glueDiff NaturallyGood _ = 0
--- Note: I made this logic up. Take a 'do your best' approach.
-glueDiff (NaturallyBad Full Unfixable) Glue{shrink=GlueFlex{factor=f, order=0}} = -(round f)
-glueDiff (NaturallyBad Bare Unfixable) Glue{stretch=GlueFlex{factor=f, order=0}} = round f
--- TODO: Refactor status to be something like 'Uncomfortable <Over|Under> ...'
-glueDiff (NaturallyBad a (Fixable GlueFlex{factor=r, order=setOrder})) Glue{shrink=shr, stretch=str}
-  | Full <- a = -(scaleFactor shr)
-  | Bare <- a = scaleFactor str
-  where
-    scaleFactor GlueFlex{factor=f, order=glueOrder} =
-      if setOrder == glueOrder then round (r * f) else 0
-
-setGlue :: ListStatus -> Glue -> B.SetGlue
-setGlue ls g@Glue{dimen=d} = B.SetGlue $ d + glueDiff ls g
-
-
-
-
-
-
-
 
 -- Page breaking.
 
