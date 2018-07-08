@@ -8,9 +8,9 @@ module Arrange where
 import Data.Maybe (isJust, mapMaybe)
 import Control.Applicative (liftA2)
 
+import qualified BoxDraw as B
 import BoxDraw (Dimensioned, naturalWidth)
 import qualified Unit
-import qualified BoxDraw as B
 import qualified Adjacent as A
 
 tenK :: Int
@@ -376,7 +376,7 @@ bestRoute desiredWidth tolerance linePenalty cs =
     _ -> minimum $ fmap subBestRoute goodLinedDemeredBreaks
 
 setListElems :: SettableListElem a b => ListStatus -> [a] -> [b]
-setListElems stat = concatMap (setElem stat)
+setListElems _status = concatMap (setElem _status)
 
 -- Expects contents in reverse order.
 -- Returns lines in normal order.
@@ -393,7 +393,7 @@ setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
     csFinished = (HPenalty $ Penalty $ -tenK):hFilGlue:(HPenalty $ Penalty tenK):csTrimmed
 
     Route{lines=lns} = bestRoute desiredWidth tolerance linePenalty $ reverse csFinished
-    setLine Line{contents=lncs, status=stat} = VHBox B.HBox{contents=setListElems stat lncs, desiredLength=B.To desiredWidth}
+    setLine Line{contents=lncs, status=_status} = VHBox B.HBox{contents=setListElems _status lncs, desiredLength=B.To desiredWidth}
   in
     fmap setLine lns
 
@@ -439,3 +439,8 @@ pageCost p b q
     vNegP = p <= -tenK
     vPosP = p >= tenK
     normalParams = not vNegP && not vPosP && normalQ
+
+setPage :: Int -> [BreakableVListElem] -> B.Page
+setPage desiredHeight cs =
+  let _status = listGlueSetRatio desiredHeight cs
+  in B.Page $ reverse $ setListElems _status cs

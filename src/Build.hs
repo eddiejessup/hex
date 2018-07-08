@@ -246,20 +246,22 @@ addParagraphToPage state pages acc stream indent
     (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph indent theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
     let
       breakItem = A.GlueBreak theInterLineGlue
-      accBreak = A.VGlue theInterLineGlue:reverse paraBoxes
-      accNoBreak = accBreak ++ acc
+      toAdd = reverse paraBoxes
+      accNoBreakProposed = toAdd ++ (A.VGlue theInterLineGlue:acc)
       -- TODO: Discard when adding to empty page.
       -- TODO: Keep best rather than taking last.
-      pen = A.breakPenalty breakItem
+      penalty = A.breakPenalty breakItem
       -- Expects normal order.
-      stat = A.listGlueSetRatio theDesiredHeight $ reverse accNoBreak
-      bad = A.listStatusBadness stat
-      cost = A.pageCost pen bad 0
-      -- Expects normal order.
-      page = B.Page $ reverse $ A.setListElems stat acc
-    if (cost == A.oneMillion) || (pen <= -A.tenK)
-      then extractPages stateNext (page:pages) accBreak streamNext
-      else extractPages stateNext pages accNoBreak streamNext
+      statusNoBreakProposed = A.listGlueSetRatio theDesiredHeight $ reverse accNoBreakProposed
+      badnessNoBreakProposed = A.listStatusBadness statusNoBreakProposed
+      costNoBreakProposed = A.pageCost penalty badnessNoBreakProposed 0
+    if (costNoBreakProposed == A.oneMillion) || (penalty <= -A.tenK)
+      then
+        let
+          page = A.setPage theDesiredHeight acc
+        in
+          extractPages stateNext (page:pages) toAdd streamNext
+      else extractPages stateNext pages accNoBreakProposed streamNext
 
 extractPages :: State -> [B.Page] -> [A.BreakableVListElem] -> Stream -> IO (State, [B.Page], [A.BreakableVListElem], Stream)
 extractPages state pages acc stream =
@@ -273,7 +275,7 @@ extractPages state pages acc stream =
       addParagraphToPage state pages acc stream True
     Right P.End ->
       do
-      let lastPage = B.Page $ reverse $ A.setListElems A.NaturallyGood acc
+      let lastPage = A.setPage theDesiredHeight acc
       return (state, lastPage:pages, acc, streamNext)
     Right (P.VAllModesCommand aCom) ->
       case aCom of
