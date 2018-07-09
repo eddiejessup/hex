@@ -126,8 +126,12 @@ spaceGlue state = do
 evaluateNormalInteger :: P.NormalInteger -> Integer
 evaluateNormalInteger (P.IntegerConstant n) = n
 
-evaluateUNr :: P.UnsignedNumber -> Integer
-evaluateUNr (P.NormalIntegerAsUNumber n) = evaluateNormalInteger n
+evaluateUnsignedNumber :: P.UnsignedNumber -> Integer
+evaluateUnsignedNumber (P.NormalIntegerAsUNumber n) = evaluateNormalInteger n
+
+evaluateNumber :: P.Number -> Integer
+evaluateNumber (P.Number True u) = evaluateUnsignedNumber u
+evaluateNumber (P.Number False u) = -(evaluateUnsignedNumber u)
 
 evaluateFactor :: P.Factor -> Rational
 evaluateFactor (P.NormalIntegerFactor n) = fromIntegral $ evaluateNormalInteger n
@@ -175,6 +179,9 @@ evaluateGlue (P.ExplicitGlue dim str shr) =
 evaluateKern :: P.Length -> B.Kern
 evaluateKern = B.Kern . evaluateLength
 
+evaluatePenalty :: P.Number -> A.Penalty
+evaluatePenalty = A.Penalty . fromIntegral . evaluateNumber
+
 -- We build a paragraph list in reverse order.
 extractParagraph :: State -> [A.BreakableHListElem] -> Stream -> IO (State, [A.BreakableHListElem], Stream)
 extractParagraph state acc stream =
@@ -194,6 +201,8 @@ extractParagraph state acc stream =
           let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractParagraph stateNext (A.HFontDefinition fontDef:acc) streamNext
+        P.AddPenalty n ->
+          extractParagraph state ((A.HPenalty $ evaluatePenalty n):acc) streamNext
         P.AddKern ln ->
           extractParagraph state ((A.HKern $ evaluateKern ln):acc) streamNext
         P.AddGlue g ->
@@ -307,6 +316,8 @@ extractPages state pages acc stream =
           let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
           extractPages stateNext pages (A.VFontDefinition fontDef:acc) streamNext
+        P.AddPenalty n ->
+          extractPages state pages ((A.VPenalty $ evaluatePenalty n):acc) streamNext
         P.AddKern ln ->
           extractPages state pages ((A.VKern $ evaluateKern ln):acc) streamNext
         P.AddGlue g ->

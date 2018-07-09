@@ -1,7 +1,7 @@
 module Unit where
 
 import Data.Ratio ((%))
-import Text.Printf (printf, PrintfArg)
+import Text.Printf (printf)
 
 -- Functions related to units used in the TeX world.
 
@@ -79,5 +79,8 @@ instance Length PhysicalUnit where
         Cicero -> 12 * inScaledPoint Didot
         ScaledPoint -> 1
 
+showFrac :: Real n => n -> String
+showFrac n = printf "%.1f" (realToFrac n :: Double)
+
 showSP :: Real n => n -> String
-showSP n = printf "%.1f" ((realToFrac n * realToFrac (scaledPointIn Point)) :: Double) ++ "pt"
+showSP n = showFrac ((realToFrac n * realToFrac (scaledPointIn Point)) :: Double) ++ "pt"

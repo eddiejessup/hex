@@ -13,6 +13,7 @@ import qualified Lex
 import Parse.Util (Parser, Stream, ParseState, NullParser, ParseError, skipOneOptionalSatisfied, easyRunParser', satisfyThen, skipSatisfiedEquals)
 import qualified Parse.Util as PU
 import qualified Parse.Common as PC
+import qualified Parse.Number as PN
 import qualified Parse.Length as PL
 import qualified Parse.Glue as PG
 
@@ -74,7 +75,7 @@ data AllModesCommand
   -- | CloseOutput { streamNr :: Int, immediate :: Bool }
   -- | Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
   -- | AddWhatsit GeneralText
-  -- | AddPenalty Int
+  | AddPenalty PN.Number
   | AddKern PL.Length
   -- | RemoveLastPenalty
   -- | RemoveLastKern
@@ -133,6 +134,7 @@ parseAllModeCommand :: Expand.Axis -> Parser AllModesCommand
 parseAllModeCommand mode = P.choice [ relax
                                     , tokenForFont
                                     , macroToFont
+                                    , addPenalty
                                     , addKern
                                     , addSpecifiedGlue mode
                                     , addSpace
@@ -193,11 +195,15 @@ macroToFont = do
       _ -> Nothing
     tokToChar _ = Nothing
 
-
 skipOptionalEquals :: NullParser
 skipOptionalEquals = do
   PC.skipOptionalSpaces
   skipOneOptionalSatisfied PC.isEquals
+
+addPenalty :: AllModeCommandParser
+addPenalty = do
+  skipSatisfiedEquals Expand.AddPenalty
+  AddPenalty <$> PN.parseNumber
 
 addKern :: AllModeCommandParser
 addKern = do

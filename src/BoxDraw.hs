@@ -202,7 +202,8 @@ instance DVIAble HBoxElem where
     -- TODO: Rule.
   toDVI (HGlue g) = [DVIE.MoveRight {distance = glueDimen g}]
   toDVI (HKern k) = [DVIE.MoveRight {distance = kernDimen k}]
-  toDVI (HRule r) = toDVI r
+  toDVI (HRule r) =
+    [DVIE.PushStack] ++ toDVI r ++ [DVIE.PopStack, DVIE.MoveRight {distance = naturalWidth r}]
   toDVI (HFontDefinition e) = toDVI e
   toDVI (HFontSelection e) = toDVI e
   toDVI (HCharacter e) = toDVI e
@@ -215,7 +216,8 @@ instance DVIAble VBoxElem where
     -- TODO: Rule.
   toDVI (VGlue g) = [DVIE.MoveDown {distance = glueDimen g}]
   toDVI (VKern k) = [DVIE.MoveDown {distance = kernDimen k}]
-  toDVI (VRule r) = toDVI r
+  toDVI (VRule r) =
+    [DVIE.PushStack] ++ toDVI r ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight r}]
   toDVI (VFontDefinition e) = toDVI e
   toDVI (VFontSelection e) = toDVI e
 

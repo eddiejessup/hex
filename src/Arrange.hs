@@ -8,6 +8,7 @@ module Arrange where
 import Data.Maybe (isJust, mapMaybe)
 import Control.Applicative (liftA2)
 import qualified Data.Char as C
+import Data.List (intercalate)
 
 import qualified BoxDraw as B
 import BoxDraw (Dimensioned, naturalWidth)
@@ -22,6 +23,11 @@ oneMillion :: Int
 oneMillion = 1000000
 
 data GlueFlex = GlueFlex {factor :: Rational, order :: Int}
+
+instance Show GlueFlex where
+  show (GlueFlex 0 0) = "0"
+  show (GlueFlex f 0) = Unit.showSP f
+  show (GlueFlex f n) = show f ++ " fil" ++ show n
 
 noFlex :: GlueFlex
 noFlex = GlueFlex 0 0
@@ -38,21 +44,24 @@ filGlue = Glue{dimen=0, stretch=filFlex, shrink=noFlex}
 hFilGlue :: BreakableHListElem
 hFilGlue = HGlue filGlue
 
-instance Show GlueFlex where
-  show (GlueFlex 0 0) = "0"
-  show (GlueFlex f 0) = Unit.showSP f
-  show (GlueFlex f n) = show f ++ " fil" ++ show n
-
 data BreakItem = GlueBreak Glue
                 | KernBreak B.Kern
                 | PenaltyBreak Penalty
                 | NoBreak
                 deriving Show
 
-data Break a = Break { before :: [a],
-                       after :: [a],
-                       item :: BreakItem }
-           -- deriving Show
+data Break a
+  = Break { before :: [a]
+          , after :: [a]
+          , item :: BreakItem }
+
+instance Show a => Show (Break a) where
+  show Break{before=b, after=a, item=k} =
+    "Break ->"
+    ++ "\nBefore: " ++ show b
+    ++ "\nBreak at: " ++ show k
+    ++ "\nAfter: " ++ show a
+  showList bs = ((intercalate "\n" $ fmap show bs) ++)
 
 -- Can't have these things in a box, only a list.
 
@@ -66,9 +75,7 @@ instance Show Glue where
   show (Glue d (GlueFlex 0 0) (GlueFlex 0 0)) = "{- " ++ Unit.showSP d ++ " -}"
   show (Glue d str shr) = "{" ++ Unit.showSP d ++ ("+" ++ show str) ++ ("-" ++ show shr) ++ "}"
 
-newtype Penalty = Penalty
-  { size :: Int
-  }
+newtype Penalty = Penalty Int
 
 instance Show Penalty where
   show (Penalty p) = "|p" ++ show p ++ "|"
@@ -107,7 +114,7 @@ instance Show BreakableHListElem where
   show (HFontSelection e) = show e
   show (HCharacter e) = show e
 
-  showList a s = (show $ foldr append [] a) ++ s
+  showList a = (show (foldr append [] a) ++)
     where
       append (HCharacter B.Character{code=n}) [] = [Sentence [C.chr n]]
       append x [] = [NonSentence x]
@@ -128,9 +135,18 @@ data BreakableVListElem
   deriving (Show)
 
 data Fixable
-  = Fixable GlueFlex
+  -- In principle we could use a GlueFlex instead of this almost identical
+  -- record. But GlueFlex stores scaled points (order 2^16), while this stores
+  -- ratios (order 1). At the very least, their show instances should look
+  -- different.
+  = Fixable { ratio :: Rational, order :: Int }
   | Unfixable
-  deriving (Show)
+
+instance Show Fixable where
+  show Fixable{ratio=r, order=0} = "Fixable, finite scale: " ++ Unit.showFrac r
+  show Fixable{ratio=r, order=1} = "Fixable, fil ratio: " ++ Unit.showSP r
+  show Fixable{ratio=r, order=n} = "Fixable, fil order " ++ show n ++ " ratio: " ++ Unit.showSP r
+  show Unfixable = "Unfixable"
 
 data LengthJudgment = Full | Bare
   deriving (Show)
@@ -226,7 +242,7 @@ glueDiff NaturallyGood _ = 0
 glueDiff (NaturallyBad Full Unfixable) Glue{shrink=GlueFlex{factor=f}} = -(round f)
 glueDiff (NaturallyBad Bare Unfixable) Glue{stretch=GlueFlex{factor=f}} = round f
 -- TODO: Refactor status to be something like 'Uncomfortable <Over|Under> ...'
-glueDiff (NaturallyBad a (Fixable GlueFlex{factor=r, order=setOrder})) Glue{shrink=shr, stretch=str}
+glueDiff (NaturallyBad a Fixable{ratio=r, order=setOrder}) Glue{shrink=shr, stretch=str}
   | Full <- a = -(scaleFactor shr)
   | Bare <- a = scaleFactor str
   where
@@ -331,7 +347,7 @@ glueSetRatio excessLength (_stretch, _shrink) =
     LT -> case flexFactor of
       -- If y0 = y1 = y2 = y3 = 0, there’s no stretchability.
       0 -> NaturallyBad Bare Unfixable
-      _ -> NaturallyBad Bare (Fixable GlueFlex{factor= -gRatio, order=_order})
+      _ -> NaturallyBad Bare Fixable{ratio= -gRatio, order=_order}
     GT -> case flexFactor of
       0 -> NaturallyBad Full Unfixable
       _ ->
@@ -341,15 +357,18 @@ glueSetRatio excessLength (_stretch, _shrink) =
           -- r is set to 1 if i = 0 and x − w > z0, because the maximum
           -- shrinkability must not be exceeded.
           let gRatioShrink = if flexIsFinite then min gRatio 1.0 else gRatio
-          in NaturallyBad Full (Fixable GlueFlex{factor=gRatioShrink, order=_order})
+          in NaturallyBad Full Fixable{ratio=gRatioShrink, order=_order}
 
 listStatusBadness :: ListStatus -> Int
 listStatusBadness NaturallyGood = 0
 -- TODO: This should actually be infinity, not 1 million.
 listStatusBadness (NaturallyBad Full Unfixable) = oneMillion
 listStatusBadness (NaturallyBad Bare Unfixable) = tenK
-listStatusBadness (NaturallyBad _ (Fixable GlueFlex{factor=r, order=_order}))
+-- if i != 0, there is infinite stretchability or shrinkability, so the badness
+-- is zero. Otherwise the badness is approximately min(100r3,10000).
+listStatusBadness (NaturallyBad _ Fixable{ratio=r, order=0})
   = min tenK $ round $ (r^(3 :: Int)) * 100
+listStatusBadness (NaturallyBad _ Fixable{order=_}) = 0
 
 listGlueSetRatio :: (BreakableList [a], BreakableListElem a) => Int -> [a] -> ListStatus
 listGlueSetRatio desiredLength cs =
@@ -399,18 +418,46 @@ bestRoute desiredWidth tolerance linePenalty cs =
   let
     breaks = allBreaks cs
     analyzedBreaks = zip breaks $ analyzeBreak <$> breaks
-    sensibleBreaks = touchyFilter isSensibleLineBreak analyzedBreaks
-    goodAnalyzedBreaks = filter isConsiderableLineBreak sensibleBreaks
-  in case goodAnalyzedBreaks of
-    [] -> Route{lines=[Line{contents=cs, status=NaturallyBad Full Unfixable}], demerit= -1}
-    _ -> minimum $ subBestRoute <$> goodAnalyzedBreaks
+    sensibleBreaks = touchyFilter isSensibleBreak analyzedBreaks
+    considerableBreaks = filter isConsiderableBreak sensibleBreaks
+  in
+    case filter isMandatoryBreak sensibleBreaks of
+      x:_ ->
+        bestRouteFromBreak False x
+      [] ->
+        let
+        in case considerableBreaks of
+          [] -> noBreakRoute
+          _ -> minimum $ bestRouteFromBreak True <$> considerableBreaks
   where
-    subBestRoute (Break{before=bef, after=aft, item=br}, (_status, bad)) =
+    analyzeBreak Break{before=bef} =
+      let _status = listGlueSetRatio desiredWidth bef
+      in (_status, listStatusBadness _status)
+
+    isSensibleBreak (_, (NaturallyBad Full Unfixable, _)) = False
+    isSensibleBreak (_, (_, _)) = True
+
+    -- "any penalty that is −10000 or less is considered so small that TeX
+    -- will always break there."
+    isMandatoryBreak (Break{item=br}, _) = breakPenalty br <= -tenK
+
+    isConsiderableBreak (Break{item=br}, (_, bad)) =
+      -- "TeX will not even consider such a line if p ≥ 10000, or b exceeds the
+      -- current tolerance or pretolerance."
+      -- But also:
+      breakPenalty br < tenK && bad <= tolerance
+
+    bestRouteFromBreak addDemerit (Break{before=bef, after=aft, item=br}, (_status, bad)) =
       let
-        Route{lines=subLines, demerit=subDemerit} = bestRoute desiredWidth tolerance linePenalty aft
-      in
-        Route{lines=Line{contents=bef, status=_status}:subLines
-             , demerit=subDemerit + lineDemerit bad br}
+        d = if addDemerit then lineDemerit bad br else 0
+        subRoute = bestRoute desiredWidth tolerance linePenalty aft
+        thisLine = Line{contents=bef, status=_status}
+      in appendToRoute subRoute thisLine d
+
+    appendToRoute Route{lines=subLns, demerit=subD} ln d =
+      Route{lines=ln:subLns, demerit=subD + d}
+
+    noBreakRoute = Route{lines=[Line{contents=cs, status=NaturallyBad Full Unfixable}], demerit= -1}
 
     lineDemerit bad br =
       let
@@ -418,16 +465,6 @@ bestRoute desiredWidth tolerance linePenalty cs =
         listDemerit = (linePenalty + bad)^(2 :: Int)
       in
         breakDemerit + listDemerit
-
-    analyzeBreak Break{before=bef} =
-      let _status = listGlueSetRatio desiredWidth bef
-      in (_status, listStatusBadness _status)
-
-    isSensibleLineBreak (_, (NaturallyBad Full Unfixable, _)) = False
-    isSensibleLineBreak (_, (_, _)) = True
-
-    isConsiderableLineBreak (Break{item=br}, (_, bad)) =
-      breakPenalty br < tenK && bad <= tolerance
 
 -- Expects contents in reverse order.
 -- Returns lines in normal order.
