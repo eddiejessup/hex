@@ -14,6 +14,7 @@ import qualified Text.Megaparsec as PS
 import qualified TFM.Main as TFMM
 import qualified TFM.Character as TFMC
 import qualified BoxDraw as B
+import Adjacent (Adjacency(..))
 import qualified Arrange as A
 import qualified Lex
 import qualified Unit
@@ -264,32 +265,98 @@ extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlu
     paraBoxes = intersperse (A.VGlue interLineGlue) lineBoxes
   return (stateNext, paraBoxes, streamNext)
 
-addParagraphToPage :: State -> [B.Page] -> [A.BreakableVListElem] -> Stream -> Bool -> IO (State, [B.Page], [A.BreakableVListElem], Stream)
-addParagraphToPage state pages acc stream indent
+-- current items, best cost, breakpoint for that cost.
+type CurrentPage = ([A.BreakableVListElem], Maybe Int, Maybe Int)
+
+newCurrentPage :: ([A.BreakableVListElem], Maybe Int, Maybe Int)
+newCurrentPage = ([], Nothing, Nothing)
+
+headOrNothing :: [a] -> Maybe a
+headOrNothing ts = case ts of
+  [] -> Nothing
+  t:_ -> Just t
+
+runPageBuilder :: CurrentPage -> [A.BreakableVListElem] -> [B.Page]
+runPageBuilder (cur, _, _) [] = [A.setPage theDesiredHeight $ reverse cur]
+runPageBuilder (cur, costBest, iBest) (x:xs)
+  -- If the current vlist has no boxes, we discard a discardable item.
+  | not $ any A.isBox cur =
+    if A.isDiscardable x
+      then runPageBuilder (cur, costBest, iBest) xs
+      else runPageBuilder (x:cur, costBest, iBest) xs
+  -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
+  -- the cost c of breaking at this point.
+  | A.isDiscardable x =
+    case A.toBreakItem (Adjacency (headOrNothing cur, x, headOrNothing xs)) of
+      -- If we can't break here, just add it to the list and continue.
+      Nothing -> runPageBuilder (x:cur, costBest, iBest) xs
+      Just brk ->
+        let breakStatus = A.pageBreakJudgment cur brk theDesiredHeight
+        in case (breakStatus, iBest) of
+          (A.DoNotBreak, _) ->
+            runPageBuilder (x:cur, costBest, iBest) xs
+          -- I don't think this condition will ever be satisfied, but if we
+          -- decide to break before any valid break-point has been considered,
+          -- just carry on.
+          (A.BreakPageAtBest, Nothing) ->
+            runPageBuilder (x:cur, costBest, iBest) xs
+          -- If c = ∞, we break at the best breakpoint so far.
+          -- The current vlist material following that best breakpoint is
+          -- returned to the recent contributions, to consider again.
+          (A.BreakPageAtBest, Just iB) ->
+            let
+              -- the `reverse` will put both of these into reading order.
+              (curNewPage, toReturn) = splitAt iB $ reverse cur
+              newPage = A.setPage theDesiredHeight curNewPage
+            in
+              -- xs is also in reading order
+              -- We didn't actually split at x: x was just what made us compute
+              -- cost and notice we'd gone too far. So add it to the left-overs
+              -- to return.
+              newPage:runPageBuilder ([], Nothing, Nothing) (toReturn ++ (x:xs))
+          -- If p ≤ −10000, we know the best breakpoint is this one, so break
+          -- here.
+          (A.BreakPageHere, _) ->
+            let
+              -- the `reverse` will put this into reading order.
+              newPage = A.setPage theDesiredHeight $ reverse cur
+            in
+              newPage:runPageBuilder ([], Nothing, Nothing) xs
+          -- If the resulting cost <= the smallest cost seen so far, remember
+          -- the current breakpoint as the best so far.
+          (A.TrackCost cHere, _) ->
+            let
+              thisCostAndI = (Just cHere, Just $ length cur)
+              (costBestNew, iBestNew) =
+                case costBest of
+                  Nothing -> thisCostAndI
+                  Just cBest ->
+                    if cHere > cBest
+                      then (costBest, iBest)
+                      else thisCostAndI
+            in runPageBuilder (x:cur, costBestNew, iBestNew) xs
+  -- If we can't break here, just add it to the list and continue.
+  | otherwise = runPageBuilder (x:cur, costBest, iBest) xs
+
+addParagraphToPage :: State
+                   -> [B.Page]
+                   -> CurrentPage
+                   -> [A.BreakableVListElem]
+                   -> Stream
+                   -> Bool
+                   -> IO (State, [B.Page], Stream)
+addParagraphToPage state pages cur acc stream indent
   = do
     -- Paraboxes returned in normal order.
+    -- TODO: Insert inter-line glue properly, between lines, instead of just
+    -- between paragraphs.
     (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph indent theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
-    let
-      breakItem = A.GlueBreak theInterLineGlue
-      toAdd = reverse paraBoxes
-      accNoBreakProposed = toAdd ++ (A.VGlue theInterLineGlue:acc)
-      -- TODO: Discard when adding to empty page.
-      -- TODO: Keep best rather than taking last.
-      penalty = A.breakPenalty breakItem
-      -- Expects normal order.
-      statusNoBreakProposed = A.listGlueSetRatio theDesiredHeight $ reverse accNoBreakProposed
-      badnessNoBreakProposed = A.listStatusBadness statusNoBreakProposed
-      costNoBreakProposed = A.pageCost penalty badnessNoBreakProposed 0
-    if (costNoBreakProposed == A.oneMillion) || (penalty <= -A.tenK)
-      then
-        let
-          page = A.setPage theDesiredHeight acc
-        in
-          extractPages stateNext (page:pages) toAdd streamNext
-      else extractPages stateNext pages accNoBreakProposed streamNext
+    -- But acc accumulates in reverse order.
+    let accNext = reverse paraBoxes ++ (A.VGlue theInterLineGlue:acc)
+    extractPages stateNext pages cur accNext streamNext
 
-extractPages :: State -> [B.Page] -> [A.BreakableVListElem] -> Stream -> IO (State, [B.Page], [A.BreakableVListElem], Stream)
-extractPages state pages acc stream =
+extractPages :: State -> [B.Page] -> CurrentPage -> [A.BreakableVListElem] -> Stream -> IO (State, [B.Page], Stream)
+extractPages state pages cur acc stream =
   let (PS.State{stateInput=streamNext}, com) = P.extractVModeCommand stream
   in case com of
     Left x -> error $ show x
@@ -297,34 +364,33 @@ extractPages state pages acc stream =
     -- stream as if the commands just seen hadn't been read.
     -- (Note that we pass 'stream', not 'streamNext'.)
     Right P.EnterHMode ->
-      addParagraphToPage state pages acc stream True
-    Right P.End ->
-      do
-      let lastPage = A.setPage theDesiredHeight acc
-      return (state, lastPage:pages, acc, streamNext)
+      addParagraphToPage state pages cur acc stream True
+    Right P.End -> do
+      let pagesFinal = pages ++ runPageBuilder cur (reverse acc)
+      return (state, pagesFinal, streamNext)
     Right (P.VAllModesCommand aCom) ->
       case aCom of
         P.Relax ->
-          extractPages state pages acc streamNext
+          extractPages state pages cur acc streamNext
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr
-          extractPages stateNext pages (A.VFontSelection fontSel:acc) streamNext
+          extractPages stateNext pages cur (A.VFontSelection fontSel:acc) streamNext
         -- \par does nothing in vertical mode.
         P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
           (stateNext, fontDef) <- defineFont state fPath fNr
-          extractPages stateNext pages (A.VFontDefinition fontDef:acc) streamNext
+          extractPages stateNext pages cur (A.VFontDefinition fontDef:acc) streamNext
         P.AddPenalty n ->
-          extractPages state pages ((A.VPenalty $ evaluatePenalty n):acc) streamNext
+          extractPages state pages cur ((A.VPenalty $ evaluatePenalty n):acc) streamNext
         P.AddKern ln ->
-          extractPages state pages ((A.VKern $ evaluateKern ln):acc) streamNext
+          extractPages state pages cur ((A.VKern $ evaluateKern ln):acc) streamNext
         P.AddGlue g ->
-          extractPages state pages (A.VGlue (evaluateGlue g):acc) streamNext
+          extractPages state pages cur (A.VGlue (evaluateGlue g):acc) streamNext
         -- <space token> has no effect in vertical modes.
         P.AddSpace ->
-          extractPages state pages acc streamNext
+          extractPages state pages cur acc streamNext
         P.AddRule{width=w, height=h, depth=d} -> do
           let
             evalW = case w of
@@ -337,8 +403,8 @@ extractPages state pages acc stream =
               Nothing -> 0
               Just ln -> evaluateLength ln
             rule = B.Rule{width=evalW, height=evalH, depth=evalD}
-          extractPages state pages (A.VRule rule:acc) streamNext
+          extractPages state pages cur (A.VRule rule:acc) streamNext
         P.StartParagraph indent ->
-          addParagraphToPage state pages acc streamNext indent
+          addParagraphToPage state pages cur acc stream indent
         P.EndParagraph ->
-          extractPages state pages acc streamNext
+          extractPages state pages cur acc streamNext

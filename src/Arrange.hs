@@ -132,7 +132,16 @@ data BreakableVListElem
   | VPenalty Penalty
   | VFontDefinition B.FontDefinition
   | VFontSelection B.FontSelection
-  deriving (Show)
+
+instance Show BreakableVListElem where
+  show (VVBox e) = show e
+  show (VHBox _) = "VHBox{...}"
+  show (VRule e) = show e
+  show (VGlue e) = show e
+  show (VKern e) = show e
+  show (VPenalty e) = show e
+  show (VFontDefinition e) = show e
+  show (VFontSelection e) = show e
 
 data Fixable
   -- In principle we could use a GlueFlex instead of this almost identical
@@ -180,6 +189,7 @@ breakPenalty (PenaltyBreak (Penalty p)) = p
 class BreakableListElem a where
   toGlue :: a -> Maybe Glue
   isDiscardable :: a -> Bool
+  isBox :: a -> Bool
   toBreakItem :: A.Adjacency a -> Maybe BreakItem
 
 class SettableListElem a b where
@@ -225,6 +235,11 @@ instance BreakableListElem BreakableVListElem where
   isDiscardable (VKern _) = True
   isDiscardable (VPenalty _) = True
   isDiscardable _ = False
+
+  isBox (VVBox _) = True
+  isBox (VHBox _) = True
+  isBox (VRule _) = True
+  isBox _ = False
 
   toBreakItem (A.Adjacency a) = case a of
     (Just x, VGlue g, _) -> if isDiscardable x then Nothing else Just $ GlueBreak g
@@ -281,6 +296,12 @@ instance BreakableListElem BreakableHListElem where
   isDiscardable (HKern _) = True
   isDiscardable (HPenalty _) = True
   isDiscardable _ = False
+
+  isBox (HVBox _) = True
+  isBox (HHBox _) = True
+  isBox (HRule _) = True
+  isBox (HCharacter _) = True
+  isBox _ = False
 
     -- TODO: Add math formula conditions.
   toBreakItem (A.Adjacency a) = case a of
@@ -487,21 +508,30 @@ setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
 
 -- Page breaking.
 
-pageCost :: Int -> Int -> Int -> Int
--- Break penalty, badness, 'insert penalties'.
-pageCost p b q
-  | not infiniteB && vNegP && normalQ = p
-  | normalParams && b < tenK = b + p + q
-  | normalParams && b == tenK = hunK
-  | (infiniteB || not normalQ) && not vPosP = oneMillion
-  where
-    normalQ = q < tenK
-    infiniteB = b == oneMillion
-    vNegP = p <= -tenK
-    vPosP = p >= tenK
-    normalParams = not vNegP && not vPosP && normalQ
+data PageBreakJudgment
+  -- Penalty >= 10k.
+  = DoNotBreak
+  -- q >= 10k or b = infinity.
+  | BreakPageAtBest
+  -- p <= -10k.
+  | BreakPageHere
+  | TrackCost Int
+  deriving Show
 
+pageBreakJudgment :: [BreakableVListElem] -> BreakItem -> Int -> PageBreakJudgment
+pageBreakJudgment cs breakItem desiredHeight
+  | penalty >= tenK = DoNotBreak
+  | q >= tenK || badness == oneMillion = BreakPageAtBest
+  | penalty <= -tenK = BreakPageHere
+  | badness == tenK = TrackCost hunK
+  | otherwise = TrackCost $ badness + penalty + q
+  where
+    badness = listStatusBadness $ listGlueSetRatio desiredHeight cs
+    penalty = breakPenalty breakItem
+    q = 0
+
+-- Assumes cs is in reading order.
 setPage :: Int -> [BreakableVListElem] -> B.Page
 setPage desiredHeight cs =
   let _status = listGlueSetRatio desiredHeight cs
-  in B.Page $ reverse $ setListElems _status cs
+  in B.Page $ setListElems _status cs

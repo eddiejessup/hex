@@ -30,7 +30,10 @@ data FontDefinition = FontDefinition
   , fontName :: String
   , scaleFactorRatio :: Rational
   , fontInfo :: TFMM.TexFont
-  } deriving (Show)
+  }
+
+instance Show FontDefinition where
+  show FontDefinition{fontName=name} = "FontDefinition {" ++ name ++ "}"
 
 newtype FontSelection = FontSelection{fontNr :: Int} deriving (Show)
 

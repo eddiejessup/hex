@@ -30,11 +30,11 @@ main = do
 
   -- page <- Build.extractPage Build.newState [] stream
 
-  (_, pages, _, _) <- Build.extractPages Build.newState [] [] stream
+  (_, pages, _) <- Build.extractPages Build.newState [] Build.newCurrentPage [] stream
 
   -- putStrLn $ show $ pages !! 0
 
-  let instrs = BoxDraw.toDVI $ reverse pages
+  let instrs = BoxDraw.toDVI $ pages
   let Right encInstrs = DVIE.encodeDocument (reverse instrs) 1000
   BLS.writeFile "out.dvi" $ DVIE.encode $ reverse encInstrs
 
