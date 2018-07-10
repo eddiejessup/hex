@@ -68,7 +68,7 @@ data ParseToken
   -- | ShowLists -- \showlists
   -- | ShowInternalQuantity -- \showthe
   -- | ShipOut -- \shipout
-  -- | IgnoreSpaces -- \ignorespaces
+  | IgnoreSpaces -- \ignorespaces
   -- | SetAfterAssignmentToken -- \afterassignment
   -- | AddToAfterGroupTokens -- \aftergroup
   -- | ChangeCase VDirection -- \uppercase, \lowercase
@@ -272,6 +272,7 @@ theFontNr = 1
 defaultCSMap :: HMap.HashMap Lex.ControlSequence ParseToken
 defaultCSMap = HMap.fromList
     [ (Lex.ControlWord "relax", Relax)
+    , (Lex.ControlWord "ignorespaces", IgnoreSpaces)
     , (Lex.ControlWord "penalty", AddPenalty)
     , (Lex.ControlWord "kern", AddKern)
     , (Lex.ControlWord "vskip", ModedCommand Vertical AddSpecifiedGlue)

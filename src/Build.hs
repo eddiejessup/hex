@@ -193,6 +193,8 @@ extractParagraph state acc stream =
       case aCom of
         P.Relax ->
           extractParagraph state acc streamNext
+        P.IgnoreSpaces ->
+          extractParagraph state acc streamNext
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr
@@ -371,6 +373,8 @@ extractPages state pages cur acc stream =
     Right (P.VAllModesCommand aCom) ->
       case aCom of
         P.Relax ->
+          extractPages state pages cur acc streamNext
+        P.IgnoreSpaces ->
           extractPages state pages cur acc streamNext
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do

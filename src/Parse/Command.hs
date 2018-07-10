@@ -64,7 +64,7 @@ data AllModesCommand
   -- | ShowLists
   -- | ShowInternalQuantity InternalQuantity
   -- | ShipOut Box
-  -- | IgnoreSpaces
+  | IgnoreSpaces
   -- | SetAfterAssignmentToken Token
   -- | AddToAfterGroupTokens Tokens
   -- | ChangeCase VDirection GeneralText
@@ -132,6 +132,7 @@ type AllModeCommandParser = Parser AllModesCommand
 
 parseAllModeCommand :: Expand.Axis -> Parser AllModesCommand
 parseAllModeCommand mode = P.choice [ relax
+                                    , ignorespaces
                                     , tokenForFont
                                     , macroToFont
                                     , addPenalty
@@ -152,6 +153,12 @@ relax :: AllModeCommandParser
 relax = do
   skipSatisfiedEquals Expand.Relax
   return Relax
+
+ignorespaces :: AllModeCommandParser
+ignorespaces = do
+  skipSatisfiedEquals Expand.IgnoreSpaces
+  PC.skipOptionalSpaces
+  return IgnoreSpaces
 
 tokenForFont :: AllModeCommandParser
 tokenForFont = satisfyThen tokToCom
