@@ -2,6 +2,8 @@
 
 module Expand where
 
+import qualified Data.HashMap.Strict as HMap
+
 import qualified Lex
 import qualified Categorise as Cat
 
@@ -267,42 +269,39 @@ instance Ord ParseToken where
 theFontNr :: Int
 theFontNr = 1
 
-extractControlWord :: String -> ParseToken
-extractControlWord "relax" = Relax
-extractControlWord "penalty" = AddPenalty
-extractControlWord "kern" = AddKern
-
-extractControlWord "vskip" = ModedCommand Vertical AddSpecifiedGlue
-extractControlWord "hskip" = ModedCommand Horizontal AddSpecifiedGlue
-extractControlWord "hfil" = ModedCommand Horizontal $ AddPresetGlue Fil
-extractControlWord "vfil" = ModedCommand Vertical $ AddPresetGlue Fil
-extractControlWord "hfill" = ModedCommand Horizontal $ AddPresetGlue Fill
-extractControlWord "vfill" = ModedCommand Vertical $ AddPresetGlue Fill
-extractControlWord "hfilneg" = ModedCommand Horizontal $ AddPresetGlue FilNeg
-extractControlWord "vfilneg" = ModedCommand Vertical $ AddPresetGlue FilNeg
-extractControlWord "hss" = ModedCommand Horizontal $ AddPresetGlue StretchOrShrink
-extractControlWord "vss" = ModedCommand Vertical $ AddPresetGlue StretchOrShrink
-
-extractControlWord "indent" = StartParagraph{indent=True}
-extractControlWord "noindent" = StartParagraph{indent=False}
-
-extractControlWord "par" = EndParagraph
-
-extractControlWord "hrule" = ModedCommand Vertical AddRule
-extractControlWord "vrule" = ModedCommand Horizontal AddRule
-
-extractControlWord "font" = MacroToFont
--- Temporary pragmatism.
-extractControlWord "selectfont" = TokenForFont theFontNr
-
-extractControlWord "end" = End
--- extractControlWord "dump" = Dump
+defaultCSMap :: HMap.HashMap Lex.ControlSequence ParseToken
+defaultCSMap = HMap.fromList
+    [ (Lex.ControlWord "relax", Relax)
+    , (Lex.ControlWord "penalty", AddPenalty)
+    , (Lex.ControlWord "kern", AddKern)
+    , (Lex.ControlWord "vskip", ModedCommand Vertical AddSpecifiedGlue)
+    , (Lex.ControlWord "hskip", ModedCommand Horizontal AddSpecifiedGlue)
+    , (Lex.ControlWord "hfil", ModedCommand Horizontal $ AddPresetGlue Fil)
+    , (Lex.ControlWord "vfil", ModedCommand Vertical $ AddPresetGlue Fil)
+    , (Lex.ControlWord "hfill", ModedCommand Horizontal $ AddPresetGlue Fill)
+    , (Lex.ControlWord "vfill", ModedCommand Vertical $ AddPresetGlue Fill)
+    , (Lex.ControlWord "hfilneg", ModedCommand Horizontal $ AddPresetGlue FilNeg)
+    , (Lex.ControlWord "vfilneg", ModedCommand Vertical $ AddPresetGlue FilNeg)
+    , (Lex.ControlWord "hss", ModedCommand Horizontal $ AddPresetGlue StretchOrShrink)
+    , (Lex.ControlWord "vss", ModedCommand Vertical $ AddPresetGlue StretchOrShrink)
+    , (Lex.ControlWord "indent", StartParagraph{indent=True})
+    , (Lex.ControlWord "noindent", StartParagraph{indent=False})
+    , (Lex.ControlWord "par", EndParagraph)
+    , (Lex.ControlWord "hrule", ModedCommand Vertical AddRule)
+    , (Lex.ControlWord "vrule", ModedCommand Horizontal AddRule)
+    , (Lex.ControlWord "font", MacroToFont)
+    -- Temporary pragmatism.
+    , (Lex.ControlWord "selectfont", TokenForFont theFontNr)
+    , (Lex.ControlWord "end", End)
+    ]
 
 lexToParseToken :: Bool -> Lex.Token -> ParseToken
 lexToParseToken _ (Lex.CharCat x)
   = CharCat x
-lexToParseToken True (Lex.ControlSequence (Lex.ControlWord x))
-  = extractControlWord x
+lexToParseToken True (Lex.ControlSequence cs)
+  = case HMap.lookup cs defaultCSMap of
+      Just p -> p
+      Nothing -> error "no such control sequence found"
 lexToParseToken False (Lex.ControlSequence cs)
   = UnexpandedControlSequence cs
 

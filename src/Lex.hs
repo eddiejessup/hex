@@ -3,13 +3,17 @@
 module Lex where
 
 import qualified Data.Char as C
-
+import Data.Hashable (Hashable, hashWithSalt)
 import qualified Categorise as Cat
 
 data ControlSequence
   = ControlSymbol Char
   | ControlWord String
   deriving (Show, Eq)
+
+instance Hashable ControlSequence where
+  hashWithSalt s (ControlSymbol c) = hashWithSalt s c
+  hashWithSalt s (ControlWord w) = hashWithSalt s w
 
 -- Not all Catcodes make it past the lexer, which we can represent in the
 -- type system.

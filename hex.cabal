@@ -48,6 +48,8 @@ library
                      , directory
                      , path
                      , mtl
+                     , unordered-containers
+                     , hashable
   default-language:    Haskell2010
 
 executable hex-exe
