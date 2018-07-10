@@ -19,8 +19,6 @@ tenK :: Int
 tenK = 10000
 hunK :: Int
 hunK = 100000
-oneMillion :: Int
-oneMillion = 1000000
 
 data GlueFlex = GlueFlex {factor :: Rational, order :: Int}
 
@@ -256,7 +254,6 @@ glueDiff NaturallyGood _ = 0
 -- Note: I made this logic up. Take a 'do your best' approach.
 glueDiff (NaturallyBad Full Unfixable) Glue{shrink=GlueFlex{factor=f}} = -(round f)
 glueDiff (NaturallyBad Bare Unfixable) Glue{stretch=GlueFlex{factor=f}} = round f
--- TODO: Refactor status to be something like 'Uncomfortable <Over|Under> ...'
 glueDiff (NaturallyBad a Fixable{ratio=r, order=setOrder}) Glue{shrink=shr, stretch=str}
   | Full <- a = -(scaleFactor shr)
   | Bare <- a = scaleFactor str
@@ -380,16 +377,22 @@ glueSetRatio excessLength (_stretch, _shrink) =
           let gRatioShrink = if flexIsFinite then min gRatio 1.0 else gRatio
           in NaturallyBad Full Fixable{ratio=gRatioShrink, order=_order}
 
-listStatusBadness :: ListStatus -> Int
-listStatusBadness NaturallyGood = 0
--- TODO: This should actually be infinity, not 1 million.
-listStatusBadness (NaturallyBad Full Unfixable) = oneMillion
-listStatusBadness (NaturallyBad Bare Unfixable) = tenK
+-- TODO: Use types to ensure number is within bounds, such as <= tenK.
+data Badness = FiniteBadness Int | InfiniteBadness
+
+listStatusBadness :: ListStatus -> Badness
+listStatusBadness NaturallyGood
+  = FiniteBadness 0
+listStatusBadness (NaturallyBad Full Unfixable)
+  = InfiniteBadness
+listStatusBadness (NaturallyBad Bare Unfixable)
+  = FiniteBadness tenK
 -- if i != 0, there is infinite stretchability or shrinkability, so the badness
 -- is zero. Otherwise the badness is approximately min(100r3,10000).
 listStatusBadness (NaturallyBad _ Fixable{ratio=r, order=0})
-  = min tenK $ round $ (r^(3 :: Int)) * 100
-listStatusBadness (NaturallyBad _ Fixable{order=_}) = 0
+  = FiniteBadness $ min tenK $ round $ (r^(3 :: Int)) * 100
+listStatusBadness (NaturallyBad _ Fixable{order=_})
+  = FiniteBadness 0
 
 listGlueSetRatio :: (BreakableList [a], BreakableListElem a) => Int -> [a] -> ListStatus
 listGlueSetRatio desiredLength cs =
@@ -439,7 +442,14 @@ bestRoute desiredWidth tolerance linePenalty cs =
   let
     breaks = allBreaks cs
     analyzedBreaks = zip breaks $ analyzeBreak <$> breaks
-    sensibleBreaks = touchyFilter isSensibleBreak analyzedBreaks
+
+    sensibleBreaks = do
+      (brk, (_status, _badness)) <- touchyFilter isSensibleBreak analyzedBreaks
+
+      bNr <- case _badness of
+        FiniteBadness b -> return b
+        _ -> fail ""
+      return (brk, (_status, bNr))
     considerableBreaks = filter isConsiderableBreak sensibleBreaks
   in
     case filter isMandatoryBreak sensibleBreaks of
@@ -462,11 +472,11 @@ bestRoute desiredWidth tolerance linePenalty cs =
     -- will always break there."
     isMandatoryBreak (Break{item=br}, _) = breakPenalty br <= -tenK
 
-    isConsiderableBreak (Break{item=br}, (_, bad)) =
+    isConsiderableBreak (Break{item=br}, (_, b)) =
       -- "TeX will not even consider such a line if p ≥ 10000, or b exceeds the
       -- current tolerance or pretolerance."
       -- But also:
-      breakPenalty br < tenK && bad <= tolerance
+      breakPenalty br < tenK && b <= tolerance
 
     bestRouteFromBreak addDemerit (Break{before=bef, after=aft, item=br}, (_status, bad)) =
       let
@@ -520,15 +530,19 @@ data PageBreakJudgment
 
 pageBreakJudgment :: [BreakableVListElem] -> BreakItem -> Int -> PageBreakJudgment
 pageBreakJudgment cs breakItem desiredHeight
-  | penalty >= tenK = DoNotBreak
-  | q >= tenK || badness == oneMillion = BreakPageAtBest
-  | penalty <= -tenK = BreakPageHere
-  | badness == tenK = TrackCost hunK
-  | otherwise = TrackCost $ badness + penalty + q
+  = inner penalty splitInsertPenalties badness
   where
     badness = listStatusBadness $ listGlueSetRatio desiredHeight cs
     penalty = breakPenalty breakItem
-    q = 0
+    splitInsertPenalties = 0
+
+    inner _ _ InfiniteBadness = BreakPageAtBest
+    inner p q (FiniteBadness b)
+      | p >= tenK = DoNotBreak
+      | q >= tenK = BreakPageAtBest
+      | p <= -tenK = BreakPageHere
+      | b == tenK = TrackCost hunK
+      | otherwise = TrackCost $ b + p + q
 
 -- Assumes cs is in reading order.
 setPage :: Int -> [BreakableVListElem] -> B.Page
