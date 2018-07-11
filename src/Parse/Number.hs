@@ -58,8 +58,8 @@ parseSigns = isPos <$> parseOptionalSigns
     isPos (False:xs) = not $ isPos xs
     isPos [] = True
 
-    signToPos (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=43}) = Just True
-    signToPos (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=45}) = Just False
+    signToPos (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=43}) = Just True
+    signToPos (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=45}) = Just False
     signToPos _  = Nothing
 
 parseNumber :: Parser Number
@@ -93,26 +93,26 @@ parseNormalInteger = P.choice [ IntegerConstant <$> parseConstant
       PU.enableExpansion
       return code
       where
-        isBacktick (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=96}) = True
+        isBacktick (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=96}) = True
         isBacktick _ = False
 
-        parseCharLike (Expand.CharCat Lex.LexCharCat{char=c}) = Just $ fromIntegral c
-        parseCharLike (Expand.UnexpandedControlSequence (Lex.ControlSymbol char)) = Just $ fromIntegral $ C.ord char
+        parseCharLike (Expand.LexToken Lex.CharCat{char=c}) = Just $ fromIntegral c
+        parseCharLike (Expand.LexToken (Lex.ControlSequence (Lex.ControlSymbol char))) = Just $ fromIntegral $ C.ord char
         parseCharLike _ = Nothing
 
 parseDecimalIntegerDigit :: Parser Int
 parseDecimalIntegerDigit = PU.satisfyThen charToDigit
   where
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=48}) = Just 0
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=49}) = Just 1
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=50}) = Just 2
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=51}) = Just 3
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=52}) = Just 4
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=53}) = Just 5
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=54}) = Just 6
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=55}) = Just 7
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=56}) = Just 8
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=57}) = Just 9
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=48}) = Just 0
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=49}) = Just 1
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=50}) = Just 2
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=51}) = Just 3
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=52}) = Just 4
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=53}) = Just 5
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=54}) = Just 6
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=55}) = Just 7
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=56}) = Just 8
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=57}) = Just 9
     charToDigit _ = Nothing
 
 parseHexadecimalIntegerDigits :: Parser [Int]
@@ -120,33 +120,33 @@ parseHexadecimalIntegerDigits = do
   PU.skipSatisfied isDoubleQuote
   P.some $ PU.satisfyThen charToDigit
   where
-    isDoubleQuote (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=34}) = True
+    isDoubleQuote (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=34}) = True
     isDoubleQuote _ = False
 
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=48}) = Just 0
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=49}) = Just 1
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=50}) = Just 2
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=51}) = Just 3
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=52}) = Just 4
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=53}) = Just 5
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=54}) = Just 6
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=55}) = Just 7
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=56}) = Just 8
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=57}) = Just 9
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=48}) = Just 0
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=49}) = Just 1
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=50}) = Just 2
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=51}) = Just 3
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=52}) = Just 4
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=53}) = Just 5
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=54}) = Just 6
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=55}) = Just 7
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=56}) = Just 8
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=57}) = Just 9
     -- A to F, category 'other',
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=65}) = Just 10
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=66}) = Just 11
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=67}) = Just 12
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=68}) = Just 13
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=69}) = Just 14
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=70}) = Just 15
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=65}) = Just 10
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=66}) = Just 11
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=67}) = Just 12
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=68}) = Just 13
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=69}) = Just 14
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=70}) = Just 15
     -- A to F, category 'letter'.
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=65}) = Just 10
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=66}) = Just 11
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=67}) = Just 12
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=68}) = Just 13
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=69}) = Just 14
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=70}) = Just 15
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=65}) = Just 10
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=66}) = Just 11
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=67}) = Just 12
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=68}) = Just 13
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=69}) = Just 14
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=70}) = Just 15
     charToDigit _ = Nothing
 
 parseOctalIntegerDigits :: Parser [Int]
@@ -154,17 +154,17 @@ parseOctalIntegerDigits = do
   PU.skipSatisfied isSingleQuote
   P.some $ PU.satisfyThen charToDigit
   where
-    isSingleQuote (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=39}) = True
+    isSingleQuote (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=39}) = True
     isSingleQuote _ = False
 
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=48}) = Just 0
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=49}) = Just 1
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=50}) = Just 2
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=51}) = Just 3
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=52}) = Just 4
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=53}) = Just 5
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=54}) = Just 6
-    charToDigit (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=55}) = Just 7
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=48}) = Just 0
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=49}) = Just 1
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=50}) = Just 2
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=51}) = Just 3
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=52}) = Just 4
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=53}) = Just 5
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=54}) = Just 6
+    charToDigit (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=55}) = Just 7
     charToDigit _ = Nothing
 
 -- parseCoercedInteger = P.choice [ parseInternalLengthAsInt
@@ -188,6 +188,6 @@ parseRationalConstant = do
   where
     decDigitsToInteger = digitsToInteger 10
 
-    isDotOrComma (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=44}) = True
-    isDotOrComma (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=46}) = True
+    isDotOrComma (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=44}) = True
+    isDotOrComma (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=46}) = True
     isDotOrComma _ = False

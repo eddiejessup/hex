@@ -67,7 +67,7 @@ data AllModesCommand
   | IgnoreSpaces
   -- | SetAfterAssignmentToken Token
   -- | AddToAfterGroupTokens Tokens
-  -- | ChangeCase VDirection GeneralText
+  | ChangeCase Expand.VDirection PC.BalancedText
   -- | Message MessageStream GeneralText
   -- | OpenInput { streamNr :: Int, fileName :: String }
   -- | CloseInput { streamNr :: Int }
@@ -133,6 +133,7 @@ type AllModeCommandParser = Parser AllModesCommand
 parseAllModeCommand :: Expand.Axis -> Parser AllModesCommand
 parseAllModeCommand mode = P.choice [ relax
                                     , ignorespaces
+                                    , changeCase
                                     , tokenForFont
                                     , macroToFont
                                     , addPenalty
@@ -160,6 +161,15 @@ ignorespaces = do
   PC.skipOptionalSpaces
   return IgnoreSpaces
 
+changeCase :: AllModeCommandParser
+changeCase = do
+  d <- satisfyThen tokToDirection
+  balancedText <- PC.parseGeneralText
+  return $ ChangeCase d balancedText
+  where
+    tokToDirection (Expand.ChangeCase d) = Just d
+    tokToDirection _ = Nothing
+
 tokenForFont :: AllModeCommandParser
 tokenForFont = satisfyThen tokToCom
   where
@@ -186,9 +196,9 @@ macroToFont = do
         Just p -> return p
         Nothing -> fail $ "Invalid filename: " ++ name ++ ".tfm"
 
-    tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=c}) = Just c
+    tokToChar (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=c}) = Just c
     -- 'Other' Characters for decimal digits are OK.
-    tokToChar (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=c}) = case c of
+    tokToChar (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=c}) = case c of
       48 -> Just c
       49 -> Just c
       50 -> Just c
@@ -298,8 +308,8 @@ addCharacter = do
   c <- satisfyThen charToCode
   return AddCharacter{method=ExplicitChar, code=c}
   where
-    charToCode (Expand.CharCat Lex.LexCharCat{cat=Lex.Letter, char=c}) = Just c
-    charToCode (Expand.CharCat Lex.LexCharCat{cat=Lex.Other, char=c}) = Just c
+    charToCode (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=c}) = Just c
+    charToCode (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=c}) = Just c
     charToCode _ = Nothing
 
 -- VMode.

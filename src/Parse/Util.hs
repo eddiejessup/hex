@@ -9,6 +9,7 @@ import Data.Proxy
 import qualified Data.Set as Set
 import qualified Data.Char as C
 import Data.List.NonEmpty (NonEmpty((:|)))
+import Data.Foldable (foldl')
 import qualified Control.Monad.State.Lazy as MState
 
 import qualified Expand
@@ -35,6 +36,10 @@ newStream cs = Stream { codes=cs
 
 insertLexToken :: Stream -> Lex.Token -> Stream
 insertLexToken s t = s{lexTokens=t:lexTokens s}
+
+insertLexTokens :: Stream -> [Lex.Token] -> Stream
+-- TODO: This use of reverse is pure sloth; fix later.
+insertLexTokens s ts = foldl' insertLexToken s $ reverse ts
 
 showSrc :: String -> String
 showSrc s = replace "\n" "\\n" (take 30 s)

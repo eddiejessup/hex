@@ -49,7 +49,7 @@ defaultCharCatMap = IMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127
 
 -- Add in some useful extras beyond the technical defaults.
 extras :: [(IMap.Key, CatCode)]
-extras = [(94, Superscript)]
+extras = [(94, Superscript), (123, BeginGroup), (125, EndGroup)]
 
 usableCharCatMap :: IMap.IntMap CatCode
 usableCharCatMap = foldl (\m (k, v) -> IMap.insert k v m) defaultCharCatMap extras

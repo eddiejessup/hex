@@ -10,6 +10,7 @@ import Path ((</>))
 import qualified Path
 import Data.Foldable (asum)
 import qualified Text.Megaparsec as PS
+import qualified Data.Char as C
 
 import qualified TFM.Main as TFMM
 import qualified TFM.Character as TFMC
@@ -21,7 +22,7 @@ import qualified Unit
 import qualified Expand
 
 import qualified Parse as P
-import Parse (Stream, insertLexToken)
+import Parse (Stream, insertLexToken, insertLexTokens)
 
 type FontInfoMap = IMap.IntMap TFMM.TexFont
 
@@ -183,6 +184,20 @@ evaluateKern = B.Kern . evaluateLength
 evaluatePenalty :: P.Number -> A.Penalty
 evaluatePenalty = A.Penalty . fromIntegral . evaluateNumber
 
+applyChangeCaseToStream :: Stream -> Expand.VDirection -> P.BalancedText -> Stream
+applyChangeCaseToStream s d (P.BalancedText ts) = insertLexTokens s $ changeCase d <$> ts
+  where
+    -- Set the character code of each character token to its
+    -- \uccode or \lccode value, if that value is non-zero.
+    -- Don't change the category code.
+    changeCase _ t@(Lex.ControlSequence _) = t
+    changeCase dir t@Lex.CharCat{char=c} = t{Lex.char=modFunc c}
+      where
+        modFunc = C.ord . switch dir . C.chr
+        switch Expand.Upward = C.toUpper
+        switch Expand.Downward = C.toLower
+
+
 -- We build a paragraph list in reverse order.
 extractParagraph :: State -> [A.BreakableHListElem] -> Stream -> IO (State, [A.BreakableHListElem], Stream)
 extractParagraph state acc stream =
@@ -195,6 +210,9 @@ extractParagraph state acc stream =
           extractParagraph state acc streamNext
         P.IgnoreSpaces ->
           extractParagraph state acc streamNext
+        P.ChangeCase d bt -> do
+          let streamNext' = applyChangeCaseToStream streamNext d bt
+          extractParagraph state acc streamNext'
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr
@@ -376,6 +394,9 @@ extractPages state pages cur acc stream =
           extractPages state pages cur acc streamNext
         P.IgnoreSpaces ->
           extractPages state pages cur acc streamNext
+        P.ChangeCase d bt -> do
+          let streamNext' = applyChangeCaseToStream streamNext d bt
+          extractPages state pages cur acc streamNext'
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
           let (stateNext, fontSel) = selectFont state fNr

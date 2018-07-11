@@ -71,7 +71,7 @@ data ParseToken
   | IgnoreSpaces -- \ignorespaces
   -- | SetAfterAssignmentToken -- \afterassignment
   -- | AddToAfterGroupTokens -- \aftergroup
-  -- | ChangeCase VDirection -- \uppercase, \lowercase
+  | ChangeCase VDirection -- \uppercase, \lowercase
   -- | Message MessageStream -- \message, \errmessage
   -- | Immediate -- \immediate
   -- | OpenInput -- \openin
@@ -256,11 +256,7 @@ data ParseToken
   -- | EndIf -- \fi
   -- | Or -- \or
 
-  -- Arguments used when defining new control sequences.
-  | UnexpandedControlSequence Lex.ControlSequence
-
-  -- Char-Cats
-  | CharCat Lex.LexCharCat
+  | LexToken Lex.Token
   deriving (Show, Eq)
 
 instance Ord ParseToken where
@@ -273,6 +269,8 @@ defaultCSMap :: HMap.HashMap Lex.ControlSequence ParseToken
 defaultCSMap = HMap.fromList
     [ (Lex.ControlWord "relax", Relax)
     , (Lex.ControlWord "ignorespaces", IgnoreSpaces)
+    , (Lex.ControlWord "uppercase", ChangeCase Upward)
+    , (Lex.ControlWord "lowercase", ChangeCase Downward)
     , (Lex.ControlWord "penalty", AddPenalty)
     , (Lex.ControlWord "kern", AddKern)
     , (Lex.ControlWord "vskip", ModedCommand Vertical AddSpecifiedGlue)
@@ -297,14 +295,12 @@ defaultCSMap = HMap.fromList
     ]
 
 lexToParseToken :: Bool -> Lex.Token -> ParseToken
-lexToParseToken _ (Lex.CharCat x)
-  = CharCat x
 lexToParseToken True (Lex.ControlSequence cs)
   = case HMap.lookup cs defaultCSMap of
       Just p -> p
       Nothing -> error "no such control sequence found"
-lexToParseToken False (Lex.ControlSequence cs)
-  = UnexpandedControlSequence cs
+lexToParseToken _ t
+  = LexToken t
 
 extractToken :: Bool -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (ParseToken, Lex.LexState, [Cat.CharCode])
 extractToken _ _ _ [] = Nothing
