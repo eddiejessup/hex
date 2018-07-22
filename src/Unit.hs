@@ -50,6 +50,9 @@ data PhysicalUnit
   | ScaledPoint -- 'sp'
   deriving Show
 
+oneKPt :: Int
+oneKPt = toScaledPointApprox (1000 :: Int) Point
+
 class Length u where
   inScaledPoint :: u -> Rational
 

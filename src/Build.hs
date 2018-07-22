@@ -4,7 +4,6 @@
 module Build where
 
 import qualified Data.IntMap.Strict as IMap
-import Data.List (intersperse)
 import System.Directory (doesFileExist)
 import Path ((</>))
 import qualified Path
@@ -27,10 +26,13 @@ import Parse (Stream, insertLexToken, insertLexTokens)
 type FontInfoMap = IMap.IntMap TFMM.TexFont
 
 data State = State { currentFontNr :: Maybe Int
-                   , fontInfoMap :: FontInfoMap } deriving Show
+                   , fontInfoMap :: FontInfoMap
+                   , previousBoxDepth :: Int } deriving Show
 
 newState :: State
-newState = State {currentFontNr=Nothing, fontInfoMap=IMap.empty}
+newState = State { currentFontNr=Nothing
+                 , fontInfoMap=IMap.empty
+                 , previousBoxDepth= -Unit.oneKPt }
 
 theParIndent :: A.BreakableHListElem
 theParIndent = A.HHBox B.HBox{contents=[]
@@ -46,10 +48,7 @@ theLinePenalty :: Int
 theLinePenalty = 10
 
 theDesiredHeight :: Int
-theDesiredHeight = 45000000
-
-theInterLineGlue :: A.Glue
-theInterLineGlue = A.Glue{dimen = 400000, stretch=A.noFlex, shrink=A.noFlex}
+theDesiredHeight = 37500000
 
 csToFontNr :: P.ControlSequenceLike -> Int
 csToFontNr (P.ControlSequence (Lex.ControlWord "thefont")) = Expand.theFontNr
@@ -274,16 +273,15 @@ extractParagraph state acc stream =
       let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
       extractParagraph state acc $ insertLexToken stream parToken
 
-extractBoxedParagraph :: Bool -> Int -> Int -> Int -> A.Glue -> State -> Stream -> IO (State, [A.BreakableVListElem], Stream)
-extractBoxedParagraph indent desiredWidth lineTolerance linePenalty interLineGlue state stream = do
+extractParagraphLineBoxes :: Bool -> Int -> Int -> Int -> State -> Stream -> IO (State, [B.HBox], Stream)
+extractParagraphLineBoxes indent desiredWidth lineTolerance linePenalty state stream = do
   let
     initial True = [theParIndent]
     initial False = []
   (stateNext, hList, streamNext) <- extractParagraph state (initial indent) stream
   let
     lineBoxes = A.setParagraph desiredWidth lineTolerance linePenalty hList
-    paraBoxes = intersperse (A.VGlue interLineGlue) lineBoxes
-  return (stateNext, paraBoxes, streamNext)
+  return (stateNext, lineBoxes, streamNext)
 
 -- current items, best cost, breakpoint for that cost.
 type CurrentPage = ([A.BreakableVListElem], Maybe Int, Maybe Int)
@@ -358,6 +356,57 @@ runPageBuilder (cur, costBest, iBest) (x:xs)
   -- If we can't break here, just add it to the list and continue.
   | otherwise = runPageBuilder (x:cur, costBest, iBest) xs
 
+-- Assume we are adding a non-rule box of height h to the vertical list.
+-- Let \prevdepth = p, \lineskiplimit = l, \baselineskip = (b plus y minus z).
+-- Add interline glue, above the new box, of:
+-- If p ≤ −1000 pt:
+--    No glue.
+-- Otherwise, if b−p−h ≥ l:
+--    (b−p−h) plus y minus z
+-- Otherwise:
+--    \lineskip
+-- Then set \prevdepth to the depth of the new box.
+
+-- Minimum distance between baselines.
+baselineLengthMin :: Int
+baselineLengthMin = 0
+-- Aimed actual distance between baselines.
+baselineLength :: Int
+baselineLength = Unit.toScaledPointApprox 12 Unit.Point
+baselineGlue :: Int -> A.BreakableVListElem
+baselineGlue l = A.VGlue $ A.Glue l A.noFlex A.noFlex
+minBaselineGlue :: A.BreakableVListElem
+minBaselineGlue = A.VGlue $ A.Glue (Unit.toScaledPointApprox 1 Unit.Point) A.noFlex A.noFlex
+
+getVListGlue :: Int  -- \prevdepth
+              -> A.BreakableVListElem
+              -> (Int, [A.BreakableVListElem])
+getVListGlue prevDepth e@(A.VHBox b)
+  | prevDepth <= -Unit.oneKPt =
+    (B.naturalDepth e, [e])
+  | otherwise =
+    let
+      proposedBaselineLength = baselineLength - prevDepth - B.naturalHeight b
+      -- Intuition: set the distance between baselines to \baselineskip, but no
+      -- closer than \lineskiplimit [baselineLengthMin], in which case
+      -- \lineskip [minBaselineGlue] is used.
+      glue = if proposedBaselineLength >= baselineLengthMin
+        then baselineGlue proposedBaselineLength
+        else minBaselineGlue
+    in (B.naturalDepth e, [e, glue])
+-- TODO: VVBox (same implementation as VHBox).
+-- TODO: Should use this function whenever we add to a v-list.
+getVListGlue prevDepth e = (prevDepth, [e])
+
+insertVListGlue :: Int
+                -> [A.BreakableVListElem]
+                -> [A.BreakableVListElem]
+                -> (Int, [A.BreakableVListElem])
+insertVListGlue prevDepth acc [] = (prevDepth, acc)
+insertVListGlue prevDepth acc (e:es) =
+  let (prevDepth', add) = getVListGlue prevDepth e
+  in insertVListGlue prevDepth' (add ++ acc) es
+
 addParagraphToPage :: State
                    -> [B.Page]
                    -> CurrentPage
@@ -365,15 +414,14 @@ addParagraphToPage :: State
                    -> Stream
                    -> Bool
                    -> IO (State, [B.Page], Stream)
-addParagraphToPage state pages cur acc stream indent
+addParagraphToPage state@State{previousBoxDepth=prevDepth} pages cur acc stream indent
   = do
-    -- Paraboxes returned in normal order.
-    -- TODO: Insert inter-line glue properly, between lines, instead of just
-    -- between paragraphs.
-    (stateNext, paraBoxes, streamNext) <- extractBoxedParagraph indent theDesiredWidth theLineTolerance theLinePenalty theInterLineGlue state stream
-    -- But acc accumulates in reverse order.
-    let accNext = reverse paraBoxes ++ (A.VGlue theInterLineGlue:acc)
-    extractPages stateNext pages cur accNext streamNext
+    -- Paraboxes returned in reading order.
+    (stateNext, lineBoxes, streamNext) <- extractParagraphLineBoxes indent theDesiredWidth theLineTolerance theLinePenalty state stream
+    -- TODO: Pass both list-element lists in their required order.
+    let (prevDepth', acc') = insertVListGlue prevDepth acc $ A.VHBox <$> lineBoxes
+    let stateNext' = stateNext{previousBoxDepth=prevDepth'}
+    extractPages stateNext' pages cur acc' streamNext
 
 extractPages :: State -> [B.Page] -> CurrentPage -> [A.BreakableVListElem] -> Stream -> IO (State, [B.Page], Stream)
 extractPages state pages cur acc stream =

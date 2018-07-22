@@ -329,6 +329,16 @@ instance Dimensioned BreakableHListElem where
   naturalHeight (HFontSelection _) = 0
   naturalHeight (HCharacter c) = B.naturalHeight c
 
+  naturalDepth (HVBox v) = B.naturalDepth v
+  naturalDepth (HHBox h) = B.naturalDepth h
+  naturalDepth (HRule r) = B.naturalDepth r
+  naturalDepth (HGlue _) = 0
+  naturalDepth (HKern _) = 0
+  naturalDepth (HPenalty _) = 0
+  naturalDepth (HFontDefinition _) = 0
+  naturalDepth (HFontSelection _) = 0
+  naturalDepth (HCharacter c) = B.naturalDepth c
+
 instance Dimensioned BreakableVListElem where
   naturalWidth (VVBox v) = B.naturalWidth v
   naturalWidth (VHBox h) = B.naturalWidth h
@@ -347,6 +357,15 @@ instance Dimensioned BreakableVListElem where
   naturalHeight (VPenalty _) = 0
   naturalHeight (VFontDefinition _) = 0
   naturalHeight (VFontSelection _) = 0
+
+  naturalDepth (VVBox v) = B.naturalDepth v
+  naturalDepth (VHBox h) = B.naturalDepth h
+  naturalDepth (VRule r) = B.naturalDepth r
+  naturalDepth (VGlue _) = 0
+  naturalDepth (VKern _) = 0
+  naturalDepth (VPenalty _) = 0
+  naturalDepth (VFontDefinition _) = 0
+  naturalDepth (VFontSelection _) = 0
 
 glueSetRatio :: Int -> (GlueFlex, GlueFlex) -> ListStatus
 glueSetRatio excessLength (_stretch, _shrink) =
@@ -427,15 +446,15 @@ allBreaks = inner [] . A.toAdjacents
           in
             brk:inner (this:seen) rest
 
--- If, once a test has gone from truthy to falsey, we know the test will never
--- again succeed, we can return early.
+-- Optimised filter for cases where we know that once a test has gone from true
+-- to false, the test will never again succeed.
 touchyFilter :: (a -> Bool) -> [a] -> [a]
 touchyFilter _ [] = []
 touchyFilter test (x:xs)
   | test x = x:takeWhile test xs
   | otherwise = touchyFilter test xs
 
--- Expects contents in normal order.
+-- Expects contents in reading order.
 bestRoute :: Int -> Int -> Int -> [BreakableHListElem] -> Route
 bestRoute _ _ _ [] = Route {lines=[], demerit=0}
 bestRoute desiredWidth tolerance linePenalty cs =
@@ -498,8 +517,8 @@ bestRoute desiredWidth tolerance linePenalty cs =
         breakDemerit + listDemerit
 
 -- Expects contents in reverse order.
--- Returns lines in normal order.
-setParagraph :: Int -> Int -> Int -> [BreakableHListElem] -> [BreakableVListElem]
+-- Returns lines in reading order.
+setParagraph :: Int -> Int -> Int -> [BreakableHListElem] -> [B.HBox]
 setParagraph _ _ _ [] = []
 setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
   let
@@ -512,7 +531,7 @@ setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
     csFinished = (HPenalty $ Penalty $ -tenK):hFilGlue:(HPenalty $ Penalty tenK):csTrimmed
 
     Route{lines=lns} = bestRoute desiredWidth tolerance linePenalty $ reverse csFinished
-    setLine Line{contents=lncs, status=_status} = VHBox B.HBox{contents=setListElems _status lncs, desiredLength=B.To desiredWidth}
+    setLine Line{contents=lncs, status=_status} = B.HBox{contents=setListElems _status lncs, desiredLength=B.To desiredWidth}
   in
     fmap setLine lns
 

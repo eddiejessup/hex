@@ -90,14 +90,17 @@ newtype Page = Page [VBoxElem] deriving Show
 class Dimensioned a where
   naturalWidth :: a -> Int
   naturalHeight :: a -> Int
+  naturalDepth :: a -> Int
 
 instance Dimensioned Rule where
   naturalWidth Rule{width=w} = w
   naturalHeight Rule{height=h} = h
+  naturalDepth Rule{depth=d} = d
 
 instance Dimensioned Character where
   naturalWidth Character{width=w} = w
   naturalHeight Character{height=h} = h
+  naturalDepth Character{depth=d} = d
 
 instance Dimensioned HBoxElem where
   naturalWidth (HVBox v) = naturalWidth v
@@ -118,6 +121,15 @@ instance Dimensioned HBoxElem where
   naturalHeight (HFontSelection _) = 0
   naturalHeight (HCharacter c) = naturalHeight c
 
+  naturalDepth (HVBox v) = naturalDepth v
+  naturalDepth (HHBox h) = naturalDepth h
+  naturalDepth (HRule r) = naturalDepth r
+  naturalDepth (HGlue _) = 0
+  naturalDepth (HKern _) = 0
+  naturalDepth (HFontDefinition _) = 0
+  naturalDepth (HFontSelection _) = 0
+  naturalDepth (HCharacter c) = naturalDepth c
+
 instance Dimensioned VBoxElem where
   naturalWidth (VVBox v) = naturalWidth v
   naturalWidth (VHBox h) = naturalWidth h
@@ -135,16 +147,26 @@ instance Dimensioned VBoxElem where
   naturalHeight (VFontDefinition _) = 0
   naturalHeight (VFontSelection _) = 0
 
-instance Dimensioned VBox where
-  naturalHeight VBox{contents=cs, desiredLength=d} =
-    case d of
-      Natural -> sum $ fmap naturalWidth cs
-      To to -> to
-      -- TODO.
-      -- Spread spread -> 1010
+  naturalDepth (VVBox v) = naturalDepth v
+  naturalDepth (VHBox h) = naturalDepth h
+  naturalDepth (VRule r) = naturalDepth r
+  naturalDepth (VGlue _) = 0
+  naturalDepth (VKern _) = 0
+  naturalDepth (VFontDefinition _) = 0
+  naturalDepth (VFontSelection _) = 0
 
+instance Dimensioned VBox where
   naturalWidth VBox{contents=[]} = 0
   naturalWidth VBox{contents=cs} = maximum $ fmap naturalWidth cs
+
+  naturalHeight VBox{contents=cs, desiredLength=Natural} =
+    sum $ fmap naturalWidth cs
+  naturalHeight VBox{desiredLength=To to} = to
+  -- TODO.
+  -- Spread spread -> 1010
+
+  -- TODO:
+  -- NaturalDepth
 
 instance Dimensioned HBox where
   naturalWidth HBox{contents=cs, desiredLength=d} =
@@ -155,7 +177,10 @@ instance Dimensioned HBox where
       -- Spread spread -> 1010
 
   naturalHeight HBox{contents=[]} = 0
-  naturalHeight HBox{contents=cs} = maximum $ fmap naturalHeight cs
+  naturalHeight HBox{contents=cs} = maximum $ naturalHeight <$> cs
+
+  naturalDepth HBox{contents=[]} = 0
+  naturalDepth HBox{contents=cs} = maximum $ naturalDepth <$> cs
 
 class DVIAble a where
   toDVI :: a -> [DVIE.Instruction]
@@ -213,14 +238,14 @@ instance DVIAble HBoxElem where
 
 instance DVIAble VBoxElem where
   toDVI (VVBox e) =
-    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight e}]
+    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight e + naturalDepth e}]
   toDVI (VHBox e) =
-    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight e}]
+    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight e + naturalDepth e}]
     -- TODO: Rule.
   toDVI (VGlue g) = [DVIE.MoveDown {distance = glueDimen g}]
   toDVI (VKern k) = [DVIE.MoveDown {distance = kernDimen k}]
   toDVI (VRule r) =
-    [DVIE.PushStack] ++ toDVI r ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight r}]
+    [DVIE.PushStack] ++ toDVI r ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight r + naturalDepth r}]
   toDVI (VFontDefinition e) = toDVI e
   toDVI (VFontSelection e) = toDVI e
 
