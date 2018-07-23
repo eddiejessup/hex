@@ -3,7 +3,7 @@
 
 module Build where
 
-import qualified Data.IntMap.Strict as IMap
+import qualified Data.HashMap.Strict as HMap
 import System.Directory (doesFileExist)
 import Path ((</>))
 import qualified Path
@@ -23,7 +23,31 @@ import qualified Expand
 import qualified Parse as P
 import Parse (Stream, insertLexToken, insertLexTokens)
 
-type FontInfoMap = IMap.IntMap TFMM.TexFont
+type FontInfoMap = HMap.HashMap Int TFMM.TexFont
+
+theParIndent :: A.BreakableHListElem
+theParIndent = A.HHBox B.HBox{contents=[]
+                             , desiredLength=B.To $ Unit.toScaledPointApprox (20 :: Int) Unit.Point}
+theDesiredWidth :: Int
+theDesiredWidth = 30750000
+theLineTolerance :: Int
+theLineTolerance = 500
+theLinePenalty :: Int
+theLinePenalty = 10
+theDesiredHeight :: Int
+theDesiredHeight = 37500000
+theMagnification :: Int
+theMagnification = 1000
+-- Minimum distance between baselines.
+theBaselineLengthMin :: Int
+theBaselineLengthMin = 0
+-- Aimed actual distance between baselines.
+theBaselineLength :: Int
+theBaselineLength = Unit.toScaledPointApprox (12 :: Int) Unit.Point
+theBaselineGlue :: Int -> A.BreakableVListElem
+theBaselineGlue l = A.VGlue $ A.Glue l A.noFlex A.noFlex
+theMinBaselineGlue :: A.BreakableVListElem
+theMinBaselineGlue = A.VGlue $ A.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) A.noFlex A.noFlex
 
 data State = State { currentFontNr :: Maybe Int
                    , fontInfoMap :: FontInfoMap
@@ -31,24 +55,8 @@ data State = State { currentFontNr :: Maybe Int
 
 newState :: State
 newState = State { currentFontNr=Nothing
-                 , fontInfoMap=IMap.empty
+                 , fontInfoMap=HMap.empty
                  , previousBoxDepth= -Unit.oneKPt }
-
-theParIndent :: A.BreakableHListElem
-theParIndent = A.HHBox B.HBox{contents=[]
-                             , desiredLength=B.To $ fromIntegral $ Unit.toScaledPointApprox (20 :: Int) Unit.Point}
-
-theDesiredWidth :: Int
-theDesiredWidth = 30750000
-
-theLineTolerance :: Int
-theLineTolerance = 500
-
-theLinePenalty :: Int
-theLinePenalty = 10
-
-theDesiredHeight :: Int
-theDesiredHeight = 37500000
 
 csToFontNr :: P.ControlSequenceLike -> Int
 csToFontNr (P.ControlSequence (Lex.ControlWord "thefont")) = Expand.theFontNr
@@ -67,7 +75,7 @@ currentFontInfo state = do
   -- Or maybe there's no font where there should be.
   -- TODO: I think I can make this case impossible, maybe by storing the
   -- current font info directly instead of a lookup.
-  IMap.lookup fontNr $ fontInfoMap state
+  HMap.lookup fontNr $ fontInfoMap state
 
 type PathToFile b = Path.Path b Path.File
 type RelPathToFile = PathToFile Path.Rel
@@ -100,7 +108,7 @@ defineFont state fontRelPath nr = do
                                    , fontInfo = font
                                    , scaleFactorRatio = 1.0
                                    }
-          stateNext = state{fontInfoMap=IMap.insert nr font $ fontInfoMap state}
+          stateNext = state{fontInfoMap=HMap.insert nr font $ fontInfoMap state}
         return (stateNext, fontDef)
       Nothing ->
         fail "No font found"
@@ -113,7 +121,7 @@ characterBox :: State -> Int -> Maybe B.Character
 characterBox state code = do
   font <- currentFontInfo state
   let toSP = TFMM.designScaleSP font
-  TFMC.Character{width=w, height=h, depth=d} <- IMap.lookup code $ TFMM.characters font
+  TFMC.Character{width=w, height=h, depth=d} <- HMap.lookup code $ TFMM.characters font
   return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
 
 spaceGlue :: State -> Maybe A.Glue
@@ -138,9 +146,6 @@ evaluateFactor :: P.Factor -> Rational
 evaluateFactor (P.NormalIntegerFactor n) = fromIntegral $ evaluateNormalInteger n
 evaluateFactor (P.RationalConstant r) = r
 
-theMag :: Int
-theMag = 1000
-
 evaluateUnit :: P.Unit -> Rational
 evaluateUnit (P.PhysicalUnit _ u) = Unit.inScaledPoint u
 -- TODO:
@@ -152,7 +157,7 @@ evaluateNormalLength (P.LengthSemiConstant f u@(P.PhysicalUnit isTrue _))
   = round $ evalF isTrue * evaluateUnit u
   where
     evalF False = evaluateFactor f
-    evalF True = evalF False * 1000 / fromIntegral theMag
+    evalF True = evalF False * 1000 / fromIntegral theMagnification
 evaluateNormalLength (P.LengthSemiConstant f u)
   = round $ evaluateFactor f * evaluateUnit u
 
@@ -356,17 +361,6 @@ runPageBuilder (cur, costBest, iBest) (x:xs)
   -- If we can't break here, just add it to the list and continue.
   | otherwise = runPageBuilder (x:cur, costBest, iBest) xs
 
--- Minimum distance between baselines.
-baselineLengthMin :: Int
-baselineLengthMin = 0
--- Aimed actual distance between baselines.
-baselineLength :: Int
-baselineLength = Unit.toScaledPointApprox (12 :: Int) Unit.Point
-baselineGlue :: Int -> A.BreakableVListElem
-baselineGlue l = A.VGlue $ A.Glue l A.noFlex A.noFlex
-minBaselineGlue :: A.BreakableVListElem
-minBaselineGlue = A.VGlue $ A.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) A.noFlex A.noFlex
-
 -- Assume we are adding a non-rule box of height h to the vertical list.
 -- Let \prevdepth = p, \lineskiplimit = l, \baselineskip = (b plus y minus z).
 -- Add interline glue, above the new box, of:
@@ -392,13 +386,13 @@ addVListElem (prevDepth, acc) e = case e of
             e:acc
           else
             let
-              proposedBaselineLength = baselineLength - prevDepth - B.naturalHeight b
+              proposedBaselineLength = theBaselineLength - prevDepth - B.naturalHeight b
               -- Intuition: set the distance between baselines to \baselineskip, but no
-              -- closer than \lineskiplimit [baselineLengthMin], in which case
-              -- \lineskip [minBaselineGlue] is used.
-              glue = if proposedBaselineLength >= baselineLengthMin
-                then baselineGlue proposedBaselineLength
-                else minBaselineGlue
+              -- closer than \lineskiplimit [theBaselineLengthMin], in which case
+              -- \lineskip [theMinBaselineGlue] is used.
+              glue = if proposedBaselineLength >= theBaselineLengthMin
+                then theBaselineGlue proposedBaselineLength
+                else theMinBaselineGlue
             in e:glue:acc
 
 addVListElems :: (Int, [A.BreakableVListElem])

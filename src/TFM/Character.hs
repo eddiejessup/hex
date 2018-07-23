@@ -4,7 +4,7 @@ module TFM.Character where
 
 import           Data.Bits          (shiftR, (.&.))
 import qualified Data.ByteString    as BS
-import qualified Data.IntMap.Strict as IntMap
+import qualified Data.HashMap.Strict as HashMap
 import qualified TFM.Parse          as TFMP
 
 -- The character info array contains, for each character, six fields packed
@@ -89,8 +89,7 @@ readCharInfo tfm contents _code = do
                      , italicCorrection=_italicCorrection
                      , special=_special }
 
-
-readCharInfos :: TFMP.TFM -> BS.ByteString -> Either String (IntMap.IntMap Character)
+readCharInfos :: TFMP.TFM -> BS.ByteString -> Either String (HashMap.HashMap Int Character)
 readCharInfos tfm contents = do
   charList <- mapM (readCharInfo tfm contents) [TFMP.smallestCharCode tfm..TFMP.largestCharCode tfm]
-  return $ IntMap.fromList $ fmap (\c@Character{code=i} -> (i, c)) charList
+  return $ HashMap.fromList $ (\c@Character{code=i} -> (i, c)) <$> charList

@@ -2,7 +2,7 @@ module TFM.Main where
 
 import qualified Data.ByteString as BS
 import qualified Data.Binary.Strict.Get as BSG
-import qualified Data.IntMap.Strict as IntMap
+import qualified Data.HashMap.Strict as HashMap
 import Path (Path, Abs, File, toFilePath)
 
 import qualified Unit as U
@@ -26,7 +26,7 @@ data TexFont = TexFont { checksum :: Int
                        , mathExtensionParams :: Maybe TFMP.MathExtensionParams
 
                        , ligKerns :: [TFMP.LigKernInstr]
-                       , characters :: IntMap.IntMap TFMC.Character }
+                       , characters :: HashMap.HashMap Int TFMC.Character }
              deriving (Show)
 
 designSizeSP :: TexFont -> Rational

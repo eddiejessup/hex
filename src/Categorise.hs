@@ -1,6 +1,6 @@
 module Categorise where
 
-import qualified Data.IntMap.Strict as IMap
+import qualified Data.HashMap.Strict as HMap
 
 data CatCode
   = Escape -- 0
@@ -28,7 +28,7 @@ data CharCat = CharCat
   , cat :: CatCode
   } deriving (Show)
 
-type CharCatMap = IMap.IntMap CatCode
+type CharCatMap = HMap.HashMap CharCode CatCode
 
 defaultCatCode :: CharCode -> CatCode
 defaultCatCode n
@@ -45,17 +45,17 @@ defaultCatCode n
   | otherwise = Other
 
 defaultCharCatMap :: CharCatMap
-defaultCharCatMap = IMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127]
+defaultCharCatMap = HMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127]
 
 -- Add in some useful extras beyond the technical defaults.
-extras :: [(IMap.Key, CatCode)]
+extras :: [(CharCode, CatCode)]
 extras = [(94, Superscript), (123, BeginGroup), (125, EndGroup)]
 
-usableCharCatMap :: IMap.IntMap CatCode
-usableCharCatMap = foldl (\m (k, v) -> IMap.insert k v m) defaultCharCatMap extras
+usableCharCatMap :: CharCatMap
+usableCharCatMap = foldl (\m (k, v) -> HMap.insert k v m) defaultCharCatMap extras
 
 catLookup :: CharCatMap -> CharCode -> CatCode
-catLookup m n = IMap.findWithDefault Invalid n m
+catLookup m n = HMap.lookupDefault Invalid n m
 
 extractCharCat :: CharCatMap -> [CharCode] -> Maybe (CharCat, [CharCode])
 extractCharCat _ [] = Nothing
