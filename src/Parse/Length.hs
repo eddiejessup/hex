@@ -60,10 +60,7 @@ data InternalUnit
 -- - Internal quantity units
 
 parseLength :: Parser Length
-parseLength = do
-  isPositive <- parseSigns
-  uLn <- parseUnsignedLength
-  return $ Length isPositive uLn
+parseLength = Length <$> parseSigns <*> parseUnsignedLength
 
 parseUnsignedLength :: Parser UnsignedLength
 parseUnsignedLength = P.choice [ NormalLengthAsULength <$> parseNormalLength
@@ -75,10 +72,7 @@ parseNormalLength = P.choice [ parseLengthSemiConstant
                              -- , InternalLength <$> parseInternalLength
                              ]
   where
-    parseLengthSemiConstant = do
-      factor <- parseFactor
-      lengthUnit <- parseUnit
-      return $ LengthSemiConstant factor lengthUnit
+    parseLengthSemiConstant = LengthSemiConstant <$> parseFactor <*> parseUnit
 
 parseUnit :: Parser Unit
 parseUnit = P.choice [ parsePhysicalUnit

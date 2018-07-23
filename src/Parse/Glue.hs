@@ -33,11 +33,7 @@ parseGlue = P.choice [ parseExplicitGlue
                      -- , parseInternalGlue
                      ]
   where
-    parseExplicitGlue = do
-      len <- parseLength
-      stretch <- parseFlex "plus"
-      shrink <- parseFlex "minus"
-      return $ ExplicitGlue len stretch shrink
+    parseExplicitGlue = ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> parseFlex "minus"
 
 parseFlex :: String -> Parser (Maybe Flex)
 parseFlex s = P.choice [ Just <$> P.try parsePresentFlex

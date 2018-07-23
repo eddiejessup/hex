@@ -63,10 +63,7 @@ parseSigns = isPos <$> parseOptionalSigns
     signToPos _  = Nothing
 
 parseNumber :: Parser Number
-parseNumber = do
-  isPositive <- parseSigns
-  uNr <- parseUnsignedNumber
-  return $ Number isPositive uNr
+parseNumber = Number <$> parseSigns <*> parseUnsignedNumber
 
 parseUnsignedNumber :: Parser UnsignedNumber
 parseUnsignedNumber = P.choice [ NormalIntegerAsUNumber <$> parseNormalInteger
