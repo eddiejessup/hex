@@ -7,7 +7,7 @@ import qualified Data.IntMap.Strict as IMap
 import System.Directory (doesFileExist)
 import Path ((</>))
 import qualified Path
-import Data.Foldable (asum)
+import Data.Foldable (asum, foldl')
 import qualified Text.Megaparsec as PS
 import qualified Data.Char as C
 
@@ -356,6 +356,17 @@ runPageBuilder (cur, costBest, iBest) (x:xs)
   -- If we can't break here, just add it to the list and continue.
   | otherwise = runPageBuilder (x:cur, costBest, iBest) xs
 
+-- Minimum distance between baselines.
+baselineLengthMin :: Int
+baselineLengthMin = 0
+-- Aimed actual distance between baselines.
+baselineLength :: Int
+baselineLength = Unit.toScaledPointApprox (12 :: Int) Unit.Point
+baselineGlue :: Int -> A.BreakableVListElem
+baselineGlue l = A.VGlue $ A.Glue l A.noFlex A.noFlex
+minBaselineGlue :: A.BreakableVListElem
+minBaselineGlue = A.VGlue $ A.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) A.noFlex A.noFlex
+
 -- Assume we are adding a non-rule box of height h to the vertical list.
 -- Let \prevdepth = p, \lineskiplimit = l, \baselineskip = (b plus y minus z).
 -- Add interline glue, above the new box, of:
@@ -366,46 +377,34 @@ runPageBuilder (cur, costBest, iBest) (x:xs)
 -- Otherwise:
 --    \lineskip
 -- Then set \prevdepth to the depth of the new box.
+addVListElem :: (Int, [A.BreakableVListElem])  -- \prevdepth
+             -> A.BreakableVListElem
+             -> (Int, [A.BreakableVListElem])
+addVListElem (prevDepth, acc) e = case e of
+  (A.VHBox b) -> addVListBox b
+  (A.VVBox b) -> addVListBox b
+  _ -> (prevDepth, e:acc)
+  where
+    addVListBox b = (B.naturalDepth e, elems)
+      where
+        elems =
+          if prevDepth <= -Unit.oneKPt then
+            e:acc
+          else
+            let
+              proposedBaselineLength = baselineLength - prevDepth - B.naturalHeight b
+              -- Intuition: set the distance between baselines to \baselineskip, but no
+              -- closer than \lineskiplimit [baselineLengthMin], in which case
+              -- \lineskip [minBaselineGlue] is used.
+              glue = if proposedBaselineLength >= baselineLengthMin
+                then baselineGlue proposedBaselineLength
+                else minBaselineGlue
+            in e:glue:acc
 
--- Minimum distance between baselines.
-baselineLengthMin :: Int
-baselineLengthMin = 0
--- Aimed actual distance between baselines.
-baselineLength :: Int
-baselineLength = Unit.toScaledPointApprox 12 Unit.Point
-baselineGlue :: Int -> A.BreakableVListElem
-baselineGlue l = A.VGlue $ A.Glue l A.noFlex A.noFlex
-minBaselineGlue :: A.BreakableVListElem
-minBaselineGlue = A.VGlue $ A.Glue (Unit.toScaledPointApprox 1 Unit.Point) A.noFlex A.noFlex
-
-getVListGlue :: Int  -- \prevdepth
-              -> A.BreakableVListElem
+addVListElems :: (Int, [A.BreakableVListElem])
+              -> [A.BreakableVListElem]
               -> (Int, [A.BreakableVListElem])
-getVListGlue prevDepth e@(A.VHBox b)
-  | prevDepth <= -Unit.oneKPt =
-    (B.naturalDepth e, [e])
-  | otherwise =
-    let
-      proposedBaselineLength = baselineLength - prevDepth - B.naturalHeight b
-      -- Intuition: set the distance between baselines to \baselineskip, but no
-      -- closer than \lineskiplimit [baselineLengthMin], in which case
-      -- \lineskip [minBaselineGlue] is used.
-      glue = if proposedBaselineLength >= baselineLengthMin
-        then baselineGlue proposedBaselineLength
-        else minBaselineGlue
-    in (B.naturalDepth e, [e, glue])
--- TODO: VVBox (same implementation as VHBox).
--- TODO: Should use this function whenever we add to a v-list.
-getVListGlue prevDepth e = (prevDepth, [e])
-
-insertVListGlue :: Int
-                -> [A.BreakableVListElem]
-                -> [A.BreakableVListElem]
-                -> (Int, [A.BreakableVListElem])
-insertVListGlue prevDepth acc [] = (prevDepth, acc)
-insertVListGlue prevDepth acc (e:es) =
-  let (prevDepth', add) = getVListGlue prevDepth e
-  in insertVListGlue prevDepth' (add ++ acc) es
+addVListElems = foldl' addVListElem
 
 addParagraphToPage :: State
                    -> [B.Page]
@@ -419,7 +418,7 @@ addParagraphToPage state@State{previousBoxDepth=prevDepth} pages cur acc stream 
     -- Paraboxes returned in reading order.
     (stateNext, lineBoxes, streamNext) <- extractParagraphLineBoxes indent theDesiredWidth theLineTolerance theLinePenalty state stream
     -- TODO: Pass both list-element lists in their required order.
-    let (prevDepth', acc') = insertVListGlue prevDepth acc $ A.VHBox <$> lineBoxes
+    let (prevDepth', acc') = addVListElems (prevDepth, acc) $ A.VHBox <$> lineBoxes
     let stateNext' = stateNext{previousBoxDepth=prevDepth'}
     extractPages stateNext' pages cur acc' streamNext
 
