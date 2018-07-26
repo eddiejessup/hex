@@ -1,18 +1,18 @@
 module Main where
 
-import qualified Data.ByteString as BS
-import Data.Binary.Strict.Get as BSG
+import qualified Data.ByteString.Lazy as BLS
+import Data.Binary.Get as BG
 import qualified TFM.Parse as TFMP
 import qualified TFM.Character as TFMC
 
 main = do
-    contents <- BS.readFile "cmr10.tfm"
-    let foo = BSG.runGet TFMP.newTFM contents
-    let (Right tfm, _) = BSG.runGet TFMP.newTFM contents
-    let (Right headers, _) = BSG.runGet (TFMP.readHeader tfm) contents
-    let (fontParams, _) = BSG.runGet (TFMP.readFontParams tfm headers) contents
-    let (Right ligKerns) = TFMP.readLigKerns tfm contents
-    let characters = TFMC.readCharInfos tfm contents
+    contents <- BLS.readFile "cmr10.tfm"
+    let
+      tfm = BG.runGet TFMP.newTFM $ contents
+      headers = BG.runGet (TFMP.readHeader tfm) $ contents
+      fontParams = BG.runGet (TFMP.readFontParams tfm headers) $ contents
+      ligKerns = TFMP.readLigKerns tfm contents
+      characters = TFMC.readCharInfos tfm contents
     print headers
     print fontParams
     -- print ligKerns

@@ -3,7 +3,7 @@
 module TFM.Character where
 
 import           Data.Bits          (shiftR, (.&.))
-import qualified Data.ByteString    as BS
+import qualified Data.ByteString.Lazy    as BLS
 import qualified Data.HashMap.Strict as HashMap
 import qualified TFM.Parse          as TFMP
 
@@ -56,40 +56,40 @@ data CharacterSpecial = ExtensibleRecipe { top      :: Int
 
 data Tag = Plain | LigKern | Chain | Extensible deriving (Enum, Ord, Eq, Show)
 
-readCharInfo :: TFMP.TFM -> BS.ByteString -> Int -> Either String Character
-readCharInfo tfm contents _code = do
-    let charIdx = _code - TFMP.smallestCharCode tfm
-    (widthIdx, heightDepthByte, italicTagByte, remainder) <- TFMP.get4Word8IntsAt tfm contents TFMP.CharacterInfo charIdx
+readCharInfo :: TFMP.TFM -> BLS.ByteString -> Int -> Character
+readCharInfo tfm contents _code =
     let
-        heightIdx = heightDepthByte `shiftR` 4
-        depthIdx = heightDepthByte .&. 0xF
-        italicIdx = italicTagByte `shiftR` 6
-        tag = italicTagByte .&. 0x3
-        -- Get a dimension from some dimension table, at some index
-        getDim tbl i = if i == 0 then return 0 else TFMP.getFixWordAt tfm contents tbl i
-    _width <- getDim TFMP.Width widthIdx
-    _height <- getDim TFMP.Height heightIdx
-    _depth <- getDim TFMP.Depth depthIdx
-    _italicCorrection <- getDim TFMP.ItalicCorrection italicIdx
+      charIdx = _code - TFMP.smallestCharCode tfm
+      (widthIdx, heightDepthByte, italicTagByte, remainder) = TFMP.get4Word8IntsAt tfm contents TFMP.CharacterInfo charIdx
+      heightIdx = heightDepthByte `shiftR` 4
+      depthIdx = heightDepthByte .&. 0xF
+      italicIdx = italicTagByte `shiftR` 6
+      tag = italicTagByte .&. 0x3
+      -- Get a dimension from some dimension table, at some index
+      getDim tbl i = if i == 0 then 0 else TFMP.getFixWordAt tfm contents tbl i
+      _width = getDim TFMP.Width widthIdx
+      _height = getDim TFMP.Height heightIdx
+      _depth = getDim TFMP.Depth depthIdx
+      _italicCorrection = getDim TFMP.ItalicCorrection italicIdx
     -- If the character is special, get its particular extra attributes.
-    _special <- case toEnum tag of
-        Plain -> return Nothing
-        LigKern -> return $ Just LigKernIndex { index=remainder }
-        Chain -> return $ Just NextLargerChar { code=remainder }
-        Extensible -> do
-            (_top, _middle, _bottom, _repeater) <- TFMP.get4Word8IntsAt tfm contents TFMP.ExtensibleCharacter remainder
-            return $ Just ExtensibleRecipe { top=_top
+      _special = case toEnum tag of
+        Plain -> Nothing
+        LigKern -> Just LigKernIndex { index=remainder }
+        Chain -> Just NextLargerChar { code=remainder }
+        Extensible ->
+            let (_top, _middle, _bottom, _repeater) = TFMP.get4Word8IntsAt tfm contents TFMP.ExtensibleCharacter remainder
+            in Just ExtensibleRecipe { top=_top
                                            , middle=_middle
                                            , bottom=_bottom
                                            , repeater=_repeater }
-    return Character { code=_code
+    in Character { code=_code
                      , width=_width
                      , height=_height
                      , depth=_depth
                      , italicCorrection=_italicCorrection
                      , special=_special }
 
-readCharInfos :: TFMP.TFM -> BS.ByteString -> Either String (HashMap.HashMap Int Character)
-readCharInfos tfm contents = do
-  charList <- mapM (readCharInfo tfm contents) [TFMP.smallestCharCode tfm..TFMP.largestCharCode tfm]
-  return $ HashMap.fromList $ (\c@Character{code=i} -> (i, c)) <$> charList
+readCharInfos :: TFMP.TFM -> BLS.ByteString -> (HashMap.HashMap Int Character)
+readCharInfos tfm contents =
+  let charList = fmap (readCharInfo tfm contents) [TFMP.smallestCharCode tfm..TFMP.largestCharCode tfm]
+  in HashMap.fromList $ (\c@Character{code=i} -> (i, c)) <$> charList

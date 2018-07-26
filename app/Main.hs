@@ -34,7 +34,7 @@ main = do
 
   -- putStrLn $ show $ pages !! 0
 
-  let instrs = BoxDraw.toDVI $ pages
+  let instrs = BoxDraw.toDVI pages
   let Right encInstrs = DVIE.encodeDocument (reverse instrs) 1000
   BLS.writeFile "out.dvi" $ DVIE.encode $ reverse encInstrs
 

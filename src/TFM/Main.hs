@@ -1,7 +1,8 @@
 module TFM.Main where
 
 import qualified Data.ByteString as BS
-import qualified Data.Binary.Strict.Get as BSG
+import qualified Data.ByteString.Lazy as BLS
+import qualified Data.Binary.Get as BG
 import qualified Data.HashMap.Strict as HashMap
 import Path (Path, Abs, File, toFilePath)
 
@@ -35,14 +36,15 @@ designSizeSP f = U.toScaledPoint (designFontSize f) U.Point
 designScaleSP :: TexFont -> Rational -> Int
 designScaleSP f x = round $ designSizeSP f * x
 
-contentsToTFM :: BS.ByteString -> Either String TexFont
-contentsToTFM contents = do
-    meta <- fst $ BSG.runGet TFMP.newTFM contents
-    headers <- fst $ BSG.runGet (TFMP.readHeader meta) contents
-    fontParams <- fst $ BSG.runGet (TFMP.readFontParams meta headers) contents
-    _ligKerns <- TFMP.readLigKerns meta contents
-    _characters <- TFMC.readCharInfos meta contents
-    return TexFont { checksum=TFMP.checksum headers
+contentsToTFM :: BLS.ByteString -> TexFont
+contentsToTFM contents =
+    let
+      meta = BG.runGet TFMP.newTFM contents
+      headers = BG.runGet (TFMP.readHeader meta) contents
+      fontParams = BG.runGet (TFMP.readFontParams meta headers) contents
+      _ligKerns = TFMP.readLigKerns meta contents
+      _characters = TFMC.readCharInfos meta contents
+    in TexFont { checksum=TFMP.checksum headers
                    , designFontSize=TFMP.designFontSize headers
                    , characterCodingScheme=TFMP.characterCodingScheme headers
                    , family=TFMP.family headers
@@ -62,8 +64,8 @@ contentsToTFM contents = do
 
 readTFM :: FilePath -> IO TexFont
 readTFM path = do
-    contents <- BS.readFile path
-    either fail return $ contentsToTFM contents
+    contents <- BLS.readFile path
+    return $ contentsToTFM contents
 
 readTFMFancy :: Path Abs File -> IO TexFont
 readTFMFancy = readTFM . toFilePath

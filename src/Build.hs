@@ -24,6 +24,7 @@ import qualified Parse as P
 import Parse (Stream, insertLexToken, insertLexTokens)
 
 type FontInfoMap = HMap.HashMap Int TFMM.TexFont
+-- type IntegerParameterMap = HMap.HashMap Int TFMM.TexFont
 
 theParIndent :: A.BreakableHListElem
 theParIndent = A.HHBox B.HBox{contents=[]
@@ -51,6 +52,7 @@ theMinBaselineGlue = A.VGlue $ A.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.
 
 data State = State { currentFontNr :: Maybe Int
                    , fontInfoMap :: FontInfoMap
+                   -- , integerParameterMap :: IntegerParameterMap
                    , previousBoxDepth :: Int } deriving Show
 
 newState :: State

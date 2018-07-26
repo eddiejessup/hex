@@ -1,8 +1,9 @@
 module TFM.Parse where
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BLS
 import Data.ByteString.Char8 (pack)
-import qualified Data.Binary.Strict.Get as BSG
+import qualified Data.Binary.Get as BG
 import qualified Data.Map as M
 import Data.List.Split (chunksOf)
 import Data.Bits ((.&.), shift)
@@ -52,27 +53,27 @@ wordToByte :: (Num a) => a -> a
 wordToByte = (*4)
 
 -- Read a floating point value.
-getFixWord :: BSG.Get Rational
+getFixWord :: BG.Get Rational
 getFixWord = do
-    nr <- BSG.getWord32be
+    nr <- BG.getWord32be
     return $ fromIntegral nr * fixWordScale
 
 -- Read integers encoded as big-endian byte sequences.
-getWord32beInt :: BSG.Get Int
-getWord32beInt = fmap fromIntegral BSG.getWord32be
-getWord16beInt :: BSG.Get Int
-getWord16beInt = fmap fromIntegral BSG.getWord16be
-getWord8Int :: BSG.Get Int
-getWord8Int = fmap fromIntegral BSG.getWord8
+getWord32beInt :: BG.Get Int
+getWord32beInt = fmap fromIntegral BG.getWord32be
+getWord16beInt :: BG.Get Int
+getWord16beInt = fmap fromIntegral BG.getWord16be
+getWord8Int :: BG.Get Int
+getWord8Int = fmap fromIntegral BG.getWord8
 
 -- Read a string that's encoded as an integer, followed by that number of
 -- characters.
-getBCPL :: BSG.Get BS.ByteString
+getBCPL :: BG.Get BS.ByteString
 getBCPL = do
     len <- getWord8Int
-    BSG.getByteString len
+    BG.getByteString len
 
-get4Word8Ints :: BSG.Get (Int, Int, Int, Int)
+get4Word8Ints :: BG.Get (Int, Int, Int, Int)
 get4Word8Ints = do
     [b1, b2, b3, b4] <- CM.replicateM 4 getWord8Int
     return (b1, b2, b3, b4)
@@ -80,16 +81,16 @@ get4Word8Ints = do
 getPos :: TFM -> Table -> Int -> Int
 getPos tfm tbl iWords = tablePointerPos tfm tbl + wordToByte iWords
 
-getSubContents :: TFM -> Table -> Int -> BS.ByteString -> BS.ByteString
-getSubContents tfm tbl iWords = BS.drop (getPos tfm tbl iWords)
+getSubContents :: TFM -> Table -> Int -> BLS.ByteString -> BLS.ByteString
+getSubContents tfm tbl iWords s = BLS.fromStrict $ BS.drop (getPos tfm tbl iWords) $ BLS.toStrict s
 
-getFixWordAt :: TFM -> BS.ByteString -> Table -> Int -> Either String Rational
+getFixWordAt :: TFM -> BLS.ByteString -> Table -> Int -> Rational
 getFixWordAt tfm contents tbl iWords =
-    fst $ BSG.runGet getFixWord $ getSubContents tfm tbl iWords contents
+    BG.runGet getFixWord $ getSubContents tfm tbl iWords contents
 
-get4Word8IntsAt :: TFM -> BS.ByteString -> Table -> Int -> Either String (Int, Int, Int, Int)
+get4Word8IntsAt :: TFM -> BLS.ByteString -> Table -> Int -> (Int, Int, Int, Int)
 get4Word8IntsAt tfm contents tbl iWords =
-    fst $ BSG.runGet get4Word8Ints $ getSubContents tfm tbl iWords contents
+    BG.runGet get4Word8Ints $ getSubContents tfm tbl iWords contents
 
 -- Utility to simplify lookup of integers from a map.
 certainIntLookup :: (Integral b, Ord a) => M.Map a b -> a -> Int
@@ -141,7 +142,7 @@ data TFM = TFM { fileLengthWords :: Int
                , tableLengthsWords :: M.Map Table Int
                , tablePointers :: M.Map Table Int } deriving (Show)
 
-newTFM :: BSG.Get TFM
+newTFM :: BG.Get TFM
 newTFM = do
     -- Read and set table lengths.
     _fileLengthWords <- getWord16beInt
@@ -183,15 +184,15 @@ data Headers = Headers { checksum :: Int
                        , characterCodingScheme :: BS.ByteString
                        , family :: BS.ByteString } deriving (Show)
 
-readHeader :: TFM -> BSG.Get Headers
+readHeader :: TFM -> BG.Get Headers
 readHeader tfm = do
-    BSG.skip $ tablePointerPos tfm Header
+    BG.skip $ tablePointerPos tfm Header
 
     -- Read header[0 ... 1], containing the checksum and design size.
     _checksum <- getWord32beInt
     _designFontSize <- getFixWord
     -- Store our current position.
-    postDesignPos <- BSG.bytesRead
+    postDesignPos <- fromIntegral <$> BG.bytesRead
 
     -- Get the position of the character info table, to orient ourselves.
     let charInfoPos = tablePointerPos tfm CharacterInfo
@@ -205,8 +206,8 @@ readHeader tfm = do
     -- Compute where the next section should start, and where we actually are,
     -- and skip past the difference.
     let postSchemePos = postDesignPos + characterCodingSchemeLength
-    postSchemeNowPos <- BSG.bytesRead
-    BSG.skip $ postSchemePos - postSchemeNowPos
+    postSchemeNowPos <- fromIntegral <$> BG.bytesRead
+    BG.skip $ postSchemePos - postSchemeNowPos
 
     -- Read header[12 ... 16] if present, containing the font family.
     -- If we still haven't reached the character info table, then assume a
@@ -215,15 +216,15 @@ readHeader tfm = do
         then getBCPL else return BS.empty
     -- Again, skip past any remaining data until the next section.
     let postFamilyPos = postSchemePos + familyLength
-    postFamilyNowPos <- BSG.bytesRead
-    BSG.skip $ postFamilyPos - postFamilyNowPos
+    postFamilyNowPos <- fromIntegral <$> BG.bytesRead
+    BG.skip $ postFamilyPos - postFamilyNowPos
 
     -- Read header[12 ... 16] if present, containing random bits.
     -- We don't actually use these for anything now.
     _ <- if postFamilyPos < charInfoPos
-        then sequence [ BSG.getWord8 -- Seven-bit safe flag.
-                      , BSG.getWord8 -- Unknown.
-                      , BSG.getWord8 ] -- 'Face'.
+        then sequence [ BG.getWord8 -- Seven-bit safe flag.
+                      , BG.getWord8 -- Unknown.
+                      , BG.getWord8 ] -- 'Face'.
         else
             return []
 
@@ -265,7 +266,7 @@ data MathExtensionParams = MathExtensionParams { defaultRuleThickness :: Rationa
                                                , bigOpSpacing :: [Rational]
                                                } deriving (Show)
 
-readMathSymbolParams :: BS.ByteString -> BSG.Get (Maybe MathSymbolParams)
+readMathSymbolParams :: BS.ByteString -> BG.Get (Maybe MathSymbolParams)
 readMathSymbolParams scheme =
     if scheme `elem` mathSymbolSchemes then do
         [_num1, _num2, _num3, _denom1, _denom2, _sup1, _sup2, _sup3, _sub1, _sub2,
@@ -288,7 +289,7 @@ readMathSymbolParams scheme =
                                        }
     else return Nothing
 
-readMathExtensionParams :: BS.ByteString -> BSG.Get (Maybe MathExtensionParams)
+readMathExtensionParams :: BS.ByteString -> BG.Get (Maybe MathExtensionParams)
 readMathExtensionParams scheme = if scheme `elem` mathExtensionSchemes
     then do
         _defaultRuleThickness <- getFixWord
@@ -298,9 +299,9 @@ readMathExtensionParams scheme = if scheme `elem` mathExtensionSchemes
                                           }
     else return Nothing
 
-readFontParams :: TFM -> Headers -> BSG.Get FontParams
+readFontParams :: TFM -> Headers -> BG.Get FontParams
 readFontParams tfm tfmHeads = do
-    BSG.skip $ tablePointerPos tfm FontParameter
+    BG.skip $ tablePointerPos tfm FontParameter
     let scheme = characterCodingScheme tfmHeads
     CM.when (scheme == pack "TeX math italic") $
       fail "Unsupported character coding scheme"
@@ -410,42 +411,42 @@ readInstrSet sets i =
         [w, x, y, z] = sets !! i
     in (w, x, y, z)
 
-getLigKernOperation :: (Int -> Either String LigKernOp) -> Int -> Int -> Either String LigKernOp
+getLigKernOperation :: (Int -> LigKernOp) -> Int -> Int -> LigKernOp
 getLigKernOperation readKern op remain =
     if op >= kernOp
         then readKern $ 256 * (op - kernOp) + remain
-        else return LigatureOp { ligatureChar=remain
-                               , charsToPassOver=op `shift` 2
-                               , deleteCurrentChar=(op .&. 0x02) == 0
-                               , deleteNextChar=(op .&. 0x01) == 0
-                               }
+        else LigatureOp { ligatureChar=remain
+                        , charsToPassOver=op `shift` 2
+                        , deleteCurrentChar=(op .&. 0x02) == 0
+                        , deleteNextChar=(op .&. 0x01) == 0
+                        }
 
-analyzeLigKernInstr :: (Int -> Either String LigKernOp) -> Int -> Int -> Int -> Int -> Either String LigKernInstr
-analyzeLigKernInstr readKern skip next op remain = do
-    _operation <- getLigKernOperation readKern op remain
-    return LigKernInstr { stop=skip >= 128
-                        , nextChar=next
-                        , operation=_operation }
+analyzeLigKernInstr :: (Int -> LigKernOp) -> Int -> Int -> Int -> Int -> LigKernInstr
+analyzeLigKernInstr readKern skip next op remain =
+    let _operation = getLigKernOperation readKern op remain
+    in LigKernInstr { stop=skip >= 128
+                    , nextChar=next
+                    , operation=_operation }
 
-getKern :: TFM -> BS.ByteString -> (Int -> Either String LigKernOp)
-getKern tfm contents iWords = do
-    _size <- getFixWordAt tfm contents Kern iWords
-    return KernOp { size=_size }
+getKern :: TFM -> BLS.ByteString -> (Int -> LigKernOp)
+getKern tfm contents iWords =
+    let _size = getFixWordAt tfm contents Kern iWords
+    in KernOp { size=_size }
 
 
-readLigKerns :: TFM -> BS.ByteString -> Either String [LigKernInstr]
+readLigKerns :: TFM -> BLS.ByteString -> [LigKernInstr]
 readLigKerns tfm contents
-    | firstSkipByte == 255 = fail "Sorry, right boundary characters are not supported"
-    | firstSkipByte > 128 = fail "Sorry, large LigKern arrays are not supported"
-    | lastSkipByte == 255 = fail "Sorry, left boundary characters are not supported"
-    | otherwise = do
+    | firstSkipByte == 255 = error "Sorry, right boundary characters are not supported"
+    | firstSkipByte > 128 = error "Sorry, large LigKern arrays are not supported"
+    | lastSkipByte == 255 = error "Sorry, left boundary characters are not supported"
+    | otherwise =
         let kernGetter = getKern tfm contents
-        mapM (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
+        in fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
     where
         ligKernTblPos = tablePointerPos tfm LigKern
         ligKernTblLengthWords = tableLength tfm LigKern
 
-        contentsLigKernOnwards = BS.drop ligKernTblPos contents
+        contentsLigKernOnwards = BS.drop ligKernTblPos $ BLS.toStrict contents
         instrSets = chunksOf 4 . fmap fromIntegral $ BS.unpack contentsLigKernOnwards
         readSet = readInstrSet instrSets
         sets = fmap readSet [0..ligKernTblLengthWords - 1]
