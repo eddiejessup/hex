@@ -9,6 +9,7 @@ import qualified Lex
 import qualified Categorise as Cat
 import qualified Data.Char as C
 import Data.Maybe (isJust)
+import Data.Functor (($>))
 
 import Parse.Util (MatchToken, skipManySatisfied, skipOneOptionalSatisfied, Parser, NullParser)
 import qualified Parse.Util as PU
@@ -68,17 +69,14 @@ matchNonActiveCharacterUncased a t@(Expand.LexToken Lex.CharCat{char=c})
 matchNonActiveCharacterUncased _ _ = False
 
 skipKeyword :: String -> NullParser
-skipKeyword s = do
-  skipOptionalSpaces
-  mapM_ (PU.skipSatisfied . matchNonActiveCharacterUncased) s
+skipKeyword s
+  = skipOptionalSpaces *> mapM_ (PU.skipSatisfied . matchNonActiveCharacterUncased) s
 
 parseOptionalKeyword :: String -> Parser Bool
 parseOptionalKeyword s = isJust <$> P.optional (P.try $ skipKeyword s)
 
 parseKeywordToValue :: String -> b -> Parser b
-parseKeywordToValue s c = do
-  skipKeyword s
-  return c
+parseKeywordToValue s = (skipKeyword s $>)
 
 parseWithoutExpansion :: Parser a -> Parser a
 parseWithoutExpansion p = do

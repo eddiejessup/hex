@@ -25,7 +25,6 @@ data FilLength
   = FilLength Bool Factor Int
   deriving Show
 
-
 -- Parse.
 
 parseGlue :: Parser Glue
@@ -39,15 +38,13 @@ parseFlex :: String -> Parser (Maybe Flex)
 parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
                        , const Nothing <$> PC.skipOptionalSpaces ]
   where
-    parsePresentFlex = do
-      PC.skipKeyword s
-      P.choice [ FilFlex <$> P.try parseFilLength
-               , FiniteFlex <$> P.try parseLength ]
+    parsePresentFlex
+      = PC.skipKeyword s *> P.choice [ FilFlex <$> P.try parseFilLength
+                                     , FiniteFlex <$> P.try parseLength ]
 
 parseFilLength :: Parser FilLength
 parseFilLength = do
-  isPositive <- parseSigns
-  factor <- parseFactor
-  PC.skipKeyword "fi"
-  order <- length <$> P.some (skipSatisfied $ PC.matchNonActiveCharacterUncased 'l')
-  return $ FilLength isPositive factor order
+  let
+    parseSomeLs = P.some (skipSatisfied $ PC.matchNonActiveCharacterUncased 'l')
+    parseOrder = PC.skipKeyword "fi" *> (length <$> parseSomeLs)
+  FilLength <$> parseSigns <*> parseFactor <*> parseOrder

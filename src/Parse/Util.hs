@@ -11,12 +11,12 @@ import qualified Data.Char as C
 import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Foldable (foldl')
 import qualified Control.Monad.State.Lazy as MState
+import Data.Functor (($>))
 
 import qualified Expand
 import Expand (ParseToken)
 import qualified Lex
 import qualified Categorise as Cat
-
 type ParseTokens = [ParseToken]
 
 type CharCodes = [Cat.CharCode]
@@ -132,9 +132,7 @@ satisfyThen f = P.token testTok Nothing
         Nothing -> Left (Just (P.Tokens (x:|[])), Set.empty)
 
 skipOptional :: Parser a -> NullParser
-skipOptional p = do
-  _ <- P.optional p
-  return ()
+skipOptional p = P.optional p $> ()
 
 skipOneOptionalSatisfied :: (ParseToken -> Bool) -> NullParser
 skipOneOptionalSatisfied = skipOptional . skipSatisfied

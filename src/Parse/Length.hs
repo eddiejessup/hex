@@ -80,21 +80,19 @@ parseUnit = P.choice [ parsePhysicalUnit
                      -- , parseInternalQuantityUnit
                      ]
   where
-    parseInternalKeywordUnit = do
-      unit <- P.choice [ P.try $ PC.parseKeywordToValue "em" Em
-                       , P.try $ PC.parseKeywordToValue "ex" Ex
-                       ]
-      PC.skipOneOptionalSpace
-      return $ InternalUnit unit
-    parsePhysicalUnit = do
-      isTrue <- PC.parseOptionalKeyword "true"
+    parseInternalKeywordUnit =
+      let parseUnitLit = P.choice [ P.try $ PC.parseKeywordToValue "em" Em
+                                  , P.try $ PC.parseKeywordToValue "ex" Ex
+                                  ]
+      in InternalUnit <$> parseUnitLit <* PC.skipOneOptionalSpace
+    parsePhysicalUnit =
       -- TODO: Use 'try' because keywords with common prefixes lead the parser
       -- down a blind alley. Could refactor to avoid, but it would be ugly.
       -- Leave as later optimisation.
       -- TODO: Should we omit the last try in such cases?
       -- NOTE: Can't trim number of 'try's naïvely, because they all suck up
       -- initial space, which would also need backtracking.
-      unit <- P.choice [ P.try $ PC.parseKeywordToValue "bp" BigPoint
+      let parseUnitLit = P.choice [ P.try $ PC.parseKeywordToValue "bp" BigPoint
                        , P.try $ PC.parseKeywordToValue "cc" Cicero
                        , P.try $ PC.parseKeywordToValue "cm" Centimetre
                        , P.try $ PC.parseKeywordToValue "dd" Didot
@@ -104,8 +102,8 @@ parseUnit = P.choice [ parsePhysicalUnit
                        , P.try $ PC.parseKeywordToValue "pt" Point
                        , P.try $ PC.parseKeywordToValue "sp" ScaledPoint
                        ]
-      PC.skipOneOptionalSpace
-      return $ PhysicalUnit isTrue unit
+      in (PhysicalUnit <$> PC.parseOptionalKeyword "true" <*> parseUnitLit) <* PC.skipOneOptionalSpace
+
 
 parseFactor :: Parser Factor
 -- NOTE: The order matters here: The TeX grammar seems to be ambiguous: '2.2'

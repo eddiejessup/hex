@@ -50,9 +50,8 @@ digitsToInteger base = foldl (\a b -> a * fromIntegral base + fromIntegral b) 0
 parseSigns :: Parser Bool
 parseSigns = isPos <$> parseOptionalSigns
   where
-    parseOptionalSigns = do
-      PC.skipOptionalSpaces
-      P.sepEndBy (PU.satisfyThen signToPos) PC.skipOptionalSpaces
+    parseOptionalSigns
+      = PC.skipOptionalSpaces *> P.sepEndBy (PU.satisfyThen signToPos) PC.skipOptionalSpaces
 
     isPos (True:xs) = isPos xs
     isPos (False:xs) = not $ isPos xs
@@ -113,9 +112,8 @@ parseDecimalIntegerDigit = PU.satisfyThen charToDigit
     charToDigit _ = Nothing
 
 parseHexadecimalIntegerDigits :: Parser [Int]
-parseHexadecimalIntegerDigits = do
-  PU.skipSatisfied isDoubleQuote
-  P.some $ PU.satisfyThen charToDigit
+parseHexadecimalIntegerDigits =
+  PU.skipSatisfied isDoubleQuote *> P.some (PU.satisfyThen charToDigit)
   where
     isDoubleQuote (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=34}) = True
     isDoubleQuote _ = False
@@ -147,9 +145,8 @@ parseHexadecimalIntegerDigits = do
     charToDigit _ = Nothing
 
 parseOctalIntegerDigits :: Parser [Int]
-parseOctalIntegerDigits = do
-  PU.skipSatisfied isSingleQuote
-  P.some $ PU.satisfyThen charToDigit
+parseOctalIntegerDigits =
+  PU.skipSatisfied isSingleQuote *> P.some (PU.satisfyThen charToDigit)
   where
     isSingleQuote (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=39}) = True
     isSingleQuote _ = False
