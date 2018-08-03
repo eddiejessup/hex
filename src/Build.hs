@@ -10,7 +10,7 @@ import qualified Path
 import Data.Foldable (asum, foldl')
 import qualified Text.Megaparsec as PS
 import qualified Data.Char as C
-
+import Safe (headMay)
 import qualified TFM.Main as TFMM
 import qualified TFM.Character as TFMC
 import qualified BoxDraw as B
@@ -50,13 +50,13 @@ theBaselineGlue l = A.VGlue $ A.Glue l A.noFlex A.noFlex
 theMinBaselineGlue :: A.BreakableVListElem
 theMinBaselineGlue = A.VGlue $ A.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) A.noFlex A.noFlex
 
-data State = State { currentFontNr :: Maybe Int
+data Config = Config { currentFontNr :: Maybe Int
                    , fontInfoMap :: FontInfoMap
                    -- , integerParameterMap :: IntegerParameterMap
                    , previousBoxDepth :: Int } deriving Show
 
-newState :: State
-newState = State { currentFontNr=Nothing
+newConfig :: Config
+newConfig = Config { currentFontNr=Nothing
                  , fontInfoMap=HMap.empty
                  , previousBoxDepth= -Unit.oneKPt }
 
@@ -70,14 +70,14 @@ fontDir2 :: AbsPathToDir
 theFontDirectories :: [AbsPathToDir]
 theFontDirectories = [fontDir1, fontDir2]
 
-currentFontInfo :: State -> Maybe TFMM.TexFont
-currentFontInfo state = do
+currentFontInfo :: Config -> Maybe TFMM.TexFont
+currentFontInfo conf = do
   -- Maybe font number isn't set.
-  fontNr <- currentFontNr state
+  fontNr <- currentFontNr conf
   -- Or maybe there's no font where there should be.
   -- TODO: I think I can make this case impossible, maybe by storing the
   -- current font info directly instead of a lookup.
-  HMap.lookup fontNr $ fontInfoMap state
+  HMap.lookup fontNr $ fontInfoMap conf
 
 type PathToFile b = Path.Path b Path.File
 type RelPathToFile = PathToFile Path.Rel
@@ -94,8 +94,8 @@ firstExistingPath ps = asum <$> mapM pathIfExists ps
 findFilePath :: RelPathToFile -> [AbsPathToDir] -> IO (Maybe (PathToFile Path.Abs))
 findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs
 
-defineFont :: State -> RelPathToFile -> Int -> IO (State, B.FontDefinition)
-defineFont state fontRelPath nr = do
+defineFont :: Config -> RelPathToFile -> Int -> IO (Config, B.FontDefinition)
+defineFont conf fontRelPath nr = do
     fontPath <- findFilePath fontRelPath theFontDirectories
     case fontPath of
       Just p -> do
@@ -110,25 +110,25 @@ defineFont state fontRelPath nr = do
                                    , fontInfo = font
                                    , scaleFactorRatio = 1.0
                                    }
-          stateNext = state{fontInfoMap=HMap.insert nr font $ fontInfoMap state}
-        return (stateNext, fontDef)
+          confNext = conf{fontInfoMap=HMap.insert nr font $ fontInfoMap conf}
+        return (confNext, fontDef)
       Nothing ->
         fail "No font found"
 
-selectFont :: State -> Int -> (State, B.FontSelection)
-selectFont state n =
-  (state{currentFontNr=Just n}, B.FontSelection{fontNr = n})
+selectFont :: Config -> Int -> (Config, B.FontSelection)
+selectFont conf n =
+  (conf{currentFontNr=Just n}, B.FontSelection{fontNr = n})
 
-characterBox :: State -> Int -> Maybe B.Character
-characterBox state code = do
-  font <- currentFontInfo state
+characterBox :: Config -> Int -> Maybe B.Character
+characterBox conf code = do
+  font <- currentFontInfo conf
   let toSP = TFMM.designScaleSP font
   TFMC.Character{width=w, height=h, depth=d} <- HMap.lookup code $ TFMM.characters font
   return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
 
-spaceGlue :: State -> Maybe A.Glue
-spaceGlue state = do
-  font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo state
+spaceGlue :: Config -> Maybe A.Glue
+spaceGlue conf = do
+  font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo conf
   let
     toSP = TFMM.designScaleSP font
     toFlex = A.finiteFlex . fromIntegral . toSP
@@ -203,43 +203,42 @@ applyChangeCaseToStream s d (P.BalancedText ts) = insertLexTokens s $ changeCase
         switch Expand.Upward = C.toUpper
         switch Expand.Downward = C.toLower
 
-
 -- We build a paragraph list in reverse order.
-extractParagraph :: State -> [A.BreakableHListElem] -> Stream -> IO (State, [A.BreakableHListElem], Stream)
-extractParagraph state acc stream =
+extractParagraph :: Config -> [A.BreakableHListElem] -> Stream -> IO (Config, [A.BreakableHListElem], Stream)
+extractParagraph conf acc stream =
   let (PS.State{stateInput=streamNext}, com) = P.extractHModeCommand stream
   in case com of
     Left x -> error $ show x
     Right (P.HAllModesCommand aCom) ->
       case aCom of
         P.Relax ->
-          extractParagraph state acc streamNext
+          extractParagraph conf acc streamNext
         P.IgnoreSpaces ->
-          extractParagraph state acc streamNext
+          extractParagraph conf acc streamNext
         P.ChangeCase d bt -> do
           let streamNext' = applyChangeCaseToStream streamNext d bt
-          extractParagraph state acc streamNext'
+          extractParagraph conf acc streamNext'
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
-          let (stateNext, fontSel) = selectFont state fNr
-          extractParagraph stateNext (A.HFontSelection fontSel:acc) streamNext
+          let (confNext, fontSel) = selectFont conf fNr
+          extractParagraph confNext (A.HFontSelection fontSel:acc) streamNext
         P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
-          (stateNext, fontDef) <- defineFont state fPath fNr
-          extractParagraph stateNext (A.HFontDefinition fontDef:acc) streamNext
+          (confNext, fontDef) <- defineFont conf fPath fNr
+          extractParagraph confNext (A.HFontDefinition fontDef:acc) streamNext
         P.AddPenalty n ->
-          extractParagraph state ((A.HPenalty $ evaluatePenalty n):acc) streamNext
+          extractParagraph conf ((A.HPenalty $ evaluatePenalty n):acc) streamNext
         P.AddKern ln ->
-          extractParagraph state ((A.HKern $ evaluateKern ln):acc) streamNext
+          extractParagraph conf ((A.HKern $ evaluateKern ln):acc) streamNext
         P.AddGlue g ->
-          extractParagraph state (A.HGlue (evaluateGlue g):acc) streamNext
+          extractParagraph conf (A.HGlue (evaluateGlue g):acc) streamNext
         P.AddSpace ->
           do
-          glue <- case spaceGlue state of
+          glue <- case spaceGlue conf of
             Just sg -> return $ A.HGlue sg
             Nothing -> fail "Could not get space glue"
-          extractParagraph state (glue:acc) streamNext
+          extractParagraph conf (glue:acc) streamNext
         -- \indent: An empty box of width \parindent is appended to the current
         -- list, and the space factor is set to 1000.
         -- TODO: Space factor.
@@ -255,21 +254,21 @@ extractParagraph state acc stream =
               Nothing -> 0
               Just ln -> evaluateLength ln
             rule = B.Rule{width=evalW, height=evalH, depth=evalD}
-          extractParagraph state (A.HRule rule:acc) streamNext
+          extractParagraph conf (A.HRule rule:acc) streamNext
         P.StartParagraph True ->
-          extractParagraph state (theParIndent:acc) streamNext
+          extractParagraph conf (theParIndent:acc) streamNext
         -- \noindent: has no effect in horizontal modes.
         P.StartParagraph False ->
-          extractParagraph state acc streamNext
+          extractParagraph conf acc streamNext
         -- \par: end the current paragraph.
         P.EndParagraph ->
-          return (state, acc, streamNext)
+          return (conf, acc, streamNext)
     Right P.AddCharacter{code=i} ->
       do
-      charBox <- case characterBox state i of
+      charBox <- case characterBox conf i of
         Just c -> return $ A.HCharacter c
         Nothing -> fail "Could not get character info"
-      extractParagraph state (charBox:acc) streamNext
+      extractParagraph conf (charBox:acc) streamNext
     Right P.LeaveHMode ->
       -- Inner mode: forbidden. TODO.
       -- Outer mode: insert the control sequence "\par" into the input. The control
@@ -278,28 +277,23 @@ extractParagraph state acc stream =
     -- (Note that we pass 'stream', not 'streamNext'.)
       do
       let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
-      extractParagraph state acc $ insertLexToken stream parToken
+      extractParagraph conf acc $ insertLexToken stream parToken
 
-extractParagraphLineBoxes :: Bool -> Int -> Int -> Int -> State -> Stream -> IO (State, [B.HBox], Stream)
-extractParagraphLineBoxes indent desiredWidth lineTolerance linePenalty state stream = do
+extractParagraphLineBoxes :: Bool -> Int -> Int -> Int -> Config -> Stream -> IO (Config, [B.HBox], Stream)
+extractParagraphLineBoxes indent desiredWidth lineTolerance linePenalty conf stream = do
   let
     initial True = [theParIndent]
     initial False = []
-  (stateNext, hList, streamNext) <- extractParagraph state (initial indent) stream
+  (confNext, hList, streamNext) <- extractParagraph conf (initial indent) stream
   let
     lineBoxes = A.setParagraph desiredWidth lineTolerance linePenalty hList
-  return (stateNext, lineBoxes, streamNext)
+  return (confNext, lineBoxes, streamNext)
 
 -- current items, best cost, breakpoint for that cost.
 type CurrentPage = ([A.BreakableVListElem], Maybe Int, Maybe Int)
 
 newCurrentPage :: ([A.BreakableVListElem], Maybe Int, Maybe Int)
 newCurrentPage = ([], Nothing, Nothing)
-
-headOrNothing :: [a] -> Maybe a
-headOrNothing ts = case ts of
-  [] -> Nothing
-  t:_ -> Just t
 
 runPageBuilder :: CurrentPage -> [A.BreakableVListElem] -> [B.Page]
 runPageBuilder (cur, _, _) [] = [A.setPage theDesiredHeight $ reverse cur]
@@ -312,7 +306,7 @@ runPageBuilder (cur, costBest, iBest) (x:xs)
   -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
   -- the cost c of breaking at this point.
   | A.isDiscardable x =
-    case A.toBreakItem (Adjacency (headOrNothing cur, x, headOrNothing xs)) of
+    case A.toBreakItem (Adjacency (headMay cur, x, headMay xs)) of
       -- If we can't break here, just add it to the list and continue.
       Nothing -> runPageBuilder (x:cur, costBest, iBest) xs
       Just brk ->
@@ -402,24 +396,24 @@ addVListElems :: (Int, [A.BreakableVListElem])
               -> (Int, [A.BreakableVListElem])
 addVListElems = foldl' addVListElem
 
-addParagraphToPage :: State
+addParagraphToPage :: Config
                    -> [B.Page]
                    -> CurrentPage
                    -> [A.BreakableVListElem]
                    -> Stream
                    -> Bool
-                   -> IO (State, [B.Page], Stream)
-addParagraphToPage state@State{previousBoxDepth=prevDepth} pages cur acc stream indent
+                   -> IO (Config, [B.Page], Stream)
+addParagraphToPage conf@Config{previousBoxDepth=prevDepth} pages cur acc stream indent
   = do
     -- Paraboxes returned in reading order.
-    (stateNext, lineBoxes, streamNext) <- extractParagraphLineBoxes indent theDesiredWidth theLineTolerance theLinePenalty state stream
+    (confNext, lineBoxes, streamNext) <- extractParagraphLineBoxes indent theDesiredWidth theLineTolerance theLinePenalty conf stream
     -- TODO: Pass both list-element lists in their required order.
     let (prevDepth', acc') = addVListElems (prevDepth, acc) $ A.VHBox <$> lineBoxes
-    let stateNext' = stateNext{previousBoxDepth=prevDepth'}
-    extractPages stateNext' pages cur acc' streamNext
+    let confNext' = confNext{previousBoxDepth=prevDepth'}
+    extractPages confNext' pages cur acc' streamNext
 
-extractPages :: State -> [B.Page] -> CurrentPage -> [A.BreakableVListElem] -> Stream -> IO (State, [B.Page], Stream)
-extractPages state pages cur acc stream =
+extractPages :: Config -> [B.Page] -> CurrentPage -> [A.BreakableVListElem] -> Stream -> IO (Config, [B.Page], Stream)
+extractPages conf pages cur acc stream =
   let (PS.State{stateInput=streamNext}, com) = P.extractVModeCommand stream
   in case com of
     Left x -> error $ show x
@@ -427,38 +421,38 @@ extractPages state pages cur acc stream =
     -- stream as if the commands just seen hadn't been read.
     -- (Note that we pass 'stream', not 'streamNext'.)
     Right P.EnterHMode ->
-      addParagraphToPage state pages cur acc stream True
+      addParagraphToPage conf pages cur acc stream True
     Right P.End -> do
       let pagesFinal = pages ++ runPageBuilder cur (reverse acc)
-      return (state, pagesFinal, streamNext)
+      return (conf, pagesFinal, streamNext)
     Right (P.VAllModesCommand aCom) ->
       case aCom of
         P.Relax ->
-          extractPages state pages cur acc streamNext
+          extractPages conf pages cur acc streamNext
         P.IgnoreSpaces ->
-          extractPages state pages cur acc streamNext
+          extractPages conf pages cur acc streamNext
         P.ChangeCase d bt -> do
           let streamNext' = applyChangeCaseToStream streamNext d bt
-          extractPages state pages cur acc streamNext'
+          extractPages conf pages cur acc streamNext'
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
-          let (stateNext, fontSel) = selectFont state fNr
-          extractPages stateNext pages cur (A.VFontSelection fontSel:acc) streamNext
+          let (confNext, fontSel) = selectFont conf fNr
+          extractPages confNext pages cur (A.VFontSelection fontSel:acc) streamNext
         -- \par does nothing in vertical mode.
         P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
-          (stateNext, fontDef) <- defineFont state fPath fNr
-          extractPages stateNext pages cur (A.VFontDefinition fontDef:acc) streamNext
+          (confNext, fontDef) <- defineFont conf fPath fNr
+          extractPages confNext pages cur (A.VFontDefinition fontDef:acc) streamNext
         P.AddPenalty n ->
-          extractPages state pages cur ((A.VPenalty $ evaluatePenalty n):acc) streamNext
+          extractPages conf pages cur ((A.VPenalty $ evaluatePenalty n):acc) streamNext
         P.AddKern ln ->
-          extractPages state pages cur ((A.VKern $ evaluateKern ln):acc) streamNext
+          extractPages conf pages cur ((A.VKern $ evaluateKern ln):acc) streamNext
         P.AddGlue g ->
-          extractPages state pages cur (A.VGlue (evaluateGlue g):acc) streamNext
+          extractPages conf pages cur (A.VGlue (evaluateGlue g):acc) streamNext
         -- <space token> has no effect in vertical modes.
         P.AddSpace ->
-          extractPages state pages cur acc streamNext
+          extractPages conf pages cur acc streamNext
         P.AddRule{width=w, height=h, depth=d} -> do
           let
             evalW = case w of
@@ -471,8 +465,8 @@ extractPages state pages cur acc stream =
               Nothing -> 0
               Just ln -> evaluateLength ln
             rule = B.Rule{width=evalW, height=evalH, depth=evalD}
-          extractPages state pages cur (A.VRule rule:acc) streamNext
+          extractPages conf pages cur (A.VRule rule:acc) streamNext
         P.StartParagraph indent ->
-          addParagraphToPage state pages cur acc stream indent
+          addParagraphToPage conf pages cur acc stream indent
         P.EndParagraph ->
-          extractPages state pages cur acc streamNext
+          extractPages conf pages cur acc streamNext

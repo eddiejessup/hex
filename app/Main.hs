@@ -28,9 +28,9 @@ main = do
 
   let stream = newStream contentsCode
 
-  -- page <- Build.extractPage Build.newState [] stream
+  -- page <- Build.extractPage Build.newConfig [] stream
 
-  (_, pages, _) <- Build.extractPages Build.newState [] Build.newCurrentPage [] stream
+  (_, pages, _) <- Build.extractPages Build.newConfig [] Build.newCurrentPage [] stream
 
   -- putStrLn $ show $ pages !! 0
 
