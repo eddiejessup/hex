@@ -19,6 +19,8 @@ import qualified Arrange as A
 import qualified Lex
 import qualified Unit
 import qualified Expand
+import Control.Monad.State.Lazy (State, gets, evalState)
+import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 
 import qualified Parse as P
 import Parse (Stream, insertLexToken, insertLexTokens)
@@ -70,14 +72,17 @@ fontDir2 :: AbsPathToDir
 theFontDirectories :: [AbsPathToDir]
 theFontDirectories = [fontDir1, fontDir2]
 
-currentFontInfo :: Config -> Maybe TFMM.TexFont
-currentFontInfo conf = do
+type ConfState = State Config
+
+currentFontInfo :: MaybeT ConfState TFMM.TexFont
+currentFontInfo = do
   -- Maybe font number isn't set.
-  fontNr <- currentFontNr conf
+  maybeFontNr <- gets currentFontNr
   -- Or maybe there's no font where there should be.
   -- TODO: I think I can make this case impossible, maybe by storing the
   -- current font info directly instead of a lookup.
-  HMap.lookup fontNr $ fontInfoMap conf
+  fInfo <- HMap.lookup <$> MaybeT (return maybeFontNr) <*> gets fontInfoMap
+  MaybeT $ return fInfo
 
 type PathToFile b = Path.Path b Path.File
 type RelPathToFile = PathToFile Path.Rel
@@ -119,16 +124,16 @@ selectFont :: Config -> Int -> (Config, B.FontSelection)
 selectFont conf n =
   (conf{currentFontNr=Just n}, B.FontSelection{fontNr = n})
 
-characterBox :: Config -> Int -> Maybe B.Character
-characterBox conf code = do
-  font <- currentFontInfo conf
+characterBox :: Int -> MaybeT ConfState B.Character
+characterBox code = do
+  font <- currentFontInfo
   let toSP = TFMM.designScaleSP font
-  TFMC.Character{width=w, height=h, depth=d} <- HMap.lookup code $ TFMM.characters font
+  TFMC.Character{width=w, height=h, depth=d} <- MaybeT (return $ HMap.lookup code $ TFMM.characters font)
   return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
 
 spaceGlue :: Config -> Maybe A.Glue
 spaceGlue conf = do
-  font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo conf
+  font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- evalState (runMaybeT currentFontInfo) conf
   let
     toSP = TFMM.designScaleSP font
     toFlex = A.finiteFlex . fromIntegral . toSP
@@ -265,9 +270,9 @@ extractParagraph conf acc stream =
           return (conf, acc, streamNext)
     Right P.AddCharacter{code=i} ->
       do
-      charBox <- case characterBox conf i of
-        Just c -> return $ A.HCharacter c
-        Nothing -> fail "Could not get character info"
+      charBox <- case A.HCharacter <$> evalState (runMaybeT (characterBox i)) conf of
+          Just c -> return c
+          Nothing -> fail "Could not get character info"
       extractParagraph conf (charBox:acc) streamNext
     Right P.LeaveHMode ->
       -- Inner mode: forbidden. TODO.
