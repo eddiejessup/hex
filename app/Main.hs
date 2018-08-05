@@ -4,6 +4,7 @@ module Main where
 
 import qualified Data.Char as C
 import qualified Data.ByteString.Lazy as BLS
+import Control.Monad.Trans.State.Lazy (runStateT)
 
 import qualified DVI.Encode as DVIE
 import qualified BoxDraw
@@ -30,7 +31,7 @@ main = do
 
   -- page <- Build.extractPage Build.newConfig [] stream
 
-  (_, pages, _) <- Build.extractPages Build.newConfig [] Build.newCurrentPage [] stream
+  ((pages, _), _) <- runStateT (Build.extractPages [] Build.newCurrentPage [] stream) Build.newConfig
 
   -- putStrLn $ show $ pages !! 0
 
