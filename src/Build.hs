@@ -209,22 +209,43 @@ runReaderOnState f = runReader f <$> get
 -- We build a paragraph list in reverse order.
 extractParagraph :: [A.BreakableHListElem] -> Stream -> ConfStateT IO ([A.BreakableHListElem], Stream)
 extractParagraph acc stream =
-  let (PS.State{stateInput=streamNext}, com) = P.extractHModeCommand stream
-  in case com of
+  case eCom of
     Left x -> error $ show x
-    Right (P.HAllModesCommand aCom) ->
-      case aCom of
+    Right com -> case com of
+      P.LeaveHMode ->
+          -- Inner mode: forbidden. TODO.
+          -- Outer mode: insert the control sequence "\par" into the input. The control
+          -- sequence's current meaning will be used, which might no longer be the \par
+          -- primitive.
+        -- (Note that we pass stream, not stream'.)
+          do
+          let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
+          modStream $ insertLexToken stream parToken
+
+      P.AddCharacter{code=i} -> do
+        charBox <- runReaderOnState (runMaybeT (characterBox i))
+        hCharBox <- case A.HCharacter <$> charBox of
+            Just c -> return c
+            Nothing -> fail "Could not get character info"
+        modAccum $ hCharBox:acc
+
+      (P.HAllModesCommand aCom) -> case aCom of
+
+        -- \par: end the current paragraph.
+        P.EndParagraph ->
+          return (acc, stream')
+
+        (P.ChangeCase d bt) ->
+          modStream $ applyChangeCaseToStream stream' d bt
+
         P.Relax ->
-          extractParagraph acc streamNext
+          continueUnchanged
         P.IgnoreSpaces ->
-          extractParagraph acc streamNext
-        P.ChangeCase d bt -> do
-          let streamNext' = applyChangeCaseToStream streamNext d bt
-          extractParagraph acc streamNext'
+          continueUnchanged
         P.Assign P.Assignment{body=P.SelectFont fNr} ->
           do
           fontSel <- selectFont fNr
-          extractParagraph (A.HFontSelection fontSel:acc) streamNext
+          modAccum $ A.HFontSelection fontSel:acc
         P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
           do
           let fNr = csToFontNr cs
@@ -232,22 +253,22 @@ extractParagraph acc stream =
           case ret of
             Just fontDef@B.FontDefinition{fontInfo=font} -> do
               modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
-              extractParagraph (A.HFontDefinition fontDef:acc) streamNext
+              modAccum $ A.HFontDefinition fontDef:acc
             Nothing -> fail "Could not define font"
         P.AddPenalty n ->
-          extractParagraph ((A.HPenalty $ evaluatePenalty n):acc) streamNext
+          modAccum $ (A.HPenalty $ evaluatePenalty n):acc
         P.AddKern ln -> do
           mag <- gets magnification
-          extractParagraph ((A.HKern $ evaluateKern mag ln):acc) streamNext
+          modAccum $ (A.HKern $ evaluateKern mag ln):acc
         P.AddGlue g -> do
           mag <- gets magnification
-          extractParagraph (A.HGlue (evaluateGlue mag g):acc) streamNext
+          modAccum $ A.HGlue (evaluateGlue mag g):acc
         P.AddSpace -> do
           glue <- runReaderOnState (runMaybeT spaceGlue)
-          hGlue <- case A.HGlue <$> glue of
-            Just sg -> return sg
+          hGlue <- case glue of
+            Just sg -> return $ A.HGlue sg
             Nothing -> fail "Could not get space glue"
-          extractParagraph (hGlue:acc) streamNext
+          modAccum $ hGlue:acc
         -- \indent: An empty box of width \parindent is appended to the current
         -- list, and the space factor is set to 1000.
         -- TODO: Space factor.
@@ -264,31 +285,20 @@ extractParagraph acc stream =
               Nothing -> 0
               Just ln -> evaluateLength mag ln
             rule = B.Rule{width=evalW, height=evalH, depth=evalD}
-          extractParagraph (A.HRule rule:acc) streamNext
-        P.StartParagraph True -> do
-          parInd <- gets parIndent
-          extractParagraph (A.HHBox parInd:acc) streamNext
-        -- \noindent: has no effect in horizontal modes.
-        P.StartParagraph False ->
-          extractParagraph acc streamNext
-        -- \par: end the current paragraph.
-        P.EndParagraph ->
-          return (acc, streamNext)
-    Right P.AddCharacter{code=i} -> do
-      charBox <- runReaderOnState (runMaybeT (characterBox i))
-      hCharBox <- case A.HCharacter <$> charBox of
-          Just c -> return c
-          Nothing -> fail "Could not get character info"
-      extractParagraph (hCharBox:acc) streamNext
-    Right P.LeaveHMode ->
-      -- Inner mode: forbidden. TODO.
-      -- Outer mode: insert the control sequence "\par" into the input. The control
-      -- sequence's current meaning will be used, which might no longer be the \par
-      -- primitive.
-    -- (Note that we pass 'stream', not 'streamNext'.)
-      do
-      let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
-      extractParagraph acc $ insertLexToken stream parToken
+          modAccum $ A.HRule rule:acc
+        P.StartParagraph indent ->
+          if indent then do
+            parInd <- gets parIndent
+            modAccum (A.HHBox parInd:acc)
+          -- \noindent: has no effect in horizontal modes.
+          else
+            continueUnchanged
+  where
+    (PS.State{stateInput=stream'}, eCom) = P.extractHModeCommand stream
+    modAccum ac = extractParagraph ac stream'
+    modStream = extractParagraph acc
+    continueUnchanged = extractParagraph acc stream'
+
 
 extractParagraphLineBoxes :: Bool -> Stream -> ConfStateT IO ([B.HBox], Stream)
 extractParagraphLineBoxes indent stream = do
