@@ -19,7 +19,8 @@ import qualified Arrange as A
 import qualified Lex
 import qualified Unit
 import qualified Expand
-import Control.Monad.State.Lazy (StateT, gets, modify, liftIO)
+import Control.Monad.State.Lazy (StateT, get, gets, modify, liftIO, lift, MonadState)
+import Control.Monad.Trans.Reader (ReaderT, asks, runReader, Reader)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import Control.Monad (foldM)
 import Control.Monad.Extra (findM)
@@ -71,15 +72,16 @@ theFontDirectories :: [AbsPathToDir]
 theFontDirectories = [fontDir1, fontDir2]
 
 type ConfStateT = StateT Config
+type ConfReaderT = ReaderT Config
 
-currentFontInfo :: Monad m => MaybeT (ConfStateT m) TFMM.TexFont
+currentFontInfo :: Monad m => MaybeT (ConfReaderT m) TFMM.TexFont
 currentFontInfo = do
   -- Maybe font number isn't set.
-  maybeFontNr <- gets currentFontNr
+  maybeFontNr <- lift $ asks currentFontNr
   -- Or maybe there's no font where there should be.
   -- TODO: I think I can make this case impossible, maybe by storing the
   -- current font info directly instead of a lookup.
-  fInfo <- HMap.lookup <$> MaybeT (return maybeFontNr) <*> gets fontInfoMap
+  fInfo <- HMap.lookup <$> MaybeT (return maybeFontNr) <*> lift (asks fontInfoMap)
   MaybeT $ return fInfo
 
 type PathToFile b = Path.Path b Path.File
@@ -117,14 +119,14 @@ selectFont n = do
   modify (\conf -> conf{currentFontNr=Just n})
   return B.FontSelection{fontNr = n}
 
-characterBox :: Monad m => Int -> MaybeT (ConfStateT m) B.Character
+characterBox :: Monad m => Int -> MaybeT (ConfReaderT m) B.Character
 characterBox code = do
   font <- currentFontInfo
   let toSP = TFMM.designScaleSP font
   TFMC.Character{width=w, height=h, depth=d} <- MaybeT (return $ HMap.lookup code $ TFMM.characters font)
   return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
 
-spaceGlue :: Monad m => MaybeT (ConfStateT m) A.Glue
+spaceGlue :: Monad m => MaybeT (ConfReaderT m) A.Glue
 spaceGlue = do
   font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo
   let
@@ -201,6 +203,9 @@ applyChangeCaseToStream s d (P.BalancedText ts) = insertLexTokens s $ changeCase
         switch Expand.Upward = C.toUpper
         switch Expand.Downward = C.toLower
 
+runReaderOnState :: MonadState r f => Reader r b -> f b
+runReaderOnState f = runReader f <$> get
+
 -- We build a paragraph list in reverse order.
 extractParagraph :: [A.BreakableHListElem] -> Stream -> ConfStateT IO ([A.BreakableHListElem], Stream)
 extractParagraph acc stream =
@@ -237,9 +242,8 @@ extractParagraph acc stream =
         P.AddGlue g -> do
           mag <- gets magnification
           extractParagraph (A.HGlue (evaluateGlue mag g):acc) streamNext
-        P.AddSpace ->
-          do
-          glue <- runMaybeT spaceGlue
+        P.AddSpace -> do
+          glue <- runReaderOnState (runMaybeT spaceGlue)
           hGlue <- case A.HGlue <$> glue of
             Just sg -> return sg
             Nothing -> fail "Could not get space glue"
@@ -270,9 +274,8 @@ extractParagraph acc stream =
         -- \par: end the current paragraph.
         P.EndParagraph ->
           return (acc, streamNext)
-    Right P.AddCharacter{code=i} ->
-      do
-      charBox <- runMaybeT (characterBox i)
+    Right P.AddCharacter{code=i} -> do
+      charBox <- runReaderOnState (runMaybeT (characterBox i))
       hCharBox <- case A.HCharacter <$> charBox of
           Just c -> return c
           Nothing -> fail "Could not get character info"
