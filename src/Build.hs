@@ -208,97 +208,100 @@ runReaderOnState f = runReader f <$> get
 
 -- We build a paragraph list in reverse order.
 extractParagraph :: [A.BreakableHListElem] -> Stream -> ConfStateT IO ([A.BreakableHListElem], Stream)
-extractParagraph acc stream =
-  case eCom of
-    Left x -> error $ show x
-    Right com -> case com of
-      P.LeaveHMode ->
-          -- Inner mode: forbidden. TODO.
-          -- Outer mode: insert the control sequence "\par" into the input. The control
-          -- sequence's current meaning will be used, which might no longer be the \par
-          -- primitive.
-        -- (Note that we pass stream, not stream'.)
-          do
-          let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
-          modStream $ insertLexToken stream parToken
+extractParagraph acc stream = case eCom of
+  Left x -> error $ show x
+  Right com -> case com of
+    P.LeaveHMode ->
+        -- Inner mode: forbidden. TODO.
+        -- Outer mode: insert the control sequence "\par" into the input. The control
+        -- sequence's current meaning will be used, which might no longer be the \par
+        -- primitive.
+      -- (Note that we pass stream, not stream'.)
+        do
+        let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
+        modStream $ insertLexToken stream parToken
 
-      P.AddCharacter{code=i} -> do
-        charBox <- runReaderOnState (runMaybeT (characterBox i))
-        hCharBox <- case A.HCharacter <$> charBox of
-            Just c -> return c
-            Nothing -> fail "Could not get character info"
-        modAccum $ hCharBox:acc
+    P.AddCharacter{code=i} -> do
+      charBox <- runReaderOnState (runMaybeT (characterBox i))
+      hCharBox <- case A.HCharacter <$> charBox of
+          Just c -> return c
+          Nothing -> fail "Could not get character info"
+      modAccum $ hCharBox:acc
 
-      (P.HAllModesCommand aCom) -> case aCom of
+    P.HAllModesCommand aCom -> case aCom of
 
-        -- \par: end the current paragraph.
-        P.EndParagraph ->
-          return (acc, stream')
+      -- Command to end recursion.
+      -- \par: end the current paragraph.
+      P.EndParagraph ->
+        return (acc, stream')
 
-        (P.ChangeCase d bt) ->
-          modStream $ applyChangeCaseToStream stream' d bt
+      -- Commands to do nothing.
+      P.Relax ->
+        continueUnchanged
+      P.IgnoreSpaces ->
+        continueUnchanged
 
-        P.Relax ->
+      -- Commands to modify the input stream.
+      P.ChangeCase d bt ->
+        modStream $ applyChangeCaseToStream stream' d bt
+
+      -- Commands to modify the list.
+      P.Assign P.Assignment{body=P.SelectFont fNr} ->
+        do
+        fontSel <- selectFont fNr
+        modAccum $ A.HFontSelection fontSel:acc
+      P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
+        do
+        let fNr = csToFontNr cs
+        ret <- liftIO $ runMaybeT $ defineFont fPath fNr
+        case ret of
+          Just fontDef@B.FontDefinition{fontInfo=font} -> do
+            modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
+            modAccum $ A.HFontDefinition fontDef:acc
+          Nothing -> fail "Could not define font"
+      P.AddPenalty n ->
+        modAccum $ (A.HPenalty $ evaluatePenalty n):acc
+      P.AddKern ln -> do
+        mag <- gets magnification
+        modAccum $ (A.HKern $ evaluateKern mag ln):acc
+      P.AddGlue g -> do
+        mag <- gets magnification
+        modAccum $ A.HGlue (evaluateGlue mag g):acc
+      P.AddSpace -> do
+        glue <- runReaderOnState (runMaybeT spaceGlue)
+        hGlue <- case glue of
+          Just sg -> return $ A.HGlue sg
+          Nothing -> fail "Could not get space glue"
+        modAccum $ hGlue:acc
+      -- \indent: An empty box of width \parindent is appended to the current
+      -- list, and the space factor is set to 1000.
+      -- TODO: Space factor.
+      P.AddRule{width=w, height=h, depth=d} -> do
+        mag <- gets magnification
+        let
+          evalW = case w of
+            Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+            Just ln -> evaluateLength mag ln
+          evalH = case h of
+            Nothing -> Unit.toScaledPointApprox (10 :: Int) Unit.Point
+            Just ln -> evaluateLength mag ln
+          evalD = case d of
+            Nothing -> 0
+            Just ln -> evaluateLength mag ln
+          rule = B.Rule{width=evalW, height=evalH, depth=evalD}
+        modAccum $ A.HRule rule:acc
+      P.StartParagraph indent ->
+        if indent then do
+          parInd <- gets parIndent
+          modAccum (A.HHBox parInd:acc)
+        -- \noindent: has no effect in horizontal modes.
+        else
           continueUnchanged
-        P.IgnoreSpaces ->
-          continueUnchanged
-        P.Assign P.Assignment{body=P.SelectFont fNr} ->
-          do
-          fontSel <- selectFont fNr
-          modAccum $ A.HFontSelection fontSel:acc
-        P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
-          do
-          let fNr = csToFontNr cs
-          ret <- liftIO $ runMaybeT $ defineFont fPath fNr
-          case ret of
-            Just fontDef@B.FontDefinition{fontInfo=font} -> do
-              modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
-              modAccum $ A.HFontDefinition fontDef:acc
-            Nothing -> fail "Could not define font"
-        P.AddPenalty n ->
-          modAccum $ (A.HPenalty $ evaluatePenalty n):acc
-        P.AddKern ln -> do
-          mag <- gets magnification
-          modAccum $ (A.HKern $ evaluateKern mag ln):acc
-        P.AddGlue g -> do
-          mag <- gets magnification
-          modAccum $ A.HGlue (evaluateGlue mag g):acc
-        P.AddSpace -> do
-          glue <- runReaderOnState (runMaybeT spaceGlue)
-          hGlue <- case glue of
-            Just sg -> return $ A.HGlue sg
-            Nothing -> fail "Could not get space glue"
-          modAccum $ hGlue:acc
-        -- \indent: An empty box of width \parindent is appended to the current
-        -- list, and the space factor is set to 1000.
-        -- TODO: Space factor.
-        P.AddRule{width=w, height=h, depth=d} -> do
-          mag <- gets magnification
-          let
-            evalW = case w of
-              Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-              Just ln -> evaluateLength mag ln
-            evalH = case h of
-              Nothing -> Unit.toScaledPointApprox (10 :: Int) Unit.Point
-              Just ln -> evaluateLength mag ln
-            evalD = case d of
-              Nothing -> 0
-              Just ln -> evaluateLength mag ln
-            rule = B.Rule{width=evalW, height=evalH, depth=evalD}
-          modAccum $ A.HRule rule:acc
-        P.StartParagraph indent ->
-          if indent then do
-            parInd <- gets parIndent
-            modAccum (A.HHBox parInd:acc)
-          -- \noindent: has no effect in horizontal modes.
-          else
-            continueUnchanged
   where
     (PS.State{stateInput=stream'}, eCom) = P.extractHModeCommand stream
     modAccum ac = extractParagraph ac stream'
     modStream = extractParagraph acc
     continueUnchanged = extractParagraph acc stream'
-
 
 extractParagraphLineBoxes :: Bool -> Stream -> ConfStateT IO ([B.HBox], Stream)
 extractParagraphLineBoxes indent stream = do
@@ -306,14 +309,9 @@ extractParagraphLineBoxes indent stream = do
   lineTol <- gets lineTolerance
   linePen <- gets linePenalty
   parInd <- gets parIndent
-  let
-    initial True = [A.HHBox parInd]
-    initial False = []
-
-  (hList, streamNext) <- extractParagraph (initial indent) stream
-  let
-    lineBoxes = A.setParagraph desiredW lineTol linePen hList
-  return (lineBoxes, streamNext)
+  (hList, stream') <- extractParagraph [A.HHBox parInd | indent] stream
+  let lineBoxes = A.setParagraph desiredW lineTol linePen hList
+  return (lineBoxes, stream')
 
 -- current items, best cost, breakpoint for that cost.
 type CurrentPage = ([A.BreakableVListElem], Maybe Int, Maybe Int)
@@ -433,83 +431,85 @@ addVListElems :: Monad m
               -> ConfStateT m [A.BreakableVListElem]
 addVListElems = foldM addVListElem
 
-addParagraphToPage :: [B.Page]
-                   -> CurrentPage
-                   -> [A.BreakableVListElem]
-                   -> Stream
-                   -> Bool
-                   -> ConfStateT IO ([B.Page], Stream)
-addParagraphToPage pages cur acc stream indent
-  = do
-    -- Paraboxes returned in reading order.
-    (lineBoxes, streamNext) <- extractParagraphLineBoxes indent stream
-    acc' <- addVListElems acc $ A.VHBox <$> lineBoxes
-    extractPages pages cur acc' streamNext
-
 extractPages :: [B.Page] -> CurrentPage -> [A.BreakableVListElem] -> Stream -> ConfStateT IO ([B.Page], Stream)
-extractPages pages cur acc stream =
-  let (PS.State{stateInput=streamNext}, com) = P.extractVModeCommand stream
-  in case com of
-    Left x -> error $ show x
-    -- If the command shifts to horizontal mode, run '\indent', and re-read the
-    -- stream as if the commands just seen hadn't been read.
-    -- (Note that we pass 'stream', not 'streamNext'.)
-    Right P.EnterHMode ->
-      addParagraphToPage pages cur acc stream True
-    Right P.End -> do
+extractPages pages cur acc stream = case eCom of
+  Left x -> error $ show x
+  Right com -> case com of
+    -- End recursion.
+    P.End -> do
       lastPage <- runPageBuilder cur (reverse acc)
       let pagesFinal = pages ++ lastPage
-      return (pagesFinal, streamNext)
-    Right (P.VAllModesCommand aCom) ->
-      case aCom of
-        P.Relax ->
-          extractPages pages cur acc streamNext
-        P.IgnoreSpaces ->
-          extractPages pages cur acc streamNext
-        P.ChangeCase d bt -> do
-          let streamNext' = applyChangeCaseToStream streamNext d bt
-          extractPages pages cur acc streamNext'
-        P.Assign P.Assignment{body=P.SelectFont fNr} ->
-          do
-          fontSel <- selectFont fNr
-          extractPages pages cur (A.VFontSelection fontSel:acc) streamNext
-        -- \par does nothing in vertical mode.
-        P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
-          do
-          let fNr = csToFontNr cs
-          ret <- liftIO $ runMaybeT $ defineFont fPath fNr
-          case ret of
-            Just fontDef@B.FontDefinition{fontInfo=font} -> do
-              modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
-              extractPages pages cur (A.VFontDefinition fontDef:acc) streamNext
-            Nothing -> fail "Could not define font"
-        P.AddPenalty n ->
-          extractPages pages cur ((A.VPenalty $ evaluatePenalty n):acc) streamNext
-        P.AddKern ln -> do
-          mag <- gets magnification
-          extractPages pages cur ((A.VKern $ evaluateKern mag ln):acc) streamNext
-        P.AddGlue g -> do
-          mag <- gets magnification
-          extractPages pages cur (A.VGlue (evaluateGlue mag g):acc) streamNext
-        -- <space token> has no effect in vertical modes.
-        P.AddSpace ->
-          extractPages pages cur acc streamNext
-        P.AddRule{width=w, height=h, depth=d} -> do
-          desiredW <- gets desiredWidth
-          mag <- gets magnification
-          let
-            evalW = case w of
-              Nothing -> desiredW
-              Just ln -> evaluateLength mag ln
-            evalH = case h of
-              Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-              Just ln -> evaluateLength mag ln
-            evalD = case d of
-              Nothing -> 0
-              Just ln -> evaluateLength mag ln
-            rule = B.Rule{width=evalW, height=evalH, depth=evalD}
-          extractPages pages cur (A.VRule rule:acc) streamNext
-        P.StartParagraph indent ->
-          addParagraphToPage pages cur acc stream indent
-        P.EndParagraph ->
-          extractPages pages cur acc streamNext
+      return (pagesFinal, stream')
+
+    P.VAllModesCommand aCom -> case aCom of
+      -- Commands to do nothing.
+      P.Relax ->
+        continueUnchanged
+      P.IgnoreSpaces ->
+        continueUnchanged
+      P.AddSpace ->
+        continueUnchanged
+      -- \par does nothing in vertical mode.
+      P.EndParagraph ->
+        continueUnchanged
+
+      -- Commands to modify the input stream.
+      P.ChangeCase d bt -> do
+        modStream $ applyChangeCaseToStream stream' d bt
+
+      -- Commands to modify the list.
+      P.Assign P.Assignment{body=P.SelectFont fNr} -> do
+        fontSel <- selectFont fNr
+        modAccum (A.VFontSelection fontSel:acc)
+      P.Assign P.Assignment{body=P.DefineFont cs fPath} -> do
+        let fNr = csToFontNr cs
+        ret <- liftIO $ runMaybeT $ defineFont fPath fNr
+        case ret of
+          Just fontDef@B.FontDefinition{fontInfo=font} -> do
+            modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
+            modAccum (A.VFontDefinition fontDef:acc)
+          Nothing -> fail "Could not define font"
+      P.AddPenalty n ->
+        modAccum ((A.VPenalty $ evaluatePenalty n):acc)
+      P.AddKern ln -> do
+        mag <- gets magnification
+        modAccum ((A.VKern $ evaluateKern mag ln):acc)
+      P.AddGlue g -> do
+        mag <- gets magnification
+        modAccum (A.VGlue (evaluateGlue mag g):acc)
+      -- <space token> has no effect in vertical modes.
+      P.AddRule{width=w, height=h, depth=d} -> do
+        desiredW <- gets desiredWidth
+        mag <- gets magnification
+        let
+          evalW = case w of
+            Nothing -> desiredW
+            Just ln -> evaluateLength mag ln
+          evalH = case h of
+            Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+            Just ln -> evaluateLength mag ln
+          evalD = case d of
+            Nothing -> 0
+            Just ln -> evaluateLength mag ln
+          rule = B.Rule{width=evalW, height=evalH, depth=evalD}
+        modAccum (A.VRule rule:acc)
+
+      -- Commands to start horizontal mode.
+      P.StartParagraph indent ->
+        addParagraphToPage indent
+    P.EnterHMode ->
+      addParagraphToPage True
+  where
+    (PS.State{stateInput=stream'}, eCom) = P.extractVModeCommand stream
+    continueSamePage = extractPages pages cur
+    modAccum ac = continueSamePage ac stream'
+    modStream = continueSamePage acc
+    continueUnchanged = continueSamePage acc stream'
+    -- If the command shifts to horizontal mode, run '\indent', and re-read the
+    -- stream as if the commands just seen hadn't been read.
+    -- (Note that we pass "stream", not "stream'".)
+    addParagraphToPage indent = do
+      -- Paraboxes returned in reading order.
+      (lineBoxes, stream'') <- extractParagraphLineBoxes indent stream
+      acc' <- addVListElems acc $ A.VHBox <$> lineBoxes
+      continueSamePage acc' stream''
