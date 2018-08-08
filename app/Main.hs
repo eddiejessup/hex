@@ -9,6 +9,7 @@ import Control.Monad.Trans.State.Lazy (runStateT)
 import qualified DVI.Encode as DVIE
 import qualified BoxDraw
 import qualified Build
+import qualified Config
 import Parse.Util (newStream)
 
 main :: IO ()
@@ -31,7 +32,7 @@ main = do
 
   -- page <- Build.extractPage Build.newConfig [] stream
 
-  ((pages, _), _) <- runStateT (Build.extractPages [] Build.newCurrentPage [] stream) Build.newConfig
+  ((pages, _), _) <- runStateT (Build.extractPages [] Build.newCurrentPage [] stream) Config.newConfig
 
   -- putStrLn $ show $ pages !! 0
 

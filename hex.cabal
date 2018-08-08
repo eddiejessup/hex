@@ -34,6 +34,7 @@ library
                      , Parse.Glue
                      , Parse.Command
                      , Parse
+                     , Config
   build-depends:       base
                      , containers
                      , bytestring

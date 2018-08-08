@@ -11,55 +11,33 @@ import qualified Path
 import qualified Text.Megaparsec as PS
 import qualified Data.Char as C
 import Safe (headMay)
+import Control.Monad.State.Lazy (get, gets, modify, liftIO, lift, MonadState)
+import Control.Monad.Trans.Reader (asks, runReader, Reader)
+import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
+import Control.Monad (foldM)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Extra (findM)
+
 import qualified TFM.Main as TFMM
 import qualified TFM.Character as TFMC
+
 import qualified BoxDraw as B
+import qualified Config as Conf
+import Config (Config(..)
+              , ConfStateT
+              , IntegerParameterName(..)
+              , LengthParameterName(..)
+              , GlueParameterName(..)
+              , SpecialIntegerParameterName(..)
+              , parIndentBox
+              , updateFuncMap)
 import Adjacent (Adjacency(..))
 import qualified Arrange as A
 import qualified Lex
 import qualified Unit
 import qualified Expand
-import Control.Monad.State.Lazy (StateT, get, gets, modify, liftIO, lift, MonadState)
-import Control.Monad.Trans.Reader (ReaderT, asks, runReader, Reader)
-import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
-import Control.Monad (foldM)
-import Control.Monad.Extra (findM)
-
 import qualified Parse as P
 import Parse (Stream, insertLexToken, insertLexTokens)
-
-type FontInfoMap = HMap.HashMap Int TFMM.TexFont
--- type IntegerParameterMap = HMap.HashMap Int TFMM.TexFont
-
-data Config = Config { currentFontNr :: Maybe Int
-                     , fontInfoMap :: FontInfoMap
-                     , desiredWidth :: Int
-                     , lineTolerance :: Int
-                     , linePenalty :: Int
-                     , desiredHeight :: Int
-                     , magnification :: Int
-                       -- Minimum distance between baselines.
-                     , baselineLengthMin :: Int
-                       -- Aimed actual distance between baselines.
-                     , baselineGlue :: A.Glue
-                     , minBaselineGlue :: A.Glue
-                     , parIndent :: B.HBox
-                     , previousBoxDepth :: Int } deriving Show
-
-newConfig :: Config
-newConfig = Config { currentFontNr=Nothing
-                   , fontInfoMap=HMap.empty
-                   , desiredWidth=30750000
-                   , lineTolerance=500
-                   , linePenalty=10
-                   , desiredHeight=37500000
-                   , magnification=1000
-                   , baselineLengthMin=0
-                   , baselineGlue=A.Glue (Unit.toScaledPointApprox (12 :: Int) Unit.Point) A.noFlex A.noFlex
-                   , minBaselineGlue=A.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) A.noFlex A.noFlex
-                   , parIndent=B.HBox{contents=[]
-                                     , desiredLength=B.To $ Unit.toScaledPointApprox (20 :: Int) Unit.Point}
-                   , previousBoxDepth= -Unit.oneKPt }
 
 csToFontNr :: P.ControlSequenceLike -> Int
 csToFontNr (P.ControlSequence (Lex.ControlWord "thefont")) = Expand.theFontNr
@@ -71,10 +49,7 @@ fontDir2 :: AbsPathToDir
 theFontDirectories :: [AbsPathToDir]
 theFontDirectories = [fontDir1, fontDir2]
 
-type ConfStateT = StateT Config
-type ConfReaderT = ReaderT Config
-
-currentFontInfo :: Monad m => MaybeT (ConfReaderT m) TFMM.TexFont
+currentFontInfo :: Monad m => MaybeT (Conf.ConfReaderT m) TFMM.TexFont
 currentFontInfo = do
   -- Maybe font number isn't set.
   maybeFontNr <- lift $ asks currentFontNr
@@ -101,32 +76,44 @@ firstExistingPath ps =
 findFilePath :: RelPathToFile -> [AbsPathToDir] -> MaybeT IO (PathToFile Path.Abs)
 findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs
 
-defineFont :: RelPathToFile -> Int -> MaybeT IO B.FontDefinition
-defineFont fontRelPath nr = do
-    fontPath <- findFilePath fontRelPath theFontDirectories
-    font <- liftIO $ TFMM.readTFMFancy fontPath
-    nonExtName <- Path.setFileExtension "" fontRelPath
-    let fontName = Path.toFilePath $ Path.filename nonExtName
-    return B.FontDefinition { fontNr = nr
-                            , fontPath = fontPath
-                            , fontName = fontName
-                            , fontInfo = font
-                            , scaleFactorRatio = 1.0
-                            }
+defineFont :: (MonadState Config m, MonadIO m) =>
+       P.ControlSequenceLike
+    -> RelPathToFile
+    -> m B.FontDefinition
+defineFont cs fPath = do
+  maybeFontDef <- liftIO $ runMaybeT ioFontDef
+  case maybeFontDef of
+    Just fontDef@B.FontDefinition{fontInfo=font} -> do
+      modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
+      return fontDef
+    Nothing -> fail "Could not define font"
+  where
+    fNr = csToFontNr cs
+    ioFontDef = do
+      fontPath <- findFilePath fPath theFontDirectories
+      font <- liftIO $ TFMM.readTFMFancy fontPath
+      nonExtName <- Path.setFileExtension "" fPath
+      let fontName = Path.toFilePath $ Path.filename nonExtName
+      return B.FontDefinition { fontNr = fNr
+                              , fontPath = fontPath
+                              , fontName = fontName
+                              , fontInfo = font
+                              , scaleFactorRatio = 1.0
+                              }
 
 selectFont :: Monad m => Int -> ConfStateT m B.FontSelection
 selectFont n = do
   modify (\conf -> conf{currentFontNr=Just n})
   return B.FontSelection{fontNr = n}
 
-characterBox :: Monad m => Int -> MaybeT (ConfReaderT m) B.Character
+characterBox :: Monad m => Int -> MaybeT (Conf.ConfReaderT m) B.Character
 characterBox code = do
   font <- currentFontInfo
   let toSP = TFMM.designScaleSP font
   TFMC.Character{width=w, height=h, depth=d} <- MaybeT (return $ HMap.lookup code $ TFMM.characters font)
   return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
 
-spaceGlue :: Monad m => MaybeT (ConfReaderT m) A.Glue
+spaceGlue :: Monad m => MaybeT (Conf.ConfReaderT m) A.Glue
 spaceGlue = do
   font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo
   let
@@ -213,7 +200,7 @@ extractParagraph acc stream = case eCom of
   Right com -> case com of
     P.LeaveHMode ->
         -- Inner mode: forbidden. TODO.
-        -- Outer mode: insert the control sequence "\par" into the input. The control
+        -- Outer mode: insert the rol sequence "\par" into the input. The control
         -- sequence's current meaning will be used, which might no longer be the \par
         -- primitive.
       -- (Note that we pass stream, not stream'.)
@@ -246,26 +233,19 @@ extractParagraph acc stream = case eCom of
         modStream $ applyChangeCaseToStream stream' d bt
 
       -- Commands to modify the list.
-      P.Assign P.Assignment{body=P.SelectFont fNr} ->
-        do
-        fontSel <- selectFont fNr
-        modAccum $ A.HFontSelection fontSel:acc
-      P.Assign P.Assignment{body=P.DefineFont cs fPath} ->
-        do
-        let fNr = csToFontNr cs
-        ret <- liftIO $ runMaybeT $ defineFont fPath fNr
-        case ret of
-          Just fontDef@B.FontDefinition{fontInfo=font} -> do
-            modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
-            modAccum $ A.HFontDefinition fontDef:acc
-          Nothing -> fail "Could not define font"
+      P.Assign P.Assignment{body=P.SelectFont fNr} -> do
+        fontSel <- A.HFontSelection <$> selectFont fNr
+        modAccum $ fontSel:acc
+      P.Assign P.Assignment{body=P.DefineFont cs fPath} -> do
+        fontDef <- A.HFontDefinition <$> defineFont cs fPath
+        modAccum $ fontDef:acc
       P.AddPenalty n ->
-        modAccum $ (A.HPenalty $ evaluatePenalty n):acc
+        modAccum $ A.HPenalty (evaluatePenalty n):acc
       P.AddKern ln -> do
-        mag <- gets magnification
-        modAccum $ (A.HKern $ evaluateKern mag ln):acc
+        mag <- gets (`integerParameter` Magnification)
+        modAccum $ A.HKern (evaluateKern mag ln):acc
       P.AddGlue g -> do
-        mag <- gets magnification
+        mag <- gets (`integerParameter` Magnification)
         modAccum $ A.HGlue (evaluateGlue mag g):acc
       P.AddSpace -> do
         glue <- runReaderOnState (runMaybeT spaceGlue)
@@ -277,7 +257,7 @@ extractParagraph acc stream = case eCom of
       -- list, and the space factor is set to 1000.
       -- TODO: Space factor.
       P.AddRule{width=w, height=h, depth=d} -> do
-        mag <- gets magnification
+        mag <- gets (`integerParameter` Magnification)
         let
           evalW = case w of
             Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
@@ -292,8 +272,8 @@ extractParagraph acc stream = case eCom of
         modAccum $ A.HRule rule:acc
       P.StartParagraph indent ->
         if indent then do
-          parInd <- gets parIndent
-          modAccum (A.HHBox parInd:acc)
+          indentBox <- gets parIndentBox
+          modAccum (indentBox:acc)
         -- \noindent: has no effect in horizontal modes.
         else
           continueUnchanged
@@ -305,11 +285,11 @@ extractParagraph acc stream = case eCom of
 
 extractParagraphLineBoxes :: Bool -> Stream -> ConfStateT IO ([B.HBox], Stream)
 extractParagraphLineBoxes indent stream = do
-  desiredW <- gets desiredWidth
-  lineTol <- gets lineTolerance
-  linePen <- gets linePenalty
-  parInd <- gets parIndent
-  (hList, stream') <- extractParagraph [A.HHBox parInd | indent] stream
+  desiredW <- gets (`lengthParameter` DesiredWidth)
+  lineTol <- gets (`integerParameter` LineTolerance)
+  linePen <- gets (`integerParameter` LinePenalty)
+  indentBox <- gets parIndentBox
+  (hList, stream') <- extractParagraph [indentBox | indent] stream
   let lineBoxes = A.setParagraph desiredW lineTol linePen hList
   return (lineBoxes, stream')
 
@@ -321,7 +301,7 @@ newCurrentPage = ([], Nothing, Nothing)
 
 runPageBuilder :: Monad m => CurrentPage -> [A.BreakableVListElem] -> ConfStateT m [B.Page]
 runPageBuilder (cur, _, _) [] = do
-  desiredH <- gets desiredHeight
+  desiredH <- gets (`lengthParameter` DesiredHeight)
   return [A.setPage desiredH $ reverse cur]
 runPageBuilder (cur, costBest, iBest) (x:xs)
   -- If the current vlist has no boxes, we discard a discardable item.
@@ -332,7 +312,7 @@ runPageBuilder (cur, costBest, iBest) (x:xs)
   -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
   -- the cost c of breaking at this point.
   | A.isDiscardable x = do
-    desiredH <- gets desiredHeight
+    desiredH <- gets (`lengthParameter` DesiredHeight)
     case A.toBreakItem (Adjacency (headMay cur, x, headMay xs)) of
       -- If we can't break here, just add it to the list and continue.
       Nothing -> runPageBuilder (x:cur, costBest, iBest) xs
@@ -404,13 +384,13 @@ addVListElem acc e = case e of
   _ -> return $ e:acc
   where
     addVListBox b = do
-      prevDepth <- gets previousBoxDepth
+      prevDepth <- gets (`specialIntegerParameter` PreviousBoxDepth)
       -- TODO:
-      (A.Glue baselineLength blineStretch blineShrink) <- gets baselineGlue
-      blineLengthMin <- gets baselineLengthMin
-      minBlineGlue <- gets minBaselineGlue
+      (A.Glue baselineLength blineStretch blineShrink) <- gets (`glueParameter` BaselineGlue)
+      blineLengthMin <- gets (`lengthParameter` BaselineLengthMin)
+      minBlineGlue <- gets (`glueParameter` MinBaselineGlue)
 
-      modify (\conf -> conf{previousBoxDepth=B.naturalDepth e})
+      modify (\conf -> conf{specialIntegerParameter=updateFuncMap (specialIntegerParameter conf) PreviousBoxDepth (B.naturalDepth e)})
       return $
         if prevDepth <= -Unit.oneKPt then
           e:acc
@@ -435,18 +415,20 @@ extractPages :: [B.Page] -> CurrentPage -> [A.BreakableVListElem] -> Stream -> C
 extractPages pages cur acc stream = case eCom of
   Left x -> error $ show x
   Right com -> case com of
-    -- End recursion.
+    -- Command to end recursion.
     P.End -> do
       lastPage <- runPageBuilder cur (reverse acc)
       let pagesFinal = pages ++ lastPage
       return (pagesFinal, stream')
 
     P.VAllModesCommand aCom -> case aCom of
+
       -- Commands to do nothing.
       P.Relax ->
         continueUnchanged
       P.IgnoreSpaces ->
         continueUnchanged
+      -- <space token> has no effect in vertical modes.
       P.AddSpace ->
         continueUnchanged
       -- \par does nothing in vertical mode.
@@ -454,33 +436,27 @@ extractPages pages cur acc stream = case eCom of
         continueUnchanged
 
       -- Commands to modify the input stream.
-      P.ChangeCase d bt -> do
+      P.ChangeCase d bt ->
         modStream $ applyChangeCaseToStream stream' d bt
 
       -- Commands to modify the list.
       P.Assign P.Assignment{body=P.SelectFont fNr} -> do
-        fontSel <- selectFont fNr
-        modAccum (A.VFontSelection fontSel:acc)
+        fontSel <- A.VFontSelection <$> selectFont fNr
+        modAccum $ fontSel:acc
       P.Assign P.Assignment{body=P.DefineFont cs fPath} -> do
-        let fNr = csToFontNr cs
-        ret <- liftIO $ runMaybeT $ defineFont fPath fNr
-        case ret of
-          Just fontDef@B.FontDefinition{fontInfo=font} -> do
-            modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
-            modAccum (A.VFontDefinition fontDef:acc)
-          Nothing -> fail "Could not define font"
+        fontDef <- A.VFontDefinition <$> defineFont cs fPath
+        modAccum $ fontDef:acc
       P.AddPenalty n ->
-        modAccum ((A.VPenalty $ evaluatePenalty n):acc)
+        modAccum $ A.VPenalty (evaluatePenalty n):acc
       P.AddKern ln -> do
-        mag <- gets magnification
-        modAccum ((A.VKern $ evaluateKern mag ln):acc)
+        mag <- gets (`integerParameter` Magnification)
+        modAccum $ A.VKern (evaluateKern mag ln):acc
       P.AddGlue g -> do
-        mag <- gets magnification
-        modAccum (A.VGlue (evaluateGlue mag g):acc)
-      -- <space token> has no effect in vertical modes.
+        mag <- gets (`integerParameter` Magnification)
+        modAccum $ A.VGlue (evaluateGlue mag g):acc
       P.AddRule{width=w, height=h, depth=d} -> do
-        desiredW <- gets desiredWidth
-        mag <- gets magnification
+        desiredW <- gets (`lengthParameter` DesiredWidth)
+        mag <- gets (`integerParameter` Magnification)
         let
           evalW = case w of
             Nothing -> desiredW
