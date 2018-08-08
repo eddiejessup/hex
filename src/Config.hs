@@ -67,7 +67,7 @@ newConfig = Config { currentFontNr=Nothing
 
 parIndentBox :: Config -> A.BreakableHListElem
 parIndentBox conf =
-  A.HHBox B.HBox{contents=[] , desiredLength=B.To $ conf `lengthParameter` ParIndent}
+  A.HListBox B.Box{contents=B.HBoxContents [], desiredLength=B.To $ conf `lengthParameter` ParIndent}
 
 newIntegerParameter :: IntegerParameterName -> Int
 newIntegerParameter LineTolerance = 500

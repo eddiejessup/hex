@@ -5,6 +5,7 @@
 
 module Arrange where
 
+import Prelude hiding (lines)
 import Data.Maybe (isJust, mapMaybe)
 import Control.Applicative (liftA2)
 import qualified Data.Char as C
@@ -82,8 +83,7 @@ instance Show Penalty where
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 
 data BreakableHListElem
-  = HVBox B.VBox
-  | HHBox B.HBox
+  = HListBox B.Box
   | HRule B.Rule
   | HGlue Glue
   | HKern B.Kern
@@ -102,8 +102,7 @@ instance Show CondensedHListElem where
   show (NonSentence x) = show x
 
 instance Show BreakableHListElem where
-  show (HVBox e) = show e
-  show (HHBox e) = show e
+  show (HListBox e) = show e
   show (HRule e) = show e
   show (HGlue e) = show e
   show (HKern e) = show e
@@ -122,8 +121,7 @@ instance Show BreakableHListElem where
         | otherwise = NonSentence y:r
 
 data BreakableVListElem
-  = VVBox B.VBox
-  | VHBox B.HBox
+  = VListBox B.Box
   | VRule B.Rule
   | VGlue Glue
   | VKern B.Kern
@@ -132,8 +130,7 @@ data BreakableVListElem
   | VFontSelection B.FontSelection
 
 instance Show BreakableVListElem where
-  show (VVBox e) = show e
-  show (VHBox _) = "VHBox{...}"
+  show (VListBox e) = show e
   show (VRule e) = show e
   show (VGlue e) = show e
   show (VKern e) = show e
@@ -176,8 +173,6 @@ instance Eq Route where
 instance Ord Route where
   compare a b = compare (demerit a) (demerit b)
 
-data Direction = Horizontal | Vertical
-
 breakPenalty :: BreakItem -> Int
 breakPenalty (GlueBreak _) = 0
 breakPenalty (KernBreak _) = 0
@@ -189,24 +184,17 @@ class BreakableListElem a where
   isDiscardable :: a -> Bool
   isBox :: a -> Bool
   toBreakItem :: A.Adjacency a -> Maybe BreakItem
+  naturalLength :: a -> Int
+  naturalListLength :: [a] -> Int
+  naturalListLength = sum . fmap naturalLength
+
+  isGlue :: BreakableListElem a => a -> Bool
+  isGlue = isJust . toGlue
+  isBreakItem :: BreakableListElem a => A.Adjacency a -> Bool
+  isBreakItem = isJust . toBreakItem
 
 class SettableListElem a b where
   setElem :: ListStatus -> a -> [b]
-
-class BreakableList a where
-  naturalLength :: a -> Int
-
-instance BreakableList [BreakableVListElem] where
-  naturalLength = sum . fmap B.naturalHeight
-
-instance BreakableList [BreakableHListElem] where
-  naturalLength = sum . fmap B.naturalWidth
-
-isGlue :: BreakableListElem a => a -> Bool
-isGlue = isJust . toGlue
-
-isBreakItem :: BreakableListElem a => A.Adjacency a -> Bool
-isBreakItem = isJust . toBreakItem
 
 addGlueFlex :: GlueFlex -> GlueFlex -> GlueFlex
 addGlueFlex g1@GlueFlex{factor=f1, order=o1} g2@GlueFlex{factor=f2, order=o2}
@@ -234,8 +222,7 @@ instance BreakableListElem BreakableVListElem where
   isDiscardable (VPenalty _) = True
   isDiscardable _ = False
 
-  isBox (VVBox _) = True
-  isBox (VHBox _) = True
+  isBox (VListBox _) = True
   isBox (VRule _) = True
   isBox _ = False
 
@@ -244,6 +231,8 @@ instance BreakableListElem BreakableVListElem where
     (_, VKern k, Just VGlue{}) -> Just $ KernBreak k
     (_, VPenalty p, _) -> Just $ PenaltyBreak p
     _ -> Nothing
+
+  naturalLength = B.naturalHeight
 
 -- Suppose the line order is i, and the glue has natural width u, and
 -- flexibility f_j, corresponding to its amount and order of stretch or shrink
@@ -267,8 +256,7 @@ setGlue ls g@Glue{dimen=d} = B.SetGlue $ d + glueDiff ls g
 instance SettableListElem BreakableHListElem B.HBoxElem where
   setElem ls (HGlue g) = [B.HGlue $ setGlue ls g]
   setElem _ (HPenalty _) = []
-  setElem _ (HVBox v) = [B.HVBox v]
-  setElem _ (HHBox h) = [B.HHBox h]
+  setElem _ (HListBox b) = [B.HChild b]
   setElem _ (HRule a) = [B.HRule a]
   setElem _ (HKern a) = [B.HKern a]
   setElem _ (HFontDefinition a) = [B.HFontDefinition a]
@@ -278,8 +266,7 @@ instance SettableListElem BreakableHListElem B.HBoxElem where
 instance SettableListElem BreakableVListElem B.VBoxElem where
   setElem ls (VGlue g) = [B.VGlue $ setGlue ls g]
   setElem _ (VPenalty _) = []
-  setElem _ (VVBox v) = [B.VVBox v]
-  setElem _ (VHBox h) = [B.VHBox h]
+  setElem _ (VListBox b) = [B.VChild b]
   setElem _ (VRule a) = [B.VRule a]
   setElem _ (VKern a) = [B.VKern a]
   setElem _ (VFontDefinition a) = [B.VFontDefinition a]
@@ -294,8 +281,7 @@ instance BreakableListElem BreakableHListElem where
   isDiscardable (HPenalty _) = True
   isDiscardable _ = False
 
-  isBox (HVBox _) = True
-  isBox (HHBox _) = True
+  isBox (HListBox _) = True
   isBox (HRule _) = True
   isBox (HCharacter _) = True
   isBox _ = False
@@ -308,9 +294,10 @@ instance BreakableListElem BreakableHListElem where
     -- TODO: Discretionary break and Math-off.
     _ -> Nothing
 
+  naturalLength = B.naturalWidth
+
 instance Dimensioned BreakableHListElem where
-  naturalWidth (HVBox v) = B.naturalWidth v
-  naturalWidth (HHBox h) = B.naturalWidth h
+  naturalWidth (HListBox b) = B.naturalWidth b
   naturalWidth (HRule r) = B.naturalWidth r
   naturalWidth (HGlue g) = dimen g
   naturalWidth (HKern k) = B.kernDimen k
@@ -319,8 +306,7 @@ instance Dimensioned BreakableHListElem where
   naturalWidth (HFontSelection _) = 0
   naturalWidth (HCharacter c) = naturalWidth c
 
-  naturalHeight (HVBox v) = B.naturalHeight v
-  naturalHeight (HHBox h) = B.naturalHeight h
+  naturalHeight (HListBox b) = B.naturalHeight b
   naturalHeight (HRule r) = B.naturalHeight r
   naturalHeight (HGlue _) = 0
   naturalHeight (HKern _) = 0
@@ -329,8 +315,7 @@ instance Dimensioned BreakableHListElem where
   naturalHeight (HFontSelection _) = 0
   naturalHeight (HCharacter c) = B.naturalHeight c
 
-  naturalDepth (HVBox v) = B.naturalDepth v
-  naturalDepth (HHBox h) = B.naturalDepth h
+  naturalDepth (HListBox b) = B.naturalDepth b
   naturalDepth (HRule r) = B.naturalDepth r
   naturalDepth (HGlue _) = 0
   naturalDepth (HKern _) = 0
@@ -340,8 +325,7 @@ instance Dimensioned BreakableHListElem where
   naturalDepth (HCharacter c) = B.naturalDepth c
 
 instance Dimensioned BreakableVListElem where
-  naturalWidth (VVBox v) = B.naturalWidth v
-  naturalWidth (VHBox h) = B.naturalWidth h
+  naturalWidth (VListBox b) = B.naturalWidth b
   naturalWidth (VRule r) = B.naturalWidth r
   naturalWidth (VGlue _) = 0
   naturalWidth (VKern _) = 0
@@ -349,8 +333,7 @@ instance Dimensioned BreakableVListElem where
   naturalWidth (VFontDefinition _) = 0
   naturalWidth (VFontSelection _) = 0
 
-  naturalHeight (VVBox v) = B.naturalHeight v
-  naturalHeight (VHBox h) = B.naturalHeight h
+  naturalHeight (VListBox b) = B.naturalHeight b
   naturalHeight (VRule r) = B.naturalHeight r
   naturalHeight (VGlue g) = dimen g
   naturalHeight (VKern k) = B.kernDimen k
@@ -358,8 +341,7 @@ instance Dimensioned BreakableVListElem where
   naturalHeight (VFontDefinition _) = 0
   naturalHeight (VFontSelection _) = 0
 
-  naturalDepth (VVBox v) = B.naturalDepth v
-  naturalDepth (VHBox h) = B.naturalDepth h
+  naturalDepth (VListBox b) = B.naturalDepth b
   naturalDepth (VRule r) = B.naturalDepth r
   naturalDepth (VGlue _) = 0
   naturalDepth (VKern _) = 0
@@ -413,9 +395,9 @@ listStatusBadness (NaturallyBad _ Fixable{ratio=r, order=0})
 listStatusBadness (NaturallyBad _ Fixable{order=_})
   = FiniteBadness 0
 
-listGlueSetRatio :: (BreakableList [a], BreakableListElem a) => Int -> [a] -> ListStatus
+listGlueSetRatio :: BreakableListElem a => Int -> [a] -> ListStatus
 listGlueSetRatio desiredLength cs =
-  glueSetRatio (naturalLength cs - desiredLength) (flex cs)
+  glueSetRatio (naturalListLength cs - desiredLength) (flex cs)
 
 setListElems :: SettableListElem a b => ListStatus -> [a] -> [b]
 setListElems _status = concatMap (setElem _status)
@@ -455,9 +437,9 @@ touchyFilter test (x:xs)
   | otherwise = touchyFilter test xs
 
 -- Expects contents in reading order.
-bestRoute :: Int -> Int -> Int -> [BreakableHListElem] -> Route
-bestRoute _ _ _ [] = Route {lines=[], demerit=0}
-bestRoute desiredWidth tolerance linePenalty cs =
+bestRouteInner :: Int -> Int -> Int -> [BreakableHListElem] -> Route
+bestRouteInner _ _ _ [] = Route {lines=[], demerit=0}
+bestRouteInner desiredWidth tolerance linePenalty cs =
   let
     breaks = allBreaks cs
     analyzedBreaks = zip breaks $ analyzeBreak <$> breaks
@@ -500,7 +482,7 @@ bestRoute desiredWidth tolerance linePenalty cs =
     bestRouteFromBreak addDemerit (Break{before=bef, after=aft, item=br}, (_status, bad)) =
       let
         d = if addDemerit then lineDemerit bad br else 0
-        subRoute = bestRoute desiredWidth tolerance linePenalty aft
+        subRoute = bestRouteInner desiredWidth tolerance linePenalty aft
         thisLine = Line{contents=bef, status=_status}
       in appendToRoute subRoute thisLine d
 
@@ -516,12 +498,15 @@ bestRoute desiredWidth tolerance linePenalty cs =
       in
         breakDemerit + listDemerit
 
+bestRoute :: Int -> Int -> Int -> [BreakableHListElem] -> [Line]
+bestRoute x y z cs = lines $ bestRouteInner x y z cs
+
 -- Expects contents in reverse order.
 -- Returns lines in reading order.
-setParagraph :: Int -> Int -> Int -> [BreakableHListElem] -> [B.HBox]
-setParagraph _ _ _ [] = []
-setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
-  let
+setParagraph :: ([BreakableHListElem] -> [Line]) -> [BreakableHListElem] -> [[B.HBoxElem]]
+setParagraph _ [] = []
+setParagraph getRoute cs@(end:rest) = fmap setLine lns
+  where
     -- Remove the final item if it's glue.
     csTrimmed = case end of
       HGlue _ -> rest
@@ -530,10 +515,9 @@ setParagraph desiredWidth tolerance linePenalty cs@(end:rest) =
     -- Add extra bits to finish the list.
     csFinished = (HPenalty $ Penalty $ -tenK):hFilGlue:(HPenalty $ Penalty tenK):csTrimmed
 
-    Route{lines=lns} = bestRoute desiredWidth tolerance linePenalty $ reverse csFinished
-    setLine Line{contents=lncs, status=_status} = B.HBox{contents=setListElems _status lncs, desiredLength=B.To desiredWidth}
-  in
-    fmap setLine lns
+    lns = getRoute $ reverse csFinished
+
+    setLine Line{contents=lncs, status=_status} = setListElems _status lncs
 
 -- Page breaking.
 

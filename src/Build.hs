@@ -283,15 +283,17 @@ extractParagraph acc stream = case eCom of
     modStream = extractParagraph acc
     continueUnchanged = extractParagraph acc stream'
 
-extractParagraphLineBoxes :: Bool -> Stream -> ConfStateT IO ([B.HBox], Stream)
+extractParagraphLineBoxes :: Bool -> Stream -> ConfStateT IO ([[B.HBoxElem]], Stream)
 extractParagraphLineBoxes indent stream = do
   desiredW <- gets (`lengthParameter` DesiredWidth)
   lineTol <- gets (`integerParameter` LineTolerance)
   linePen <- gets (`integerParameter` LinePenalty)
   indentBox <- gets parIndentBox
   (hList, stream') <- extractParagraph [indentBox | indent] stream
-  let lineBoxes = A.setParagraph desiredW lineTol linePen hList
-  return (lineBoxes, stream')
+  let
+    getRoute = A.bestRoute desiredW lineTol linePen
+    elemLists = A.setParagraph getRoute hList
+  return (elemLists, stream')
 
 -- current items, best cost, breakpoint for that cost.
 type CurrentPage = ([A.BreakableVListElem], Maybe Int, Maybe Int)
@@ -379,8 +381,7 @@ addVListElem :: Monad m
              -> A.BreakableVListElem
              -> ConfStateT m [A.BreakableVListElem]
 addVListElem acc e = case e of
-  (A.VHBox b) -> addVListBox b
-  (A.VVBox b) -> addVListBox b
+  (A.VListBox b) -> addVListBox b
   _ -> return $ e:acc
   where
     addVListBox b = do
@@ -487,5 +488,7 @@ extractPages pages cur acc stream = case eCom of
     addParagraphToPage indent = do
       -- Paraboxes returned in reading order.
       (lineBoxes, stream'') <- extractParagraphLineBoxes indent stream
-      acc' <- addVListElems acc $ A.VHBox <$> lineBoxes
+      desiredW <- gets (`lengthParameter` DesiredWidth)
+      let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
+      acc' <- addVListElems acc $ (A.VListBox . toBox) <$> lineBoxes
       continueSamePage acc' stream''

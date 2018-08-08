@@ -10,6 +10,8 @@ import qualified Unit
 import qualified DVI.Encode as DVIE
 import qualified TFM.Main as TFMM
 
+data Direction = Horizontal | Vertical deriving Show
+
 data DesiredLength
   = Natural
   | Spread Int
@@ -52,21 +54,18 @@ newtype SetGlue = SetGlue{glueDimen :: Int}
 instance Show SetGlue where
   show (SetGlue d) = "[" ++ Unit.showSP d ++ "]"
 
-data VBox = VBox
-  { contents :: [VBoxElem]
-  , desiredLength :: DesiredLength
-  } deriving (Show)
+data BoxContents = HBoxContents [HBoxElem] | VBoxContents [VBoxElem]
+  deriving Show
 
-data HBox = HBox
-  { contents :: [HBoxElem]
+data Box = Box
+  { contents :: BoxContents
   , desiredLength :: DesiredLength
   } deriving (Show)
 
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 
 data HBoxElem
-  = HVBox VBox
-  | HHBox HBox
+  = HChild Box
   | HRule Rule
   | HGlue SetGlue
   | HKern Kern
@@ -76,8 +75,7 @@ data HBoxElem
   deriving (Show)
 
 data VBoxElem
-  = VVBox VBox
-  | VHBox HBox
+  = VChild Box
   | VRule Rule
   | VGlue SetGlue
   | VKern Kern
@@ -103,8 +101,7 @@ instance Dimensioned Character where
   naturalDepth Character{depth=d} = d
 
 instance Dimensioned HBoxElem where
-  naturalWidth (HVBox v) = naturalWidth v
-  naturalWidth (HHBox h) = naturalWidth h
+  naturalWidth (HChild b) = naturalWidth b
   naturalWidth (HRule r) = naturalWidth r
   naturalWidth (HGlue g) = glueDimen g
   naturalWidth (HKern k) = kernDimen k
@@ -112,8 +109,7 @@ instance Dimensioned HBoxElem where
   naturalWidth (HFontSelection _) = 0
   naturalWidth (HCharacter c) = naturalWidth c
 
-  naturalHeight (HVBox v) = naturalHeight v
-  naturalHeight (HHBox h) = naturalHeight h
+  naturalHeight (HChild b) = naturalHeight b
   naturalHeight (HRule r) = naturalHeight r
   naturalHeight (HGlue _) = 0
   naturalHeight (HKern _) = 0
@@ -121,8 +117,7 @@ instance Dimensioned HBoxElem where
   naturalHeight (HFontSelection _) = 0
   naturalHeight (HCharacter c) = naturalHeight c
 
-  naturalDepth (HVBox v) = naturalDepth v
-  naturalDepth (HHBox h) = naturalDepth h
+  naturalDepth (HChild b) = naturalDepth b
   naturalDepth (HRule r) = naturalDepth r
   naturalDepth (HGlue _) = 0
   naturalDepth (HKern _) = 0
@@ -131,65 +126,53 @@ instance Dimensioned HBoxElem where
   naturalDepth (HCharacter c) = naturalDepth c
 
 instance Dimensioned VBoxElem where
-  naturalWidth (VVBox v) = naturalWidth v
-  naturalWidth (VHBox h) = naturalWidth h
+  naturalWidth (VChild b) = naturalWidth b
   naturalWidth (VRule r) = naturalWidth r
   naturalWidth (VGlue _) = 0
   naturalWidth (VKern _) = 0
   naturalWidth (VFontDefinition _) = 0
   naturalWidth (VFontSelection _) = 0
 
-  naturalHeight (VVBox v) = naturalHeight v
-  naturalHeight (VHBox h) = naturalHeight h
+  naturalHeight (VChild b) = naturalHeight b
   naturalHeight (VRule r) = naturalHeight r
   naturalHeight (VGlue g) = glueDimen g
   naturalHeight (VKern k) = kernDimen k
   naturalHeight (VFontDefinition _) = 0
   naturalHeight (VFontSelection _) = 0
 
-  naturalDepth (VVBox v) = naturalDepth v
-  naturalDepth (VHBox h) = naturalDepth h
+  naturalDepth (VChild b) = naturalDepth b
   naturalDepth (VRule r) = naturalDepth r
   naturalDepth (VGlue _) = 0
   naturalDepth (VKern _) = 0
   naturalDepth (VFontDefinition _) = 0
   naturalDepth (VFontSelection _) = 0
 
-instance Dimensioned VBox where
-  naturalWidth VBox{contents=[]} = 0
-  naturalWidth VBox{contents=cs} = maximum $ fmap naturalWidth cs
+instance Dimensioned Box where
+  naturalWidth Box{contents=(HBoxContents cs), desiredLength=Natural} = sum $ fmap naturalWidth cs
+  naturalWidth Box{contents=(HBoxContents _), desiredLength=To to} = to
+  naturalWidth Box{contents=(VBoxContents [])} = 0
+  naturalWidth Box{contents=(VBoxContents cs)} = maximum $ fmap naturalWidth cs
 
-  naturalHeight VBox{contents=cs, desiredLength=Natural} =
-    sum $ fmap naturalWidth cs
-  naturalHeight VBox{desiredLength=To to} = to
-  -- TODO.
-  -- Spread spread -> 1010
+  naturalHeight Box{contents=(HBoxContents [])} = 0
+  naturalHeight Box{contents=(HBoxContents cs)} = maximum $ naturalHeight <$> cs
+  naturalHeight Box{contents=(VBoxContents cs), desiredLength=Natural} = sum $ fmap naturalHeight cs
+  naturalHeight Box{contents=(VBoxContents _), desiredLength=To to} = to
 
+  naturalDepth Box{contents=(HBoxContents [])} = 0
+  naturalDepth Box{contents=(HBoxContents cs)} = maximum $ naturalDepth <$> cs
   -- TODO:
   -- NaturalDepth
 
-instance Dimensioned HBox where
-  naturalWidth HBox{contents=cs, desiredLength=d} =
-    case d of
-      Natural -> sum $ fmap naturalWidth cs
-      To to -> to
-      -- TODO.
-      -- Spread spread -> 1010
+  -- TODO.
+  -- Spread
 
-  naturalHeight HBox{contents=[]} = 0
-  naturalHeight HBox{contents=cs} = maximum $ naturalHeight <$> cs
-
-  naturalDepth HBox{contents=[]} = 0
-  naturalDepth HBox{contents=cs} = maximum $ naturalDepth <$> cs
 
 class DVIAble a where
   toDVI :: a -> [DVIE.Instruction]
 
-instance DVIAble VBox where
-  toDVI VBox{contents=cs} = concatMap toDVI cs
-
-instance DVIAble HBox where
-  toDVI HBox{contents=cs} = concatMap toDVI cs
+instance DVIAble Box where
+  toDVI Box{contents=HBoxContents cs} = concatMap toDVI cs
+  toDVI Box{contents=VBoxContents cs} = concatMap toDVI cs
 
 -- TODO: Don't know how to handle depth.
 instance DVIAble Rule where
@@ -223,10 +206,8 @@ instance DVIAble Character where
   toDVI Character {code = c} = [DVIE.Character {charNr = c, move = True}]
 
 instance DVIAble HBoxElem where
-  toDVI (HVBox e) =
-    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveRight {distance = naturalWidth e}]
-  toDVI (HHBox e) =
-    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveRight {distance=naturalWidth e}]
+  toDVI (HChild b) =
+    [DVIE.PushStack] ++ toDVI b ++ [DVIE.PopStack, DVIE.MoveRight {distance = naturalWidth b}]
     -- TODO: Rule.
   toDVI (HGlue g) = [DVIE.MoveRight {distance = glueDimen g}]
   toDVI (HKern k) = [DVIE.MoveRight {distance = kernDimen k}]
@@ -237,10 +218,8 @@ instance DVIAble HBoxElem where
   toDVI (HCharacter e) = toDVI e
 
 instance DVIAble VBoxElem where
-  toDVI (VVBox e) =
-    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight e + naturalDepth e}]
-  toDVI (VHBox e) =
-    [DVIE.PushStack] ++ toDVI e ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight e + naturalDepth e}]
+  toDVI (VChild b) =
+    [DVIE.PushStack] ++ toDVI b ++ [DVIE.PopStack, DVIE.MoveDown {distance = naturalHeight b + naturalDepth b}]
     -- TODO: Rule.
   toDVI (VGlue g) = [DVIE.MoveDown {distance = glueDimen g}]
   toDVI (VKern k) = [DVIE.MoveDown {distance = kernDimen k}]
