@@ -94,6 +94,9 @@ data AllModesCommand
   -- | AddAlignedMaterial DesiredLength AlignmentMaterial
   | StartParagraph { indent :: Bool }
   | EndParagraph
+
+  -- Unofficial stuff while playing.
+  | ExpandMacro Expand.Macro
   deriving Show
 
 data VModeCommand
@@ -143,6 +146,7 @@ parseAllModeCommand mode = P.choice [ relax
                                     , addRule mode
                                     , startParagraph
                                     , endParagraph
+                                    , expandMacro
                                     ]
 
 checkModeAndToken :: Expand.Axis -> (Expand.ModedCommandParseToken -> Bool) ->
@@ -271,6 +275,14 @@ startParagraph = satisfyThen parToCom
 
 endParagraph :: AllModeCommandParser
 endParagraph = const EndParagraph <$> skipSatisfiedEquals Expand.EndParagraph
+
+expandMacro :: AllModeCommandParser
+expandMacro = do
+  macro <- satisfyThen tokToMacro
+  return $ ExpandMacro macro
+  where
+    tokToMacro (Expand.MacroToken m) = Just m
+    tokToMacro _ = Nothing
 
 -- HMode.
 

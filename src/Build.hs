@@ -476,6 +476,8 @@ extractPages pages cur acc stream = case eCom of
       -- Commands to start horizontal mode.
       P.StartParagraph indent ->
         addParagraphToPage indent
+      P.ExpandMacro (Expand.Macro [] ts) ->
+          modStream $ insertLexTokens stream' ts
     P.EnterHMode ->
       addParagraphToPage True
   where

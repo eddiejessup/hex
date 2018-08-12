@@ -49,6 +49,12 @@ data BoxRegisterAttribute
   | IsVoid
   deriving (Show, Eq)
 
+data MacroParameter = MacroParameter { nr :: Int, delimiter :: [Lex.Token] }
+  deriving (Show, Eq)
+
+data Macro = Macro [MacroParameter] [Lex.Token]
+  deriving (Show, Eq)
+
 data ModedCommandParseToken
   = AddSpecifiedGlue -- \vskip, \hskip
   | AddPresetGlue PresetGlueType -- \{v,h}{fil,fill,filneg,ss}
@@ -258,6 +264,9 @@ data ParseToken
   -- | Or -- \or
 
   | LexToken Lex.Token
+
+  -- Unofficial stuff while playing.
+  | MacroToken Macro
   deriving (Show, Eq)
 
 instance Ord ParseToken where
@@ -293,6 +302,9 @@ defaultCSMap = HMap.fromList
     -- Temporary pragmatism.
     , (Lex.ControlWord "selectfont", TokenForFont theFontNr)
     , (Lex.ControlWord "end", End)
+
+    , (Lex.ControlWord "amacro", MacroToken $ Macro [] [Lex.ControlSequence $ Lex.ControlWord "uppercase", Lex.CharCat 123 Lex.BeginGroup, Lex.CharCat 99 Lex.Letter ] )
+
     ]
 
 lexToParseToken :: Bool -> Lex.Token -> ParseToken
