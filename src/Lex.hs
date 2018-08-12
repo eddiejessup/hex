@@ -5,13 +5,14 @@ module Lex where
 import qualified Data.Char as C
 import Data.Hashable (Hashable, hashWithSalt)
 import qualified Categorise as Cat
+import Categorise (CharCode)
 
 data ControlSequence
   = ControlSymbol Char
   | ControlWord String
   deriving (Show, Eq)
 
-data ControlSequenceLike = ActiveCharacter Cat.CharCode | ControlSequenceProper ControlSequence
+data ControlSequenceLike = ActiveCharacter CharCode | ControlSequenceProper ControlSequence
   deriving (Show, Eq)
 
 instance Hashable ControlSequenceLike where
@@ -39,7 +40,7 @@ data LexCatCode
   deriving (Show, Eq)
 
 data Token
-  = CharCat {char :: Cat.CharCode, cat :: LexCatCode}
+  = CharCat {char :: CharCode, cat :: LexCatCode}
   | ControlSequence ControlSequence
   deriving (Show, Eq)
 
@@ -84,13 +85,12 @@ isEndOfLine :: Cat.CatCode -> Bool
 isEndOfLine Cat.EndOfLine = True
 isEndOfLine _ = False
 
-extractToken :: Cat.CharCatMap -> LexState -> [Cat.CharCode] -> Maybe (Token, LexState, [Cat.CharCode])
+extractToken :: ([CharCode] -> Maybe (Cat.CharCat, [CharCode])) -> LexState -> [CharCode] -> Maybe (Token, LexState, [CharCode])
 extractToken _ _ [] = Nothing
-extractToken ccMap state cs = do
+extractToken getCC state cs = do
   (cc1, rest) <- getCC cs
   extractTokenRest cc1 rest
   where
-    getCC = Cat.extractCharCat (Cat.catLookup ccMap)
     extractTokenRest Cat.CharCat{cat=cat1, char=n} rest
       -- Control sequence: Grab it.
       | Cat.Escape <- cat1 = do
@@ -112,10 +112,10 @@ extractToken ccMap state cs = do
           return (ControlSequence contSeq, nextState, rest2)
       -- Comment: Ignore rest' of line and switch to line-begin.
       | Cat.Comment <- cat1 =
-          extractToken ccMap LineBegin $ chopDropWhile getCC (not . isEndOfLine . Cat.cat) rest
+          extractToken getCC LineBegin $ chopDropWhile getCC (not . isEndOfLine . Cat.cat) rest
       -- Space at the start of a line: Ignore.
       | LineBegin <- state, Cat.Space <- cat1 =
-          extractToken ccMap state rest
+          extractToken getCC state rest
       -- Empty line: Make a paragraph.
       | LineBegin <- state, Cat.EndOfLine <- cat1 =
           Just (ControlSequence $ ControlWord "par", LineBegin, rest)
@@ -142,9 +142,9 @@ extractToken ccMap state cs = do
           Just (CharCat{char=n, cat=Active}, LineMiddle, rest)
       -- Space, or end of line, while skipping blanks: Ignore.
       | SkippingBlanks <- state, Cat.Space <- cat1 =
-          extractToken ccMap state rest
+          extractToken getCC state rest
       | SkippingBlanks <- state, Cat.EndOfLine <- cat1 =
-          extractToken ccMap state rest
+          extractToken getCC state rest
       -- Space in middle of line: Make a space token and start skipping blanks.
       | LineMiddle <- state, Cat.Space <- cat1 =
           Just (spaceTok, SkippingBlanks, rest)
@@ -153,8 +153,8 @@ extractToken ccMap state cs = do
           Just (spaceTok, LineBegin, rest)
       -- Ignored: Ignore.
       | Cat.Ignored <- cat1 =
-          extractToken ccMap state rest
+          extractToken getCC state rest
       -- Invalid: Print error message and ignore.
       -- TODO: TeXbook says to print an error message in this case.
       | Cat.Invalid <- cat1 =
-          extractToken ccMap state rest
+          extractToken getCC state rest

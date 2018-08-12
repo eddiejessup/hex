@@ -331,5 +331,7 @@ lexToParseToken _ _ t
 extractToken :: Bool -> Cat.CharCatMap -> CSMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (ParseToken, Lex.LexState, [Cat.CharCode])
 extractToken _ _ _ _ [] = Nothing
 extractToken expandTok ccMap csMap lexState cs = do
-  (lexTok, lexStateNext, rest) <- Lex.extractToken ccMap lexState cs
+  (lexTok, lexStateNext, rest) <- Lex.extractToken getCC lexState cs
   return (lexToParseToken expandTok csMap lexTok, lexStateNext, rest)
+  where
+    getCC = Cat.extractCharCat (Cat.catLookup ccMap)
