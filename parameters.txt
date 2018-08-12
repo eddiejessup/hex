@@ -320,3 +320,33 @@ everycr
 
 errhelp
     : Tokens that supplement an \errmessage
+
+## Special integers
+
+spacefactor
+
+prevgraf
+
+deadcycles
+
+insertpenalties
+
+## Special lengths
+
+prevdepth
+
+pagegoal
+
+pagetotal
+
+pagestretch
+
+pagefilstretch
+
+pagefillstretch
+
+pagefilllstretch
+
+pageshrink
+
+pagedepth
