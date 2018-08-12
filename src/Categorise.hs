@@ -57,21 +57,21 @@ usableCharCatMap = foldl (\m (k, v) -> HMap.insert k v m) defaultCharCatMap extr
 catLookup :: CharCatMap -> CharCode -> CatCode
 catLookup m n = HMap.lookupDefault Invalid n m
 
-extractCharCat :: CharCatMap -> [CharCode] -> Maybe (CharCat, [CharCode])
+extractCharCat :: (CharCode -> CatCode) -> [CharCode] -> Maybe (CharCat, [CharCode])
 extractCharCat _ [] = Nothing
-extractCharCat ccMap (n1:n2:n3:rest)
+extractCharCat charToCat (n1:n2:n3:rest)
     -- Next two characters must be identical, and have category
     -- 'Superscript', and triod character mustn't have category 'EndOfLine'.
  = 
   let
-    cat1 = catLookup ccMap n1
+    cat1 = charToCat n1
     n3Triod = if n3 < 64 then n3 + 64 else n3 - 64
-    charCatTriod = CharCat {char = n3Triod, cat = catLookup ccMap n3Triod}
+    charCatTriod = CharCat {char = n3Triod, cat = charToCat n3Triod}
     charCatSimple = CharCat {char = n1, cat = cat1}
   in
     if (cat1 == Superscript) &&
        (n1 == n2) &&
-       (catLookup ccMap n3 /= EndOfLine)
+       (charToCat n3 /= EndOfLine)
     then Just (charCatTriod, rest)
     else Just (charCatSimple, n2:n3:rest)
-extractCharCat ccMap (n1:rest) = Just (CharCat {char = n1, cat = catLookup ccMap n1}, rest)
+extractCharCat charToCat (n1:rest) = Just (CharCat {char = n1, cat = charToCat n1}, rest)
