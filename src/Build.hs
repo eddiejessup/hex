@@ -18,10 +18,10 @@ import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Extra (findM)
 
-import qualified TFM.Main as TFMM
+import qualified TFM
 import qualified TFM.Character as TFMC
 
-import qualified BoxDraw as B
+import qualified Box as B
 import qualified Config as Conf
 import Config (Config(..)
               , ConfStateT
@@ -32,7 +32,9 @@ import Config (Config(..)
               , parIndentBox
               , updateFuncMap)
 import Adjacent (Adjacency(..))
-import qualified Arrange as A
+import qualified BreakList as BL
+import BreakList.Line (bestRoute, setParagraph)
+import BreakList.Page (pageBreakJudgment, PageBreakJudgment(..), setPage)
 import qualified Lex
 import qualified Unit
 import qualified Expand
@@ -49,7 +51,7 @@ fontDir2 :: AbsPathToDir
 theFontDirectories :: [AbsPathToDir]
 theFontDirectories = [fontDir1, fontDir2]
 
-currentFontInfo :: Monad m => MaybeT (Conf.ConfReaderT m) TFMM.TexFont
+currentFontInfo :: Monad m => MaybeT (Conf.ConfReaderT m) TFM.TexFont
 currentFontInfo = do
   -- Maybe font number isn't set.
   maybeFontNr <- lift $ asks currentFontNr
@@ -91,7 +93,7 @@ defineFont cs fPath = do
     fNr = csToFontNr cs
     ioFontDef = do
       fontPath <- findFilePath fPath theFontDirectories
-      font <- liftIO $ TFMM.readTFMFancy fontPath
+      font <- liftIO $ TFM.readTFMFancy fontPath
       nonExtName <- Path.setFileExtension "" fPath
       let fontName = Path.toFilePath $ Path.filename nonExtName
       return B.FontDefinition { fontNr = fNr
@@ -109,17 +111,17 @@ selectFont n = do
 characterBox :: Monad m => Int -> MaybeT (Conf.ConfReaderT m) B.Character
 characterBox code = do
   font <- currentFontInfo
-  let toSP = TFMM.designScaleSP font
-  TFMC.Character{width=w, height=h, depth=d} <- MaybeT (return $ HMap.lookup code $ TFMM.characters font)
+  let toSP = TFM.designScaleSP font
+  TFMC.Character{width=w, height=h, depth=d} <- MaybeT (return $ HMap.lookup code $ TFM.characters font)
   return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
 
-spaceGlue :: Monad m => MaybeT (Conf.ConfReaderT m) A.Glue
+spaceGlue :: Monad m => MaybeT (Conf.ConfReaderT m) BL.Glue
 spaceGlue = do
-  font@TFMM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo
+  font@TFM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo
   let
-    toSP = TFMM.designScaleSP font
-    toFlex = A.finiteFlex . fromIntegral . toSP
-  return A.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
+    toSP = TFM.designScaleSP font
+    toFlex = BL.finiteFlex . fromIntegral . toSP
+  return BL.Glue{dimen=toSP d, stretch=toFlex str, shrink=toFlex shr}
 
 evaluateNormalInteger :: P.NormalInteger -> Integer
 evaluateNormalInteger (P.IntegerConstant n) = n
@@ -157,15 +159,15 @@ evaluateLength :: Int -> P.Length -> Int
 evaluateLength mag (P.Length True uLn) = evaluateULength mag uLn
 evaluateLength mag (P.Length False uLn) = -(evaluateULength mag uLn)
 
-evaluateFlex :: Int -> Maybe P.Flex -> A.GlueFlex
-evaluateFlex mag (Just (P.FiniteFlex ln)) = A.GlueFlex{factor=fromIntegral $ evaluateLength mag ln, order=0}
-evaluateFlex _ (Just (P.FilFlex (P.FilLength True f ord))) = A.GlueFlex{factor=evaluateFactor f, order=ord}
-evaluateFlex _ (Just (P.FilFlex (P.FilLength False f ord))) = A.GlueFlex{factor= -(evaluateFactor f), order=ord}
-evaluateFlex _ Nothing = A.noFlex
+evaluateFlex :: Int -> Maybe P.Flex -> BL.GlueFlex
+evaluateFlex mag (Just (P.FiniteFlex ln)) = BL.GlueFlex{factor=fromIntegral $ evaluateLength mag ln, order=0}
+evaluateFlex _ (Just (P.FilFlex (P.FilLength True f ord))) = BL.GlueFlex{factor=evaluateFactor f, order=ord}
+evaluateFlex _ (Just (P.FilFlex (P.FilLength False f ord))) = BL.GlueFlex{factor= -(evaluateFactor f), order=ord}
+evaluateFlex _ Nothing = BL.noFlex
 
-evaluateGlue :: Int -> P.Glue -> A.Glue
+evaluateGlue :: Int -> P.Glue -> BL.Glue
 evaluateGlue mag (P.ExplicitGlue dim str shr) =
-  A.Glue {
+  BL.Glue {
     dimen=evaluateLength mag dim,
     stretch=evaluateFlex mag str,
     shrink=evaluateFlex mag shr
@@ -174,8 +176,8 @@ evaluateGlue mag (P.ExplicitGlue dim str shr) =
 evaluateKern :: Int -> P.Length -> B.Kern
 evaluateKern mag = B.Kern . evaluateLength mag
 
-evaluatePenalty :: P.Number -> A.Penalty
-evaluatePenalty = A.Penalty . fromIntegral . evaluateNumber
+evaluatePenalty :: P.Number -> BL.Penalty
+evaluatePenalty = BL.Penalty . fromIntegral . evaluateNumber
 
 applyChangeCaseToStream :: Stream -> Expand.VDirection -> P.BalancedText -> Stream
 applyChangeCaseToStream s d (P.BalancedText ts) = insertLexTokens s $ changeCase d <$> ts
@@ -194,7 +196,7 @@ runReaderOnState :: MonadState r f => Reader r b -> f b
 runReaderOnState f = runReader f <$> get
 
 -- We build a paragraph list in reverse order.
-extractParagraph :: [A.BreakableHListElem] -> Stream -> ConfStateT IO ([A.BreakableHListElem], Stream)
+extractParagraph :: [BL.BreakableHListElem] -> Stream -> ConfStateT IO ([BL.BreakableHListElem], Stream)
 extractParagraph acc stream = case eCom of
   Left x -> error $ show x
   Right com -> case com of
@@ -210,7 +212,7 @@ extractParagraph acc stream = case eCom of
 
     P.AddCharacter{code=i} -> do
       charBox <- runReaderOnState (runMaybeT (characterBox i))
-      hCharBox <- case A.HCharacter <$> charBox of
+      hCharBox <- case BL.HCharacter <$> charBox of
           Just c -> return c
           Nothing -> fail "Could not get character info"
       modAccum $ hCharBox:acc
@@ -234,23 +236,23 @@ extractParagraph acc stream = case eCom of
 
       -- Commands to modify the list.
       P.Assign P.Assignment{body=P.SelectFont fNr} -> do
-        fontSel <- A.HFontSelection <$> selectFont fNr
+        fontSel <- BL.HFontSelection <$> selectFont fNr
         modAccum $ fontSel:acc
       P.Assign P.Assignment{body=P.DefineFont cs fPath} -> do
-        fontDef <- A.HFontDefinition <$> defineFont cs fPath
+        fontDef <- BL.HFontDefinition <$> defineFont cs fPath
         modAccum $ fontDef:acc
       P.AddPenalty n ->
-        modAccum $ A.HPenalty (evaluatePenalty n):acc
+        modAccum $ BL.HPenalty (evaluatePenalty n):acc
       P.AddKern ln -> do
         mag <- gets (`integerParameter` Magnification)
-        modAccum $ A.HKern (evaluateKern mag ln):acc
+        modAccum $ BL.HKern (evaluateKern mag ln):acc
       P.AddGlue g -> do
         mag <- gets (`integerParameter` Magnification)
-        modAccum $ A.HGlue (evaluateGlue mag g):acc
+        modAccum $ BL.HGlue (evaluateGlue mag g):acc
       P.AddSpace -> do
         glue <- runReaderOnState (runMaybeT spaceGlue)
         hGlue <- case glue of
-          Just sg -> return $ A.HGlue sg
+          Just sg -> return $ BL.HGlue sg
           Nothing -> fail "Could not get space glue"
         modAccum $ hGlue:acc
       -- \indent: An empty box of width \parindent is appended to the current
@@ -269,7 +271,7 @@ extractParagraph acc stream = case eCom of
             Nothing -> 0
             Just ln -> evaluateLength mag ln
           rule = B.Rule{width=evalW, height=evalH, depth=evalD}
-        modAccum $ A.HRule rule:acc
+        modAccum $ BL.HRule rule:acc
       P.StartParagraph indent ->
         if indent then do
           indentBox <- gets parIndentBox
@@ -291,51 +293,51 @@ extractParagraphLineBoxes indent stream = do
   indentBox <- gets parIndentBox
   (hList, stream') <- extractParagraph [indentBox | indent] stream
   let
-    getRoute = A.bestRoute desiredW lineTol linePen
-    elemLists = A.setParagraph getRoute hList
+    getRoute = bestRoute desiredW lineTol linePen
+    elemLists = setParagraph getRoute hList
   return (elemLists, stream')
 
 -- current items, best cost, breakpoint for that cost.
-type CurrentPage = ([A.BreakableVListElem], Maybe Int, Maybe Int)
+type CurrentPage = ([BL.BreakableVListElem], Maybe Int, Maybe Int)
 
-newCurrentPage :: ([A.BreakableVListElem], Maybe Int, Maybe Int)
+newCurrentPage :: ([BL.BreakableVListElem], Maybe Int, Maybe Int)
 newCurrentPage = ([], Nothing, Nothing)
 
-runPageBuilder :: Monad m => CurrentPage -> [A.BreakableVListElem] -> ConfStateT m [B.Page]
+runPageBuilder :: Monad m => CurrentPage -> [BL.BreakableVListElem] -> ConfStateT m [B.Page]
 runPageBuilder (cur, _, _) [] = do
   desiredH <- gets (`lengthParameter` DesiredHeight)
-  return [A.setPage desiredH $ reverse cur]
+  return [setPage desiredH $ reverse cur]
 runPageBuilder (cur, costBest, iBest) (x:xs)
   -- If the current vlist has no boxes, we discard a discardable item.
-  | not $ any A.isBox cur =
-    if A.isDiscardable x
+  | not $ any BL.isBox cur =
+    if BL.isDiscardable x
       then runPageBuilder (cur, costBest, iBest) xs
       else runPageBuilder (x:cur, costBest, iBest) xs
   -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
   -- the cost c of breaking at this point.
-  | A.isDiscardable x = do
+  | BL.isDiscardable x = do
     desiredH <- gets (`lengthParameter` DesiredHeight)
-    case A.toBreakItem (Adjacency (headMay cur, x, headMay xs)) of
+    case BL.toBreakItem (Adjacency (headMay cur, x, headMay xs)) of
       -- If we can't break here, just add it to the list and continue.
       Nothing -> runPageBuilder (x:cur, costBest, iBest) xs
       Just brk ->
-        let breakStatus = A.pageBreakJudgment cur brk desiredH
+        let breakStatus = pageBreakJudgment cur brk desiredH
         in case (breakStatus, iBest) of
-          (A.DoNotBreak, _) ->
+          (DoNotBreak, _) ->
             runPageBuilder (x:cur, costBest, iBest) xs
           -- I don't think this condition will ever be satisfied, but if we
           -- decide to break before any valid break-point has been considered,
           -- just carry on.
-          (A.BreakPageAtBest, Nothing) ->
+          (BreakPageAtBest, Nothing) ->
             runPageBuilder (x:cur, costBest, iBest) xs
           -- If c = ∞, we break at the best breakpoint so far.
           -- The current vlist material following that best breakpoint is
           -- returned to the recent contributions, to consider again.
-          (A.BreakPageAtBest, Just iB) ->
+          (BreakPageAtBest, Just iB) ->
             let
               -- the `reverse` will put both of these into reading order.
               (curNewPage, toReturn) = splitAt iB $ reverse cur
-              newPage = A.setPage desiredH curNewPage
+              newPage = setPage desiredH curNewPage
             in
               -- xs is also in reading order
               -- We didn't actually split at x: x was just what made us compute
@@ -344,15 +346,15 @@ runPageBuilder (cur, costBest, iBest) (x:xs)
               (newPage:) <$> runPageBuilder ([], Nothing, Nothing) (toReturn ++ (x:xs))
           -- If p ≤ −10000, we know the best breakpoint is this one, so break
           -- here.
-          (A.BreakPageHere, _) ->
+          (BreakPageHere, _) ->
             let
               -- the `reverse` will put this into reading order.
-              newPage = A.setPage desiredH $ reverse cur
+              newPage = setPage desiredH $ reverse cur
             in
               (newPage:) <$> runPageBuilder ([], Nothing, Nothing) xs
           -- If the resulting cost <= the smallest cost seen so far, remember
           -- the current breakpoint as the best so far.
-          (A.TrackCost cHere, _) ->
+          (TrackCost cHere, _) ->
             let
               thisCostAndI = (Just cHere, Just $ length cur)
               (costBestNew, iBestNew) =
@@ -377,17 +379,17 @@ runPageBuilder (cur, costBest, iBest) (x:xs)
 --    \lineskip
 -- Then set \prevdepth to the depth of the new box.
 addVListElem :: Monad m
-             => [A.BreakableVListElem]
-             -> A.BreakableVListElem
-             -> ConfStateT m [A.BreakableVListElem]
+             => [BL.BreakableVListElem]
+             -> BL.BreakableVListElem
+             -> ConfStateT m [BL.BreakableVListElem]
 addVListElem acc e = case e of
-  (A.VListBox b) -> addVListBox b
+  (BL.VListBox b) -> addVListBox b
   _ -> return $ e:acc
   where
     addVListBox b = do
       prevDepth <- gets (`specialIntegerParameter` PreviousBoxDepth)
       -- TODO:
-      (A.Glue baselineLength blineStretch blineShrink) <- gets (`glueParameter` BaselineGlue)
+      (BL.Glue baselineLength blineStretch blineShrink) <- gets (`glueParameter` BaselineGlue)
       blineLengthMin <- gets (`lengthParameter` BaselineLengthMin)
       minBlineGlue <- gets (`glueParameter` MinBaselineGlue)
 
@@ -401,18 +403,18 @@ addVListElem acc e = case e of
             -- Intuition: set the distance between baselines to \baselineskip, but no
             -- closer than \lineskiplimit [theBaselineLengthMin], in which case
             -- \lineskip [theMinBaselineGlue] is used.
-            glue = A.VGlue $ if proposedBaselineLength >= blineLengthMin
-              then A.Glue proposedBaselineLength blineStretch blineShrink
+            glue = BL.VGlue $ if proposedBaselineLength >= blineLengthMin
+              then BL.Glue proposedBaselineLength blineStretch blineShrink
               else minBlineGlue
           in e:glue:acc
 
 addVListElems :: Monad m
-              => [A.BreakableVListElem]
-              -> [A.BreakableVListElem]
-              -> ConfStateT m [A.BreakableVListElem]
+              => [BL.BreakableVListElem]
+              -> [BL.BreakableVListElem]
+              -> ConfStateT m [BL.BreakableVListElem]
 addVListElems = foldM addVListElem
 
-extractPages :: [B.Page] -> CurrentPage -> [A.BreakableVListElem] -> Stream -> ConfStateT IO ([B.Page], Stream)
+extractPages :: [B.Page] -> CurrentPage -> [BL.BreakableVListElem] -> Stream -> ConfStateT IO ([B.Page], Stream)
 extractPages pages cur acc stream = case eCom of
   Left x -> error $ show x
   Right com -> case com of
@@ -442,19 +444,19 @@ extractPages pages cur acc stream = case eCom of
 
       -- Commands to modify the list.
       P.Assign P.Assignment{body=P.SelectFont fNr} -> do
-        fontSel <- A.VFontSelection <$> selectFont fNr
+        fontSel <- BL.VFontSelection <$> selectFont fNr
         modAccum $ fontSel:acc
       P.Assign P.Assignment{body=P.DefineFont cs fPath} -> do
-        fontDef <- A.VFontDefinition <$> defineFont cs fPath
+        fontDef <- BL.VFontDefinition <$> defineFont cs fPath
         modAccum $ fontDef:acc
       P.AddPenalty n ->
-        modAccum $ A.VPenalty (evaluatePenalty n):acc
+        modAccum $ BL.VPenalty (evaluatePenalty n):acc
       P.AddKern ln -> do
         mag <- gets (`integerParameter` Magnification)
-        modAccum $ A.VKern (evaluateKern mag ln):acc
+        modAccum $ BL.VKern (evaluateKern mag ln):acc
       P.AddGlue g -> do
         mag <- gets (`integerParameter` Magnification)
-        modAccum $ A.VGlue (evaluateGlue mag g):acc
+        modAccum $ BL.VGlue (evaluateGlue mag g):acc
       P.AddRule{width=w, height=h, depth=d} -> do
         desiredW <- gets (`lengthParameter` DesiredWidth)
         mag <- gets (`integerParameter` Magnification)
@@ -469,7 +471,7 @@ extractPages pages cur acc stream = case eCom of
             Nothing -> 0
             Just ln -> evaluateLength mag ln
           rule = B.Rule{width=evalW, height=evalH, depth=evalD}
-        modAccum (A.VRule rule:acc)
+        modAccum (BL.VRule rule:acc)
 
       -- Commands to start horizontal mode.
       P.StartParagraph indent ->
@@ -490,5 +492,5 @@ extractPages pages cur acc stream = case eCom of
       (lineBoxes, stream'') <- extractParagraphLineBoxes indent stream
       desiredW <- gets (`lengthParameter` DesiredWidth)
       let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
-      acc' <- addVListElems acc $ (A.VListBox . toBox) <$> lineBoxes
+      acc' <- addVListElems acc $ BL.VListBox . toBox <$> lineBoxes
       continueSamePage acc' stream''

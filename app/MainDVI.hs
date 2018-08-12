@@ -11,7 +11,7 @@ import qualified Data.Int as I
 
 import qualified DVI.Encode as DVIE
 
-import qualified TFM.Main as TFMM
+import qualified TFM
 
 showEncArg arg = "\t" ++ (DVIE.name arg) ++ " = " ++ (show $ DVIE.val arg) ++ "\n"
 showEncInstr instr =
@@ -59,7 +59,7 @@ main = do
     -- print $ DVIE.beginPage dviDoc
 
     let fontPath = "cmr10"
-    fontInfo <- TFMM.readTFM "cmr10.tfm"
+    fontInfo <- TFM.readTFM "cmr10.tfm"
     -- let (Right dviDocF) = DVIE.defineFont fontInfo fontPath 1 1.0 dviDoc
 
     let instrs = [ DVIE.Character{charNr=80, move=True}

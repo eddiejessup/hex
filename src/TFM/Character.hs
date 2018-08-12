@@ -89,7 +89,7 @@ readCharInfo tfm contents _code =
                      , italicCorrection=_italicCorrection
                      , special=_special }
 
-readCharInfos :: TFMP.TFM -> BLS.ByteString -> (HashMap.HashMap Int Character)
+readCharInfos :: TFMP.TFM -> BLS.ByteString -> HashMap.HashMap Int Character
 readCharInfos tfm contents =
   let charList = fmap (readCharInfo tfm contents) [TFMP.smallestCharCode tfm..TFMP.largestCharCode tfm]
   in HashMap.fromList $ (\c@Character{code=i} -> (i, c)) <$> charList

@@ -8,13 +8,13 @@ import qualified Data.HashMap.Strict as HMap
 import Control.Monad.State.Lazy (StateT)
 import Control.Monad.Trans.Reader (ReaderT)
 
-import qualified TFM.Main as TFMM
+import qualified TFM
 
-import qualified BoxDraw as B
-import qualified Arrange as A
+import qualified Box as B
+import qualified BreakList as BL
 import qualified Unit
 
-type FontInfoMap = HMap.HashMap Int TFMM.TexFont
+type FontInfoMap = HMap.HashMap Int TFM.TexFont
 
 data IntegerParameterName
   = LineTolerance
@@ -48,7 +48,7 @@ data Config = Config { currentFontNr :: Maybe Int
 
                      , integerParameter :: IntegerParameterName -> Int
                      , lengthParameter :: LengthParameterName -> Int
-                     , glueParameter :: GlueParameterName -> A.Glue
+                     , glueParameter :: GlueParameterName -> BL.Glue
 
                      , specialIntegerParameter :: SpecialIntegerParameterName -> Int } deriving Show
 
@@ -65,9 +65,9 @@ newConfig = Config { currentFontNr=Nothing
 
                    , specialIntegerParameter=newSpecialIntegerParameter }
 
-parIndentBox :: Config -> A.BreakableHListElem
+parIndentBox :: Config -> BL.BreakableHListElem
 parIndentBox conf =
-  A.HListBox B.Box{contents=B.HBoxContents [], desiredLength=B.To $ conf `lengthParameter` ParIndent}
+  BL.HListBox B.Box{contents=B.HBoxContents [], desiredLength=B.To $ conf `lengthParameter` ParIndent}
 
 newIntegerParameter :: IntegerParameterName -> Int
 newIntegerParameter LineTolerance = 500
@@ -80,9 +80,9 @@ newLengthParameter DesiredHeight = 37500000
 newLengthParameter BaselineLengthMin = 0
 newLengthParameter ParIndent = Unit.toScaledPointApprox (20 :: Int) Unit.Point
 
-newGlueParameter :: GlueParameterName -> A.Glue
-newGlueParameter BaselineGlue = A.Glue (Unit.toScaledPointApprox (12 :: Int) Unit.Point) A.noFlex A.noFlex
-newGlueParameter MinBaselineGlue = A.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) A.noFlex A.noFlex
+newGlueParameter :: GlueParameterName -> BL.Glue
+newGlueParameter BaselineGlue = BL.Glue (Unit.toScaledPointApprox (12 :: Int) Unit.Point) BL.noFlex BL.noFlex
+newGlueParameter MinBaselineGlue = BL.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) BL.noFlex BL.noFlex
 
 newSpecialIntegerParameter :: SpecialIntegerParameterName -> Int
 newSpecialIntegerParameter PreviousBoxDepth = -Unit.oneKPt

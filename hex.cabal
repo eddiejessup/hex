@@ -16,25 +16,34 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Categorise
-                     , Arrange
                      , Build
                      , Unit
                      , Adjacent
                      , Lex
                      , Expand
-                     , BoxDraw
+                     , Config
+
+                     , BreakList
+                     , BreakList.Line
+                     , BreakList.Page
+
+
+                     , Box
+                     , Box.Draw
+
+                     , TFM
                      , TFM.Parse
                      , TFM.Character
-                     , TFM.Main
+
                      , DVI.Encode
+
+                     , Parse
                      , Parse.Util
                      , Parse.Common
                      , Parse.Number
                      , Parse.Length
                      , Parse.Glue
                      , Parse.Command
-                     , Parse
-                     , Config
   build-depends:       base
                      , containers
                      , bytestring

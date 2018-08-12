@@ -1,4 +1,4 @@
-module TFM.Main where
+module TFM where
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BLS

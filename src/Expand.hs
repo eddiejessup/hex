@@ -3,6 +3,7 @@
 module Expand where
 
 import qualified Data.HashMap.Strict as HMap
+import Data.Maybe (fromMaybe)
 
 import qualified Lex
 import qualified Categorise as Cat
@@ -296,9 +297,7 @@ defaultCSMap = HMap.fromList
 
 lexToParseToken :: Bool -> Lex.Token -> ParseToken
 lexToParseToken True (Lex.ControlSequence cs)
-  = case HMap.lookup cs defaultCSMap of
-      Just p -> p
-      Nothing -> error "no such control sequence found"
+  = fromMaybe (error "no such control sequence found") (HMap.lookup cs defaultCSMap)
 lexToParseToken _ t
   = LexToken t
 

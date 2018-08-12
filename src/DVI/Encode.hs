@@ -9,7 +9,7 @@ import qualified Data.Int as I
 import qualified Data.Word as W
 import System.FilePath (splitFileName)
 
-import qualified TFM.Main as TFMM
+import qualified TFM
 
 type Fourple a = (a, a, a, a)
 
@@ -515,7 +515,7 @@ data Instruction
   | MoveDownY
   | MoveDownZ
     -- Fonts.
-  | DefineFont { fontInfo :: TFMM.TexFont
+  | DefineFont { fontInfo :: TFM.TexFont
                , fontPath :: FilePath
                , fontNr :: Int
                , scaleFactorRatio :: Rational }
@@ -592,9 +592,9 @@ encodeInstructions (this:rest) magnification = do
                  , fontNr = nr
                  , scaleFactorRatio = scaleRatio
                  } -> do
-        let checksum = TFMM.checksum info
-            designSize = round $ TFMM.designSizeSP info
-            scaleFactor = TFMM.designScaleSP info scaleRatio
+        let checksum = TFM.checksum info
+            designSize = round $ TFM.designSizeSP info
+            scaleFactor = TFM.designScaleSP info scaleRatio
         defineFontInstruction <-
           getDefineFontInstruction nr path scaleFactor designSize checksum
         return

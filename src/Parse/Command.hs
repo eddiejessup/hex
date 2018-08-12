@@ -162,10 +162,8 @@ ignorespaces = do
   return IgnoreSpaces
 
 changeCase :: AllModeCommandParser
-changeCase = do
-  d <- satisfyThen tokToDirection
-  balancedText <- PC.parseGeneralText
-  return $ ChangeCase d balancedText
+changeCase =
+  ChangeCase <$> satisfyThen tokToDirection <*> PC.parseGeneralText
   where
     tokToDirection (Expand.ChangeCase d) = Just d
     tokToDirection _ = Nothing

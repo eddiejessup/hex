@@ -7,7 +7,7 @@ import qualified Data.ByteString.Lazy as BLS
 import Control.Monad.Trans.State.Lazy (runStateT)
 
 import qualified DVI.Encode as DVIE
-import qualified BoxDraw
+import Box.Draw (toDVI)
 import qualified Build
 import qualified Config
 import Parse.Util (newStream)
@@ -36,7 +36,7 @@ main = do
 
   -- putStrLn $ show $ pages !! 0
 
-  let instrs = BoxDraw.toDVI pages
+  let instrs = toDVI pages
   let Right encInstrs = DVIE.encodeDocument (reverse instrs) 1000
   BLS.writeFile "out.dvi" $ DVIE.encode $ reverse encInstrs
 

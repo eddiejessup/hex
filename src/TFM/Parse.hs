@@ -221,12 +221,10 @@ readHeader tfm = do
 
     -- Read header[12 ... 16] if present, containing random bits.
     -- We don't actually use these for anything now.
-    _ <- if postFamilyPos < charInfoPos
-        then sequence [ BG.getWord8 -- Seven-bit safe flag.
-                      , BG.getWord8 -- Unknown.
-                      , BG.getWord8 ] -- 'Face'.
-        else
-            return []
+    CM.when (postFamilyPos < charInfoPos)
+        (sequence_ [ BG.getWord8 -- Seven-bit safe flag.
+                  , BG.getWord8 -- Unknown.
+                  , BG.getWord8 ]) -- 'Face'.
 
     -- Don't read header [18 ... whatever]
 
