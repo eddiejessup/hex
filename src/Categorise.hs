@@ -75,11 +75,3 @@ extractCharCat ccMap (n1:n2:n3:rest)
     then Just (charCatTriod, rest)
     else Just (charCatSimple, n2:n3:rest)
 extractCharCat ccMap (n1:rest) = Just (CharCat {char = n1, cat = catLookup ccMap n1}, rest)
-
-extractAll :: CharCatMap -> [CharCode] -> [CharCat]
-extractAll _ [] = []
-extractAll ccMap cs =
-  case extractCharCat ccMap cs of
-    Nothing -> []
-    Just (thisCC, rest) ->
-      thisCC:extractAll ccMap rest
