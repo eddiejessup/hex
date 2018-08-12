@@ -6,7 +6,6 @@ import qualified Data.HashMap.Strict as HMap
 import Data.Maybe (fromMaybe)
 
 import qualified Lex
-import qualified Categorise as Cat
 
 data HDirection = Leftward | Rightward
   deriving (Show, Eq)
@@ -327,11 +326,3 @@ lexToParseToken True csMap (Lex.ControlSequence cs)
   = fromMaybe (error ("no such control sequence found: " ++ show cs)) (HMap.lookup (Lex.ControlSequenceProper cs) csMap)
 lexToParseToken _ _ t
   = LexToken t
-
-extractToken :: Bool -> Cat.CharCatMap -> CSMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (ParseToken, Lex.LexState, [Cat.CharCode])
-extractToken _ _ _ _ [] = Nothing
-extractToken expandTok ccMap csMap lexState cs = do
-  (lexTok, lexStateNext, rest) <- Lex.extractToken getCC lexState cs
-  return (lexToParseToken expandTok csMap lexTok, lexStateNext, rest)
-  where
-    getCC = Cat.extractCharCat (Cat.catLookup ccMap)

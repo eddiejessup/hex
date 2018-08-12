@@ -78,14 +78,20 @@ instance P.Stream Stream where
   advanceN Proxy _ pos _ = pos
 
   -- take1_ :: s -> Maybe (Token s, s)
-  --
   take1_ (Stream [] _ _ _ _ _) = Nothing
+  -- If the lex token buffer is empty.
   take1_ stream@(Stream cs [] _lexState _ccMap _csMap _expand) = do
-    (pt, lexStateNext, csNext) <- Expand.extractToken _expand _ccMap _csMap _lexState cs
-    let streamNext = stream{codes=csNext, lexState=lexStateNext}
-    return (pt, streamNext)
-  take1_ stream@(Stream _ (lt:lts) _ _ _csMap _expand) =
-    return (Expand.lexToParseToken _expand _csMap lt, stream{lexTokens=lts})
+    (lexTok, _lexState', cs') <- Lex.extractToken getCC _lexState cs
+    let parseTok = Expand.lexToParseToken _expand _csMap lexTok
+    let stream' = stream{codes=cs', lexState=_lexState'}
+    return (parseTok, stream')
+    where
+      getCC = Cat.extractCharCat (Cat.catLookup _ccMap)
+  -- If there is a lex token in the buffer.
+  take1_ stream@(Stream _ (lt:lts) _ _ _csMap _expand) = do
+    let parseTok = Expand.lexToParseToken _expand _csMap lt
+    let stream' = stream{lexTokens=lts}
+    return (parseTok, stream')
 
 -- Helpers.
 
