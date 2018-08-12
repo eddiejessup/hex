@@ -11,6 +11,13 @@ data ControlSequence
   | ControlWord String
   deriving (Show, Eq)
 
+data ControlSequenceLike = ActiveCharacter Cat.CharCode | ControlSequenceProper ControlSequence
+  deriving (Show, Eq)
+
+instance Hashable ControlSequenceLike where
+  hashWithSalt s (ControlSequenceProper cs) = hashWithSalt s cs
+  hashWithSalt s (ActiveCharacter cc) = hashWithSalt s cc
+
 instance Hashable ControlSequence where
   hashWithSalt s (ControlSymbol c) = hashWithSalt s c
   hashWithSalt s (ControlWord w) = hashWithSalt s w

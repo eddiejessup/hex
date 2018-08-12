@@ -6,6 +6,7 @@ import qualified Text.Megaparsec as P
 import Text.Megaparsec ((<|>))
 import qualified Data.Char as C
 import Path (Path, Rel, File, parseRelFile)
+import Control.Monad (when)
 
 import qualified Expand
 import qualified Lex
@@ -22,24 +23,30 @@ import qualified Parse.Glue as PG
 data CharSource = ExplicitChar | CodeChar | TokenChar
   deriving Show
 
+data MacroPrefix
+  = Long
+  | Outer
+  | Global
+  deriving Eq
+
 data AssignmentBody
-  -- = DefineMacro { name :: ControlSequenceLike
-  --               , parameters :: ParameterText
-  --               , contents :: BalancedText
-  --               , long, outer, expanded :: Bool }
+  = DefineMacro { name :: Lex.ControlSequenceLike
+                , parameters :: [Expand.MacroParameter]
+                , contents :: Expand.BalancedText
+                , long, outer :: Bool }
   -- | ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
   -- | SetVariable VariableAssignment
-  -- | ModifyVariable VariableModification
+  -- | ModifyVariable VariableModificatxion
   -- | AssignCode { codeType :: CodeType, codeIndex, value :: Int }
   -- | Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
   -- | FutureLet { name :: ControlSequenceLike, token1, token2 :: Token}
-  = SelectFont Int
+  | SelectFont Int
   -- | SetFamilyMember {member :: FamilyMember, font :: Font}
   -- | SetParShape
   -- | Read
   -- | DefineBox
   -- TEMP: Dummy label constructor until properly implemented.
-  | DefineFont PC.ControlSequenceLike (Path Rel File)
+  | DefineFont Lex.ControlSequenceLike (Path Rel File)
   -- -- Global assignments.
   -- | SetFontAttribute
   -- | SetHyphenation
@@ -67,7 +74,7 @@ data AllModesCommand
   | IgnoreSpaces
   -- | SetAfterAssignmentToken Token
   -- | AddToAfterGroupTokens Tokens
-  | ChangeCase Expand.VDirection PC.BalancedText
+  | ChangeCase Expand.VDirection Expand.BalancedText
   -- | Message MessageStream GeneralText
   -- | OpenInput { streamNr :: Int, fileName :: String }
   -- | CloseInput { streamNr :: Int }
@@ -147,6 +154,7 @@ parseAllModeCommand mode = P.choice [ relax
                                     , startParagraph
                                     , endParagraph
                                     , expandMacro
+                                    , defineMacro
                                     ]
 
 checkModeAndToken :: Expand.Axis -> (Expand.ModedCommandParseToken -> Bool) ->
@@ -192,11 +200,11 @@ macroToFont = do
     parseFileName = do
       PC.skipOptionalSpaces
       nameCodes <- P.some $ satisfyThen tokToChar
-      let name = fmap C.chr nameCodes
+      let fileName = fmap C.chr nameCodes
       PU.skipSatisfied PC.isSpace
-      case parseRelFile (name ++ ".tfm") of
+      case parseRelFile (fileName ++ ".tfm") of
         Just p -> return p
-        Nothing -> fail $ "Invalid filename: " ++ name ++ ".tfm"
+        Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
 
     tokToChar (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=c}) = Just c
     -- 'Other' Characters for decimal digits are OK.
@@ -283,6 +291,37 @@ expandMacro = do
   where
     tokToMacro (Expand.MacroToken m) = Just m
     tokToMacro _ = Nothing
+
+defineMacro :: AllModeCommandParser
+defineMacro = do
+  prefixes <- P.many $ satisfyThen tokToPrefix
+  (defGlobal, defExpand) <- satisfyThen tokToDef
+  cs <- PC.parseCSName
+  params <- parseParameters
+  PU.skipSatisfied PC.isExplicitLeftBrace
+  when defExpand $ error "expanded-def not implemented"
+  _contents <- PC.parseBalancedText
+  return $ Assign $
+    Assignment {
+      body=DefineMacro { name=cs
+                       , parameters=params
+                       , contents=_contents
+                       , long=Long `elem` prefixes
+                       , outer=Outer `elem` prefixes }
+      , global=defGlobal || Global `elem` prefixes
+    }
+
+  where
+    tokToPrefix Expand.Global = Just Global
+    tokToPrefix Expand.Outer = Just Outer
+    tokToPrefix Expand.Long = Just Long
+    tokToPrefix _ = Nothing
+
+    tokToDef Expand.DefineMacro{global=_global, expand=_expand} = Just (_global, _expand)
+    tokToDef _ = Nothing
+
+    -- TODO.
+    parseParameters = return []
 
 -- HMode.
 

@@ -4,21 +4,16 @@ module Parse.Common where
 
 import qualified Text.Megaparsec as P
 
+import Expand (BalancedText(..))
 import qualified Expand
+import Lex (ControlSequenceLike(..))
 import qualified Lex
-import qualified Categorise as Cat
 import qualified Data.Char as C
 import Data.Maybe (isJust)
 import Data.Functor (($>))
 
 import Parse.Util (MatchToken, skipManySatisfied, skipOneOptionalSatisfied, Parser, NullParser)
 import qualified Parse.Util as PU
-
-data ControlSequenceLike = ActiveCharacter Cat.CharCode | ControlSequence Lex.ControlSequence
-  deriving Show
-
-newtype BalancedText = BalancedText [Lex.Token]
-  deriving Show
 
 skipOneOptionalSpace :: NullParser
 skipOneOptionalSpace = skipOneOptionalSatisfied isSpace
@@ -89,7 +84,7 @@ parseCSName :: Parser ControlSequenceLike
 parseCSName = parseWithoutExpansion $ PU.satisfyThen tokToCSLike
   where
     tokToCSLike (Expand.LexToken Lex.CharCat{cat=Lex.Active, char=c}) = Just $ ActiveCharacter c
-    tokToCSLike (Expand.LexToken (Lex.ControlSequence cs)) = Just $ ControlSequence cs
+    tokToCSLike (Expand.LexToken (Lex.ControlSequence cs)) = Just $ ControlSequenceProper cs
     tokToCSLike _ = Nothing
 
 parseNestedBraces :: Int -> Parser [Lex.Token]
@@ -107,15 +102,20 @@ parseNestedBraces n = do
     -- should be seen.
     parseNext _ = Nothing
 
+parseBalancedText :: Parser BalancedText
+parseBalancedText =
+  BalancedText <$> parseWithoutExpansion (parseNestedBraces 1)
+
 parseGeneralText :: Parser BalancedText
 parseGeneralText = do
   skipManySatisfied isFillerItem
-  PU.skipSatisfied isLeftBrace
-  BalancedText <$> parseWithoutExpansion (parseNestedBraces 1)
+  -- TODO: Maybe other things can act as left braces.
+  PU.skipSatisfied isExplicitLeftBrace
+  parseBalancedText
   where
     isFillerItem Expand.Relax = True
     isFillerItem t = isSpace t
 
-    -- TODO: Maybe other things can act as left braces.
-    isLeftBrace (Expand.LexToken Lex.CharCat{cat=Lex.BeginGroup}) = True
-    isLeftBrace _ = False
+isExplicitLeftBrace :: Expand.ParseToken -> Bool
+isExplicitLeftBrace (Expand.LexToken Lex.CharCat{cat=Lex.BeginGroup}) = True
+isExplicitLeftBrace _ = False

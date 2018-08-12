@@ -41,8 +41,10 @@ import qualified Expand
 import qualified Parse as P
 import Parse (Stream, insertLexToken, insertLexTokens)
 
-csToFontNr :: P.ControlSequenceLike -> Int
-csToFontNr (P.ControlSequence (Lex.ControlWord "thefont")) = Expand.theFontNr
+import Debug.Trace
+
+csToFontNr :: Lex.ControlSequenceLike -> Int
+csToFontNr (Lex.ControlSequenceProper (Lex.ControlWord "thefont")) = Expand.theFontNr
 
 fontDir1 :: AbsPathToDir
 (Just fontDir1) = Path.parseAbsDir "/Users/ejm/projects/hex"
@@ -79,7 +81,7 @@ findFilePath :: RelPathToFile -> [AbsPathToDir] -> MaybeT IO (PathToFile Path.Ab
 findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs
 
 defineFont :: (MonadState Config m, MonadIO m) =>
-       P.ControlSequenceLike
+       Lex.ControlSequenceLike
     -> RelPathToFile
     -> m B.FontDefinition
 defineFont cs fPath = do
@@ -179,8 +181,8 @@ evaluateKern mag = B.Kern . evaluateLength mag
 evaluatePenalty :: P.Number -> BL.Penalty
 evaluatePenalty = BL.Penalty . fromIntegral . evaluateNumber
 
-applyChangeCaseToStream :: Stream -> Expand.VDirection -> P.BalancedText -> Stream
-applyChangeCaseToStream s d (P.BalancedText ts) = insertLexTokens s $ changeCase d <$> ts
+applyChangeCaseToStream :: Stream -> Expand.VDirection -> Expand.BalancedText -> Stream
+applyChangeCaseToStream s d (Expand.BalancedText ts) = insertLexTokens s $ changeCase d <$> ts
   where
     -- Set the character code of each character token to its
     -- \uccode or \lccode value, if that value is non-zero.
@@ -191,6 +193,10 @@ applyChangeCaseToStream s d (P.BalancedText ts) = insertLexTokens s $ changeCase
         modFunc = C.ord . switch dir . C.chr
         switch Expand.Upward = C.toUpper
         switch Expand.Downward = C.toLower
+
+defineMacro :: Stream -> P.AssignmentBody -> Stream
+defineMacro stream (P.DefineMacro name params conts False False) =
+  stream{P.csMap=HMap.insert name (Expand.MacroToken $ Expand.Macro params conts) (P.csMap stream)}
 
 runReaderOnState :: MonadState r f => Reader r b -> f b
 runReaderOnState f = runReader f <$> get
@@ -279,6 +285,10 @@ extractParagraph acc stream = case eCom of
         -- \noindent: has no effect in horizontal modes.
         else
           continueUnchanged
+      P.ExpandMacro (Expand.Macro [] (Expand.BalancedText ts)) ->
+          modStream $ insertLexTokens stream' ts
+      P.Assign P.Assignment{body=m@P.DefineMacro{} } ->
+          modStream $ defineMacro stream' m
   where
     (PS.State{stateInput=stream'}, eCom) = P.extractHModeCommand stream
     modAccum ac = extractParagraph ac stream'
@@ -476,8 +486,10 @@ extractPages pages cur acc stream = case eCom of
       -- Commands to start horizontal mode.
       P.StartParagraph indent ->
         addParagraphToPage indent
-      P.ExpandMacro (Expand.Macro [] ts) ->
+      P.ExpandMacro (Expand.Macro [] (Expand.BalancedText ts)) ->
           modStream $ insertLexTokens stream' ts
+      P.Assign P.Assignment{body=m@P.DefineMacro{} } ->
+          modStream $ defineMacro stream' m
     P.EnterHMode ->
       addParagraphToPage True
   where

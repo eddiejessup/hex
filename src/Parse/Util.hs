@@ -25,6 +25,7 @@ data Stream = Stream { codes :: CharCodes
                      , lexTokens :: [Lex.Token]
                      , lexState :: Lex.LexState
                      , ccMap :: Cat.CharCatMap
+                     , csMap :: Expand.CSMap
                      , expand :: Bool }
 
 newStream :: [Cat.CharCode] -> Stream
@@ -32,6 +33,7 @@ newStream cs = Stream { codes=cs
                       , lexTokens=[]
                       , lexState=Lex.LineBegin
                       , ccMap=Cat.usableCharCatMap
+                      , csMap=Expand.defaultCSMap
                       , expand=True }
 
 insertLexToken :: Stream -> Lex.Token -> Stream
@@ -77,13 +79,13 @@ instance P.Stream Stream where
 
   -- take1_ :: s -> Maybe (Token s, s)
   --
-  take1_ (Stream [] _ _ _ _) = Nothing
-  take1_ stream@(Stream cs [] _lexState _ccMap _expand) = do
-    (pt, lexStateNext, csNext) <- Expand.extractToken _expand _ccMap _lexState cs
+  take1_ (Stream [] _ _ _ _ _) = Nothing
+  take1_ stream@(Stream cs [] _lexState _ccMap _csMap _expand) = do
+    (pt, lexStateNext, csNext) <- Expand.extractToken _expand _ccMap _csMap _lexState cs
     let streamNext = stream{codes=csNext, lexState=lexStateNext}
     return (pt, streamNext)
-  take1_ stream@(Stream _ (lt:lts) _ _ _expand) =
-    return (Expand.lexToParseToken _expand lt, stream{lexTokens=lts})
+  take1_ stream@(Stream _ (lt:lts) _ _ _csMap _expand) =
+    return (Expand.lexToParseToken _expand _csMap lt, stream{lexTokens=lts})
 
 -- Helpers.
 

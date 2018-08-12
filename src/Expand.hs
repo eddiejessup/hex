@@ -49,10 +49,13 @@ data BoxRegisterAttribute
   | IsVoid
   deriving (Show, Eq)
 
+newtype BalancedText = BalancedText [Lex.Token]
+  deriving (Show, Eq)
+
 data MacroParameter = MacroParameter { nr :: Int, delimiter :: [Lex.Token] }
   deriving (Show, Eq)
 
-data Macro = Macro [MacroParameter] [Lex.Token]
+data Macro = Macro [MacroParameter] BalancedText
   deriving (Show, Eq)
 
 data ModedCommandParseToken
@@ -129,14 +132,14 @@ data ParseToken
 
   -- -- Involved in assignments.
   -- -- * * Modifying how to apply assignments.
-  -- |      Global -- \global
+  |      Global -- \global
 
   -- -- * Defining macros.
   -- -- * * Modifying how to parse the macro.
-  -- |      Long -- \long
-  -- |      Outer -- \outer
-  -- --     \def, \gdef, \edef (expanded-def), \xdef (global-expanded-def).
-  -- |      DefineMacro { global, expand :: Bool }
+  |      Long -- \long
+  |      Outer -- \outer
+  --     \def, \gdef, \edef (expanded-def), \xdef (global-expanded-def).
+  |      DefineMacro { global, expand :: Bool }
   -- -- * * Modifying how to parse the macro.
 
   -- -- * Setting variable values.
@@ -275,46 +278,58 @@ instance Ord ParseToken where
 theFontNr :: Int
 theFontNr = 1
 
-defaultCSMap :: HMap.HashMap Lex.ControlSequence ParseToken
-defaultCSMap = HMap.fromList
-    [ (Lex.ControlWord "relax", Relax)
-    , (Lex.ControlWord "ignorespaces", IgnoreSpaces)
-    , (Lex.ControlWord "uppercase", ChangeCase Upward)
-    , (Lex.ControlWord "lowercase", ChangeCase Downward)
-    , (Lex.ControlWord "penalty", AddPenalty)
-    , (Lex.ControlWord "kern", AddKern)
-    , (Lex.ControlWord "vskip", ModedCommand Vertical AddSpecifiedGlue)
-    , (Lex.ControlWord "hskip", ModedCommand Horizontal AddSpecifiedGlue)
-    , (Lex.ControlWord "hfil", ModedCommand Horizontal $ AddPresetGlue Fil)
-    , (Lex.ControlWord "vfil", ModedCommand Vertical $ AddPresetGlue Fil)
-    , (Lex.ControlWord "hfill", ModedCommand Horizontal $ AddPresetGlue Fill)
-    , (Lex.ControlWord "vfill", ModedCommand Vertical $ AddPresetGlue Fill)
-    , (Lex.ControlWord "hfilneg", ModedCommand Horizontal $ AddPresetGlue FilNeg)
-    , (Lex.ControlWord "vfilneg", ModedCommand Vertical $ AddPresetGlue FilNeg)
-    , (Lex.ControlWord "hss", ModedCommand Horizontal $ AddPresetGlue StretchOrShrink)
-    , (Lex.ControlWord "vss", ModedCommand Vertical $ AddPresetGlue StretchOrShrink)
-    , (Lex.ControlWord "indent", StartParagraph{indent=True})
-    , (Lex.ControlWord "noindent", StartParagraph{indent=False})
-    , (Lex.ControlWord "par", EndParagraph)
-    , (Lex.ControlWord "hrule", ModedCommand Vertical AddRule)
-    , (Lex.ControlWord "vrule", ModedCommand Horizontal AddRule)
-    , (Lex.ControlWord "font", MacroToFont)
-    -- Temporary pragmatism.
-    , (Lex.ControlWord "selectfont", TokenForFont theFontNr)
-    , (Lex.ControlWord "end", End)
+type CSMap = HMap.HashMap Lex.ControlSequenceLike ParseToken
 
-    , (Lex.ControlWord "amacro", MacroToken $ Macro [] [Lex.ControlSequence $ Lex.ControlWord "uppercase", Lex.CharCat 123 Lex.BeginGroup, Lex.CharCat 99 Lex.Letter ] )
+defaultCSMap :: CSMap
+defaultCSMap = HMap.fromList
+    [ (Lex.ControlSequenceProper (Lex.ControlWord "relax"), Relax)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "ignorespaces"), IgnoreSpaces)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "uppercase"), ChangeCase Upward)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "lowercase"), ChangeCase Downward)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "penalty"), AddPenalty)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "kern"), AddKern)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "vskip"), ModedCommand Vertical AddSpecifiedGlue)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "hskip"), ModedCommand Horizontal AddSpecifiedGlue)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "hfil"), ModedCommand Horizontal $ AddPresetGlue Fil)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "vfil"), ModedCommand Vertical $ AddPresetGlue Fil)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "hfill"), ModedCommand Horizontal $ AddPresetGlue Fill)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "vfill"), ModedCommand Vertical $ AddPresetGlue Fill)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "hfilneg"), ModedCommand Horizontal $ AddPresetGlue FilNeg)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "vfilneg"), ModedCommand Vertical $ AddPresetGlue FilNeg)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "hss"), ModedCommand Horizontal $ AddPresetGlue StretchOrShrink)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "vss"), ModedCommand Vertical $ AddPresetGlue StretchOrShrink)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "indent"), StartParagraph{indent=True})
+    , (Lex.ControlSequenceProper (Lex.ControlWord "noindent"), StartParagraph{indent=False})
+    , (Lex.ControlSequenceProper (Lex.ControlWord "par"), EndParagraph)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "hrule"), ModedCommand Vertical AddRule)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "vrule"), ModedCommand Horizontal AddRule)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "font"), MacroToFont)
+    -- Temporary pragmatism.
+    , (Lex.ControlSequenceProper (Lex.ControlWord "selectfont"), TokenForFont theFontNr)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "end"), End)
+
+    -- Macro prefixes.
+    , (Lex.ControlSequenceProper (Lex.ControlWord "global"), Global)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "long"), Long)
+    , (Lex.ControlSequenceProper (Lex.ControlWord "outer"), Outer)
+    -- Macro def types.
+    , (Lex.ControlSequenceProper (Lex.ControlWord "def"), DefineMacro{ global=False, expand=False })
+    , (Lex.ControlSequenceProper (Lex.ControlWord "edef"), DefineMacro{ global=False, expand=True })
+    , (Lex.ControlSequenceProper (Lex.ControlWord "gdef"), DefineMacro{ global=True, expand=False })
+    , (Lex.ControlSequenceProper (Lex.ControlWord "xdef"), DefineMacro{ global=True, expand=True })
+
+    , (Lex.ControlSequenceProper (Lex.ControlWord "amacro"), MacroToken $ Macro [] $ BalancedText [Lex.ControlSequence $ Lex.ControlWord "uppercase", Lex.CharCat 123 Lex.BeginGroup, Lex.CharCat 99 Lex.Letter ] )
 
     ]
 
-lexToParseToken :: Bool -> Lex.Token -> ParseToken
-lexToParseToken True (Lex.ControlSequence cs)
-  = fromMaybe (error "no such control sequence found") (HMap.lookup cs defaultCSMap)
-lexToParseToken _ t
+lexToParseToken :: Bool -> CSMap -> Lex.Token -> ParseToken
+lexToParseToken True csMap (Lex.ControlSequence cs)
+  = fromMaybe (error ("no such control sequence found: " ++ show cs)) (HMap.lookup (Lex.ControlSequenceProper cs) csMap)
+lexToParseToken _ _ t
   = LexToken t
 
-extractToken :: Bool -> Cat.CharCatMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (ParseToken, Lex.LexState, [Cat.CharCode])
-extractToken _ _ _ [] = Nothing
-extractToken expand ccMap lexState cs = do
+extractToken :: Bool -> Cat.CharCatMap -> CSMap -> Lex.LexState -> [Cat.CharCode] -> Maybe (ParseToken, Lex.LexState, [Cat.CharCode])
+extractToken _ _ _ _ [] = Nothing
+extractToken expandTok ccMap csMap lexState cs = do
   (lexTok, lexStateNext, rest) <- Lex.extractToken ccMap lexState cs
-  return (lexToParseToken expand lexTok, lexStateNext, rest)
+  return (lexToParseToken expandTok csMap lexTok, lexStateNext, rest)
