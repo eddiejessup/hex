@@ -8,6 +8,9 @@ extra-deps:
 
 extra-package-dbs: []
 
-
 ghc-options:
   "$everything": -O0 -j4
+
+flags:
+  hsdev:
+    docs: false

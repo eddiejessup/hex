@@ -309,7 +309,7 @@ instance Encodable Argument where
   encode = encode . val
 
 instance Encodable EncodableInstruction where
-  encode instr = (encode $ op instr) `BLS.append` (encode $ arguments instr)
+  encode instr = encode (op instr) `BLS.append` encode (arguments instr)
 
 instance Encodable a => Encodable [a] where
   encode = BLS.concat . fmap encode
@@ -706,10 +706,9 @@ getPostPostambleInstr postamblePointer =
          signature
      }
 
-encodeDocument :: [Instruction] -> Int -> Either String [EncodableInstruction]
-encodeDocument instrs magnification = do
-  (mundaneInstrs, _, beginPagePointers, _, maxStackDepth) <-
-    encodeInstructions instrs magnification
+buildDocument :: [Instruction] -> Int -> Either String [EncodableInstruction]
+buildDocument instrs magnification = do
+  (mundaneInstrs, _, beginPagePointers, _, maxStackDepth) <- encodeInstructions (reverse instrs) magnification
   let (maxPageHeightPlusDepth, maxPageWidth) = (1, 1)
       postambleInstr =
         getPostambleInstr

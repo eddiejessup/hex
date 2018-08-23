@@ -219,6 +219,9 @@ macroToFont = do
       55 -> Just c
       56 -> Just c
       57 -> Just c
+      -- Not in the spec, but let's say "/" and "." are OK.
+      46 -> Just c
+      47 -> Just c
       _ -> Nothing
     tokToChar _ = Nothing
 

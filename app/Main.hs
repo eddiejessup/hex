@@ -1,43 +1,62 @@
-{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main where
 
-import qualified Data.Char as C
-import qualified Data.ByteString.Lazy as BLS
-import Control.Monad.Trans.State.Lazy (runStateT)
+import Prelude hiding (writeFile)
 
-import qualified DVI.Encode as DVIE
+import Data.Char (ord)
+import Data.ByteString.Lazy (writeFile)
+import Control.Monad.Trans.State.Lazy (runStateT)
+import Data.Maybe
+import System.Console.GetOpt
+import System.Environment
+
+import DVI.Encode (buildDocument, encode)
 import Box.Draw (toDVI)
-import qualified Build
-import qualified Config
+import Build (extractPages, newCurrentPage)
+import Config (newConfig)
 import Parse.Util (newStream)
+
+data Flag
+ = Help
+ | Output FilePath
+ deriving Show
+
+options :: [OptDescr Flag]
+options =
+  [ Option ['h'] ["help"]    (NoArg Help)            "show usage information"
+  , Option ['o'] ["output"]  (OptArg output "FILE")  "output to FILE"
+  ]
+  where
+    output = Output . fromMaybe "out.dvi"
+
+usage :: String
+usage = usageInfo header options
+  where header = "Usage: hex [OPTION...] file"
+
+parseArgs :: [String] -> IO ([Flag], [String])
+parseArgs argStr = 
+  case getOpt Permute options argStr of
+     (o, n, []) -> return (o, n)
+     (_, _, errs) -> ioError $ userError $ concat errs ++ usage
+
+run :: FilePath -> FilePath -> IO ()
+run inFName outFName = do
+  stream <- newStream . fmap ord <$> readFile inFName
+
+  conf <- newConfig
+  ((pages, _), _) <- runStateT (extractPages [] newCurrentPage [] stream) conf
+
+  let instrs = toDVI pages
+  case buildDocument instrs 1000 of
+    Left err -> ioError $ userError err
+    Right encInstrs ->  writeFile outFName $ encode $ reverse encInstrs
 
 main :: IO ()
 main = do
-  contents <- readFile "test.tex"
-  let contentsCode = fmap C.ord contents
-
-  -- Get some char-cats.
-  -- let charCats = Cat.extractAll Cat.usableCharCatMap contentsCode
-
-  -- Get some tokens.
-  -- let tokens = Lex.extractAll Cat.usableCharCatMap contentsCode
-  -- putStrLn $ List.intercalate "\n" $ fmap show tokens
-
-  -- Get some commands.
-  -- let coms = Parse.extractAllDebug Cat.usableCharCatMap contentsCode
-  -- putStrLn $ List.intercalate "\n" $ fmap show coms
-
-  let stream = newStream contentsCode
-
-  -- page <- Build.extractPage Build.newConfig [] stream
-
-  ((pages, _), _) <- runStateT (Build.extractPages [] Build.newCurrentPage [] stream) Config.newConfig
-
-  -- putStrLn $ show $ pages !! 0
-
-  let instrs = toDVI pages
-  let Right encInstrs = DVIE.encodeDocument (reverse instrs) 1000
-  BLS.writeFile "out.dvi" $ DVIE.encode $ reverse encInstrs
-
+  getArgs >>= parseArgs >>= \case
+    ([Help], []) -> putStrLn usage
+    ([], [inFName]) -> run inFName "out.dvi"
+    ([Output outFName], [inFName]) -> run inFName outFName
+    (_, _) -> ioError $ userError usage
   return ()

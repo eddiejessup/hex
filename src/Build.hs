@@ -4,10 +4,8 @@
 
 module Build where
 
+import Config
 import qualified Data.HashMap.Strict as HMap
-import System.Directory (doesFileExist)
-import Path ((</>))
-import qualified Path
 import qualified Text.Megaparsec as PS
 import qualified Data.Char as C
 import Safe (headMay)
@@ -16,21 +14,13 @@ import Control.Monad.Trans.Reader (asks, runReader, Reader)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Extra (findM)
+import Path
 
 import qualified TFM
 import qualified TFM.Character as TFMC
 
 import qualified Box as B
 import qualified Config as Conf
-import Config (Config(..)
-              , ConfStateT
-              , IntegerParameterName(..)
-              , LengthParameterName(..)
-              , GlueParameterName(..)
-              , SpecialIntegerParameterName(..)
-              , parIndentBox
-              , updateFuncMap)
 import Adjacent (Adjacency(..))
 import qualified BreakList as BL
 import BreakList.Line (bestRoute, setParagraph)
@@ -41,17 +31,8 @@ import qualified Expand
 import qualified Parse as P
 import Parse (Stream, insertLexToken, insertLexTokens)
 
-import Debug.Trace
-
 csToFontNr :: Lex.ControlSequenceLike -> Int
 csToFontNr (Lex.ControlSequenceProper (Lex.ControlWord "thefont")) = Expand.theFontNr
-
-fontDir1 :: AbsPathToDir
-(Just fontDir1) = Path.parseAbsDir "/Users/ejm/projects/hex"
-fontDir2 :: AbsPathToDir
-(Just fontDir2) = Path.parseAbsDir "/Users/ejm/projects/hex/support"
-theFontDirectories :: [AbsPathToDir]
-theFontDirectories = [fontDir1, fontDir2]
 
 currentFontInfo :: Monad m => MaybeT (Conf.ConfReaderT m) TFM.TexFont
 currentFontInfo = do
@@ -63,29 +44,13 @@ currentFontInfo = do
   fInfo <- HMap.lookup <$> MaybeT (return maybeFontNr) <*> lift (asks fontInfoMap)
   MaybeT $ return fInfo
 
-type PathToFile b = Path.Path b Path.File
-type RelPathToFile = PathToFile Path.Rel
-type AbsPathToDir = Path.Path Path.Abs Path.Dir
-
-firstExistingPath :: [PathToFile b] -> MaybeT IO (PathToFile b)
-firstExistingPath ps =
-  -- Make a MaybeT of...
-  MaybeT $
-    -- The result of an IO function, lifted to our MaybeT IO monad.
-    liftIO $
-      -- namely, 'find', but using a predicate which acts in the IO monad,
-      -- and which tests if a file exists.
-      findM (doesFileExist . Path.toFilePath) ps
-
-findFilePath :: RelPathToFile -> [AbsPathToDir] -> MaybeT IO (PathToFile Path.Abs)
-findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs
-
 defineFont :: (MonadState Config m, MonadIO m) =>
        Lex.ControlSequenceLike
-    -> RelPathToFile
+    -> Path Rel File
     -> m B.FontDefinition
 defineFont cs fPath = do
-  maybeFontDef <- liftIO $ runMaybeT ioFontDef
+  theFontDirectories <- gets fontDirectories
+  maybeFontDef <- liftIO $ runMaybeT $ ioFontDef theFontDirectories
   case maybeFontDef of
     Just fontDef@B.FontDefinition{fontInfo=font} -> do
       modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
@@ -93,8 +58,8 @@ defineFont cs fPath = do
     Nothing -> fail "Could not define font"
   where
     fNr = csToFontNr cs
-    ioFontDef = do
-      fontPath <- findFilePath fPath theFontDirectories
+    ioFontDef fontDirs = do
+      fontPath <- findFilePath fPath fontDirs
       font <- liftIO $ TFM.readTFMFancy fontPath
       nonExtName <- Path.setFileExtension "" fPath
       let fontName = Path.toFilePath $ Path.filename nonExtName
