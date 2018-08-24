@@ -278,15 +278,11 @@ data ArgVal
   | S String
   deriving (Show)
 
-data Argument = Argument
-  { name :: String
-  , val :: ArgVal
-  } deriving (Show)
+data Argument = Argument String ArgVal
+  deriving (Show)
 
-data EncodableInstruction = EncodableInstruction
-  { op :: Operation
-  , arguments :: [Argument]
-  } deriving (Show)
+data EncodableInstruction = EncodableInstruction Operation [Argument]
+  deriving (Show)
 
 class Encodable a where
   encLength :: a -> Int
@@ -306,10 +302,10 @@ instance Encodable Operation where
   encode = B.encode . (fromIntegral :: Int -> W.Word8) . fromEnum
 
 instance Encodable Argument where
-  encode = encode . val
+  encode (Argument _ val) = encode val
 
 instance Encodable EncodableInstruction where
-  encode instr = encode (op instr) `BLS.append` encode (arguments instr)
+  encode (EncodableInstruction op args) = encode op `BLS.append` encode args
 
 instance Encodable a => Encodable [a] where
   encode = BLS.concat . fmap encode
@@ -373,9 +369,12 @@ buildIntArgVal signed n = do
       if signed
         then S2 $ fromIntegral n
         else U2 $ fromIntegral n
-    3 -> return $ S4 $ fromIntegral n
-    4 -> return $ S4 $ fromIntegral n
-    b -> fail $ "Cannot handle this number of bytes: " ++ show b
+    3 ->
+      return $ S4 $ fromIntegral n
+    4 ->
+      return $ S4 $ fromIntegral n
+    b ->
+      fail $ "Cannot handle this number of bytes: " ++ show b
 
 pickSizeOp :: Fourple a -> Bool -> Int -> Either String (a, ArgVal)
 pickSizeOp (op1, op2, _, op4) signed n = do
@@ -397,8 +396,7 @@ pickSizeOpUnsigned ops = pickSizeOp ops False
 getVarByteInstruction :: Fourple Operation -> String -> Int -> Bool -> Either String EncodableInstruction
 getVarByteInstruction ops _name n signed = do
   (_op, argVal) <- pickSizeOp ops signed n
-  let arg = Argument {name = _name, val = argVal}
-  return EncodableInstruction {op = _op, arguments = [arg]}
+  return $ EncodableInstruction _op [Argument _name argVal]
 
 -- Encoding abstract instructions.
 longSelectFontOps :: Fourple Operation
@@ -408,15 +406,15 @@ getSelectFontNrInstruction :: Int -> Either String EncodableInstruction
 getSelectFontNrInstruction fNr = do
   (longOp, argVal) <- pickSizeOpUnsigned longSelectFontOps fNr
   let shortOp = toEnum $ fNr + fromEnum SelectFontNr0
-      fontNrArg = Argument {name = "font_number", val = argVal}
+      fontNrArg = Argument "font_number" argVal
       (_op, args) =
         if fNr < 64
           then (shortOp, [])
           else (longOp, [fontNrArg])
-  return EncodableInstruction {op = _op, arguments = args}
+  return $ EncodableInstruction _op args
 
 getSimpleEncInstruction :: Operation -> EncodableInstruction
-getSimpleEncInstruction _op = EncodableInstruction {op = _op, arguments = []}
+getSimpleEncInstruction _op = EncodableInstruction _op []
 
 endPageInstruction :: EncodableInstruction
 endPageInstruction = getSimpleEncInstruction EndPage
@@ -433,15 +431,12 @@ lastOrMinus1 a = last a
 
 getBeginPageInstruction :: Int -> EncodableInstruction
 getBeginPageInstruction lastBeginPoint =
-  let boringArg n = Argument {name = 'c' : show n, val = S4 $ fromIntegral n}
+  let boringArg n = Argument ('c' : show n) (S4 $ fromIntegral n)
       boringArgs = fmap boringArg ([0 .. 9] :: [Int])
       lastBeginPointArg =
-        Argument
-        { name = "last_begin_page_pointer"
-        , val = S4 $ fromIntegral lastBeginPoint
-        }
+        Argument "last_begin_page_pointer" (S4 $ fromIntegral lastBeginPoint)
       args = boringArgs ++ [lastBeginPointArg]
-  in EncodableInstruction {op = BeginPage, arguments = args}
+  in EncodableInstruction BeginPage args
 
 -- Define font.
 defineFontOps :: Fourple Operation
@@ -464,22 +459,20 @@ getDefineFontInstruction fNr fPath scaleFactor designSize fontChecksum = do
           then ""
           else dirPathRaw
       args =
-        [ Argument {name = "font_nr", val = fontNrArgVal}
-        , Argument {name = "checksum", val = U4 $ fromIntegral fontChecksum}
-        , Argument {name = "scale_factor", val = S4 $ fromIntegral scaleFactor}
-        , Argument {name = "design_size", val = S4 $ fromIntegral designSize}
-        , Argument
-          {name = "dir_path_length", val = U1 $ fromIntegral $ length dirPath}
-        , Argument
-          {name = "file_name_length", val = U1 $ fromIntegral $ length fileName}
-        , Argument {name = "font_path", val = S fPath}
+        [ Argument "font_nr" fontNrArgVal
+        , Argument "checksum" (U4 $ fromIntegral fontChecksum)
+        , Argument "scale_factor" (S4 $ fromIntegral scaleFactor)
+        , Argument "design_size" (S4 $ fromIntegral designSize)
+        , Argument "dir_path_length" (U1 $ fromIntegral $ length dirPath)
+        , Argument "file_name_length" (U1 $ fromIntegral $ length fileName)
+        , Argument "font_path" (S fPath)
         ]
   if fPath == (dirPath ++ fileName)
     then return ()
     else fail $
          "Split path badly: " ++
          fPath ++ " not equal to (" ++ dirPath ++ ", " ++ fileName ++ ")"
-  return EncodableInstruction {op = _op, arguments = args}
+  return $ EncodableInstruction _op args
 
 -- Put or set characters.
 setCharOps :: Fourple Operation
@@ -492,12 +485,12 @@ getCharacterInstruction :: Int -> Bool -> Either String EncodableInstruction
 getCharacterInstruction code True = do
   (longOp, charNrArgVal) <- pickSizeOpUnsigned setCharOps code
   let shortOp = toEnum $ code + fromEnum SetChar0
-      charNrArg = Argument {name = "char_nr", val = charNrArgVal}
+      charNrArg = Argument "char_nr" charNrArgVal
       (_op, args) =
         if code < 128
           then (shortOp, [])
           else (longOp, [charNrArg])
-  return EncodableInstruction {op = _op, arguments = args}
+  return $ EncodableInstruction _op args
 getCharacterInstruction code False = getVarByteInstruction putCharOps "char_nr" code False
 
 -- Encode abstract instructions.
@@ -553,10 +546,10 @@ encodeInstructions (this:rest) magnification = do
       Rule {width = w, height = h, move = _move} ->
         let _op = if _move then SetRule else PutRule
             args =
-              [ Argument {name = "height", val = U4 $ fromIntegral h}
-              , Argument {name = "width", val = U4 $ fromIntegral w}
+              [ Argument "height" (U4 $ fromIntegral h)
+              , Argument "width" (U4 $ fromIntegral w)
               ]
-            instr = EncodableInstruction {op = _op, arguments = args}
+            instr = EncodableInstruction _op args
         in return ([instr], restCurrentFontNr, restBeginPagePointers)
       BeginNewPage -> do
         let endRet =
@@ -635,76 +628,45 @@ signatureInteger :: Int
 signatureInteger = 223
 
 dviFormatArg :: Argument
-dviFormatArg = Argument {name = "dvi_format", val = U1 $ fromIntegral dviFormat}
+dviFormatArg = Argument "dvi_format" (U1 $ fromIntegral dviFormat)
 
 numeratorArg :: Argument
-numeratorArg = Argument {name = "numerator", val = S4 $ fromIntegral numerator}
+numeratorArg = Argument "numerator" (S4 $ fromIntegral numerator)
 
 denominatorArg :: Argument
-denominatorArg = Argument {name = "denominator", val = S4 $ fromIntegral denominator}
+denominatorArg = Argument "denominator" (S4 $ fromIntegral denominator)
 
 magnificationArg :: Int -> Argument
-magnificationArg magnification = Argument {name = "magnification", val = S4 $ fromIntegral magnification}
+magnificationArg magnification = Argument "magnification" (S4 $ fromIntegral magnification)
 
 getPreambleInstr :: Int -> EncodableInstruction
 getPreambleInstr magnification =
-  EncodableInstruction
-  { op = Preamble
-  , arguments =
-      [ dviFormatArg
-        -- Define a fraction by which all dimensions should be multiplied to get
-        -- lengths in units of 10^(-7) meters.
-      , numeratorArg
-      , denominatorArg
-      , magnificationArg magnification
-      , Argument
-        {name = "comment_length", val = U1 $ fromIntegral $ length comment}
-      , Argument {name = "comment", val = S comment}
-      ]
-  }
+  EncodableInstruction Preamble [ dviFormatArg
+                                  -- Define a fraction by which all dimensions should be multiplied to get
+                                  -- lengths in units of 10^(-7) meters.
+                                , numeratorArg
+                                , denominatorArg
+                                , magnificationArg magnification
+                                , Argument "comment_length" (U1 $ fromIntegral $ length comment)
+                                , Argument "comment" (S comment)
+                                ]
 
 getPostambleInstr :: [Int] -> Int -> Int -> Int -> Int -> EncodableInstruction
 getPostambleInstr beginPagePointers magnification maxPageHeightPlusDepth maxPageWidth maxStackDepth =
-  EncodableInstruction
-  { op = Postamble
-  , arguments =
-      [ Argument
-        { name = "final_begin_page_pointer"
-        , val = S4 $ fromIntegral $ lastOrMinus1 beginPagePointers
-        }
-      , numeratorArg
-      , denominatorArg
-      , magnificationArg magnification
-      , Argument
-        { name = "max_page_height_plus_depth"
-        , val = S4 $ fromIntegral maxPageHeightPlusDepth
-        }
-      , Argument {name = "max_page_width", val = S4 $ fromIntegral maxPageWidth}
-      , Argument
-        {name = "max_stack_depth", val = U2 $ fromIntegral maxStackDepth}
-      , Argument
-        {name = "nr_pages", val = U2 $ fromIntegral $ length beginPagePointers}
-      ]
-  }
+  EncodableInstruction Postamble [ Argument "final_begin_page_pointer" (S4 $ fromIntegral $ lastOrMinus1 beginPagePointers)
+                                 , numeratorArg
+                                 , denominatorArg
+                                 , magnificationArg magnification
+                                 , Argument "max_page_height_plus_depth" (S4 $ fromIntegral maxPageHeightPlusDepth)
+                                 , Argument "max_page_width" (S4 $ fromIntegral maxPageWidth)
+                                 , Argument "max_stack_depth" (U2 $ fromIntegral maxStackDepth)
+                                 , Argument "nr_pages" (U2 $ fromIntegral $ length beginPagePointers) ]
 
 getPostPostambleInstr :: Int -> EncodableInstruction
 getPostPostambleInstr postamblePointer =
-  let signature =
-        replicate
-          4
-          Argument
-          {name = "signature", val = U1 $ fromIntegral signatureInteger}
-  in EncodableInstruction
-     { op = PostPostamble
-     , arguments =
-         [ Argument
-           { name = "postamble_pointer"
-           , val = S4 $ fromIntegral postamblePointer
-           }
-         , dviFormatArg
-         ] ++
-         signature
-     }
+  let signature = replicate 4 $ Argument "signature" (U1 $ fromIntegral signatureInteger)
+  in EncodableInstruction PostPostamble ( [ Argument "postamble_pointer" (S4 $ fromIntegral postamblePointer)
+                                          , dviFormatArg ] ++ signature )
 
 buildDocument :: [Instruction] -> Int -> Either String [EncodableInstruction]
 buildDocument instrs magnification = do
@@ -720,7 +682,7 @@ buildDocument instrs magnification = do
       finishedInstrs = endPageInstruction:mundaneInstrs
       postamblePointer = encLength finishedInstrs
       postPostambleInstr = getPostPostambleInstr postamblePointer
-      fontDefinitions = filter (\instr -> op instr `elem` defineFontOpsLst) mundaneInstrs
+      fontDefinitions = filter (\(EncodableInstruction op _) -> op `elem` defineFontOpsLst) mundaneInstrs
   return $
     [postPostambleInstr] ++
     fontDefinitions ++ [postambleInstr] ++ finishedInstrs
