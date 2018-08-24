@@ -1,10 +1,10 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module BreakList.Page where
+module HeX.BreakList.Page where
 
-import BreakList
+import HeX.BreakList
 
-import qualified Box as B
+import qualified HeX.Box as B
 
 data PageBreakJudgment
   -- Penalty >= 10k.

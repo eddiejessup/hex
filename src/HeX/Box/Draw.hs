@@ -1,11 +1,11 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Box.Draw where
+module HeX.Box.Draw where
 
 import qualified DVI.Encode as DVIE
 
-import Box
+import HeX.Box
 
 class DVIAble a where
   toDVI :: a -> [DVIE.Instruction]

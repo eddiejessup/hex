@@ -6,7 +6,7 @@ import qualified Data.Binary.Get as BG
 import qualified Data.HashMap.Strict as HashMap
 import Path (Path, Abs, File, toFilePath)
 
-import qualified Unit as U
+import qualified HeX.Unit as U
 
 import qualified TFM.Parse as TFMP
 import qualified TFM.Character as TFMC

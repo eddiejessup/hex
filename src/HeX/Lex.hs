@@ -1,11 +1,12 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Lex where
+module HeX.Lex where
 
 import qualified Data.Char as C
 import Data.Hashable (Hashable, hashWithSalt)
-import qualified Categorise as Cat
-import Categorise (CharCode)
+
+import qualified HeX.Categorise as Cat
+import HeX.Categorise (CharCode)
 
 data ControlSequence
   = ControlSymbol Char

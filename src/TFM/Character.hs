@@ -2,10 +2,10 @@
 
 module TFM.Character where
 
-import           Data.Bits          (shiftR, (.&.))
-import qualified Data.ByteString.Lazy    as BLS
+import Data.Bits (shiftR, (.&.))
+import qualified Data.ByteString.Lazy as BLS
 import qualified Data.HashMap.Strict as HashMap
-import qualified TFM.Parse          as TFMP
+import qualified TFM.Parse as TFMP
 
 -- The character info array contains, for each character, six fields packed
 -- into four bytes:

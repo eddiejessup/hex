@@ -15,21 +15,30 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Categorise
-                     , Build
-                     , Unit
+  exposed-modules:     HeX.Categorise
+                     , HeX.Build
+                     , HeX.Unit
+                     , HeX.Lex
+                     , HeX.Expand
+                     , HeX.Config
+
+                     , HeX.Parse
+                     , HeX.Parse.Util
+                     , HeX.Parse.Common
+                     , HeX.Parse.Number
+                     , HeX.Parse.Length
+                     , HeX.Parse.Glue
+                     , HeX.Parse.Command
+
+                     , HeX.BreakList
+                     , HeX.BreakList.Line
+                     , HeX.BreakList.Page
+
+
+                     , HeX.Box
+                     , HeX.Box.Draw
+
                      , Adjacent
-                     , Lex
-                     , Expand
-                     , Config
-
-                     , BreakList
-                     , BreakList.Line
-                     , BreakList.Page
-
-
-                     , Box
-                     , Box.Draw
 
                      , TFM
                      , TFM.Parse
@@ -37,13 +46,6 @@ library
 
                      , DVI.Encode
 
-                     , Parse
-                     , Parse.Util
-                     , Parse.Common
-                     , Parse.Number
-                     , Parse.Length
-                     , Parse.Glue
-                     , Parse.Command
   build-depends:       base
                      , containers
                      , bytestring

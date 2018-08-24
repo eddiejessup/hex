@@ -1,6 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Parse.Command where
+module HeX.Parse.Command where
 
 import qualified Text.Megaparsec as P
 import Text.Megaparsec ((<|>))
@@ -8,15 +8,15 @@ import qualified Data.Char as C
 import Path (Path, Rel, File, parseRelFile)
 import Control.Monad (when)
 
-import qualified Expand
-import qualified Lex
+import qualified HeX.Expand as Expand
+import qualified HeX.Lex as Lex
 
-import Parse.Util (Parser, Stream, ParseState, NullParser, ParseError, skipOneOptionalSatisfied, easyRunParser', satisfyThen, skipSatisfiedEquals)
-import qualified Parse.Util as PU
-import qualified Parse.Common as PC
-import qualified Parse.Number as PN
-import qualified Parse.Length as PL
-import qualified Parse.Glue as PG
+import HeX.Parse.Util (Parser, Stream, ParseState, NullParser, ParseError, skipOneOptionalSatisfied, easyRunParser', satisfyThen, skipSatisfiedEquals)
+import qualified HeX.Parse.Util as PU
+import qualified HeX.Parse.Common as PC
+import qualified HeX.Parse.Number as PN
+import qualified HeX.Parse.Length as PL
+import qualified HeX.Parse.Glue as PG
 
 -- AST.
 

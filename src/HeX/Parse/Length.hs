@@ -1,14 +1,13 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Parse.Length where
+module HeX.Parse.Length where
 
 import qualified Text.Megaparsec as P
 
-import Unit (PhysicalUnit(..))
-
-import Parse.Util (Parser)
-import qualified Parse.Common as PC
-import Parse.Number (NormalInteger, parseNormalInteger, parseRationalConstant, parseSigns)
+import HeX.Unit (PhysicalUnit(..))
+import HeX.Parse.Util (Parser)
+import qualified HeX.Parse.Common as PC
+import HeX.Parse.Number (NormalInteger, parseNormalInteger, parseRationalConstant, parseSigns)
 
 -- AST.
 

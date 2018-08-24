@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Config where
+module HeX.Config where
 
 import Control.Monad.Extra
 import Control.Monad.IO.Class
@@ -13,11 +13,12 @@ import Control.Monad.Trans.Reader (ReaderT)
 import Data.Maybe (fromJust)
 import Path
 import System.Directory
+
 import qualified TFM
 
-import qualified Box as B
-import qualified BreakList as BL
-import qualified Unit
+import qualified HeX.Box as B
+import qualified HeX.BreakList as BL
+import qualified HeX.Unit as Unit
 
 type FontInfoMap = HMap.HashMap Int TFM.TexFont
 

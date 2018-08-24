@@ -2,9 +2,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Build where
+module HeX.Build where
 
-import Config
 import qualified Data.HashMap.Strict as HMap
 import qualified Text.Megaparsec as PS
 import qualified Data.Char as C
@@ -18,18 +17,19 @@ import Path
 
 import qualified TFM
 import qualified TFM.Character as TFMC
-
-import qualified Box as B
-import qualified Config as Conf
 import Adjacent (Adjacency(..))
-import qualified BreakList as BL
-import BreakList.Line (bestRoute, setParagraph)
-import BreakList.Page (pageBreakJudgment, PageBreakJudgment(..), setPage)
-import qualified Lex
-import qualified Unit
-import qualified Expand
-import qualified Parse as P
-import Parse (Stream, insertLexToken, insertLexTokens)
+
+import HeX.Config as Config
+import qualified HeX.Box as B
+import qualified HeX.Config as Conf
+import qualified HeX.BreakList as BL
+import HeX.BreakList.Line (bestRoute, setParagraph)
+import HeX.BreakList.Page (pageBreakJudgment, PageBreakJudgment(..), setPage)
+import qualified HeX.Lex as Lex
+import qualified HeX.Unit as Unit
+import qualified HeX.Expand as Expand
+import qualified HeX.Parse as P
+import HeX.Parse (Stream, insertLexToken, insertLexTokens)
 
 csToFontNr :: Lex.ControlSequenceLike -> Int
 csToFontNr (Lex.ControlSequenceProper (Lex.ControlWord "thefont")) = Expand.theFontNr

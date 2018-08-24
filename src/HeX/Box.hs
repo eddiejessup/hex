@@ -1,12 +1,13 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Box where
+module HeX.Box where
 
 import qualified Data.Char as C
 import Path (Path, Abs, File)
 
-import qualified Unit
 import qualified TFM
+
+import qualified HeX.Unit as Unit
 
 data Direction = Horizontal | Vertical deriving Show
 

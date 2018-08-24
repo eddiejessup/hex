@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Parse.Util where
+module HeX.Parse.Util where
 
 import Data.String.Utils (replace)
 import qualified Text.Megaparsec as P
@@ -13,10 +13,11 @@ import Data.Foldable (foldl')
 import qualified Control.Monad.State.Lazy as MState
 import Data.Functor (($>))
 
-import qualified Expand
-import Expand (ParseToken)
-import qualified Lex
-import qualified Categorise as Cat
+import qualified HeX.Expand as Expand
+import HeX.Expand (ParseToken)
+import qualified HeX.Lex as Lex
+import qualified HeX.Categorise as Cat
+
 type ParseTokens = [ParseToken]
 
 type CharCodes = [Cat.CharCode]

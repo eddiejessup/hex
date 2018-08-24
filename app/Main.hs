@@ -12,10 +12,11 @@ import System.Console.GetOpt
 import System.Environment
 
 import DVI.Encode (buildDocument, encode)
-import Box.Draw (toDVI)
-import Build (extractPages, newCurrentPage)
-import Config (newConfig)
-import Parse.Util (newStream)
+
+import HeX.Box.Draw (toDVI)
+import HeX.Build (extractPages, newCurrentPage)
+import HeX.Config (newConfig)
+import HeX.Parse (newStream)
 
 data Flag
  = Help
