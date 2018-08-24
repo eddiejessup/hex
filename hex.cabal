@@ -45,6 +45,7 @@ library
                      , TFM.Character
 
                      , DVI.Encode
+                     , DVI.Document
 
   build-depends:       base
                      , containers

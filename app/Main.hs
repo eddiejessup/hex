@@ -11,7 +11,8 @@ import Data.Maybe
 import System.Console.GetOpt
 import System.Environment
 
-import DVI.Encode (buildDocument, encode)
+import DVI.Document (parseInstructions)
+import DVI.Encode (encode)
 
 import HeX.Box.Draw (toDVI)
 import HeX.Build (extractPages, newCurrentPage)
@@ -49,7 +50,7 @@ run inFName outFName = do
   ((pages, _), _) <- runStateT (extractPages [] newCurrentPage [] stream) conf
 
   let instrs = toDVI pages
-  case buildDocument instrs 1000 of
+  case parseInstructions instrs 1000 of
     Left err -> ioError $ userError err
     Right encInstrs ->  writeFile outFName $ encode $ reverse encInstrs
 
