@@ -1,5 +1,6 @@
 module DVI.Document where
 
+import Control.Monad
 import Safe (lastDef)
 import qualified TFM
 
@@ -27,79 +28,64 @@ data Instruction
   deriving (Show)
 
 -- History: (Encodable instructions, selected font number, begin-page pointers, stack depth, max stack depth)
-parseMundaneInstructions :: [Instruction] -> Int -> Either String ([EncodableInstruction], Maybe Int, [Int], Int, Int)
-parseMundaneInstructions [] magnification = Right ([getPreambleInstr magnification], Nothing, [], 0, 0)
-parseMundaneInstructions (this:rest) magnification = do
-  (restEncodeds, restCurrentFontNr, restBeginPagePointers, restStackDepth, restMaxStackDepth) <-
-    parseMundaneInstructions rest magnification
-  (thisEncodeds, thisCurrentFontNr, thisBeginPagePointers) <-
-    case this of
-      SelectFont _fontNr -> do
-        instr <- getSelectFontNrInstruction _fontNr
-        return ([instr], Just _fontNr, restBeginPagePointers)
-      Character {charNr = _charNr, move = _move} -> do
-        charInstr <- getCharacterInstruction _charNr _move
-        return ([charInstr], restCurrentFontNr, restBeginPagePointers)
-      Rule {width = w, height = h, move = _move} ->
-        let _op = if _move then SetRule else PutRule
-            args = [U4 $ fromIntegral h, U4 $ fromIntegral w]
-            instr = EncodableInstruction _op args
-        in return ([instr], restCurrentFontNr, restBeginPagePointers)
-      BeginNewPage -> do
-        let endRet =
-              case restBeginPagePointers of
-                [] -> []
-                _ -> [endPageInstruction]
-            beginPageInstr =
-              getBeginPageInstruction $ lastDef (-1) restBeginPagePointers
-            newBeginPagePointer = encLength (endRet ++ restEncodeds)
-        fontRet <-
-          case restCurrentFontNr of
-            Just nr -> (:[]) <$> getSelectFontNrInstruction nr
-            Nothing -> return []
-        return
-          ( fontRet ++ [beginPageInstr] ++ endRet
-          , restCurrentFontNr
-          , newBeginPagePointer : restBeginPagePointers)
-      MoveRight dist -> do
-        instr <- getMoveInstruction True dist
-        return ([instr], restCurrentFontNr, restBeginPagePointers)
-      MoveDown dist -> do
-        instr <- getMoveInstruction False dist
-        return ([instr], restCurrentFontNr, restBeginPagePointers)
-      DefineFont { fontInfo = info
-                 , fontPath = path
-                 , fontNr = nr
-                 , scaleFactorRatio = scaleRatio
-                 } -> do
-        let checksum = TFM.checksum info
-            designSize = round $ TFM.designSizeSP info
-            scaleFactor = TFM.designScaleSP info scaleRatio
-        defineFontInstruction <-
-          getDefineFontInstruction nr path scaleFactor designSize checksum
-        return
-          ([defineFontInstruction], restCurrentFontNr, restBeginPagePointers)
-      PushStack ->
-        return ([pushInstruction], restCurrentFontNr, restBeginPagePointers)
-      PopStack ->
-        return ([popInstruction], restCurrentFontNr, restBeginPagePointers)
-  let thisStackDepth =
-        restStackDepth +
-        case this of
-          PushStack -> 1
-          PopStack -> -1
-          _ -> 0
-      thisMaxStackDepth = max thisStackDepth restMaxStackDepth
-  return
-    ( thisEncodeds ++ restEncodeds
-    , thisCurrentFontNr
-    , thisBeginPagePointers
-    , thisStackDepth
-    , thisMaxStackDepth)
+type ParseState = ([EncodableInstruction], Maybe Int, [Int], Int, Int)
+
+parseMundaneInstruction :: ParseState -> Instruction -> Either String ParseState
+parseMundaneInstruction (acc, fNr, points, sDep, maxSDep) this =
+  case this of
+    SelectFont fNr' -> do
+      instr <- getSelectFontNrInstruction fNr'
+      return (instr:acc, Just fNr', points, sDep, maxSDep)
+    Character {charNr = _charNr, move = _move} ->
+      getCharacterInstruction _charNr _move >>= addInstr
+    Rule {width = w, height = h, move = _move} ->
+      let
+        op = (if _move then SetRule else PutRule)
+        args = fmap (U4 . fromIntegral) [h, w]
+      in addInstr $ EncodableInstruction op args
+    BeginNewPage ->
+      let
+        beginPageInstr = getBeginPageInstruction $ lastDef (-1) points
+        accEnded = case points of
+          [] -> acc
+          _ -> endPageInstruction:acc
+        newBeginPagePointer = encLength accEnded
+      in
+        do
+          acc' <- case fNr of
+            Just nr -> do
+              fInstr <- getSelectFontNrInstruction nr
+              return $ fInstr:beginPageInstr:accEnded
+            Nothing ->
+              return $ beginPageInstr:accEnded
+          return (acc', fNr, newBeginPagePointer:points, sDep, maxSDep)
+    MoveRight dist ->
+      getMoveInstruction True dist >>= addInstr
+    MoveDown dist ->
+      getMoveInstruction False dist >>= addInstr
+    DefineFont { fontInfo = info
+               , fontPath = path
+               , fontNr = defFontNr
+               , scaleFactorRatio = scaleRatio
+               } ->
+      let checksum = TFM.checksum info
+          designSize = round $ TFM.designSizeSP info
+          scaleFactor = TFM.designScaleSP info scaleRatio
+          instr = getDefineFontInstruction defFontNr path scaleFactor designSize checksum
+      in instr >>= addInstr
+    PushStack ->
+      return (pushInstruction:acc, fNr, points, sDep + 1, max maxSDep (sDep + 1))
+    PopStack ->
+      return (popInstruction:acc, fNr, points, sDep - 1, maxSDep)
+  where
+    addInstr i = return (i:acc, fNr, points, sDep, maxSDep)
+
+parseMundaneInstructions :: [Instruction] -> Either String ParseState
+parseMundaneInstructions = foldM parseMundaneInstruction ([], Nothing, [], 0, 0)
 
 parseInstructions :: [Instruction] -> Int -> Either String [EncodableInstruction]
 parseInstructions instrs magnification = do
-  (mundaneInstrs, _, beginPagePointers, _, maxStackDepth) <- parseMundaneInstructions (reverse instrs) magnification
+  (mundaneInstrs, _, beginPagePointers, _, maxStackDepth) <- parseMundaneInstructions instrs
   let (maxPageHeightPlusDepth, maxPageWidth) = (1, 1)
       postambleInstr =
         getPostambleInstr
@@ -112,8 +98,7 @@ parseInstructions instrs magnification = do
       postamblePointer = encLength finishedInstrs
       postPostambleInstr = getPostPostambleInstr postamblePointer
       fontDefinitions = filter isDefineFontInstr mundaneInstrs
-  return $ [postPostambleInstr] ++
-    fontDefinitions ++ [postambleInstr] ++ finishedInstrs
+  return $ [postPostambleInstr] ++ fontDefinitions ++ [postambleInstr] ++ finishedInstrs ++ [getPreambleInstr magnification]
   where
     isDefineFontInstr (EncodableInstruction op _) = case op of
       Define1ByteFontNr -> True
