@@ -6,9 +6,9 @@ module DVI.Encode where
 import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BLS
 import Data.Char (ord)
-import Safe (lastDef)
 import qualified Data.Int as I
 import qualified Data.Word as W
+import Safe (lastDef)
 import System.FilePath (splitFileName)
 
 class Encodable a where
@@ -33,8 +33,6 @@ encEnds = cumSum . encLengths
 
 instance Encodable a => Encodable [a] where
   encode = BLS.concat . fmap encode
-
-type Fourple a = (a, a, a, a)
 
 data Operation
     -- 0 to 127: set that character number.
@@ -294,24 +292,6 @@ data Operation
 instance Encodable Operation where
   encode = B.encode . (fromIntegral :: Int -> W.Word8) . fromEnum
 
-longSelectFontOps :: Fourple Operation
-longSelectFontOps = (Select1ByteFontNr, Select2ByteFontNr, Select3ByteFontNr, Select4ByteFontNr)
-
-defineFontOps :: Fourple Operation
-defineFontOps = (Define1ByteFontNr, Define2ByteFontNr, Define3ByteFontNr, Define4ByteFontNr)
-
-setCharOps :: Fourple Operation
-setCharOps = (Set1ByteChar, Set2ByteChar, Set3ByteChar, Set4ByteChar)
-
-putCharOps :: Fourple Operation
-putCharOps = (Put1ByteChar, Put2ByteChar, Put3ByteChar, Put4ByteChar)
-
-moveRightOps :: Fourple Operation
-moveRightOps = (Right1Byte, Right2Byte, Right3Byte, Right4Byte)
-
-moveDownOps :: Fourple Operation
-moveDownOps = (Down1Byte, Down2Byte, Down3Byte, Down4Byte)
-
 data ArgVal
   = U1 W.Word8
   | U2 W.Word16
@@ -331,7 +311,9 @@ instance Encodable ArgVal where
   encode (S4 v) = B.encode v
   encode (S v) = BLS.pack $ fmap (fromIntegral . ord) v
 
-data EncodableInstruction = EncodableInstruction Operation [ArgVal]
+data EncodableInstruction =
+  EncodableInstruction Operation
+                       [ArgVal]
   deriving (Show)
 
 instance Encodable EncodableInstruction where
@@ -342,7 +324,7 @@ isSignedNrExpressibleInNBits :: Int -> Int -> Bool
 isSignedNrExpressibleInNBits n nrBits =
   let minSignedVal = -(2 ^ (nrBits - 1))
       maxSignedVal = 2 ^ (nrBits - 1) - 1
-  in (minSignedVal <= n) && (n <= maxSignedVal)
+   in (minSignedVal <= n) && (n <= maxSignedVal)
 
 getBytesNeededUnsigned :: Int -> Int
 getBytesNeededUnsigned n =
@@ -365,16 +347,22 @@ getBytesNeeded signedRaw n
           if needExtraByte
             then 1
             else 0
-    in return nrBytes
+     in return nrBytes
 
-pickSizeOp :: Fourple a -> Bool -> Int -> Either String (a, ArgVal)
-pickSizeOp (op1, op2, _, op4) signed n =
+pickSizeOp :: a -> a -> a -> a -> Bool -> Int -> Either String (a, ArgVal)
+pickSizeOp op1 op2 _ op4 signed n =
   getBytesNeeded signed n >>= \case
     1 -> do
-      let v = if signed then S1 $ fromIntegral n else U1 $ fromIntegral n
+      let v =
+            if signed
+              then S1 $ fromIntegral n
+              else U1 $ fromIntegral n
       return (op1, v)
     2 -> do
-      let v = if signed then S2 $ fromIntegral n else U2 $ fromIntegral n
+      let v =
+            if signed
+              then S2 $ fromIntegral n
+              else U2 $ fromIntegral n
       return (op2, v)
     3 -> do
       let v = S4 $ fromIntegral n
@@ -382,20 +370,32 @@ pickSizeOp (op1, op2, _, op4) signed n =
     4 -> do
       let v = S4 $ fromIntegral n
       return (op4, v)
-    b ->
-      fail $ "Cannot handle this number of bytes: " ++ show b
+    b -> fail $ "Cannot handle this number of bytes: " ++ show b
 
-pickSizeOpUnsigned :: Fourple a -> Int -> Either String (a, ArgVal)
-pickSizeOpUnsigned ops = pickSizeOp ops False
+pickSizeOpUnsigned :: a -> a -> a -> a -> Int -> Either String (a, ArgVal)
+pickSizeOpUnsigned op1 op2 op3 op4 = pickSizeOp op1 op2 op3 op4 False
 
-getVarByteInstruction :: Fourple Operation -> String -> Int -> Bool -> Either String EncodableInstruction
-getVarByteInstruction ops _name n signed = do
-  (_op, argVal) <- pickSizeOp ops signed n
+getVarByteInstruction ::
+     Operation
+  -> Operation
+  -> Operation
+  -> Operation
+  -> Int
+  -> Bool
+  -> Either String EncodableInstruction
+getVarByteInstruction op1 op2 op3 op4 n signed = do
+  (_op, argVal) <- pickSizeOp op1 op2 op3 op4 signed n
   return $ EncodableInstruction _op [argVal]
 
 getSelectFontNrInstruction :: Int -> Either String EncodableInstruction
 getSelectFontNrInstruction fNr = do
-  (longOp, argVal) <- pickSizeOpUnsigned longSelectFontOps fNr
+  (longOp, argVal) <-
+    pickSizeOpUnsigned
+      Select1ByteFontNr
+      Select2ByteFontNr
+      Select3ByteFontNr
+      Select4ByteFontNr
+      fNr
   let shortOp = toEnum $ fNr + fromEnum SelectFontNr0
       (_op, args) =
         if fNr < 64
@@ -421,11 +421,18 @@ getBeginPageInstruction lastBeginPoint =
       boringArgs = fmap boringArg ([0 .. 9] :: [Int])
       lastBeginPointArg = S4 $ fromIntegral lastBeginPoint
       args = boringArgs ++ [lastBeginPointArg]
-  in EncodableInstruction BeginPage args
+   in EncodableInstruction BeginPage args
 
-getDefineFontInstruction :: Int -> FilePath -> Int -> Int -> Int -> Either String EncodableInstruction
+getDefineFontInstruction ::
+     Int -> FilePath -> Int -> Int -> Int -> Either String EncodableInstruction
 getDefineFontInstruction fNr fPath scaleFactor designSize fontChecksum = do
-  (_op, fontNrArgVal) <- pickSizeOpUnsigned defineFontOps fNr
+  (_op, fontNrArgVal) <-
+    pickSizeOpUnsigned
+      Define1ByteFontNr
+      Define2ByteFontNr
+      Define3ByteFontNr
+      Define4ByteFontNr
+      fNr
   let (dirPathRaw, fileName) = splitFileName fPath
       dirPath =
         if dirPathRaw == "./"
@@ -449,26 +456,39 @@ getDefineFontInstruction fNr fPath scaleFactor designSize fontChecksum = do
 
 getCharacterInstruction :: Int -> Bool -> Either String EncodableInstruction
 getCharacterInstruction code True = do
-  (longOp, charNrArgVal) <- pickSizeOpUnsigned setCharOps code
+  (longOp, charNrArgVal) <-
+    pickSizeOpUnsigned Set1ByteChar Set2ByteChar Set3ByteChar Set4ByteChar code
   let shortOp = toEnum $ code + fromEnum SetChar0
       (_op, args) =
         if code < 128
           then (shortOp, [])
           else (longOp, [charNrArgVal])
   return $ EncodableInstruction _op args
-getCharacterInstruction code False = getVarByteInstruction putCharOps "char_nr" code False
+getCharacterInstruction code False =
+  getVarByteInstruction
+    Put1ByteChar
+    Put2ByteChar
+    Put3ByteChar
+    Put4ByteChar
+    code
+    False
 
 getMoveInstruction :: Bool -> Int -> Either String EncodableInstruction
-getMoveInstruction right dist = getVarByteInstruction (if right then moveRightOps else moveDownOps) "distance" dist True
+getMoveInstruction right dist =
+  (if right
+     then getVarByteInstruction Right1Byte Right2Byte Right3Byte Right4Byte
+     else getVarByteInstruction Down1Byte Down2Byte Down3Byte Down4Byte)
+    dist
+    True
 
 dviFormatArg :: ArgVal
 dviFormatArg = U1 2
 
 -- Define a fraction by which all dimensions should be multiplied to get
 -- lengths in units of 10^(-7) meters.
-numeratorArg :: ArgVal
+numeratorArg, denominatorArg :: ArgVal
 numeratorArg = S4 $ 254 * (10 ^ (5 :: Int))
-denominatorArg :: ArgVal
+
 denominatorArg = S4 $ 7227 * (2 ^ (16 :: Int))
 
 magnificationArg :: Int -> ArgVal
@@ -479,18 +499,23 @@ ambleArgs mag = [numeratorArg, denominatorArg, magnificationArg mag]
 
 getPreambleInstr :: Int -> EncodableInstruction
 getPreambleInstr mag =
-  EncodableInstruction Preamble $ [dviFormatArg] ++ ambleArgs mag ++ [U1 0, S ""]
+  EncodableInstruction Preamble $
+  [dviFormatArg] ++ ambleArgs mag ++ [U1 0, S ""]
 
 getPostambleInstr :: [Int] -> Int -> Int -> Int -> Int -> EncodableInstruction
 getPostambleInstr beginPagePointers mag maxPageHeightPlusDepth maxPageWidth maxStackDepth =
   EncodableInstruction Postamble $
-    [lastPointerArg] ++ ambleArgs mag ++ [ S4 $ fromIntegral maxPageHeightPlusDepth
-                                         , S4 $ fromIntegral maxPageWidth
-                                         , U2 $ fromIntegral maxStackDepth
-                                         , U2 $ fromIntegral $ length beginPagePointers ]
+  [lastPointerArg] ++
+  ambleArgs mag ++
+  [ S4 $ fromIntegral maxPageHeightPlusDepth
+  , S4 $ fromIntegral maxPageWidth
+  , U2 $ fromIntegral maxStackDepth
+  , U2 $ fromIntegral $ length beginPagePointers
+  ]
   where
     lastPointerArg = S4 $ fromIntegral $ lastDef (-1) beginPagePointers
 
 getPostPostambleInstr :: Int -> EncodableInstruction
 getPostPostambleInstr postamblePointer =
-  EncodableInstruction PostPostamble $ [S4 $ fromIntegral postamblePointer, dviFormatArg] ++ replicate 4 (U1 223)
+  EncodableInstruction PostPostamble $
+  [S4 $ fromIntegral postamblePointer, dviFormatArg] ++ replicate 4 (U1 223)
