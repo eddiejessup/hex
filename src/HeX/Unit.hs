@@ -1,4 +1,4 @@
-module Unit where
+module HeX.Unit where
 
 import Data.Ratio ((%))
 import Text.Printf (printf)

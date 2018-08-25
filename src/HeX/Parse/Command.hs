@@ -1,6 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Parse.Command where
+module HeX.Parse.Command where
 
 import qualified Text.Megaparsec as P
 import Text.Megaparsec ((<|>))
@@ -8,16 +8,16 @@ import qualified Data.Char as C
 import Path (Path, Rel, File, parseRelFile)
 import Control.Monad (when)
 
-import qualified Expand
-import qualified Lex
+import qualified HeX.Expand as Expand
+import qualified HeX.Lex as Lex
 
-import Parse.Stream (SimpExpandParser, ExpandedStream)
-import Parse.Helpers (ParseError, NullSimpParser, skipOneOptionalSatisfied, satisfyThen, skipSatisfiedEquals, skipSatisfied, easyRunParser)
-import Parse.Inhibited (parseInhibited, parseGeneralText, parseBalancedText, parseCSName)
-import qualified Parse.Common as PC
-import qualified Parse.Number as PN
-import qualified Parse.Length as PL
-import qualified Parse.Glue as PG
+import HeX.Parse.Stream (SimpExpandParser, ExpandedStream)
+import HeX.Parse.Helpers (ParseError, NullSimpParser, skipOneOptionalSatisfied, satisfyThen, skipSatisfiedEquals, skipSatisfied, easyRunParser)
+import HeX.Parse.Inhibited (parseInhibited, parseGeneralText, parseBalancedText, parseCSName)
+import qualified HeX.Parse.Common as PC
+import qualified HeX.Parse.Number as PN
+import qualified HeX.Parse.Length as PL
+import qualified HeX.Parse.Glue as PG
 
 -- AST.
 
@@ -220,6 +220,9 @@ macroToFont = do
       55 -> Just c
       56 -> Just c
       57 -> Just c
+      -- Not in the spec, but let's say "/" and "." are OK.
+      46 -> Just c
+      47 -> Just c
       _ -> Nothing
     tokToChar _ = Nothing
 

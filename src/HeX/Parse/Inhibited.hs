@@ -1,16 +1,16 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Parse.Inhibited where
+module HeX.Parse.Inhibited where
 
 import qualified Text.Megaparsec as P
 import qualified Data.Char as C
 
-import qualified Expand
-import qualified Lex
-import Parse.Helpers (skipManySatisfied)
-import qualified Parse.Helpers as PU
-import Parse.Stream (ExpandedStream(..), SimpLexParser, SimpExpandParser)
-import qualified Parse.Common as PC
+import qualified HeX.Expand as Expand
+import qualified HeX.Lex as Lex
+import HeX.Parse.Helpers (skipManySatisfied)
+import qualified HeX.Parse.Helpers as PU
+import HeX.Parse.Stream (ExpandedStream(..), SimpLexParser, SimpExpandParser)
+import qualified HeX.Parse.Common as PC
 
 parseInhibited :: SimpLexParser a -> SimpExpandParser a
 parseInhibited p = do
@@ -59,3 +59,4 @@ parseGeneralText = do
   where
     isFillerItem Expand.Relax = True
     isFillerItem t = PC.isSpace t
+

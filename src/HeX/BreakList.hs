@@ -3,15 +3,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module BreakList where
+module HeX.BreakList where
 
 import Data.Maybe (isJust, mapMaybe)
 import qualified Data.Char as C
 
-import qualified Box as B
-import Box (Dimensioned, naturalWidth)
-import qualified Unit
 import qualified Adjacent as A
+
+import qualified HeX.Box as B
+import HeX.Box (Dimensioned, naturalWidth)
+import qualified HeX.Unit as Unit
 
 tenK :: Int
 tenK = 10000

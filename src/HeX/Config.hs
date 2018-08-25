@@ -2,19 +2,25 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Config where
+module HeX.Config where
 
+import Control.Monad.Extra
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Maybe
 import qualified Data.HashMap.Strict as HMap
 import Control.Monad.State.Lazy (StateT)
 import Control.Monad.Trans.Reader (ReaderT)
+import Data.Maybe (fromJust)
+import Path
+import System.Directory
 
-import qualified TFM
+import TFM (TexFont)
 
-import qualified Box as B
-import qualified BreakList as BL
-import qualified Unit
+import qualified HeX.Box as B
+import qualified HeX.BreakList as BL
+import qualified HeX.Unit as Unit
 
-type FontInfoMap = HMap.HashMap Int TFM.TexFont
+type FontInfoMap = HMap.HashMap Int TexFont
 
 data IntegerParameterName
   = LineTolerance
@@ -45,6 +51,7 @@ instance (Enum a, Bounded a, Show a, Show b) => Show (a -> b) where
 
 data Config = Config { currentFontNr :: Maybe Int
                      , fontInfoMap :: FontInfoMap
+                     , fontDirectories :: [AbsPathToDir]
 
                      , integerParameter :: IntegerParameterName -> Int
                      , lengthParameter :: LengthParameterName -> Int
@@ -55,15 +62,18 @@ data Config = Config { currentFontNr :: Maybe Int
 type ConfStateT = StateT Config
 type ConfReaderT = ReaderT Config
 
-newConfig :: Config
-newConfig = Config { currentFontNr=Nothing
-                   , fontInfoMap=HMap.empty
+newConfig :: IO Config
+newConfig = do
+  cwd <- fromJust . parseAbsDir <$> getCurrentDirectory
+  return $ Config { currentFontNr=Nothing
+                  , fontInfoMap=HMap.empty
+                  , fontDirectories=[cwd]
 
-                   , integerParameter=newIntegerParameter
-                   , lengthParameter=newLengthParameter
-                   , glueParameter=newGlueParameter
+                  , integerParameter=newIntegerParameter
+                  , lengthParameter=newLengthParameter
+                  , glueParameter=newGlueParameter
 
-                   , specialIntegerParameter=newSpecialIntegerParameter }
+                  , specialIntegerParameter=newSpecialIntegerParameter }
 
 parIndentBox :: Config -> BL.BreakableHListElem
 parIndentBox conf =
@@ -89,3 +99,23 @@ newSpecialIntegerParameter PreviousBoxDepth = -Unit.oneKPt
 
 updateFuncMap :: Eq a => (a -> b) -> a -> b -> (a -> b)
 updateFuncMap f k v   k' = if k' == k then v else f k'
+
+
+-- Path stuff
+
+type PathToFile b = Path b File
+type RelPathToFile = PathToFile Rel
+type AbsPathToDir = Path Abs Dir
+
+firstExistingPath :: [PathToFile b] -> MaybeT IO (PathToFile b)
+firstExistingPath ps =
+  -- Make a MaybeT of...
+  MaybeT $
+    -- The result of an IO function, lifted to our MaybeT IO monad.
+    liftIO $
+      -- namely, 'find', but using a predicate which acts in the IO monad,
+      -- and which tests if a file exists.
+      findM (doesFileExist . toFilePath) ps
+
+findFilePath :: RelPathToFile -> [AbsPathToDir] -> MaybeT IO (PathToFile Abs)
+findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs

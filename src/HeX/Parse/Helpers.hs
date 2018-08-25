@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Parse.Helpers where
+module HeX.Parse.Helpers where
 
 import qualified Text.Megaparsec as P
 import qualified Data.Set as Set

@@ -1,18 +1,18 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TupleSections #-}
 
-module Parse.Number where
+module HeX.Parse.Number where
 
 import qualified Text.Megaparsec as P
 import Data.Ratio ((%))
 
-import qualified Expand
-import qualified Lex
+import qualified HeX.Expand as Expand
+import qualified HeX.Lex as Lex
 
-import Parse.Stream (SimpExpandParser, SimpExpandParser)
-import qualified Parse.Helpers as PU
-import qualified Parse.Common as PC
-import Parse.Inhibited (parseInhibited, parseCharLike)
+import HeX.Parse.Stream (SimpExpandParser, SimpExpandParser)
+import qualified HeX.Parse.Helpers as PU
+import qualified HeX.Parse.Common as PC
+import HeX.Parse.Inhibited (parseInhibited, parseCharLike)
 
 -- AST.
 

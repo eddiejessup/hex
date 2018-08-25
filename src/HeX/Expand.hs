@@ -1,11 +1,11 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Expand where
+module HeX.Expand where
 
 import qualified Data.HashMap.Strict as HMap
 import Data.Maybe (fromMaybe)
 
-import qualified Lex
+import qualified HeX.Lex as Lex
 
 data HDirection = Leftward | Rightward
   deriving (Show, Eq)

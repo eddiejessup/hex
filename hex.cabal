@@ -15,37 +15,43 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Categorise
-                     , Build
-                     , Unit
+  exposed-modules:     HeX.Categorise
+                     , HeX.Build
+                     , HeX.Unit
+                     , HeX.Lex
+                     , HeX.Expand
+                     , HeX.Config
+
+                     , HeX.BreakList
+                     , HeX.BreakList.Line
+                     , HeX.BreakList.Page
+
+                     , HeX.Box
+                     , HeX.Box.Draw
+
+                     , HeX.Parse
+                     , HeX.Parse.Helpers
+                     , HeX.Parse.Common
+                     , HeX.Parse.Number
+                     , HeX.Parse.Length
+                     , HeX.Parse.Glue
+                     , HeX.Parse.Command
+                     , HeX.Parse.Inhibited
+                     , HeX.Parse.Stream
+
                      , Adjacent
-                     , Lex
-                     , Expand
-                     , Config
-
-                     , BreakList
-                     , BreakList.Line
-                     , BreakList.Page
-
-
-                     , Box
-                     , Box.Draw
 
                      , TFM
                      , TFM.Parse
+                     , TFM.Common
+                     , TFM.Table
+                     , TFM.Header
                      , TFM.Character
+                     , TFM.LigKern
+                     , TFM.FontParams
 
                      , DVI.Encode
-
-                     , Parse
-                     , Parse.Helpers
-                     , Parse.Inhibited
-                     , Parse.Stream
-                     , Parse.Common
-                     , Parse.Number
-                     , Parse.Length
-                     , Parse.Glue
-                     , Parse.Command
+                     , DVI.Document
   build-depends:       base
                      , containers
                      , bytestring
@@ -64,7 +70,7 @@ library
                      , extra
   default-language:    Haskell2010
 
-executable hex-exe
+executable hex
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -threaded
@@ -72,26 +78,6 @@ executable hex-exe
                      , hex
                      , bytestring
                      , transformers
-  default-language:    Haskell2010
-
-executable tfm-exe
-  hs-source-dirs:      app
-  main-is:             MainTFM.hs
-  ghc-options:         -threaded
-  build-depends:       base
-                     , hex
-                     , bytestring
-                     , binary
-  default-language:    Haskell2010
-
-executable dvi-exe
-  hs-source-dirs:      app
-  main-is:             MainDVI.hs
-  ghc-options:         -threaded
-  build-depends:       base
-                     , hex
-                     , bytestring
-                     , binary
   default-language:    Haskell2010
 
 source-repository head

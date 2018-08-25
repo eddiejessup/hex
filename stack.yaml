@@ -1,4 +1,4 @@
-resolver: lts-11.20
+resolver: lts-11.22
 
 packages:
 - .
@@ -8,6 +8,9 @@ extra-deps:
 
 extra-package-dbs: []
 
-
 ghc-options:
   "$everything": -O0 -j4
+
+flags:
+  hsdev:
+    docs: false

@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Parse.Stream where
+module HeX.Parse.Stream where
 
 import Data.String.Utils (replace)
 import qualified Text.Megaparsec as P
@@ -9,10 +9,10 @@ import Data.Proxy
 import qualified Data.Char as C
 import Data.Foldable (foldl')
 
-import qualified Expand
-import Expand (ParseToken)
-import qualified Lex
-import qualified Categorise as Cat
+import qualified HeX.Expand as Expand
+import HeX.Expand (ParseToken)
+import qualified HeX.Lex as Lex
+import qualified HeX.Categorise as Cat
 
 type CharCodes = [Cat.CharCode]
 

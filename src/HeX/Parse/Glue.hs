@@ -1,14 +1,14 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Parse.Glue where
+module HeX.Parse.Glue where
 
 import qualified Text.Megaparsec as P
 
-import Parse.Stream (SimpExpandParser)
-import Parse.Helpers (skipSatisfied)
-import qualified Parse.Common as PC
-import Parse.Number (parseSigns)
-import Parse.Length (Length, Factor, parseLength, parseFactor)
+import HeX.Parse.Stream (SimpExpandParser)
+import HeX.Parse.Helpers (skipSatisfied)
+import qualified HeX.Parse.Common as PC
+import HeX.Parse.Number (parseSigns)
+import HeX.Parse.Length (Length, Factor, parseLength, parseFactor)
 
 -- AST.
 

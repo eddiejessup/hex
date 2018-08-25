@@ -1,19 +1,21 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Parse.Common where
+module HeX.Parse.Common where
 
 import qualified Text.Megaparsec as P
-
-import qualified Expand
-import qualified Lex
 import qualified Data.Char as C
 import Data.Maybe (isJust)
 import Data.Functor (($>))
 
-import Parse.Helpers (MatchToken, skipManySatisfied, skipOneOptionalSatisfied
-                     , NullSimpParser, NullSimpParser)
-import qualified Parse.Helpers as PU
-import Parse.Stream (ExpandedStream(..), SimpExpandParser)
+import HeX.Expand (BalancedText(..))
+import qualified HeX.Expand as Expand
+import HeX.Lex (ControlSequenceLike(..))
+import qualified HeX.Lex as Lex
+
+import HeX.Parse.Helpers (MatchToken, skipManySatisfied, skipOneOptionalSatisfied
+                         , NullSimpParser, NullSimpParser)
+import qualified HeX.Parse.Helpers as PU
+import HeX.Parse.Stream (ExpandedStream(..), SimpExpandParser)
 
 skipOneOptionalSpace :: NullSimpParser ExpandedStream
 skipOneOptionalSpace = skipOneOptionalSatisfied isSpace

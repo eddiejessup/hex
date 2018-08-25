@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module BreakList.Line where
+module HeX.BreakList.Line where
 
 import Prelude hiding (lines)
 
@@ -9,9 +9,9 @@ import Control.Applicative (liftA2)
 import Data.List (intercalate)
 
 import qualified Adjacent as A
-import qualified Box as B
 
-import BreakList
+import qualified HeX.Box as B
+import HeX.BreakList
 
 data Break a
   = Break { before :: [a]

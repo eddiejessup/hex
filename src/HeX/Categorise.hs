@@ -1,4 +1,4 @@
-module Categorise where
+module HeX.Categorise where
 
 import qualified Data.HashMap.Strict as HMap
 

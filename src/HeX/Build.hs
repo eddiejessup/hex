@@ -2,12 +2,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Build where
+module HeX.Build where
 
 import qualified Data.HashMap.Strict as HMap
-import System.Directory (doesFileExist)
-import Path ((</>))
-import qualified Path
 import qualified Text.Megaparsec as PS
 import qualified Data.Char as C
 import Safe (headMay)
@@ -16,44 +13,29 @@ import Control.Monad.Trans.Reader (asks, runReader, Reader)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Extra (findM)
+import Path
 
 import qualified TFM
+import TFM (TexFont(..))
 import qualified TFM.Character as TFMC
-
-import qualified Box as B
-import qualified Config as Conf
-import Config (Config(..)
-              , ConfStateT
-              , IntegerParameterName(..)
-              , LengthParameterName(..)
-              , GlueParameterName(..)
-              , SpecialIntegerParameterName(..)
-              , parIndentBox
-              , updateFuncMap)
 import Adjacent (Adjacency(..))
-import qualified BreakList as BL
-import BreakList.Line (bestRoute, setParagraph)
-import BreakList.Page (pageBreakJudgment, PageBreakJudgment(..), setPage)
-import qualified Lex
-import qualified Unit
-import qualified Expand
-import qualified Parse as P
-import Parse (insertLexTokenE, insertLexTokensE, ExpandedStream)
 
-import Debug.Trace
+import HeX.Config as Config
+import qualified HeX.Box as B
+import qualified HeX.Config as Conf
+import qualified HeX.BreakList as BL
+import HeX.BreakList.Line (bestRoute, setParagraph)
+import HeX.BreakList.Page (pageBreakJudgment, PageBreakJudgment(..), setPage)
+import qualified HeX.Lex as Lex
+import qualified HeX.Unit as Unit
+import qualified HeX.Expand as Expand
+import qualified HeX.Parse as P
+import HeX.Parse.Stream (ExpandedStream, insertLexTokenE, insertLexTokensE)
 
 csToFontNr :: Lex.ControlSequenceLike -> Int
 csToFontNr (Lex.ControlSequenceProper (Lex.ControlWord "thefont")) = Expand.theFontNr
 
-fontDir1 :: AbsPathToDir
-(Just fontDir1) = Path.parseAbsDir "/Users/ejm/projects/hex"
-fontDir2 :: AbsPathToDir
-(Just fontDir2) = Path.parseAbsDir "/Users/ejm/projects/hex/support"
-theFontDirectories :: [AbsPathToDir]
-theFontDirectories = [fontDir1, fontDir2]
-
-currentFontInfo :: Monad m => MaybeT (Conf.ConfReaderT m) TFM.TexFont
+currentFontInfo :: Monad m => MaybeT (Conf.ConfReaderT m) TexFont
 currentFontInfo = do
   -- Maybe font number isn't set.
   maybeFontNr <- lift $ asks currentFontNr
@@ -63,29 +45,13 @@ currentFontInfo = do
   fInfo <- HMap.lookup <$> MaybeT (return maybeFontNr) <*> lift (asks fontInfoMap)
   MaybeT $ return fInfo
 
-type PathToFile b = Path.Path b Path.File
-type RelPathToFile = PathToFile Path.Rel
-type AbsPathToDir = Path.Path Path.Abs Path.Dir
-
-firstExistingPath :: [PathToFile b] -> MaybeT IO (PathToFile b)
-firstExistingPath ps =
-  -- Make a MaybeT of...
-  MaybeT $
-    -- The result of an IO function, lifted to our MaybeT IO monad.
-    liftIO $
-      -- namely, 'find', but using a predicate which acts in the IO monad,
-      -- and which tests if a file exists.
-      findM (doesFileExist . Path.toFilePath) ps
-
-findFilePath :: RelPathToFile -> [AbsPathToDir] -> MaybeT IO (PathToFile Path.Abs)
-findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs
-
 defineFont :: (MonadState Config m, MonadIO m) =>
        Lex.ControlSequenceLike
-    -> RelPathToFile
+    -> Path Rel File
     -> m B.FontDefinition
 defineFont cs fPath = do
-  maybeFontDef <- liftIO $ runMaybeT ioFontDef
+  theFontDirectories <- gets fontDirectories
+  maybeFontDef <- liftIO $ runMaybeT $ ioFontDef theFontDirectories
   case maybeFontDef of
     Just fontDef@B.FontDefinition{fontInfo=font} -> do
       modify (\conf -> conf{fontInfoMap=HMap.insert fNr font $ fontInfoMap conf})
@@ -93,8 +59,8 @@ defineFont cs fPath = do
     Nothing -> fail "Could not define font"
   where
     fNr = csToFontNr cs
-    ioFontDef = do
-      fontPath <- findFilePath fPath theFontDirectories
+    ioFontDef fontDirs = do
+      fontPath <- findFilePath fPath fontDirs
       font <- liftIO $ TFM.readTFMFancy fontPath
       nonExtName <- Path.setFileExtension "" fPath
       let fontName = Path.toFilePath $ Path.filename nonExtName
@@ -114,12 +80,12 @@ characterBox :: Monad m => Int -> MaybeT (Conf.ConfReaderT m) B.Character
 characterBox code = do
   font <- currentFontInfo
   let toSP = TFM.designScaleSP font
-  TFMC.Character{width=w, height=h, depth=d} <- MaybeT (return $ HMap.lookup code $ TFM.characters font)
+  TFMC.Character{width=w, height=h, depth=d} <- MaybeT (return $ HMap.lookup code $ characters font)
   return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
 
 spaceGlue :: Monad m => MaybeT (Conf.ConfReaderT m) BL.Glue
 spaceGlue = do
-  font@TFM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo
+  font@TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo
   let
     toSP = TFM.designScaleSP font
     toFlex = BL.finiteFlex . fromIntegral . toSP
