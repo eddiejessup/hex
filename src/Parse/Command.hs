@@ -11,8 +11,9 @@ import Control.Monad (when)
 import qualified Expand
 import qualified Lex
 
-import Parse.Util (Parser, Stream, ParseState, NullParser, ParseError, skipOneOptionalSatisfied, easyRunParser', satisfyThen, skipSatisfiedEquals)
-import qualified Parse.Util as PU
+import Parse.Stream (SimpExpandParser, ExpandedStream)
+import Parse.Helpers (ParseError, NullSimpParser, skipOneOptionalSatisfied, satisfyThen, skipSatisfiedEquals, skipSatisfied, easyRunParser)
+import Parse.Inhibited (parseInhibited, parseGeneralText, parseBalancedText, parseCSName)
 import qualified Parse.Common as PC
 import qualified Parse.Number as PN
 import qualified Parse.Length as PL
@@ -128,19 +129,19 @@ data HModeCommand
 
 -- Entry-points.
 
-extractHModeCommand :: Stream -> (ParseState, Either ParseError HModeCommand)
-extractHModeCommand = easyRunParser' parseHModeCommand
+extractHModeCommand :: ExpandedStream -> (P.State ExpandedStream, Either (ParseError ExpandedStream) HModeCommand)
+extractHModeCommand = easyRunParser parseHModeCommand
 
-extractVModeCommand :: Stream -> (ParseState, Either ParseError VModeCommand)
-extractVModeCommand = easyRunParser' parseVModeCommand
+extractVModeCommand :: ExpandedStream -> (P.State ExpandedStream, Either (ParseError ExpandedStream) VModeCommand)
+extractVModeCommand = easyRunParser parseVModeCommand
 
 -- Parse.
 
 -- All-mode Commands.
 
-type AllModeCommandParser = Parser AllModesCommand
+type AllModeCommandParser = SimpExpandParser AllModesCommand
 
-parseAllModeCommand :: Expand.Axis -> Parser AllModesCommand
+parseAllModeCommand :: Expand.Axis -> SimpExpandParser AllModesCommand
 parseAllModeCommand mode = P.choice [ relax
                                     , ignorespaces
                                     , changeCase
@@ -175,7 +176,7 @@ ignorespaces = do
 
 changeCase :: AllModeCommandParser
 changeCase =
-  ChangeCase <$> satisfyThen tokToDirection <*> PC.parseGeneralText
+  ChangeCase <$> satisfyThen tokToDirection <*> parseGeneralText
   where
     tokToDirection (Expand.ChangeCase d) = Just d
     tokToDirection _ = Nothing
@@ -190,25 +191,25 @@ tokenForFont = satisfyThen tokToCom
 macroToFont :: AllModeCommandParser
 macroToFont = do
   skipSatisfiedEquals Expand.MacroToFont
-  cs <- PC.parseCSName
+  cs <- parseInhibited parseCSName
   skipOptionalEquals
   fontPath <- parseFileName
   return $ Assign Assignment {body=DefineFont cs fontPath, global=False}
   where
     -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-    parseFileName :: Parser (Path Rel File)
+    parseFileName :: SimpExpandParser (Path Rel File)
     parseFileName = do
       PC.skipOptionalSpaces
       nameCodes <- P.some $ satisfyThen tokToChar
       let fileName = fmap C.chr nameCodes
-      PU.skipSatisfied PC.isSpace
+      skipSatisfied PC.isSpace
       case parseRelFile (fileName ++ ".tfm") of
         Just p -> return p
         Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
 
-    tokToChar (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=c}) = Just c
+    tokToChar (Expand.CharCat Lex.CharCat{cat=Lex.Letter, char=c}) = Just c
     -- 'Other' Characters for decimal digits are OK.
-    tokToChar (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=c}) = case c of
+    tokToChar (Expand.CharCat Lex.CharCat{cat=Lex.Other, char=c}) = case c of
       48 -> Just c
       49 -> Just c
       50 -> Just c
@@ -222,7 +223,7 @@ macroToFont = do
       _ -> Nothing
     tokToChar _ = Nothing
 
-skipOptionalEquals :: NullParser
+skipOptionalEquals :: NullSimpParser ExpandedStream
 skipOptionalEquals = do
   PC.skipOptionalSpaces
   skipOneOptionalSatisfied PC.isEquals
@@ -239,15 +240,15 @@ addKern = do
 
 addSpecifiedGlue :: Expand.Axis -> AllModeCommandParser
 addSpecifiedGlue mode = do
-  PU.skipSatisfied $ checkModeAndToken mode (== Expand.AddSpecifiedGlue)
+  skipSatisfied $ checkModeAndToken mode (== Expand.AddSpecifiedGlue)
   AddGlue <$> PG.parseGlue
 
 addSpace :: AllModeCommandParser
-addSpace = const AddSpace <$> PU.skipSatisfied PC.isSpace
+addSpace = const AddSpace <$> skipSatisfied PC.isSpace
 
 addRule :: Expand.Axis -> AllModeCommandParser
 addRule mode = do
-  PU.skipSatisfied $ checkModeAndToken mode (== Expand.AddRule)
+  skipSatisfied $ checkModeAndToken mode (== Expand.AddRule)
   let cmd = AddRule{width=Nothing, height=Nothing, depth=Nothing}
   parseRuleSpecification cmd
   where
@@ -296,11 +297,11 @@ defineMacro :: AllModeCommandParser
 defineMacro = do
   prefixes <- P.many $ satisfyThen tokToPrefix
   (defGlobal, defExpand) <- satisfyThen tokToDef
-  cs <- PC.parseCSName
+  cs <- parseInhibited parseCSName
   params <- parseParameters
-  PU.skipSatisfied PC.isExplicitLeftBrace
+  skipSatisfied PC.isExplicitLeftBrace
   when defExpand $ error "expanded-def not implemented"
-  _contents <- PC.parseBalancedText
+  _contents <- parseInhibited parseBalancedText
   return $ Assign $
     Assignment {
       body=DefineMacro { name=cs
@@ -325,9 +326,9 @@ defineMacro = do
 
 -- HMode.
 
-type HModeCommandParser = Parser HModeCommand
+type HModeCommandParser = SimpExpandParser HModeCommand
 
-parseHModeCommand :: Parser HModeCommand
+parseHModeCommand :: SimpExpandParser HModeCommand
 parseHModeCommand =
   P.choice [ leaveHMode
            , addCharacter
@@ -337,7 +338,7 @@ parseHModeCommand =
 
 leaveHMode :: HModeCommandParser
 leaveHMode = do
-  PU.skipSatisfied endsHMode
+  skipSatisfied endsHMode
   return LeaveHMode
   where
     endsHMode Expand.End = True
@@ -357,15 +358,15 @@ addCharacter = do
   c <- satisfyThen charToCode
   return AddCharacter{method=ExplicitChar, code=c}
   where
-    charToCode (Expand.LexToken Lex.CharCat{cat=Lex.Letter, char=c}) = Just c
-    charToCode (Expand.LexToken Lex.CharCat{cat=Lex.Other, char=c}) = Just c
+    charToCode (Expand.CharCat Lex.CharCat{cat=Lex.Letter, char=c}) = Just c
+    charToCode (Expand.CharCat Lex.CharCat{cat=Lex.Other, char=c}) = Just c
     charToCode _ = Nothing
 
 -- VMode.
 
-type VModeCommandParser = Parser VModeCommand
+type VModeCommandParser = SimpExpandParser VModeCommand
 
-parseVModeCommand :: Parser VModeCommand
+parseVModeCommand :: SimpExpandParser VModeCommand
 parseVModeCommand =
   P.choice [ enterHMode
            , end
@@ -380,7 +381,7 @@ end = do
 
 enterHMode :: VModeCommandParser
 enterHMode = do
-  PU.skipSatisfied startsHMode
+  skipSatisfied startsHMode
   return EnterHMode
   where
     startsHMode x

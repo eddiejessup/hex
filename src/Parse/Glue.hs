@@ -4,7 +4,8 @@ module Parse.Glue where
 
 import qualified Text.Megaparsec as P
 
-import Parse.Util (Parser, skipSatisfied)
+import Parse.Stream (SimpExpandParser)
+import Parse.Helpers (skipSatisfied)
 import qualified Parse.Common as PC
 import Parse.Number (parseSigns)
 import Parse.Length (Length, Factor, parseLength, parseFactor)
@@ -27,14 +28,14 @@ data FilLength
 
 -- Parse.
 
-parseGlue :: Parser Glue
+parseGlue :: SimpExpandParser Glue
 parseGlue = P.choice [ parseExplicitGlue
                      -- , parseInternalGlue
                      ]
   where
     parseExplicitGlue = ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> parseFlex "minus"
 
-parseFlex :: String -> Parser (Maybe Flex)
+parseFlex :: String -> SimpExpandParser (Maybe Flex)
 parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
                        , const Nothing <$> PC.skipOptionalSpaces ]
   where
@@ -42,7 +43,7 @@ parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
       = PC.skipKeyword s *> P.choice [ FilFlex <$> P.try parseFilLength
                                      , FiniteFlex <$> P.try parseLength ]
 
-parseFilLength :: Parser FilLength
+parseFilLength :: SimpExpandParser FilLength
 parseFilLength = do
   let
     parseSomeLs = P.some (skipSatisfied $ PC.matchNonActiveCharacterUncased 'l')

@@ -39,7 +39,7 @@ import qualified Lex
 import qualified Unit
 import qualified Expand
 import qualified Parse as P
-import Parse (Stream, insertLexToken, insertLexTokens)
+import Parse (insertLexTokenE, insertLexTokensE, ExpandedStream)
 
 import Debug.Trace
 
@@ -181,28 +181,32 @@ evaluateKern mag = B.Kern . evaluateLength mag
 evaluatePenalty :: P.Number -> BL.Penalty
 evaluatePenalty = BL.Penalty . fromIntegral . evaluateNumber
 
-applyChangeCaseToStream :: Stream -> Expand.VDirection -> Expand.BalancedText -> Stream
-applyChangeCaseToStream s d (Expand.BalancedText ts) = insertLexTokens s $ changeCase d <$> ts
+applyChangeCaseToStream :: ExpandedStream -> Expand.VDirection -> Expand.BalancedText -> ExpandedStream
+applyChangeCaseToStream s d (Expand.BalancedText ts) = insertLexTokensE s $ changeCase d <$> ts
   where
     -- Set the character code of each character token to its
     -- \uccode or \lccode value, if that value is non-zero.
     -- Don't change the category code.
     changeCase _ t@(Lex.ControlSequence _) = t
-    changeCase dir t@Lex.CharCat{char=c} = t{Lex.char=modFunc c}
+    changeCase dir (Lex.CharCatToken cc) = Lex.CharCatToken $ modCC cc
       where
+        modCC t@Lex.CharCat{char=c} = t{Lex.char=modFunc c}
         modFunc = C.ord . switch dir . C.chr
         switch Expand.Upward = C.toUpper
         switch Expand.Downward = C.toLower
 
-defineMacro :: Stream -> P.AssignmentBody -> Stream
-defineMacro stream (P.DefineMacro name params conts False False) =
-  stream{P.csMap=HMap.insert name (Expand.MacroToken $ Expand.Macro params conts) (P.csMap stream)}
+defineMacro :: ExpandedStream -> P.AssignmentBody -> ExpandedStream
+defineMacro (P.ExpandedStream ls csMap) (P.DefineMacro name params conts False False) =
+  P.ExpandedStream ls csMap'
+  where
+    csMap' = HMap.insert name newMacro csMap
+    newMacro = Expand.MacroToken $ Expand.Macro params conts
 
 runReaderOnState :: MonadState r f => Reader r b -> f b
 runReaderOnState f = runReader f <$> get
 
 -- We build a paragraph list in reverse order.
-extractParagraph :: [BL.BreakableHListElem] -> Stream -> ConfStateT IO ([BL.BreakableHListElem], Stream)
+extractParagraph :: [BL.BreakableHListElem] -> ExpandedStream -> ConfStateT IO ([BL.BreakableHListElem], ExpandedStream)
 extractParagraph acc stream = case eCom of
   Left x -> error $ show x
   Right com -> case com of
@@ -214,7 +218,7 @@ extractParagraph acc stream = case eCom of
       -- (Note that we pass stream, not stream'.)
         do
         let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
-        modStream $ insertLexToken stream parToken
+        modStream $ insertLexTokenE stream parToken
 
     P.AddCharacter{code=i} -> do
       charBox <- runReaderOnState (runMaybeT (characterBox i))
@@ -286,7 +290,7 @@ extractParagraph acc stream = case eCom of
         else
           continueUnchanged
       P.ExpandMacro (Expand.Macro [] (Expand.BalancedText ts)) ->
-          modStream $ insertLexTokens stream' ts
+          modStream $ insertLexTokensE stream' ts
       P.Assign P.Assignment{body=m@P.DefineMacro{} } ->
           modStream $ defineMacro stream' m
   where
@@ -295,7 +299,7 @@ extractParagraph acc stream = case eCom of
     modStream = extractParagraph acc
     continueUnchanged = extractParagraph acc stream'
 
-extractParagraphLineBoxes :: Bool -> Stream -> ConfStateT IO ([[B.HBoxElem]], Stream)
+extractParagraphLineBoxes :: Bool -> ExpandedStream -> ConfStateT IO ([[B.HBoxElem]], ExpandedStream)
 extractParagraphLineBoxes indent stream = do
   desiredW <- gets (`lengthParameter` DesiredWidth)
   lineTol <- gets (`integerParameter` LineTolerance)
@@ -424,7 +428,7 @@ addVListElems :: Monad m
               -> ConfStateT m [BL.BreakableVListElem]
 addVListElems = foldM addVListElem
 
-extractPages :: [B.Page] -> CurrentPage -> [BL.BreakableVListElem] -> Stream -> ConfStateT IO ([B.Page], Stream)
+extractPages :: [B.Page] -> CurrentPage -> [BL.BreakableVListElem] -> ExpandedStream -> ConfStateT IO ([B.Page], ExpandedStream)
 extractPages pages cur acc stream = case eCom of
   Left x -> error $ show x
   Right com -> case com of
@@ -487,7 +491,7 @@ extractPages pages cur acc stream = case eCom of
       P.StartParagraph indent ->
         addParagraphToPage indent
       P.ExpandMacro (Expand.Macro [] (Expand.BalancedText ts)) ->
-          modStream $ insertLexTokens stream' ts
+          modStream $ insertLexTokensE stream' ts
       P.Assign P.Assignment{body=m@P.DefineMacro{} } ->
           modStream $ defineMacro stream' m
     P.EnterHMode ->

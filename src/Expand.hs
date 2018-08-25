@@ -265,7 +265,7 @@ data ParseToken
   -- | EndIf -- \fi
   -- | Or -- \or
 
-  | LexToken Lex.Token
+  | CharCat Lex.CharCat
 
   -- Unofficial stuff while playing.
   | MacroToken Macro
@@ -317,12 +317,11 @@ defaultCSMap = HMap.fromList
     , (Lex.ControlSequenceProper (Lex.ControlWord "gdef"), DefineMacro{ global=True, expand=False })
     , (Lex.ControlSequenceProper (Lex.ControlWord "xdef"), DefineMacro{ global=True, expand=True })
 
-    , (Lex.ControlSequenceProper (Lex.ControlWord "amacro"), MacroToken $ Macro [] $ BalancedText [Lex.ControlSequence $ Lex.ControlWord "uppercase", Lex.CharCat 123 Lex.BeginGroup, Lex.CharCat 99 Lex.Letter ] )
+    , (Lex.ControlSequenceProper (Lex.ControlWord "amacro"), MacroToken $ Macro [] $ BalancedText [Lex.ControlSequence $ Lex.ControlWord "uppercase", Lex.CharCatToken $ Lex.CharCat 123 Lex.BeginGroup, Lex.CharCatToken $ Lex.CharCat 99 Lex.Letter ] )
 
     ]
 
-lexToParseToken :: Bool -> CSMap -> Lex.Token -> ParseToken
-lexToParseToken True csMap (Lex.ControlSequence cs)
+lexToParseToken :: CSMap -> Lex.Token -> ParseToken
+lexToParseToken csMap (Lex.ControlSequence cs)
   = fromMaybe (error ("no such control sequence found: " ++ show cs)) (HMap.lookup (Lex.ControlSequenceProper cs) csMap)
-lexToParseToken _ _ t
-  = LexToken t
+lexToParseToken _ (Lex.CharCatToken cc) = CharCat cc

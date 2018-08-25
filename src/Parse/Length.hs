@@ -6,7 +6,7 @@ import qualified Text.Megaparsec as P
 
 import Unit (PhysicalUnit(..))
 
-import Parse.Util (Parser)
+import Parse.Stream (SimpExpandParser)
 import qualified Parse.Common as PC
 import Parse.Number (NormalInteger, parseNormalInteger, parseRationalConstant, parseSigns)
 
@@ -59,22 +59,22 @@ data InternalUnit
 -- TODO:
 -- - Internal quantity units
 
-parseLength :: Parser Length
+parseLength :: SimpExpandParser Length
 parseLength = Length <$> parseSigns <*> parseUnsignedLength
 
-parseUnsignedLength :: Parser UnsignedLength
+parseUnsignedLength :: SimpExpandParser UnsignedLength
 parseUnsignedLength = P.choice [ NormalLengthAsULength <$> parseNormalLength
                                -- , CoercedLength <$> parseCoercedLength
                                ]
 
-parseNormalLength :: Parser NormalLength
+parseNormalLength :: SimpExpandParser NormalLength
 parseNormalLength = P.choice [ parseLengthSemiConstant
                              -- , InternalLength <$> parseInternalLength
                              ]
   where
     parseLengthSemiConstant = LengthSemiConstant <$> parseFactor <*> parseUnit
 
-parseUnit :: Parser Unit
+parseUnit :: SimpExpandParser Unit
 parseUnit = P.choice [ parsePhysicalUnit
                      , parseInternalKeywordUnit
                      -- , parseInternalQuantityUnit
@@ -105,7 +105,7 @@ parseUnit = P.choice [ parsePhysicalUnit
       in (PhysicalUnit <$> PC.parseOptionalKeyword "true" <*> parseUnitLit) <* PC.skipOneOptionalSpace
 
 
-parseFactor :: Parser Factor
+parseFactor :: SimpExpandParser Factor
 -- NOTE: The order matters here: The TeX grammar seems to be ambiguous: '2.2'
 -- could be parsed as an integer constant, '2', followed by '.2'. We break the
 -- ambiguity by prioritising the rational constant parser.

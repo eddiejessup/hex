@@ -39,10 +39,16 @@ data LexCatCode
   | Active
   deriving (Show, Eq)
 
+data CharCat = CharCat {char :: CharCode, cat :: LexCatCode}
+  deriving (Show, Eq)
+
 data Token
-  = CharCat {char :: CharCode, cat :: LexCatCode}
+  = CharCatToken CharCat
   | ControlSequence ControlSequence
   deriving (Show, Eq)
+
+instance Ord Token where
+  compare _ _ = EQ
 
 data LexState
   = SkippingBlanks
@@ -52,7 +58,7 @@ data LexState
 
 spaceTok :: Token
 -- 32 means ' '.
-spaceTok = CharCat{char=32, cat=Space}
+spaceTok = CharCatToken CharCat{char=32, cat=Space}
 
 chopDropWhile :: ([b] -> Maybe (a, [b])) -> (a -> Bool) -> [b] -> [b]
 chopDropWhile _ _ [] = []
@@ -121,25 +127,25 @@ extractToken getCC state cs = do
           Just (ControlSequence $ ControlWord "par", LineBegin, rest)
       -- Simple tokeniser cases
       | Cat.BeginGroup <- cat1 =
-          Just (CharCat{char=n, cat=BeginGroup}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=BeginGroup}, LineMiddle, rest)
       | Cat.EndGroup <- cat1 =
-          Just (CharCat{char=n, cat=EndGroup}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=EndGroup}, LineMiddle, rest)
       | Cat.MathShift <- cat1 =
-          Just (CharCat{char=n, cat=MathShift}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=MathShift}, LineMiddle, rest)
       | Cat.AlignTab <- cat1 =
-          Just (CharCat{char=n, cat=AlignTab}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=AlignTab}, LineMiddle, rest)
       | Cat.Parameter <- cat1 =
-          Just (CharCat{char=n, cat=Parameter}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=Parameter}, LineMiddle, rest)
       | Cat.Superscript <- cat1 =
-          Just (CharCat{char=n, cat=Superscript}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=Superscript}, LineMiddle, rest)
       | Cat.Subscript <- cat1 =
-          Just (CharCat{char=n, cat=Subscript}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=Subscript}, LineMiddle, rest)
       | Cat.Letter <- cat1 =
-          Just (CharCat{char=n, cat=Letter}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=Letter}, LineMiddle, rest)
       | Cat.Other <- cat1 =
-          Just (CharCat{char=n, cat=Other}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=Other}, LineMiddle, rest)
       | Cat.Active <- cat1 =
-          Just (CharCat{char=n, cat=Active}, LineMiddle, rest)
+          Just (CharCatToken CharCat{char=n, cat=Active}, LineMiddle, rest)
       -- Space, or end of line, while skipping blanks: Ignore.
       | SkippingBlanks <- state, Cat.Space <- cat1 =
           extractToken getCC state rest

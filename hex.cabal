@@ -38,7 +38,9 @@ library
                      , DVI.Encode
 
                      , Parse
-                     , Parse.Util
+                     , Parse.Helpers
+                     , Parse.Inhibited
+                     , Parse.Stream
                      , Parse.Common
                      , Parse.Number
                      , Parse.Length
