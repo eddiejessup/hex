@@ -1,4 +1,10 @@
-module TFM where
+module TFM (
+  module TFM.Parse,
+  designSizeSP,
+  designScaleSP,
+  readTFM,
+  readTFMFancy
+) where
 
 import Prelude hiding (readFile)
 

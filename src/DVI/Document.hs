@@ -3,7 +3,7 @@ module DVI.Document where
 import Control.Monad
 import Safe (lastDef)
 import qualified TFM
-import TFM.Parse (TexFont, checksum)
+import TFM (TexFont(..))
 
 import DVI.Encode
 

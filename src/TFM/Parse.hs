@@ -1,4 +1,7 @@
-module TFM.Parse where
+module TFM.Parse (
+  TexFont(..),
+  newTFM
+) where
 
 import qualified Data.Binary.Get as BG
 import Data.ByteString
@@ -28,7 +31,7 @@ data TexFont = TexFont { checksum :: Int
 
                        , ligKerns :: [LigKernInstr]
                        , characters :: HashMap Int Character }
-             deriving (Show)
+  deriving (Show)
 
 newTFM :: BG.Get TexFont
 newTFM

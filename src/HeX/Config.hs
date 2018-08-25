@@ -14,7 +14,7 @@ import Data.Maybe (fromJust)
 import Path
 import System.Directory
 
-import TFM.Parse (TexFont)
+import TFM (TexFont)
 
 import qualified HeX.Box as B
 import qualified HeX.BreakList as BL

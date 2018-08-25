@@ -5,7 +5,7 @@ module HeX.Box where
 import qualified Data.Char as C
 import Path (Path, Abs, File)
 
-import TFM.Parse (TexFont)
+import TFM (TexFont)
 
 import qualified HeX.Unit as Unit
 

@@ -16,7 +16,7 @@ import Control.Monad.IO.Class (MonadIO)
 import Path
 
 import qualified TFM
-import TFM.Parse (TexFont(..), characters)
+import TFM (TexFont(..))
 import qualified TFM.Character as TFMC
 import Adjacent (Adjacency(..))
 
