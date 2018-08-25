@@ -3,6 +3,7 @@ module DVI.Document where
 import Control.Monad
 import Safe (lastDef)
 import qualified TFM
+import TFM.Parse (TexFont, checksum)
 
 import DVI.Encode
 
@@ -20,7 +21,7 @@ data Instruction
   | MoveDown Int
   | MoveDownY
   | MoveDownZ
-  | DefineFont { fontInfo :: TFM.TexFont
+  | DefineFont { fontInfo :: TexFont
                , fontPath :: FilePath
                , fontNr :: Int
                , scaleFactorRatio :: Rational }
@@ -69,7 +70,7 @@ parseMundaneInstruction (acc, fNr, points, sDep, maxSDep) this =
                , fontNr = defFontNr
                , scaleFactorRatio = scaleRatio
                } ->
-      let checksum = TFM.checksum info
+      let _checksum = checksum info
           designSize = round $ TFM.designSizeSP info
           scaleFactor = TFM.designScaleSP info scaleRatio
           instr =
@@ -78,7 +79,7 @@ parseMundaneInstruction (acc, fNr, points, sDep, maxSDep) this =
               path
               scaleFactor
               designSize
-              checksum
+              _checksum
        in instr >>= addInstr
     PushStack ->
       return

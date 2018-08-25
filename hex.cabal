@@ -42,7 +42,12 @@ library
 
                      , TFM
                      , TFM.Parse
+                     , TFM.Common
+                     , TFM.Table
+                     , TFM.Header
                      , TFM.Character
+                     , TFM.LigKern
+                     , TFM.FontParams
 
                      , DVI.Encode
                      , DVI.Document

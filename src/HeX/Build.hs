@@ -16,6 +16,7 @@ import Control.Monad.IO.Class (MonadIO)
 import Path
 
 import qualified TFM
+import TFM.Parse (TexFont(..), characters)
 import qualified TFM.Character as TFMC
 import Adjacent (Adjacency(..))
 
@@ -34,7 +35,7 @@ import HeX.Parse (Stream, insertLexToken, insertLexTokens)
 csToFontNr :: Lex.ControlSequenceLike -> Int
 csToFontNr (Lex.ControlSequenceProper (Lex.ControlWord "thefont")) = Expand.theFontNr
 
-currentFontInfo :: Monad m => MaybeT (Conf.ConfReaderT m) TFM.TexFont
+currentFontInfo :: Monad m => MaybeT (Conf.ConfReaderT m) TexFont
 currentFontInfo = do
   -- Maybe font number isn't set.
   maybeFontNr <- lift $ asks currentFontNr
@@ -79,12 +80,12 @@ characterBox :: Monad m => Int -> MaybeT (Conf.ConfReaderT m) B.Character
 characterBox code = do
   font <- currentFontInfo
   let toSP = TFM.designScaleSP font
-  TFMC.Character{width=w, height=h, depth=d} <- MaybeT (return $ HMap.lookup code $ TFM.characters font)
+  TFMC.Character{width=w, height=h, depth=d} <- MaybeT (return $ HMap.lookup code $ characters font)
   return B.Character {code = code, width=toSP w, height=toSP h, depth=toSP d}
 
 spaceGlue :: Monad m => MaybeT (Conf.ConfReaderT m) BL.Glue
 spaceGlue = do
-  font@TFM.TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo
+  font@TexFont{spacing=d, spaceStretch=str, spaceShrink=shr} <- currentFontInfo
   let
     toSP = TFM.designScaleSP font
     toFlex = BL.finiteFlex . fromIntegral . toSP

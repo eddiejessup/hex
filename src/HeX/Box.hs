@@ -5,7 +5,7 @@ module HeX.Box where
 import qualified Data.Char as C
 import Path (Path, Abs, File)
 
-import qualified TFM
+import TFM.Parse (TexFont)
 
 import qualified HeX.Unit as Unit
 
@@ -30,7 +30,7 @@ data FontDefinition = FontDefinition
   , fontPath :: Path Abs File
   , fontName :: String
   , scaleFactorRatio :: Rational
-  , fontInfo :: TFM.TexFont
+  , fontInfo :: TexFont
   }
 
 instance Show FontDefinition where

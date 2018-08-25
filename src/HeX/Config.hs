@@ -14,13 +14,13 @@ import Data.Maybe (fromJust)
 import Path
 import System.Directory
 
-import qualified TFM
+import TFM.Parse (TexFont)
 
 import qualified HeX.Box as B
 import qualified HeX.BreakList as BL
 import qualified HeX.Unit as Unit
 
-type FontInfoMap = HMap.HashMap Int TFM.TexFont
+type FontInfoMap = HMap.HashMap Int TexFont
 
 data IntegerParameterName
   = LineTolerance
