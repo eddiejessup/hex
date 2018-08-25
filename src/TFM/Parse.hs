@@ -4,10 +4,8 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BLS
 import Data.ByteString.Char8 (pack)
 import qualified Data.Binary.Get as BG
-import qualified Data.Map as M
 import Data.List.Split (chunksOf)
 import Data.Bits ((.&.), shift)
-import Data.Maybe (fromJust)
 import qualified Control.Monad as CM
 import Data.Ratio ((%))
 
@@ -79,7 +77,7 @@ get4Word8Ints = do
     return (b1, b2, b3, b4)
 
 getPos :: TFM -> Table -> Int -> Int
-getPos tfm tbl iWords = tablePointerPos tfm tbl + wordToByte iWords
+getPos tfm tbl iWords = tablePointerPosBytes tfm tbl + wordToByte iWords
 
 getSubContents :: TFM -> Table -> Int -> BLS.ByteString -> BLS.ByteString
 getSubContents tfm tbl iWords s = BLS.fromStrict $ BS.drop (getPos tfm tbl iWords) $ BLS.toStrict s
@@ -92,91 +90,79 @@ get4Word8IntsAt :: TFM -> BLS.ByteString -> Table -> Int -> (Int, Int, Int, Int)
 get4Word8IntsAt tfm contents tbl iWords =
     BG.runGet get4Word8Ints $ getSubContents tfm tbl iWords contents
 
--- Utility to simplify lookup of integers from a map.
-certainIntLookup :: (Integral b, Ord a) => M.Map a b -> a -> Int
-certainIntLookup tmap tbl = fromIntegral $ fromJust $ M.lookup tbl tmap
-
 -- From a map from each table to their length, infer a particular table's
 -- position.
-tablePos :: M.Map Table Int -> Table -> Int
+tablePosBytes :: (Table -> Int) -> Table -> Int
 -- Base case: The header starts at a fixed position.
-tablePos _ Header = headerPointerBytes
+tablePosBytes _ Header = headerPointerBytes
 -- Otherwise,
-tablePos tblLengthsWords tbl =
+tablePosBytes tblLengthsWords tbl =
     let
         prevTbl = pred tbl
-        prevPos = tablePos tblLengthsWords prevTbl
-        prevLen = wordToByte $ certainIntLookup tblLengthsWords prevTbl
+        prevPos = tablePosBytes tblLengthsWords prevTbl
+        prevLen = wordToByte $ tblLengthsWords prevTbl
     in
         -- The table's position is the previous table's position, plus that
         -- table's length.
         prevPos + prevLen
 
--- With a map from each table to its starting position, and a map from each
--- table to its length, infer the position of the end of a particular table.
-tablePointerEnd :: (Integral a) => M.Map Table a -> M.Map Table a -> Table -> Int
-tablePointerEnd pointers wlengths table =
-    let
-        pos = certainIntLookup pointers table
-        len = wordToByte $ certainIntLookup wlengths table
-    in
-        pos + len
+-- Infer the position of the end of a particular table.
+tablePointerEnd :: (Table -> Int) -> Table -> Int
+tablePointerEnd tableToLength table =
+  tablePosBytes tableToLength table + wordToByte (tableToLength table)
 
 -- Similar utilities to above, but inferring table attributes using a TFM
 -- object.
 
-tablePointerPos :: TFM -> (Table -> Int)
-tablePointerPos tfm = certainIntLookup (tablePointers tfm)
-
-tableLength :: TFM -> (Table -> Int)
-tableLength tfm = certainIntLookup (tableLengthsWords tfm)
+tablePointerPosBytes :: TFM -> (Table -> Int)
+tablePointerPosBytes = tablePosBytes . tableLengthsWords
 
 tablePointerEndTFM :: TFM -> Table -> Int
-tablePointerEndTFM tfm = tablePointerEnd (tablePointers tfm) (tableLengthsWords tfm)
+tablePointerEndTFM tfm = tablePointerEnd (tableLengthsWords tfm)
 
 -- Basic information about a TeX Font Metric file.
-data TFM = TFM { fileLengthWords :: Int
-               , headerDataLengthWords :: Int
-               , smallestCharCode :: Int
+data TFM = TFM { smallestCharCode :: Int
                , largestCharCode :: Int
-               , tableLengthsWords :: M.Map Table Int
-               , tablePointers :: M.Map Table Int } deriving (Show)
+               , tableLengthsWords :: Table -> Int }
 
 newTFM :: BG.Get TFM
 newTFM = do
     -- Read and set table lengths.
     _fileLengthWords <- getWord16beInt
-    headerDataLengthWordsRead <- getWord16beInt
-    let _headerDataLengthWords = max headerDataLengthWordsRead headerDataLengthWordsMin
+    _headerDataLengthWords <- max headerDataLengthWordsMin <$> getWord16beInt
     _smallestCharCode <- getWord16beInt
     _largestCharCode <- getWord16beInt
-
     -- Read the lengths of all tables after and including the 'Width' table.
-    let laterTables = filter (>=Width) [minBound..]
-    laterLengths <- mapM (const getWord16beInt) laterTables
+    widthDataLengthWords <- getWord16beInt
+    heightDataLengthWords <- getWord16beInt
+    depthDataLengthWords <- getWord16beInt
+    italicCorrectionDataLengthWords <- getWord16beInt
+    ligKernDataLengthWords <- getWord16beInt
+    kernDataLengthWords <- getWord16beInt
+    extensibleCharDataLengthWords <- getWord16beInt
+    fontParamDataLengthWords <- getWord16beInt
 
-    let nrChars = _largestCharCode - _smallestCharCode + 1
+    let
+      tableToLength Header = _headerDataLengthWords
+      tableToLength CharacterInfo = _largestCharCode - _smallestCharCode + 1
+      tableToLength Width = widthDataLengthWords
+      tableToLength Height = heightDataLengthWords
+      tableToLength Depth = depthDataLengthWords
+      tableToLength ItalicCorrection = italicCorrectionDataLengthWords
+      tableToLength LigKern = ligKernDataLengthWords
+      tableToLength Kern = kernDataLengthWords
+      tableToLength ExtensibleCharacter = extensibleCharDataLengthWords
+      tableToLength FontParameter = fontParamDataLengthWords
 
-        -- Assemble the inferred lengths of the tables into maps from them, to
-        -- their length and position.
-        tableLengthsWordsLst = (Header, _headerDataLengthWords)
-                               : (CharacterInfo, nrChars)
-                               : zip laterTables laterLengths
-        _tableLengthsWords = M.fromList tableLengthsWordsLst
-        _tablePointers = M.mapWithKey (\tbl _ -> tablePos _tableLengthsWords tbl) _tableLengthsWords
-
-        -- Check the inferred file length matches expectations.
-        validationFileLength = tablePointerEnd _tablePointers _tableLengthsWords maxBound
+      -- Check the inferred file length matches expectations.
+      validationFileLength = tablePointerEnd tableToLength maxBound
 
     CM.when (validationFileLength /= wordToByte _fileLengthWords) $
         fail $ "Invalid TFM File " ++ show validationFileLength ++ " " ++ show _fileLengthWords
 
-    return TFM { fileLengthWords=_fileLengthWords
-               , headerDataLengthWords=_headerDataLengthWords
-               , smallestCharCode=_smallestCharCode
+    return TFM { smallestCharCode=_smallestCharCode
                , largestCharCode=_largestCharCode
-               , tableLengthsWords=_tableLengthsWords
-               , tablePointers=_tablePointers }
+               , tableLengthsWords=tableToLength }
 
 -- The information stored in the header table of a TFM file.
 data Headers = Headers { checksum :: Int
@@ -186,7 +172,7 @@ data Headers = Headers { checksum :: Int
 
 readHeader :: TFM -> BG.Get Headers
 readHeader tfm = do
-    BG.skip $ tablePointerPos tfm Header
+    BG.skip $ tablePointerPosBytes tfm Header
 
     -- Read header[0 ... 1], containing the checksum and design size.
     _checksum <- getWord32beInt
@@ -195,7 +181,7 @@ readHeader tfm = do
     postDesignPos <- fromIntegral <$> BG.bytesRead
 
     -- Get the position of the character info table, to orient ourselves.
-    let charInfoPos = tablePointerPos tfm CharacterInfo
+    let charInfoPos = tablePointerPosBytes tfm CharacterInfo
 
     -- Read header[2 ... 11] if present, containing the character coding
     -- scheme.
@@ -299,7 +285,7 @@ readMathExtensionParams scheme = if scheme `elem` mathExtensionSchemes
 
 readFontParams :: TFM -> Headers -> BG.Get FontParams
 readFontParams tfm tfmHeads = do
-    BG.skip $ tablePointerPos tfm FontParameter
+    BG.skip $ tablePointerPosBytes tfm FontParameter
     let scheme = characterCodingScheme tfmHeads
     CM.when (scheme == pack "TeX math italic") $
       fail "Unsupported character coding scheme"
@@ -441,8 +427,8 @@ readLigKerns tfm contents
         let kernGetter = getKern tfm contents
         in fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
     where
-        ligKernTblPos = tablePointerPos tfm LigKern
-        ligKernTblLengthWords = tableLength tfm LigKern
+        ligKernTblPos = tablePointerPosBytes tfm LigKern
+        ligKernTblLengthWords = tableLengthsWords tfm LigKern
 
         contentsLigKernOnwards = BS.drop ligKernTblPos $ BLS.toStrict contents
         instrSets = chunksOf 4 . fmap fromIntegral $ BS.unpack contentsLigKernOnwards
