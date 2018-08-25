@@ -2,18 +2,17 @@
 
 module HeX.Parse.Common where
 
-import qualified Text.Megaparsec as P
 import qualified Data.Char as C
-import Data.Maybe (isJust)
 import Data.Functor (($>))
+import Data.Maybe (isJust)
+import qualified Text.Megaparsec as P
 
-import HeX.Expand (BalancedText(..))
 import qualified HeX.Expand as Expand
-import HeX.Lex (ControlSequenceLike(..))
 import qualified HeX.Lex as Lex
 
-import HeX.Parse.Helpers (MatchToken, skipManySatisfied, skipOneOptionalSatisfied
-                         , NullSimpParser, NullSimpParser)
+import HeX.Parse.Helpers
+       (MatchToken, NullSimpParser, NullSimpParser, skipManySatisfied,
+        skipOneOptionalSatisfied)
 import qualified HeX.Parse.Helpers as PU
 import HeX.Parse.Stream (ExpandedStream(..), SimpExpandParser)
 
@@ -40,11 +39,11 @@ isNonActiveCharacter :: MatchToken ExpandedStream
 isNonActiveCharacter = not . isActiveCharacter
 
 isEquals :: MatchToken ExpandedStream
-isEquals (Expand.CharCat Lex.CharCat{cat=Lex.Other, char=61}) = True
+isEquals (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 61}) = True
 isEquals _ = False
 
 isCategory :: Lex.LexCatCode -> MatchToken ExpandedStream
-isCategory c (Expand.CharCat Lex.CharCat{cat=c'}) = c == c'
+isCategory c (Expand.CharCat Lex.CharCat {cat = c'}) = c == c'
 isCategory _ _ = False
 
 isLetter :: MatchToken ExpandedStream
@@ -60,13 +59,14 @@ isExplicitLeftBrace :: MatchToken ExpandedStream
 isExplicitLeftBrace = isCategory Lex.BeginGroup
 
 matchNonActiveCharacterUncased :: Char -> MatchToken ExpandedStream
-matchNonActiveCharacterUncased a t@(Expand.CharCat Lex.CharCat{char=c})
-  = isNonActiveCharacter t && (C.chr c `elem` [C.toUpper a, C.toLower a])
+matchNonActiveCharacterUncased a t@(Expand.CharCat Lex.CharCat {char = c}) =
+  isNonActiveCharacter t && (C.chr c `elem` [C.toUpper a, C.toLower a])
 matchNonActiveCharacterUncased _ _ = False
 
 skipKeyword :: String -> NullSimpParser ExpandedStream
-skipKeyword s
-  = skipOptionalSpaces *> mapM_ (PU.skipSatisfied . matchNonActiveCharacterUncased) s
+skipKeyword s =
+  skipOptionalSpaces *>
+  mapM_ (PU.skipSatisfied . matchNonActiveCharacterUncased) s
 
 parseOptionalKeyword :: String -> SimpExpandParser Bool
 parseOptionalKeyword s = isJust <$> P.optional (P.try $ skipKeyword s)

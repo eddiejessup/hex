@@ -48,7 +48,7 @@ parseMundaneInstruction (acc, fNr, points, sDep, maxSDep) this =
                then SetRule
                else PutRule)
           args = fmap (U4 . fromIntegral) [h, w]
-       in addInstr $ EncodableInstruction op args
+      in addInstr $ EncodableInstruction op args
     BeginNewPage ->
       let beginPageInstr = getBeginPageInstruction $ lastDef (-1) points
           accEnded =
@@ -56,13 +56,13 @@ parseMundaneInstruction (acc, fNr, points, sDep, maxSDep) this =
               [] -> acc
               _ -> endPageInstruction : acc
           newBeginPagePointer = encLength accEnded
-       in do acc' <-
-               case fNr of
-                 Just nr -> do
-                   fInstr <- getSelectFontNrInstruction nr
-                   return $ fInstr : beginPageInstr : accEnded
-                 Nothing -> return $ beginPageInstr : accEnded
-             return (acc', fNr, newBeginPagePointer : points, sDep, maxSDep)
+      in do acc' <-
+              case fNr of
+                Just nr -> do
+                  fInstr <- getSelectFontNrInstruction nr
+                  return $ fInstr : beginPageInstr : accEnded
+                Nothing -> return $ beginPageInstr : accEnded
+            return (acc', fNr, newBeginPagePointer : points, sDep, maxSDep)
     MoveRight dist -> getMoveInstruction True dist >>= addInstr
     MoveDown dist -> getMoveInstruction False dist >>= addInstr
     DefineFont { fontInfo = info
@@ -80,7 +80,7 @@ parseMundaneInstruction (acc, fNr, points, sDep, maxSDep) this =
               scaleFactor
               designSize
               _checksum
-       in instr >>= addInstr
+      in instr >>= addInstr
     PushStack ->
       return
         (pushInstruction : acc, fNr, points, sDep + 1, max maxSDep (sDep + 1))

@@ -4,9 +4,9 @@ module Main where
 
 import Prelude hiding (writeFile)
 
-import Data.Char (ord)
-import Data.ByteString.Lazy (writeFile)
 import Control.Monad.Trans.State.Lazy (runStateT)
+import Data.ByteString.Lazy (writeFile)
+import Data.Char (ord)
 import Data.Maybe
 import System.Console.GetOpt
 import System.Environment
@@ -21,27 +21,28 @@ import HeX.Expand (defaultCSMap)
 import HeX.Parse.Stream (newExpandStream)
 
 data Flag
- = Help
- | Output FilePath
- deriving Show
+  = Help
+  | Output FilePath
+  deriving (Show)
 
 options :: [OptDescr Flag]
 options =
-  [ Option ['h'] ["help"]    (NoArg Help)            "show usage information"
-  , Option ['o'] ["output"]  (OptArg output "FILE")  "output to FILE"
+  [ Option ['h'] ["help"] (NoArg Help) "show usage information"
+  , Option ['o'] ["output"] (OptArg output "FILE") "output to FILE"
   ]
   where
     output = Output . fromMaybe "out.dvi"
 
 usage :: String
 usage = usageInfo header options
-  where header = "Usage: hex [OPTION...] file"
+  where
+    header = "Usage: hex [OPTION...] file"
 
 parseArgs :: [String] -> IO ([Flag], [String])
-parseArgs argStr = 
+parseArgs argStr =
   case getOpt Permute options argStr of
-     (o, n, []) -> return (o, n)
-     (_, _, errs) -> ioError $ userError $ concat errs ++ usage
+    (o, n, []) -> return (o, n)
+    (_, _, errs) -> ioError $ userError $ concat errs ++ usage
 
 run :: FilePath -> FilePath -> IO ()
 run inFName outFName = do
@@ -52,7 +53,7 @@ run inFName outFName = do
   let instrs = toDVI pages
   case parseInstructions instrs 1000 of
     Left err -> ioError $ userError err
-    Right encInstrs ->  writeFile outFName $ encode $ reverse encInstrs
+    Right encInstrs -> writeFile outFName $ encode $ reverse encInstrs
 
 main :: IO ()
 main = do

@@ -7,19 +7,29 @@ import Data.Maybe (fromMaybe)
 
 import qualified HeX.Lex as Lex
 
-data HDirection = Leftward | Rightward
+data HDirection
+  = Leftward
+  | Rightward
   deriving (Show, Eq)
 
-data VDirection = Upward | Downward
+data VDirection
+  = Upward
+  | Downward
   deriving (Show, Eq)
 
-data Direction = Forward | Backward
+data Direction
+  = Forward
+  | Backward
   deriving (Show, Eq)
 
-data MessageStream = Out | Err
+data MessageStream
+  = Out
+  | Err
   deriving (Show, Eq)
 
-data Axis = Horizontal | Vertical
+data Axis
+  = Horizontal
+  | Vertical
   deriving (Show, Eq)
 
 data PresetGlueType
@@ -48,13 +58,18 @@ data BoxRegisterAttribute
   | IsVoid
   deriving (Show, Eq)
 
-newtype BalancedText = BalancedText [Lex.Token]
+newtype BalancedText =
+  BalancedText [Lex.Token]
   deriving (Show, Eq)
 
-data MacroParameter = MacroParameter { nr :: Int, delimiter :: [Lex.Token] }
-  deriving (Show, Eq)
+data MacroParameter = MacroParameter
+  { nr :: Int
+  , delimiter :: [Lex.Token]
+  } deriving (Show, Eq)
 
-data Macro = Macro [MacroParameter] BalancedText
+data Macro =
+  Macro [MacroParameter]
+        BalancedText
   deriving (Show, Eq)
 
 data ModedCommandParseToken
@@ -100,14 +115,12 @@ data ParseToken
   | StartParagraph { indent :: Bool } -- \indent, \noindent
   | EndParagraph -- \par
   -- | LeftBrace -- {
-
   -- Starters of mode-specific commands with almost mode-independent grammar.
-  | ModedCommand Axis ModedCommandParseToken
-
+  | ModedCommand Axis
+                 ModedCommandParseToken
   -- Starters of Vertical-Mode-specific commands.
   | End -- \end
   -- | Dump -- \dump
-
   -- Starters of Horizontal-Mode-specific commands.
   -- | ControlSpace -- \␣ (a control symbol named ' ')
   -- | AddCharacterCode -- \char
@@ -117,7 +130,6 @@ data ParseToken
   -- | AddDiscretionaryText -- \discretionary
   -- | AddDiscretionaryHyphen -- \-
   -- | ToggleMathMode -- $
-
   -- -- Starters of box invocations.
   -- | PopRegisterBox -- \box
   -- | LookupRegisterBox -- \copy
@@ -128,19 +140,16 @@ data ParseToken
   -- | VBox {top :: Bool} -- \vbox, \vtop
   -- Direction represents reading direction: forward means right, or down.
   -- | AddFetchedBox { pop :: Bool } -- \box, \copy
-
   -- -- Involved in assignments.
   -- -- * * Modifying how to apply assignments.
-  |      Global -- \global
-
+  | Global -- \global
   -- -- * Defining macros.
   -- -- * * Modifying how to parse the macro.
-  |      Long -- \long
-  |      Outer -- \outer
+  | Long -- \long
+  | Outer -- \outer
   --     \def, \gdef, \edef (expanded-def), \xdef (global-expanded-def).
-  |      DefineMacro { global, expand :: Bool }
+  | DefineMacro { global, expand :: Bool }
   -- -- * * Modifying how to parse the macro.
-
   -- -- * Setting variable values.
   -- -- * * Setting an integer value.
   -- -- |      IntegerParameter IntegerParameter -- example: \tolerance
@@ -172,23 +181,19 @@ data ParseToken
   --        -- register, such as defined through \toksdef.
   -- |      TokenForTokenList
   -- |      LookupTokenList -- \toks
-
   -- * Modifying variable values with arithmetic.
   -- | Advance -- \advance
   -- | Multiply -- \multiply
   -- | Divide -- \divide
-
   -- * Setting code table values.
   -- | SetCodeCategory -- \catcode
   -- | SetCodeMathCategory -- \mathcode
   -- | SetCodeChangeCase VDirection -- \uccode, \lccode
   -- | SetCodeSpaceFactor -- \sfcode
   -- | SetCodeDelimiter -- \delcode
-
   -- * Aliasing tokens.
   -- | Let -- \let
   -- | FutureLet -- \futurelet
-
   -- * Defining simple token macros (also known as 'short-hand definitions').
   -- * * Macros resolving to character and math-character codes.
   -- | MacroToCharacter -- \chardef
@@ -199,55 +204,42 @@ data ParseToken
   -- | MacroToGlueLookup -- \skipdef
   -- | MacroToMathGlueLookup -- \muskipdef
   -- | MacroToTokenListLookup -- \toksdef
-
   -- * Setting the current font.
   -- A control sequence representing a particular font, such as defined through
   -- \font.
   | TokenForFont Int
-
   -- * Setting font math-family-member things.
   -- | SetTextSizeFont -- \textfont
   -- | SetScriptSizeFont -- \scriptfont
   -- | SetScriptScriptSizeFont -- \scriptscriptfont
-
   -- * Setting paragraph shape things.
   -- | SetParagraphShape -- \parshape
-
   -- * Reading contents into control sequences (not sure what this is about).
   -- | Read -- \read
-
   -- * Setting the contents of a box register.
   -- | SetBoxRegister -- \setbox
-
   -- * Defining macros resolving to a font.
   | MacroToFont -- \font
-
   -- Involved in global assignments.
-
   -- * Setting properties of a font.
   -- | SetFontDimension -- \fontdimen
   -- | SetFontHyphenCharacter -- \hyphenchar
   -- | SetFontSkewCharacter -- \skewchar
-
   -- * Configuring hyphenation.
   -- | AddHyphenationExceptions -- \hyphenation
   -- | SetHyphenationPatterns -- \patterns
-
   -- * Dealing with box dimensions.
   -- | BoxHeight -- \ht
   -- | BoxWidth -- \wd
   -- | BoxDepth -- \dp
-
   -- * Setting interaction mode.
   -- | SwitchToErrorStopMode -- \errorstopmode
   -- | SwitchToScrollMode -- \scrollmode
   -- | SwitchToNonStopMode -- \nonstopmode
   -- | SwitchToBatchMode -- \batchmode
-
   -- * Setting special values.
   -- | SpecialInteger SpecialInteger -- \example: \spacefactor
   -- | SpecialDistance SpecialDistance -- \example: \pagestretch
-
   -- Conditions.
   -- | CompareIntegers -- \ifnum
   -- | CompareDistances -- \ifdim
@@ -264,9 +256,7 @@ data ParseToken
   -- | Else -- \else
   -- | EndIf -- \fi
   -- | Or -- \or
-
   | CharCat Lex.CharCat
-
   -- Unofficial stuff while playing.
   | MacroToken Macro
   deriving (Show, Eq)
@@ -280,48 +270,76 @@ theFontNr = 1
 type CSMap = HMap.HashMap Lex.ControlSequenceLike ParseToken
 
 defaultCSMap :: CSMap
-defaultCSMap = HMap.fromList
+defaultCSMap =
+  HMap.fromList
     [ (Lex.ControlSequenceProper (Lex.ControlWord "relax"), Relax)
     , (Lex.ControlSequenceProper (Lex.ControlWord "ignorespaces"), IgnoreSpaces)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "uppercase"), ChangeCase Upward)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "lowercase"), ChangeCase Downward)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "uppercase")
+      , ChangeCase Upward)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "lowercase")
+      , ChangeCase Downward)
     , (Lex.ControlSequenceProper (Lex.ControlWord "penalty"), AddPenalty)
     , (Lex.ControlSequenceProper (Lex.ControlWord "kern"), AddKern)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "vskip"), ModedCommand Vertical AddSpecifiedGlue)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "hskip"), ModedCommand Horizontal AddSpecifiedGlue)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "hfil"), ModedCommand Horizontal $ AddPresetGlue Fil)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "vfil"), ModedCommand Vertical $ AddPresetGlue Fil)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "hfill"), ModedCommand Horizontal $ AddPresetGlue Fill)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "vfill"), ModedCommand Vertical $ AddPresetGlue Fill)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "hfilneg"), ModedCommand Horizontal $ AddPresetGlue FilNeg)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "vfilneg"), ModedCommand Vertical $ AddPresetGlue FilNeg)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "hss"), ModedCommand Horizontal $ AddPresetGlue StretchOrShrink)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "vss"), ModedCommand Vertical $ AddPresetGlue StretchOrShrink)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "indent"), StartParagraph{indent=True})
-    , (Lex.ControlSequenceProper (Lex.ControlWord "noindent"), StartParagraph{indent=False})
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "vskip")
+      , ModedCommand Vertical AddSpecifiedGlue)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "hskip")
+      , ModedCommand Horizontal AddSpecifiedGlue)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "hfil")
+      , ModedCommand Horizontal $ AddPresetGlue Fil)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "vfil")
+      , ModedCommand Vertical $ AddPresetGlue Fil)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "hfill")
+      , ModedCommand Horizontal $ AddPresetGlue Fill)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "vfill")
+      , ModedCommand Vertical $ AddPresetGlue Fill)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "hfilneg")
+      , ModedCommand Horizontal $ AddPresetGlue FilNeg)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "vfilneg")
+      , ModedCommand Vertical $ AddPresetGlue FilNeg)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "hss")
+      , ModedCommand Horizontal $ AddPresetGlue StretchOrShrink)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "vss")
+      , ModedCommand Vertical $ AddPresetGlue StretchOrShrink)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "indent")
+      , StartParagraph {indent = True})
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "noindent")
+      , StartParagraph {indent = False})
     , (Lex.ControlSequenceProper (Lex.ControlWord "par"), EndParagraph)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "hrule"), ModedCommand Vertical AddRule)
-    , (Lex.ControlSequenceProper (Lex.ControlWord "vrule"), ModedCommand Horizontal AddRule)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "hrule")
+      , ModedCommand Vertical AddRule)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "vrule")
+      , ModedCommand Horizontal AddRule)
     , (Lex.ControlSequenceProper (Lex.ControlWord "font"), MacroToFont)
     -- Temporary pragmatism.
-    , (Lex.ControlSequenceProper (Lex.ControlWord "selectfont"), TokenForFont theFontNr)
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "selectfont")
+      , TokenForFont theFontNr)
     , (Lex.ControlSequenceProper (Lex.ControlWord "end"), End)
-
     -- Macro prefixes.
     , (Lex.ControlSequenceProper (Lex.ControlWord "global"), Global)
     , (Lex.ControlSequenceProper (Lex.ControlWord "long"), Long)
     , (Lex.ControlSequenceProper (Lex.ControlWord "outer"), Outer)
     -- Macro def types.
-    , (Lex.ControlSequenceProper (Lex.ControlWord "def"), DefineMacro{ global=False, expand=False })
-    , (Lex.ControlSequenceProper (Lex.ControlWord "edef"), DefineMacro{ global=False, expand=True })
-    , (Lex.ControlSequenceProper (Lex.ControlWord "gdef"), DefineMacro{ global=True, expand=False })
-    , (Lex.ControlSequenceProper (Lex.ControlWord "xdef"), DefineMacro{ global=True, expand=True })
-
-    , (Lex.ControlSequenceProper (Lex.ControlWord "amacro"), MacroToken $ Macro [] $ BalancedText [Lex.ControlSequence $ Lex.ControlWord "uppercase", Lex.CharCatToken $ Lex.CharCat 123 Lex.BeginGroup, Lex.CharCatToken $ Lex.CharCat 99 Lex.Letter ] )
-
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "def")
+      , DefineMacro {global = False, expand = False})
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "edef")
+      , DefineMacro {global = False, expand = True})
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "gdef")
+      , DefineMacro {global = True, expand = False})
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "xdef")
+      , DefineMacro {global = True, expand = True})
+    , ( Lex.ControlSequenceProper (Lex.ControlWord "amacro")
+      , MacroToken $
+        Macro [] $
+        BalancedText
+          [ Lex.ControlSequence $ Lex.ControlWord "uppercase"
+          , Lex.CharCatToken $ Lex.CharCat 123 Lex.BeginGroup
+          , Lex.CharCatToken $ Lex.CharCat 99 Lex.Letter
+          ])
     ]
 
 lexToParseToken :: CSMap -> Lex.Token -> ParseToken
-lexToParseToken csMap (Lex.ControlSequence cs)
-  = fromMaybe (error ("no such control sequence found: " ++ show cs)) (HMap.lookup (Lex.ControlSequenceProper cs) csMap)
+lexToParseToken csMap (Lex.ControlSequence cs) =
+  fromMaybe
+    (error ("no such control sequence found: " ++ show cs))
+    (HMap.lookup (Lex.ControlSequenceProper cs) csMap)
 lexToParseToken _ (Lex.CharCatToken cc) = CharCat cc

@@ -2,33 +2,38 @@
 
 module HeX.Parse.Command where
 
+import Control.Monad (when)
+import qualified Data.Char as C
+import Path (File, Path, Rel, parseRelFile)
 import qualified Text.Megaparsec as P
 import Text.Megaparsec ((<|>))
-import qualified Data.Char as C
-import Path (Path, Rel, File, parseRelFile)
-import Control.Monad (when)
 
 import qualified HeX.Expand as Expand
 import qualified HeX.Lex as Lex
 
-import HeX.Parse.Stream (SimpExpandParser, ExpandedStream)
-import HeX.Parse.Helpers (ParseError, NullSimpParser, skipOneOptionalSatisfied, satisfyThen, skipSatisfiedEquals, skipSatisfied, easyRunParser)
-import HeX.Parse.Inhibited (parseInhibited, parseGeneralText, parseBalancedText, parseCSName)
 import qualified HeX.Parse.Common as PC
-import qualified HeX.Parse.Number as PN
-import qualified HeX.Parse.Length as PL
 import qualified HeX.Parse.Glue as PG
+import HeX.Parse.Helpers
+       (NullSimpParser, ParseError, easyRunParser, satisfyThen,
+        skipOneOptionalSatisfied, skipSatisfied, skipSatisfiedEquals)
+import HeX.Parse.Inhibited
+       (parseBalancedText, parseCSName, parseGeneralText, parseInhibited)
+import qualified HeX.Parse.Length as PL
+import qualified HeX.Parse.Number as PN
+import HeX.Parse.Stream (ExpandedStream, SimpExpandParser)
 
 -- AST.
-
-data CharSource = ExplicitChar | CodeChar | TokenChar
-  deriving Show
+data CharSource
+  = ExplicitChar
+  | CodeChar
+  | TokenChar
+  deriving (Show)
 
 data MacroPrefix
   = Long
   | Outer
   | Global
-  deriving Eq
+  deriving (Eq)
 
 data AssignmentBody
   = DefineMacro { name :: Lex.ControlSequenceLike
@@ -47,18 +52,20 @@ data AssignmentBody
   -- | Read
   -- | DefineBox
   -- TEMP: Dummy label constructor until properly implemented.
-  | DefineFont Lex.ControlSequenceLike (Path Rel File)
+  | DefineFont Lex.ControlSequenceLike
+               (Path Rel File)
   -- -- Global assignments.
   -- | SetFontAttribute
   -- | SetHyphenation
   -- | SetBoxSize
   -- | SetInteractionMode
   -- | SetSpecialVariable
-  deriving Show
+  deriving (Show)
 
-data Assignment
-  = Assignment { body :: AssignmentBody, global :: Bool }
-  deriving Show
+data Assignment = Assignment
+  { body :: AssignmentBody
+  , global :: Bool
+  } deriving (Show)
 
 data AllModesCommand
   = Assign Assignment
@@ -75,7 +82,8 @@ data AllModesCommand
   | IgnoreSpaces
   -- | SetAfterAssignmentToken Token
   -- | AddToAfterGroupTokens Tokens
-  | ChangeCase Expand.VDirection Expand.BalancedText
+  | ChangeCase Expand.VDirection
+               Expand.BalancedText
   -- | Message MessageStream GeneralText
   -- | OpenInput { streamNr :: Int, fileName :: String }
   -- | CloseInput { streamNr :: Int }
@@ -102,17 +110,16 @@ data AllModesCommand
   -- | AddAlignedMaterial DesiredLength AlignmentMaterial
   | StartParagraph { indent :: Bool }
   | EndParagraph
-
   -- Unofficial stuff while playing.
   | ExpandMacro Expand.Macro
-  deriving Show
+  deriving (Show)
 
 data VModeCommand
   = VAllModesCommand AllModesCommand
   | EnterHMode
   | End
   -- | Dump
-  deriving Show
+  deriving (Show)
 
 data HModeCommand
   = HAllModesCommand AllModesCommand
@@ -120,46 +127,52 @@ data HModeCommand
   -- | EnterMathMode
   -- | AddAdjustment VModeMaterial
   -- | AddControlSpace
-  | AddCharacter { method :: CharSource, code :: Int }
+  | AddCharacter { method :: CharSource
+                 , code :: Int }
   -- | AddAccentedCharacter { accentCode :: Int, targetCode :: Maybe Int, assignments :: [Assignment]}
   -- | AddItalicCorrection
   -- | AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
-  deriving Show
-
+  deriving (Show)
 
 -- Entry-points.
-
-extractHModeCommand :: ExpandedStream -> (P.State ExpandedStream, Either (ParseError ExpandedStream) HModeCommand)
+extractHModeCommand ::
+     ExpandedStream
+  -> (P.State ExpandedStream, Either (ParseError ExpandedStream) HModeCommand)
 extractHModeCommand = easyRunParser parseHModeCommand
 
-extractVModeCommand :: ExpandedStream -> (P.State ExpandedStream, Either (ParseError ExpandedStream) VModeCommand)
+extractVModeCommand ::
+     ExpandedStream
+  -> (P.State ExpandedStream, Either (ParseError ExpandedStream) VModeCommand)
 extractVModeCommand = easyRunParser parseVModeCommand
 
 -- Parse.
-
 -- All-mode Commands.
-
 type AllModeCommandParser = SimpExpandParser AllModesCommand
 
 parseAllModeCommand :: Expand.Axis -> SimpExpandParser AllModesCommand
-parseAllModeCommand mode = P.choice [ relax
-                                    , ignorespaces
-                                    , changeCase
-                                    , tokenForFont
-                                    , macroToFont
-                                    , addPenalty
-                                    , addKern
-                                    , addSpecifiedGlue mode
-                                    , addSpace
-                                    , addRule mode
-                                    , startParagraph
-                                    , endParagraph
-                                    , expandMacro
-                                    , defineMacro
-                                    ]
+parseAllModeCommand mode =
+  P.choice
+    [ relax
+    , ignorespaces
+    , changeCase
+    , tokenForFont
+    , macroToFont
+    , addPenalty
+    , addKern
+    , addSpecifiedGlue mode
+    , addSpace
+    , addRule mode
+    , startParagraph
+    , endParagraph
+    , expandMacro
+    , defineMacro
+    ]
 
-checkModeAndToken :: Expand.Axis -> (Expand.ModedCommandParseToken -> Bool) ->
-                     Expand.ParseToken -> Bool
+checkModeAndToken ::
+     Expand.Axis
+  -> (Expand.ModedCommandParseToken -> Bool)
+  -> Expand.ParseToken
+  -> Bool
 checkModeAndToken m1 chk (Expand.ModedCommand m2 tok) = (m1 == m2) && chk tok
 checkModeAndToken _ _ _ = False
 
@@ -175,8 +188,7 @@ ignorespaces = do
   return IgnoreSpaces
 
 changeCase :: AllModeCommandParser
-changeCase =
-  ChangeCase <$> satisfyThen tokToDirection <*> parseGeneralText
+changeCase = ChangeCase <$> satisfyThen tokToDirection <*> parseGeneralText
   where
     tokToDirection (Expand.ChangeCase d) = Just d
     tokToDirection _ = Nothing
@@ -184,7 +196,8 @@ changeCase =
 tokenForFont :: AllModeCommandParser
 tokenForFont = satisfyThen tokToCom
   where
-    tokToCom (Expand.TokenForFont n) = Just $ Assign Assignment {body=SelectFont n , global=False}
+    tokToCom (Expand.TokenForFont n) =
+      Just $ Assign Assignment {body = SelectFont n, global = False}
     tokToCom _ = Nothing
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
@@ -194,9 +207,9 @@ macroToFont = do
   cs <- parseInhibited parseCSName
   skipOptionalEquals
   fontPath <- parseFileName
-  return $ Assign Assignment {body=DefineFont cs fontPath, global=False}
-  where
+  return $ Assign Assignment {body = DefineFont cs fontPath, global = False}
     -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
+  where
     parseFileName :: SimpExpandParser (Path Rel File)
     parseFileName = do
       PC.skipOptionalSpaces
@@ -206,24 +219,24 @@ macroToFont = do
       case parseRelFile (fileName ++ ".tfm") of
         Just p -> return p
         Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
-
-    tokToChar (Expand.CharCat Lex.CharCat{cat=Lex.Letter, char=c}) = Just c
+    tokToChar (Expand.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) = Just c
     -- 'Other' Characters for decimal digits are OK.
-    tokToChar (Expand.CharCat Lex.CharCat{cat=Lex.Other, char=c}) = case c of
-      48 -> Just c
-      49 -> Just c
-      50 -> Just c
-      51 -> Just c
-      52 -> Just c
-      53 -> Just c
-      54 -> Just c
-      55 -> Just c
-      56 -> Just c
-      57 -> Just c
+    tokToChar (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = c}) =
+      case c of
+        48 -> Just c
+        49 -> Just c
+        50 -> Just c
+        51 -> Just c
+        52 -> Just c
+        53 -> Just c
+        54 -> Just c
+        55 -> Just c
+        56 -> Just c
+        57 -> Just c
       -- Not in the spec, but let's say "/" and "." are OK.
-      46 -> Just c
-      47 -> Just c
-      _ -> Nothing
+        46 -> Just c
+        47 -> Just c
+        _ -> Nothing
     tokToChar _ = Nothing
 
 skipOptionalEquals :: NullSimpParser ExpandedStream
@@ -252,37 +265,36 @@ addSpace = const AddSpace <$> skipSatisfied PC.isSpace
 addRule :: Expand.Axis -> AllModeCommandParser
 addRule mode = do
   skipSatisfied $ checkModeAndToken mode (== Expand.AddRule)
-  let cmd = AddRule{width=Nothing, height=Nothing, depth=Nothing}
+  let cmd = AddRule {width = Nothing, height = Nothing, depth = Nothing}
   parseRuleSpecification cmd
   where
     parseRuleSpecification cmd = do
       PC.skipOptionalSpaces
-      x <- P.optional $ P.try $ P.choice [ parseRuleWidth cmd
-                                         , parseRuleHeight cmd
-                                         , parseRuleDepth cmd ]
+      x <-
+        P.optional $
+        P.try $
+        P.choice [parseRuleWidth cmd, parseRuleHeight cmd, parseRuleDepth cmd]
       case x of
         Just newCmd -> parseRuleSpecification newCmd
         Nothing -> return cmd
-
     parseRuleWidth cmd = do
       PC.skipKeyword "width"
       ln <- PL.parseLength
-      return cmd{width=Just ln}
-
+      return cmd {width = Just ln}
     parseRuleHeight cmd = do
       PC.skipKeyword "height"
       ln <- PL.parseLength
-      return cmd{height=Just ln}
-
+      return cmd {height = Just ln}
     parseRuleDepth cmd = do
       PC.skipKeyword "depth"
       ln <- PL.parseLength
-      return cmd{depth=Just ln}
+      return cmd {depth = Just ln}
 
 startParagraph :: AllModeCommandParser
 startParagraph = satisfyThen parToCom
   where
-    parToCom (Expand.StartParagraph _indent) = Just StartParagraph{indent=_indent}
+    parToCom (Expand.StartParagraph _indent) =
+      Just StartParagraph {indent = _indent}
     parToCom _ = Nothing
 
 endParagraph :: AllModeCommandParser
@@ -305,38 +317,36 @@ defineMacro = do
   skipSatisfied PC.isExplicitLeftBrace
   when defExpand $ error "expanded-def not implemented"
   _contents <- parseInhibited parseBalancedText
-  return $ Assign $
-    Assignment {
-      body=DefineMacro { name=cs
-                       , parameters=params
-                       , contents=_contents
-                       , long=Long `elem` prefixes
-                       , outer=Outer `elem` prefixes }
-      , global=defGlobal || Global `elem` prefixes
+  return $
+    Assign $
+    Assignment
+    { body =
+        DefineMacro
+        { name = cs
+        , parameters = params
+        , contents = _contents
+        , long = Long `elem` prefixes
+        , outer = Outer `elem` prefixes
+        }
+    , global = defGlobal || Global `elem` prefixes
     }
-
   where
     tokToPrefix Expand.Global = Just Global
     tokToPrefix Expand.Outer = Just Outer
     tokToPrefix Expand.Long = Just Long
     tokToPrefix _ = Nothing
-
-    tokToDef Expand.DefineMacro{global=_global, expand=_expand} = Just (_global, _expand)
+    tokToDef Expand.DefineMacro {global = _global, expand = _expand} =
+      Just (_global, _expand)
     tokToDef _ = Nothing
-
     -- TODO.
     parseParameters = return []
 
 -- HMode.
-
 type HModeCommandParser = SimpExpandParser HModeCommand
 
 parseHModeCommand :: SimpExpandParser HModeCommand
 parseHModeCommand =
-  P.choice [ leaveHMode
-           , addCharacter
-           ]
-  <|>
+  P.choice [leaveHMode, addCharacter] <|>
   (HAllModesCommand <$> parseAllModeCommand Expand.Horizontal)
 
 leaveHMode :: HModeCommandParser
@@ -355,26 +365,22 @@ leaveHMode = do
     -- - AddPresetGlue Vertical
     endsHMode _ = False
 
-
 addCharacter :: HModeCommandParser
 addCharacter = do
   c <- satisfyThen charToCode
-  return AddCharacter{method=ExplicitChar, code=c}
+  return AddCharacter {method = ExplicitChar, code = c}
   where
-    charToCode (Expand.CharCat Lex.CharCat{cat=Lex.Letter, char=c}) = Just c
-    charToCode (Expand.CharCat Lex.CharCat{cat=Lex.Other, char=c}) = Just c
+    charToCode (Expand.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) =
+      Just c
+    charToCode (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = c}) = Just c
     charToCode _ = Nothing
 
 -- VMode.
-
 type VModeCommandParser = SimpExpandParser VModeCommand
 
 parseVModeCommand :: SimpExpandParser VModeCommand
 parseVModeCommand =
-  P.choice [ enterHMode
-           , end
-           ]
-  <|>
+  P.choice [enterHMode, end] <|>
   (VAllModesCommand <$> parseAllModeCommand Expand.Vertical)
 
 end :: VModeCommandParser

@@ -62,22 +62,22 @@ readMathSymbolParams scheme =
       return $
         Just
           MathSymbolParams
-            { num1 = _num1
-            , num2 = _num2
-            , num3 = _num3
-            , denom1 = _denom1
-            , denom2 = _denom2
-            , sup1 = _sup1
-            , sup2 = _sup2
-            , sup3 = _sup3
-            , sub1 = _sub1
-            , sub2 = _sub2
-            , supdrop = _supdrop
-            , subdrop = _subdrop
-            , delim1 = _delim1
-            , delim2 = _delim2
-            , axisHeight = _axisHeight
-            }
+          { num1 = _num1
+          , num2 = _num2
+          , num3 = _num3
+          , denom1 = _denom1
+          , denom2 = _denom2
+          , sup1 = _sup1
+          , sup2 = _sup2
+          , sup3 = _sup3
+          , sub1 = _sub1
+          , sub2 = _sub2
+          , supdrop = _supdrop
+          , subdrop = _subdrop
+          , delim1 = _delim1
+          , delim2 = _delim2
+          , axisHeight = _axisHeight
+          }
     else return Nothing
 
 readMathExtensionParams :: ByteString -> Get (Maybe MathExtensionParams)
@@ -89,11 +89,10 @@ readMathExtensionParams scheme =
       return $
         Just
           MathExtensionParams
-            { defaultRuleThickness = _defaultRuleThickness
-            , bigOpSpacing = _bigOpSpacing
-            }
+          { defaultRuleThickness = _defaultRuleThickness
+          , bigOpSpacing = _bigOpSpacing
+          }
     else return Nothing
-
 
 getFontParams :: ByteString -> Get FontParams
 getFontParams scheme = do
@@ -106,13 +105,13 @@ getFontParams scheme = do
   _mathExtensionParams <- readMathExtensionParams scheme
   return
     FontParams
-      { slant = _slant
-      , spacing = _spacing
-      , spaceStretch = _spaceStretch
-      , spaceShrink = _spaceShrink
-      , xHeight = _xHeight
-      , quad = _quad
-      , extraSpace = _extraSpace
-      , mathSymbolParams = _mathSymbolParams
-      , mathExtensionParams = _mathExtensionParams
-      }
+    { slant = _slant
+    , spacing = _spacing
+    , spaceStretch = _spaceStretch
+    , spaceShrink = _spaceShrink
+    , xHeight = _xHeight
+    , quad = _quad
+    , extraSpace = _extraSpace
+    , mathSymbolParams = _mathSymbolParams
+    , mathExtensionParams = _mathExtensionParams
+    }

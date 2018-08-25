@@ -14,16 +14,16 @@ data PageBreakJudgment
   -- p <= -10k.
   | BreakPageHere
   | TrackCost Int
-  deriving Show
+  deriving (Show)
 
-pageBreakJudgment :: [BreakableVListElem] -> BreakItem -> Int -> PageBreakJudgment
-pageBreakJudgment cs breakItem desiredHeight
-  = inner penalty splitInsertPenalties badness
+pageBreakJudgment ::
+     [BreakableVListElem] -> BreakItem -> Int -> PageBreakJudgment
+pageBreakJudgment cs breakItem desiredHeight =
+  inner penalty splitInsertPenalties badness
   where
     badness = listStatusBadness $ listGlueSetRatio desiredHeight cs
     penalty = breakPenalty breakItem
     splitInsertPenalties = 0
-
     inner _ _ InfiniteBadness = BreakPageAtBest
     inner p q (FiniteBadness b)
       | p >= tenK = DoNotBreak

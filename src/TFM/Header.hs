@@ -11,6 +11,7 @@ import TFM.Common
 
 characterCodingSchemeLength, familyLength :: Int
 characterCodingSchemeLength = 40
+
 familyLength = 20
 
 -- The information stored in the header table of a TFM file.
@@ -65,8 +66,8 @@ getHeader charInfoPos
     -- Don't read header [18 ... whatever]
   return
     Header
-      { checksum = _checksum
-      , designFontSize = _designFontSize
-      , characterCodingScheme = _characterCodingScheme
-      , family = _family
-      }
+    { checksum = _checksum
+    , designFontSize = _designFontSize
+    , characterCodingScheme = _characterCodingScheme
+    , family = _family
+    }

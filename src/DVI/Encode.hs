@@ -324,7 +324,7 @@ isSignedNrExpressibleInNBits :: Int -> Int -> Bool
 isSignedNrExpressibleInNBits n nrBits =
   let minSignedVal = -(2 ^ (nrBits - 1))
       maxSignedVal = 2 ^ (nrBits - 1) - 1
-   in (minSignedVal <= n) && (n <= maxSignedVal)
+  in (minSignedVal <= n) && (n <= maxSignedVal)
 
 getBytesNeededUnsigned :: Int -> Int
 getBytesNeededUnsigned n =
@@ -347,7 +347,7 @@ getBytesNeeded signedRaw n
           if needExtraByte
             then 1
             else 0
-     in return nrBytes
+    in return nrBytes
 
 pickSizeOp :: a -> a -> a -> a -> Bool -> Int -> Either String (a, ArgVal)
 pickSizeOp op1 op2 _ op4 signed n =
@@ -421,7 +421,7 @@ getBeginPageInstruction lastBeginPoint =
       boringArgs = fmap boringArg ([0 .. 9] :: [Int])
       lastBeginPointArg = S4 $ fromIntegral lastBeginPoint
       args = boringArgs ++ [lastBeginPointArg]
-   in EncodableInstruction BeginPage args
+  in EncodableInstruction BeginPage args
 
 getDefineFontInstruction ::
      Int -> FilePath -> Int -> Int -> Int -> Either String EncodableInstruction

@@ -8,8 +8,10 @@ import TFM.Common
 headerDataLengthWordsMin, headerPointerWords, headerPointerBytes :: Int
 -- The minimum length of the header.
 headerDataLengthWordsMin = 18
+
 -- The position where the header starts.
 headerPointerWords = 6
+
 headerPointerBytes = wordToByte headerPointerWords
 
 -- From a map from each table to their length, infer a particular table's
@@ -24,7 +26,7 @@ tablePosBytes tblLengthsWords tbl =
       prevLen = wordToByte $ tblLengthsWords prevTbl
     -- The table's position is the previous table's position, plus that
     -- table's length.
-   in prevPos + prevLen
+  in prevPos + prevLen
 
 -- Sections within the file containing different bits of information.
 data Table
@@ -67,8 +69,12 @@ getTableParams
       tableToLength Kern = kernDataLengthWords
       tableToLength ExtensibleCharacter = extensibleCharDataLengthWords
       tableToLength FontParameter = fontParamDataLengthWords
-
-      inferredFileLengthWords = headerPointerWords + sum (fmap tableToLength [minBound ..])
-  when (_fileLengthWords /= inferredFileLengthWords)
-    (fail ("Incorrect table lengths: read " ++ show _fileLengthWords ++ " is not equal to inferred " ++ show inferredFileLengthWords))
+      inferredFileLengthWords =
+        headerPointerWords + sum (fmap tableToLength [minBound ..])
+  when
+    (_fileLengthWords /= inferredFileLengthWords)
+    (fail
+       ("Incorrect table lengths: read " ++
+        show _fileLengthWords ++
+        " is not equal to inferred " ++ show inferredFileLengthWords))
   return (tableToLength, _smallestCharCode, _largestCharCode)

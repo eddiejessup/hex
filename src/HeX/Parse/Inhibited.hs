@@ -2,19 +2,20 @@
 
 module HeX.Parse.Inhibited where
 
-import qualified Text.Megaparsec as P
 import qualified Data.Char as C
+import qualified Text.Megaparsec as P
 
 import qualified HeX.Expand as Expand
 import qualified HeX.Lex as Lex
+import qualified HeX.Parse.Common as PC
 import HeX.Parse.Helpers (skipManySatisfied)
 import qualified HeX.Parse.Helpers as PU
-import HeX.Parse.Stream (ExpandedStream(..), SimpLexParser, SimpExpandParser)
-import qualified HeX.Parse.Common as PC
+import HeX.Parse.Stream
+       (ExpandedStream(..), SimpExpandParser, SimpLexParser)
 
 parseInhibited :: SimpLexParser a -> SimpExpandParser a
 parseInhibited p = do
-  P.State{stateInput=ExpandedStream lStream csMap} <- P.getParserState
+  P.State {stateInput = ExpandedStream lStream csMap} <- P.getParserState
   case PU.easyRunParser p lStream of
     (_, Left _) -> error "ohnoes"
     (P.State lStr pos prc w, Right v) -> do
@@ -27,10 +28,12 @@ parseNestedBraces n = do
   (x, nextN) <- PU.satisfyThen parseNext
   case nextN of
     0 -> return []
-    posN -> (x:) <$> parseNestedBraces posN
+    posN -> (x :) <$> parseNestedBraces posN
   where
-    parseNext x@(Lex.CharCatToken Lex.CharCat{cat = Lex.BeginGroup}) = Just (x, succ n)
-    parseNext x@(Lex.CharCatToken Lex.CharCat{cat = Lex.EndGroup}) = Just (x, pred n)
+    parseNext x@(Lex.CharCatToken Lex.CharCat {cat = Lex.BeginGroup}) =
+      Just (x, succ n)
+    parseNext x@(Lex.CharCatToken Lex.CharCat {cat = Lex.EndGroup}) =
+      Just (x, pred n)
     parseNext x = Just (x, n)
 
 parseBalancedText :: SimpLexParser Expand.BalancedText
@@ -39,14 +42,17 @@ parseBalancedText = Expand.BalancedText <$> parseNestedBraces 1
 parseCharLike :: SimpLexParser Integer
 parseCharLike = PU.satisfyThen tokToCharLike
   where
-    tokToCharLike (Lex.CharCatToken Lex.CharCat{char=c}) = Just $ fromIntegral c
-    tokToCharLike (Lex.ControlSequence (Lex.ControlSymbol char)) = Just $ fromIntegral $ C.ord char
+    tokToCharLike (Lex.CharCatToken Lex.CharCat {char = c}) =
+      Just $ fromIntegral c
+    tokToCharLike (Lex.ControlSequence (Lex.ControlSymbol char)) =
+      Just $ fromIntegral $ C.ord char
     tokToCharLike _ = Nothing
 
 parseCSName :: SimpLexParser Lex.ControlSequenceLike
 parseCSName = PU.satisfyThen tokToCSLike
   where
-    tokToCSLike (Lex.CharCatToken Lex.CharCat{cat=Lex.Active, char=c}) = Just $ Lex.ActiveCharacter c
+    tokToCSLike (Lex.CharCatToken Lex.CharCat {cat = Lex.Active, char = c}) =
+      Just $ Lex.ActiveCharacter c
     tokToCSLike (Lex.ControlSequence cs) = Just $ Lex.ControlSequenceProper cs
     tokToCSLike _ = Nothing
 
@@ -59,4 +65,3 @@ parseGeneralText = do
   where
     isFillerItem Expand.Relax = True
     isFillerItem t = PC.isSpace t
-

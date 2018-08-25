@@ -4,48 +4,55 @@ module HeX.Parse.Glue where
 
 import qualified Text.Megaparsec as P
 
-import HeX.Parse.Stream (SimpExpandParser)
-import HeX.Parse.Helpers (skipSatisfied)
 import qualified HeX.Parse.Common as PC
+import HeX.Parse.Helpers (skipSatisfied)
+import HeX.Parse.Length (Factor, Length, parseFactor, parseLength)
 import HeX.Parse.Number (parseSigns)
-import HeX.Parse.Length (Length, Factor, parseLength, parseFactor)
+import HeX.Parse.Stream (SimpExpandParser)
 
 -- AST.
-
-data Glue
-  = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
+data Glue =
+  ExplicitGlue Length
+               (Maybe Flex)
+               (Maybe Flex)
   -- | InternalGlue Bool InternalGlue
-  deriving Show
+  deriving (Show)
 
 data Flex
   = FiniteFlex Length
   | FilFlex FilLength
-  deriving Show
+  deriving (Show)
 
-data FilLength
-  = FilLength Bool Factor Int
-  deriving Show
+data FilLength =
+  FilLength Bool
+            Factor
+            Int
+  deriving (Show)
 
 -- Parse.
-
 parseGlue :: SimpExpandParser Glue
-parseGlue = P.choice [ parseExplicitGlue
+parseGlue =
+  P.choice
+    [ parseExplicitGlue
                      -- , parseInternalGlue
-                     ]
+    ]
   where
-    parseExplicitGlue = ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> parseFlex "minus"
+    parseExplicitGlue =
+      ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> parseFlex "minus"
 
 parseFlex :: String -> SimpExpandParser (Maybe Flex)
-parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
-                       , const Nothing <$> PC.skipOptionalSpaces ]
+parseFlex s =
+  P.choice
+    [Just <$> P.try parsePresentFlex, const Nothing <$> PC.skipOptionalSpaces]
   where
-    parsePresentFlex
-      = PC.skipKeyword s *> P.choice [ FilFlex <$> P.try parseFilLength
-                                     , FiniteFlex <$> P.try parseLength ]
+    parsePresentFlex =
+      PC.skipKeyword s *>
+      P.choice
+        [FilFlex <$> P.try parseFilLength, FiniteFlex <$> P.try parseLength]
 
 parseFilLength :: SimpExpandParser FilLength
 parseFilLength = do
-  let
-    parseSomeLs = P.some (skipSatisfied $ PC.matchNonActiveCharacterUncased 'l')
-    parseOrder = PC.skipKeyword "fi" *> (length <$> parseSomeLs)
+  let parseSomeLs =
+        P.some (skipSatisfied $ PC.matchNonActiveCharacterUncased 'l')
+      parseOrder = PC.skipKeyword "fi" *> (length <$> parseSomeLs)
   FilLength <$> parseSigns <*> parseFactor <*> parseOrder

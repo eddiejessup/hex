@@ -3,13 +3,16 @@
 module HeX.Box where
 
 import qualified Data.Char as C
-import Path (Path, Abs, File)
+import Path (Abs, File, Path)
 
 import TFM (TexFont)
 
 import qualified HeX.Unit as Unit
 
-data Direction = Horizontal | Vertical deriving Show
+data Direction
+  = Horizontal
+  | Vertical
+  deriving (Show)
 
 data DesiredLength
   = Natural
@@ -23,7 +26,9 @@ data Rule = Rule
   , depth :: Int
   } deriving (Show)
 
-newtype Kern = Kern{kernDimen :: Int} deriving (Show)
+newtype Kern = Kern
+  { kernDimen :: Int
+  } deriving (Show)
 
 data FontDefinition = FontDefinition
   { fontNr :: Int
@@ -34,9 +39,11 @@ data FontDefinition = FontDefinition
   }
 
 instance Show FontDefinition where
-  show FontDefinition{fontName=name} = "FontDefinition {" ++ name ++ "}"
+  show FontDefinition {fontName = name} = "FontDefinition {" ++ name ++ "}"
 
-newtype FontSelection = FontSelection{fontNr :: Int} deriving (Show)
+newtype FontSelection = FontSelection
+  { fontNr :: Int
+  } deriving (Show)
 
 data Character = Character
   { code :: Int
@@ -48,13 +55,17 @@ data Character = Character
 instance Show Character where
   show c = "'" ++ [C.chr $ code c] ++ "'"
 
-newtype SetGlue = SetGlue{glueDimen :: Int}
+newtype SetGlue = SetGlue
+  { glueDimen :: Int
+  }
 
 instance Show SetGlue where
   show (SetGlue d) = "[" ++ Unit.showSP d ++ "]"
 
-data BoxContents = HBoxContents [HBoxElem] | VBoxContents [VBoxElem]
-  deriving Show
+data BoxContents
+  = HBoxContents [HBoxElem]
+  | VBoxContents [VBoxElem]
+  deriving (Show)
 
 data Box = Box
   { contents :: BoxContents
@@ -62,7 +73,6 @@ data Box = Box
   } deriving (Show)
 
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
-
 data HBoxElem
   = HChild Box
   | HRule Rule
@@ -82,7 +92,9 @@ data VBoxElem
   | VFontSelection FontSelection
   deriving (Show)
 
-newtype Page = Page [VBoxElem] deriving Show
+newtype Page =
+  Page [VBoxElem]
+  deriving (Show)
 
 class Dimensioned a where
   naturalWidth :: a -> Int
@@ -90,14 +102,14 @@ class Dimensioned a where
   naturalDepth :: a -> Int
 
 instance Dimensioned Rule where
-  naturalWidth Rule{width=w} = w
-  naturalHeight Rule{height=h} = h
-  naturalDepth Rule{depth=d} = d
+  naturalWidth Rule {width = w} = w
+  naturalHeight Rule {height = h} = h
+  naturalDepth Rule {depth = d} = d
 
 instance Dimensioned Character where
-  naturalWidth Character{width=w} = w
-  naturalHeight Character{height=h} = h
-  naturalDepth Character{depth=d} = d
+  naturalWidth Character {width = w} = w
+  naturalHeight Character {height = h} = h
+  naturalDepth Character {depth = d} = d
 
 instance Dimensioned HBoxElem where
   naturalWidth (HChild b) = naturalWidth b
@@ -107,7 +119,6 @@ instance Dimensioned HBoxElem where
   naturalWidth (HFontDefinition _) = 0
   naturalWidth (HFontSelection _) = 0
   naturalWidth (HCharacter c) = naturalWidth c
-
   naturalHeight (HChild b) = naturalHeight b
   naturalHeight (HRule r) = naturalHeight r
   naturalHeight (HGlue _) = 0
@@ -115,7 +126,6 @@ instance Dimensioned HBoxElem where
   naturalHeight (HFontDefinition _) = 0
   naturalHeight (HFontSelection _) = 0
   naturalHeight (HCharacter c) = naturalHeight c
-
   naturalDepth (HChild b) = naturalDepth b
   naturalDepth (HRule r) = naturalDepth r
   naturalDepth (HGlue _) = 0
@@ -131,14 +141,12 @@ instance Dimensioned VBoxElem where
   naturalWidth (VKern _) = 0
   naturalWidth (VFontDefinition _) = 0
   naturalWidth (VFontSelection _) = 0
-
   naturalHeight (VChild b) = naturalHeight b
   naturalHeight (VRule r) = naturalHeight r
   naturalHeight (VGlue g) = glueDimen g
   naturalHeight (VKern k) = kernDimen k
   naturalHeight (VFontDefinition _) = 0
   naturalHeight (VFontSelection _) = 0
-
   naturalDepth (VChild b) = naturalDepth b
   naturalDepth (VRule r) = naturalDepth r
   naturalDepth (VGlue _) = 0
@@ -147,20 +155,22 @@ instance Dimensioned VBoxElem where
   naturalDepth (VFontSelection _) = 0
 
 instance Dimensioned Box where
-  naturalWidth Box{contents=(HBoxContents cs), desiredLength=Natural} = sum $ fmap naturalWidth cs
-  naturalWidth Box{contents=(HBoxContents _), desiredLength=To to} = to
-  naturalWidth Box{contents=(VBoxContents [])} = 0
-  naturalWidth Box{contents=(VBoxContents cs)} = maximum $ fmap naturalWidth cs
-
-  naturalHeight Box{contents=(HBoxContents [])} = 0
-  naturalHeight Box{contents=(HBoxContents cs)} = maximum $ naturalHeight <$> cs
-  naturalHeight Box{contents=(VBoxContents cs), desiredLength=Natural} = sum $ fmap naturalHeight cs
-  naturalHeight Box{contents=(VBoxContents _), desiredLength=To to} = to
-
-  naturalDepth Box{contents=(HBoxContents [])} = 0
-  naturalDepth Box{contents=(HBoxContents cs)} = maximum $ naturalDepth <$> cs
+  naturalWidth Box {contents = (HBoxContents cs), desiredLength = Natural} =
+    sum $ fmap naturalWidth cs
+  naturalWidth Box {contents = (HBoxContents _), desiredLength = To to} = to
+  naturalWidth Box {contents = (VBoxContents [])} = 0
+  naturalWidth Box {contents = (VBoxContents cs)} =
+    maximum $ fmap naturalWidth cs
+  naturalHeight Box {contents = (HBoxContents [])} = 0
+  naturalHeight Box {contents = (HBoxContents cs)} =
+    maximum $ naturalHeight <$> cs
+  naturalHeight Box {contents = (VBoxContents cs), desiredLength = Natural} =
+    sum $ fmap naturalHeight cs
+  naturalHeight Box {contents = (VBoxContents _), desiredLength = To to} = to
+  naturalDepth Box {contents = (HBoxContents [])} = 0
+  naturalDepth Box {contents = (HBoxContents cs)} =
+    maximum $ naturalDepth <$> cs
   -- TODO:
   -- NaturalDepth
-
   -- TODO.
   -- Spread

@@ -45,33 +45,36 @@ defaultCatCode n
   | otherwise = Other
 
 defaultCharCatMap :: CharCatMap
-defaultCharCatMap = HMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127]
+defaultCharCatMap =
+  HMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127]
 
 -- Add in some useful extras beyond the technical defaults.
 extras :: [(CharCode, CatCode)]
 extras = [(94, Superscript), (123, BeginGroup), (125, EndGroup)]
 
 usableCharCatMap :: CharCatMap
-usableCharCatMap = foldl (\m (k, v) -> HMap.insert k v m) defaultCharCatMap extras
+usableCharCatMap =
+  foldl (\m (k, v) -> HMap.insert k v m) defaultCharCatMap extras
 
 catLookup :: CharCatMap -> CharCode -> CatCode
 catLookup m n = HMap.lookupDefault Invalid n m
 
-extractCharCat :: (CharCode -> CatCode) -> [CharCode] -> Maybe (CharCat, [CharCode])
+extractCharCat ::
+     (CharCode -> CatCode) -> [CharCode] -> Maybe (CharCat, [CharCode])
 extractCharCat _ [] = Nothing
 extractCharCat charToCat (n1:n2:n3:rest)
     -- Next two characters must be identical, and have category
     -- 'Superscript', and triod character mustn't have category 'EndOfLine'.
- = 
-  let
-    cat1 = charToCat n1
-    n3Triod = if n3 < 64 then n3 + 64 else n3 - 64
-    charCatTriod = CharCat {char = n3Triod, cat = charToCat n3Triod}
-    charCatSimple = CharCat {char = n1, cat = cat1}
-  in
-    if (cat1 == Superscript) &&
-       (n1 == n2) &&
-       (charToCat n3 /= EndOfLine)
-    then Just (charCatTriod, rest)
-    else Just (charCatSimple, n2:n3:rest)
-extractCharCat charToCat (n1:rest) = Just (CharCat {char = n1, cat = charToCat n1}, rest)
+ =
+  let cat1 = charToCat n1
+      n3Triod =
+        if n3 < 64
+          then n3 + 64
+          else n3 - 64
+      charCatTriod = CharCat {char = n3Triod, cat = charToCat n3Triod}
+      charCatSimple = CharCat {char = n1, cat = cat1}
+  in if (cat1 == Superscript) && (n1 == n2) && (charToCat n3 /= EndOfLine)
+       then Just (charCatTriod, rest)
+       else Just (charCatSimple, n2 : n3 : rest)
+extractCharCat charToCat (n1:rest) =
+  Just (CharCat {char = n1, cat = charToCat n1}, rest)

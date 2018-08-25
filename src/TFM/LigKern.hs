@@ -2,9 +2,9 @@ module TFM.LigKern where
 
 import Prelude hiding (length)
 
-import Data.List.Split
 import Data.Bits
 import Data.ByteString hiding (head, last)
+import Data.List.Split
 
 import TFM.Common
 
@@ -65,7 +65,6 @@ import TFM.Common
 -- Where 'nl' is the number of words in the lig/kern table. If such an
 -- instruction is encountered during program execution, it denotes an
 -- unconditional halt, without performing a ligature command.
-
 kernOp :: Int
 kernOp = 128
 
@@ -86,24 +85,24 @@ data LigKernInstr = LigKernInstr
 readInstrSet :: [[Int]] -> Int -> (Int, Int, Int, Int)
 readInstrSet sets i =
   let [w, x, y, z] = sets !! i
-   in (w, x, y, z)
+  in (w, x, y, z)
 
 getLigKernOperation :: (Int -> LigKernOp) -> Int -> Int -> LigKernOp
 getLigKernOperation readKern op remain =
   if op >= kernOp
     then readKern $ 256 * (op - kernOp) + remain
     else LigatureOp
-           { ligatureChar = remain
-           , charsToPassOver = op `shift` 2
-           , deleteCurrentChar = (op .&. 0x02) == 0
-           , deleteNextChar = (op .&. 0x01) == 0
-           }
+         { ligatureChar = remain
+         , charsToPassOver = op `shift` 2
+         , deleteCurrentChar = (op .&. 0x02) == 0
+         , deleteNextChar = (op .&. 0x01) == 0
+         }
 
 analyzeLigKernInstr ::
      (Int -> LigKernOp) -> Int -> Int -> Int -> Int -> LigKernInstr
 analyzeLigKernInstr readKern skip next op remain =
   let _operation = getLigKernOperation readKern op remain
-   in LigKernInstr {stop = skip >= 128, nextChar = next, operation = _operation}
+  in LigKernInstr {stop = skip >= 128, nextChar = next, operation = _operation}
 
 getKern :: ByteString -> (Int -> LigKernOp)
 getKern kStr iWords = KernOp {size = runGetAt getFixWord kStr iWords}
@@ -117,7 +116,7 @@ readLigKerns ligKernStr kernStr
     error "Sorry, left boundary characters are not supported"
   | otherwise =
     let kernGetter = getKern kernStr
-     in fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
+    in fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
   where
     ligKernTblLengthWords = length ligKernStr `div` 4
     instrSets = chunksOf 4 . fmap fromIntegral $ unpack ligKernStr

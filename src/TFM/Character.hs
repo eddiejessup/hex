@@ -59,7 +59,16 @@ data Tag
   | Extensible
   deriving (Enum, Ord, Eq, Show)
 
-readCharInfo :: Int -> ByteString -> ByteString -> ByteString -> ByteString -> ByteString -> ByteString -> Int -> Character
+readCharInfo ::
+     Int
+  -> ByteString
+  -> ByteString
+  -> ByteString
+  -> ByteString
+  -> ByteString
+  -> ByteString
+  -> Int
+  -> Character
 readCharInfo _smallestCharCode charInfoStr extStr wStr hStr dStr iStr _code =
   let charIdx = _code - _smallestCharCode
       (widthIdx, heightDepthByte, italicTagByte, remainder) =
@@ -86,26 +95,35 @@ readCharInfo _smallestCharCode charInfoStr extStr wStr hStr dStr iStr _code =
           Extensible ->
             let (_top, _middle, _bottom, _repeater) =
                   runGetAt get4Word8Ints extStr remainder
-             in Just
-                  ExtensibleRecipe
-                    { top = _top
-                    , middle = _middle
-                    , bottom = _bottom
-                    , repeater = _repeater
-                    }
-   in Character
-        { code = _code
-        , width = _width
-        , height = _height
-        , depth = _depth
-        , italicCorrection = _italicCorrection
-        , special = _special
-        }
+            in Just
+                 ExtensibleRecipe
+                 { top = _top
+                 , middle = _middle
+                 , bottom = _bottom
+                 , repeater = _repeater
+                 }
+  in Character
+     { code = _code
+     , width = _width
+     , height = _height
+     , depth = _depth
+     , italicCorrection = _italicCorrection
+     , special = _special
+     }
 
-readCharInfos :: Int -> Int -> ByteString -> ByteString -> ByteString -> ByteString -> ByteString -> ByteString -> HashMap Int Character
+readCharInfos ::
+     Int
+  -> Int
+  -> ByteString
+  -> ByteString
+  -> ByteString
+  -> ByteString
+  -> ByteString
+  -> ByteString
+  -> HashMap Int Character
 readCharInfos _smallestCharCode _largestCharCode cInfoStr extStr wStr hStr dStr iStr =
   let charList =
         fmap
           (readCharInfo _smallestCharCode cInfoStr extStr wStr hStr dStr iStr)
           [_smallestCharCode .. _largestCharCode]
-   in fromList $ (\c@Character {code = i} -> (i, c)) <$> charList
+  in fromList $ (\c@Character {code = i} -> (i, c)) <$> charList
