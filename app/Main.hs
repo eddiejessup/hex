@@ -17,8 +17,8 @@ import DVI.Encode (encode)
 import HeX.Box.Draw (toDVI)
 import HeX.Build (extractPages, newCurrentPage)
 import HeX.Config (newConfig)
-import HeX.Expand (defaultCSMap)
-import HeX.Parse.Stream (newExpandStream)
+import HeX.Parse.Resolved (defaultCSMap)
+import HeX.Parse.Expanded (newExpandStream)
 
 data Flag
   = Help

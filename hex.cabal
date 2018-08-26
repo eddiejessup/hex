@@ -19,7 +19,6 @@ library
                      , HeX.Build
                      , HeX.Unit
                      , HeX.Lex
-                     , HeX.Expand
                      , HeX.Config
 
                      , HeX.BreakList
@@ -33,15 +32,25 @@ library
                      , HeX.Box
                      , HeX.Box.Draw
 
-                     , HeX.Parse
                      , HeX.Parse.Helpers
-                     , HeX.Parse.Common
-                     , HeX.Parse.Number
-                     , HeX.Parse.Length
-                     , HeX.Parse.Glue
-                     , HeX.Parse.Command
-                     , HeX.Parse.Inhibited
-                     , HeX.Parse.Stream
+
+                     , HeX.Parse.Lexed
+                     , HeX.Parse.Lexed.Inhibited
+                     , HeX.Parse.Lexed.Stream
+
+                     , HeX.Parse.Resolved
+                     , HeX.Parse.Resolved.Stream
+                     , HeX.Parse.Resolved.Token
+                     , HeX.Parse.Resolved.Resolve
+                     , HeX.Parse.Resolved.SyntaxCommand
+
+                     , HeX.Parse.Expanded
+                     , HeX.Parse.Expanded.Stream
+                     , HeX.Parse.Expanded.Common
+                     , HeX.Parse.Expanded.Command
+                     , HeX.Parse.Expanded.Number
+                     , HeX.Parse.Expanded.Length
+                     , HeX.Parse.Expanded.Glue
 
                      , Adjacent
 

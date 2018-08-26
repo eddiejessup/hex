@@ -1,18 +1,19 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TupleSections #-}
 
-module HeX.Parse.Number where
+module HeX.Parse.Expanded.Number where
 
 import Data.Ratio ((%))
 import qualified Text.Megaparsec as P
 
-import qualified HeX.Expand as Expand
 import qualified HeX.Lex as Lex
 
-import HeX.Parse.Common
+import HeX.Parse.Lexed
 import HeX.Parse.Helpers
-import HeX.Parse.Inhibited
-import HeX.Parse.Stream
+import qualified HeX.Parse.Resolved as R
+
+import HeX.Parse.Expanded.Common
+import HeX.Parse.Expanded.Stream
 
 -- AST.
 data Number =
@@ -52,9 +53,9 @@ parseSigns = isPos <$> parseOptionalSigns
     isPos (True:xs) = isPos xs
     isPos (False:xs) = not $ isPos xs
     isPos [] = True
-    signToPos (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 43}) =
+    signToPos (R.CharCat Lex.CharCat {cat = Lex.Other, char = 43}) =
       Just True
-    signToPos (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 45}) =
+    signToPos (R.CharCat Lex.CharCat {cat = Lex.Other, char = 45}) =
       Just False
     signToPos _ = Nothing
 
@@ -89,32 +90,32 @@ parseNormalInteger =
       skipSatisfied isBacktick
       parseInhibited parseCharLike
       where
-        isBacktick (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 96}) =
+        isBacktick (R.CharCat Lex.CharCat {cat = Lex.Other, char = 96}) =
           True
         isBacktick _ = False
 
 parseDecimalIntegerDigit :: SimpExpandParser Int
 parseDecimalIntegerDigit = satisfyThen charToDigit
   where
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 48}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 48}) =
       Just 0
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 49}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 49}) =
       Just 1
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 50}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 50}) =
       Just 2
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 51}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 51}) =
       Just 3
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 52}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 52}) =
       Just 4
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 53}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 53}) =
       Just 5
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 54}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 54}) =
       Just 6
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 55}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 55}) =
       Just 7
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 56}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 56}) =
       Just 8
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 57}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 57}) =
       Just 9
     charToDigit _ = Nothing
 
@@ -122,54 +123,54 @@ parseHexadecimalIntegerDigits :: SimpExpandParser [Int]
 parseHexadecimalIntegerDigits =
   skipSatisfied isDoubleQuote *> P.some (satisfyThen charToDigit)
   where
-    isDoubleQuote (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 34}) =
+    isDoubleQuote (R.CharCat Lex.CharCat {cat = Lex.Other, char = 34}) =
       True
     isDoubleQuote _ = False
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 48}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 48}) =
       Just 0
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 49}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 49}) =
       Just 1
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 50}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 50}) =
       Just 2
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 51}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 51}) =
       Just 3
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 52}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 52}) =
       Just 4
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 53}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 53}) =
       Just 5
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 54}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 54}) =
       Just 6
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 55}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 55}) =
       Just 7
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 56}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 56}) =
       Just 8
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 57}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 57}) =
       Just 9
     -- A to F, category 'other',
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 65}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 65}) =
       Just 10
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 66}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 66}) =
       Just 11
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 67}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 67}) =
       Just 12
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 68}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 68}) =
       Just 13
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 69}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 69}) =
       Just 14
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 70}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 70}) =
       Just 15
     -- A to F, category 'letter'.
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Letter, char = 65}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Letter, char = 65}) =
       Just 10
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Letter, char = 66}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Letter, char = 66}) =
       Just 11
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Letter, char = 67}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Letter, char = 67}) =
       Just 12
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Letter, char = 68}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Letter, char = 68}) =
       Just 13
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Letter, char = 69}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Letter, char = 69}) =
       Just 14
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Letter, char = 70}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Letter, char = 70}) =
       Just 15
     charToDigit _ = Nothing
 
@@ -177,24 +178,24 @@ parseOctalIntegerDigits :: SimpExpandParser [Int]
 parseOctalIntegerDigits =
   skipSatisfied isSingleQuote *> P.some (satisfyThen charToDigit)
   where
-    isSingleQuote (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 39}) =
+    isSingleQuote (R.CharCat Lex.CharCat {cat = Lex.Other, char = 39}) =
       True
     isSingleQuote _ = False
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 48}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 48}) =
       Just 0
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 49}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 49}) =
       Just 1
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 50}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 50}) =
       Just 2
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 51}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 51}) =
       Just 3
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 52}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 52}) =
       Just 4
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 53}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 53}) =
       Just 5
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 54}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 54}) =
       Just 6
-    charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 55}) =
+    charToDigit (R.CharCat Lex.CharCat {cat = Lex.Other, char = 55}) =
       Just 7
     charToDigit _ = Nothing
 
@@ -216,8 +217,8 @@ parseRationalConstant = do
   return $ fromIntegral wholeNr + fraction
   where
     decDigitsToInteger = digitsToInteger 10
-    isDotOrComma (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 44}) =
+    isDotOrComma (R.CharCat Lex.CharCat {cat = Lex.Other, char = 44}) =
       True
-    isDotOrComma (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 46}) =
+    isDotOrComma (R.CharCat Lex.CharCat {cat = Lex.Other, char = 46}) =
       True
     isDotOrComma _ = False

@@ -1,14 +1,14 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module HeX.Parse.Length where
+module HeX.Parse.Expanded.Length where
 
 import qualified Text.Megaparsec as P
 
 import HeX.Unit (PhysicalUnit(..))
 
-import HeX.Parse.Common
-import HeX.Parse.Number
-import HeX.Parse.Stream
+import HeX.Parse.Expanded.Common
+import HeX.Parse.Expanded.Number
+import HeX.Parse.Expanded.Stream
 
 -- AST.
 data Length =

@@ -10,7 +10,6 @@ import Control.Monad.State.Lazy
        (MonadState, get, gets, lift, liftIO, modify)
 import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
 import Control.Monad.Trans.Reader (Reader, asks, runReader)
-import qualified Data.Char as C
 import qualified Data.HashMap.Strict as HMap
 import Path
 import Safe (headMay)
@@ -27,14 +26,14 @@ import HeX.BreakList.Line (bestRoute, setParagraph)
 import HeX.BreakList.Page
        (PageBreakJudgment(..), pageBreakJudgment, setPage)
 import HeX.Config
-import qualified HeX.Expand as Expand
 import qualified HeX.Lex as Lex
-import qualified HeX.Parse as P
+import qualified HeX.Parse.Expanded as E
+import qualified HeX.Parse.Resolved as R
 import qualified HeX.Unit as Unit
 
 csToFontNr :: Lex.ControlSequenceLike -> Int
 csToFontNr (Lex.ControlSequenceProper (Lex.ControlWord "thefont")) =
-  Expand.theFontNr
+  R.theFontNr
 
 currentFontInfo :: Monad m => MaybeT (ConfReaderT m) TexFont
 currentFontInfo
@@ -100,91 +99,72 @@ spaceGlue = do
       toFlex = BL.finiteFlex . fromIntegral . toSP
   return BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
-evaluateNormalInteger :: P.NormalInteger -> Integer
-evaluateNormalInteger (P.IntegerConstant n) = n
+evaluateNormalInteger :: E.NormalInteger -> Integer
+evaluateNormalInteger (E.IntegerConstant n) = n
 
-evaluateUnsignedNumber :: P.UnsignedNumber -> Integer
-evaluateUnsignedNumber (P.NormalIntegerAsUNumber n) = evaluateNormalInteger n
+evaluateUnsignedNumber :: E.UnsignedNumber -> Integer
+evaluateUnsignedNumber (E.NormalIntegerAsUNumber n) = evaluateNormalInteger n
 
-evaluateNumber :: P.Number -> Integer
-evaluateNumber (P.Number True u) = evaluateUnsignedNumber u
-evaluateNumber (P.Number False u) = -(evaluateUnsignedNumber u)
+evaluateNumber :: E.Number -> Integer
+evaluateNumber (E.Number True u) = evaluateUnsignedNumber u
+evaluateNumber (E.Number False u) = -(evaluateUnsignedNumber u)
 
-evaluateFactor :: P.Factor -> Rational
-evaluateFactor (P.NormalIntegerFactor n) =
+evaluateFactor :: E.Factor -> Rational
+evaluateFactor (E.NormalIntegerFactor n) =
   fromIntegral $ evaluateNormalInteger n
-evaluateFactor (P.RationalConstant r) = r
+evaluateFactor (E.RationalConstant r) = r
 
-evaluateUnit :: P.Unit -> Rational
-evaluateUnit (P.PhysicalUnit _ u) = Unit.inScaledPoint u
+evaluateUnit :: E.Unit -> Rational
+evaluateUnit (E.PhysicalUnit _ u) = Unit.inScaledPoint u
 -- TODO:
-evaluateUnit (P.InternalUnit P.Em) = 10
-evaluateUnit (P.InternalUnit P.Ex) = 10
+evaluateUnit (E.InternalUnit E.Em) = 10
+evaluateUnit (E.InternalUnit E.Ex) = 10
 
-evaluateNormalLength :: Int -> P.NormalLength -> Int
-evaluateNormalLength mag (P.LengthSemiConstant f u@(P.PhysicalUnit isTrue _)) =
+evaluateNormalLength :: Int -> E.NormalLength -> Int
+evaluateNormalLength mag (E.LengthSemiConstant f u@(E.PhysicalUnit isTrue _)) =
   round $ evalF isTrue * evaluateUnit u
   where
     evalF False = evaluateFactor f
     evalF True = evalF False * 1000 / fromIntegral mag
-evaluateNormalLength _ (P.LengthSemiConstant f u) =
+evaluateNormalLength _ (E.LengthSemiConstant f u) =
   round $ evaluateFactor f * evaluateUnit u
 
-evaluateULength :: Int -> P.UnsignedLength -> Int
-evaluateULength mag (P.NormalLengthAsULength nLn) = evaluateNormalLength mag nLn
+evaluateULength :: Int -> E.UnsignedLength -> Int
+evaluateULength mag (E.NormalLengthAsULength nLn) = evaluateNormalLength mag nLn
 
-evaluateLength :: Int -> P.Length -> Int
-evaluateLength mag (P.Length True uLn) = evaluateULength mag uLn
-evaluateLength mag (P.Length False uLn) = -(evaluateULength mag uLn)
+evaluateLength :: Int -> E.Length -> Int
+evaluateLength mag (E.Length True uLn) = evaluateULength mag uLn
+evaluateLength mag (E.Length False uLn) = -(evaluateULength mag uLn)
 
-evaluateFlex :: Int -> Maybe P.Flex -> BL.GlueFlex
-evaluateFlex mag (Just (P.FiniteFlex ln)) =
+evaluateFlex :: Int -> Maybe E.Flex -> BL.GlueFlex
+evaluateFlex mag (Just (E.FiniteFlex ln)) =
   BL.GlueFlex {factor = fromIntegral $ evaluateLength mag ln, order = 0}
-evaluateFlex _ (Just (P.FilFlex (P.FilLength True f ord))) =
+evaluateFlex _ (Just (E.FilFlex (E.FilLength True f ord))) =
   BL.GlueFlex {factor = evaluateFactor f, order = ord}
-evaluateFlex _ (Just (P.FilFlex (P.FilLength False f ord))) =
+evaluateFlex _ (Just (E.FilFlex (E.FilLength False f ord))) =
   BL.GlueFlex {factor = -(evaluateFactor f), order = ord}
 evaluateFlex _ Nothing = BL.noFlex
 
-evaluateGlue :: Int -> P.Glue -> BL.Glue
-evaluateGlue mag (P.ExplicitGlue dim str shr) =
+evaluateGlue :: Int -> E.Glue -> BL.Glue
+evaluateGlue mag (E.ExplicitGlue dim str shr) =
   BL.Glue
   { dimen = evaluateLength mag dim
   , stretch = evaluateFlex mag str
   , shrink = evaluateFlex mag shr
   }
 
-evaluateKern :: Int -> P.Length -> B.Kern
+evaluateKern :: Int -> E.Length -> B.Kern
 evaluateKern mag = B.Kern . evaluateLength mag
 
-evaluatePenalty :: P.Number -> BL.Penalty
+evaluatePenalty :: E.Number -> BL.Penalty
 evaluatePenalty = BL.Penalty . fromIntegral . evaluateNumber
 
-applyChangeCaseToStream ::
-     P.ExpandedStream
-  -> Expand.VDirection
-  -> Expand.BalancedText
-  -> P.ExpandedStream
-applyChangeCaseToStream s d (Expand.BalancedText ts) =
-  P.insertLexTokensE s $ changeCase d <$> ts
-    -- Set the character code of each character token to its
-    -- \uccode or \lccode value, if that value is non-zero.
-    -- Don't change the category code.
+defineMacro :: E.ExpandedStream -> E.AssignmentBody -> E.ExpandedStream
+defineMacro (E.ExpandedStream (R.ResolvedStream ls csMap)) (E.DefineMacro name params conts False False) =
+  E.ExpandedStream (R.ResolvedStream ls csMap')
   where
-    changeCase _ t@(Lex.ControlSequence _) = t
-    changeCase dir (Lex.CharCatToken cc) = Lex.CharCatToken $ modCC cc
-      where
-        modCC t@Lex.CharCat {char = c} = t {Lex.char = modFunc c}
-        modFunc = C.ord . switch dir . C.chr
-        switch Expand.Upward = C.toUpper
-        switch Expand.Downward = C.toLower
-
-defineMacro :: P.ExpandedStream -> P.AssignmentBody -> P.ExpandedStream
-defineMacro (P.ExpandedStream ls csMap) (P.DefineMacro name params conts False False) =
-  P.ExpandedStream ls csMap'
-  where
+    newMacro = R.ExpandableToken $ R.MacroToken $ R.Macro params conts
     csMap' = HMap.insert name newMacro csMap
-    newMacro = Expand.MacroToken $ Expand.Macro params conts
 
 runReaderOnState :: MonadState r f => Reader r b -> f b
 runReaderOnState f = runReader f <$> get
@@ -192,14 +172,14 @@ runReaderOnState f = runReader f <$> get
 -- We build a paragraph list in reverse order.
 extractParagraph ::
      [BL.BreakableHListElem]
-  -> P.ExpandedStream
-  -> ConfStateT IO ([BL.BreakableHListElem], P.ExpandedStream)
+  -> E.ExpandedStream
+  -> ConfStateT IO ([BL.BreakableHListElem], E.ExpandedStream)
 extractParagraph acc stream =
   case eCom of
     Left x -> error $ show x
     Right com ->
       case com of
-        P.LeaveHMode
+        E.LeaveHMode
         -- Inner mode: forbidden. TODO.
         -- Outer mode: insert the rol sequence "\par" into the input. The control
         -- sequence's current meaning will be used, which might no longer be the \par
@@ -207,48 +187,48 @@ extractParagraph acc stream =
       -- (Note that we pass stream, not stream'.)
          -> do
           let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
-          modStream $ P.insertLexTokenE stream parToken
-        P.AddCharacter {code = i} -> do
+          modStream $ E.insertLexTokenE stream parToken
+        E.AddCharacter {code = i} -> do
           charBox <- runReaderOnState (runMaybeT (characterBox i))
           hCharBox <-
             case BL.HCharacter <$> charBox of
               Just c -> return c
               Nothing -> fail "Could not get character info"
           modAccum $ hCharBox : acc
-        P.HAllModesCommand aCom ->
+        E.HAllModesCommand aCom ->
           case aCom
             -- Command to end recursion.
             -- \par: end the current paragraph.
                 of
-            P.EndParagraph -> return (acc, stream')
+            E.EndParagraph -> return (acc, stream')
             -- Commands to do nothing.
-            P.Relax -> continueUnchanged
-            P.IgnoreSpaces -> continueUnchanged
+            E.Relax -> continueUnchanged
+            E.IgnoreSpaces -> continueUnchanged
             -- Commands to modify the input stream.
-            P.ChangeCase d bt ->
-              modStream $ applyChangeCaseToStream stream' d bt
+            -- E.ChangeCase d bt ->
+            --   modStream $ applyChangeCaseToStream stream' d bt
             -- Commands to modify the list.
-            P.Assign P.Assignment {body = P.SelectFont fNr} -> do
+            E.Assign E.Assignment {body = E.SelectFont fNr} -> do
               fontSel <- BL.HFontSelection <$> selectFont fNr
               modAccum $ fontSel : acc
-            P.Assign P.Assignment {body = P.DefineFont cs fPath} -> do
+            E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
               fontDef <- BL.HFontDefinition <$> defineFont cs fPath
               modAccum $ fontDef : acc
-            P.AddPenalty n -> modAccum $ BL.HPenalty (evaluatePenalty n) : acc
-            P.AddKern ln -> do
+            E.AddPenalty n -> modAccum $ BL.HPenalty (evaluatePenalty n) : acc
+            E.AddKern ln -> do
               mag <- gets (`integerParameter` Magnification)
               modAccum $ BL.HKern (evaluateKern mag ln) : acc
-            P.AddGlue g -> do
+            E.AddGlue g -> do
               mag <- gets (`integerParameter` Magnification)
               modAccum $ BL.HGlue (evaluateGlue mag g) : acc
-            P.AddSpace -> do
+            E.AddSpace -> do
               glue <- runReaderOnState (runMaybeT spaceGlue)
               hGlue <-
                 case glue of
                   Just sg -> return $ BL.HGlue sg
                   Nothing -> fail "Could not get space glue"
               modAccum $ hGlue : acc
-            P.AddRule {width = w, height = h, depth = d} -> do
+            E.AddRule {width = w, height = h, depth = d} -> do
               mag <- gets (`integerParameter` Magnification)
               let evalW =
                     case w of
@@ -268,24 +248,24 @@ extractParagraph acc stream =
             -- \indent: An empty box of width \parindent is appended to the current
             -- list, and the space factor is set to 1000.
             -- TODO: Space factor.
-            P.StartParagraph indent ->
+            E.StartParagraph indent ->
               if indent
                 then do
                   indentBox <- gets parIndentBox
                   modAccum (indentBox : acc)
                 else continueUnchanged
-            P.ExpandMacro (Expand.Macro [] (Expand.BalancedText ts)) ->
-              modStream $ P.insertLexTokensE stream' ts
-            P.Assign P.Assignment {body = m@P.DefineMacro {}} ->
+            -- E.ExpandMacro (R.Macro [] (R.BalancedText ts)) ->
+            --   modStream $ E.insertLexTokensE stream' ts
+            E.Assign E.Assignment {body = m@E.DefineMacro {}} ->
               modStream $ defineMacro stream' m
   where
-    (PS.State {stateInput = stream'}, eCom) = P.extractHModeCommand stream
+    (PS.State {stateInput = stream'}, eCom) = E.extractHModeCommand stream
     modAccum ac = extractParagraph ac stream'
     modStream = extractParagraph acc
     continueUnchanged = extractParagraph acc stream'
 
 extractParagraphLineBoxes ::
-     Bool -> P.ExpandedStream -> ConfStateT IO ([[B.HBoxElem]], P.ExpandedStream)
+     Bool -> E.ExpandedStream -> ConfStateT IO ([[B.HBoxElem]], E.ExpandedStream)
 extractParagraphLineBoxes indent stream = do
   desiredW <- gets (`lengthParameter` DesiredWidth)
   lineTol <- gets (`integerParameter` LineTolerance)
@@ -431,8 +411,8 @@ extractPages ::
      [B.Page]
   -> CurrentPage
   -> [BL.BreakableVListElem]
-  -> P.ExpandedStream
-  -> ConfStateT IO ([B.Page], P.ExpandedStream)
+  -> E.ExpandedStream
+  -> ConfStateT IO ([B.Page], E.ExpandedStream)
 extractPages pages cur acc stream =
   case eCom of
     Left x -> error $ show x
@@ -440,38 +420,38 @@ extractPages pages cur acc stream =
       case com
     -- Command to end recursion.
             of
-        P.End -> do
+        E.End -> do
           lastPage <- runPageBuilder cur (reverse acc)
           let pagesFinal = pages ++ lastPage
           return (pagesFinal, stream')
-        P.VAllModesCommand aCom ->
+        E.VAllModesCommand aCom ->
           case aCom
             -- Commands to do nothing.
                 of
-            P.Relax -> continueUnchanged
-            P.IgnoreSpaces -> continueUnchanged
+            E.Relax -> continueUnchanged
+            E.IgnoreSpaces -> continueUnchanged
             -- <space token> has no effect in vertical modes.
-            P.AddSpace -> continueUnchanged
+            E.AddSpace -> continueUnchanged
             -- \par does nothing in vertical mode.
-            P.EndParagraph -> continueUnchanged
+            E.EndParagraph -> continueUnchanged
             -- Commands to modify the input stream.
-            P.ChangeCase d bt ->
-              modStream $ applyChangeCaseToStream stream' d bt
+            -- E.ChangeCase d bt ->
+            --   modStream $ applyChangeCaseToStream stream' d bt
             -- Commands to modify the list.
-            P.Assign P.Assignment {body = P.SelectFont fNr} -> do
+            E.Assign E.Assignment {body = E.SelectFont fNr} -> do
               fontSel <- BL.VFontSelection <$> selectFont fNr
               modAccum $ fontSel : acc
-            P.Assign P.Assignment {body = P.DefineFont cs fPath} -> do
+            E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
               fontDef <- BL.VFontDefinition <$> defineFont cs fPath
               modAccum $ fontDef : acc
-            P.AddPenalty n -> modAccum $ BL.VPenalty (evaluatePenalty n) : acc
-            P.AddKern ln -> do
+            E.AddPenalty n -> modAccum $ BL.VPenalty (evaluatePenalty n) : acc
+            E.AddKern ln -> do
               mag <- gets (`integerParameter` Magnification)
               modAccum $ BL.VKern (evaluateKern mag ln) : acc
-            P.AddGlue g -> do
+            E.AddGlue g -> do
               mag <- gets (`integerParameter` Magnification)
               modAccum $ BL.VGlue (evaluateGlue mag g) : acc
-            P.AddRule {width = w, height = h, depth = d} -> do
+            E.AddRule {width = w, height = h, depth = d} -> do
               desiredW <- gets (`lengthParameter` DesiredWidth)
               mag <- gets (`integerParameter` Magnification)
               let evalW =
@@ -490,14 +470,14 @@ extractPages pages cur acc stream =
                   rule = B.Rule {width = evalW, height = evalH, depth = evalD}
               modAccum (BL.VRule rule : acc)
             -- Commands to start horizontal mode.
-            P.StartParagraph indent -> addParagraphToPage indent
-            P.ExpandMacro (Expand.Macro [] (Expand.BalancedText ts)) ->
-              modStream $ P.insertLexTokensE stream' ts
-            P.Assign P.Assignment {body = m@P.DefineMacro {}} ->
+            E.StartParagraph indent -> addParagraphToPage indent
+            -- E.ExpandMacro (R.Macro [] (R.BalancedText ts)) ->
+            --   modStream $ E.insertLexTokensE stream' ts
+            E.Assign E.Assignment {body = m@E.DefineMacro {}} ->
               modStream $ defineMacro stream' m
-        P.EnterHMode -> addParagraphToPage True
+        E.EnterHMode -> addParagraphToPage True
   where
-    (PS.State {stateInput = stream'}, eCom) = P.extractVModeCommand stream
+    (PS.State {stateInput = stream'}, eCom) = E.extractVModeCommand stream
     continueSamePage = extractPages pages cur
     modAccum ac = continueSamePage ac stream'
     modStream = continueSamePage acc

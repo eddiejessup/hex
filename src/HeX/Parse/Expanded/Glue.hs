@@ -1,14 +1,15 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module HeX.Parse.Glue where
+module HeX.Parse.Expanded.Glue where
 
 import qualified Text.Megaparsec as P
 
-import HeX.Parse.Common
 import HeX.Parse.Helpers
-import HeX.Parse.Length
-import HeX.Parse.Number
-import HeX.Parse.Stream
+
+import HeX.Parse.Expanded.Common
+import HeX.Parse.Expanded.Length
+import HeX.Parse.Expanded.Number
+import HeX.Parse.Expanded.Stream
 
 -- AST.
 data Glue =
