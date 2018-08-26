@@ -2,8 +2,8 @@ module DVI.Document where
 
 import Control.Monad
 import Safe (lastDef)
-import qualified TFM
-import TFM (TexFont(..))
+
+import TFM
 
 import DVI.Encode
 
@@ -71,8 +71,8 @@ parseMundaneInstruction (acc, fNr, points, sDep, maxSDep) this =
                , scaleFactorRatio = scaleRatio
                } ->
       let _checksum = checksum info
-          designSize = round $ TFM.designSizeSP info
-          scaleFactor = TFM.designScaleSP info scaleRatio
+          designSize = round $ designSizeSP info
+          scaleFactor = designScaleSP info scaleRatio
           instr =
             getDefineFontInstruction
               defFontNr

@@ -9,10 +9,10 @@ import qualified Text.Megaparsec as P
 import qualified HeX.Expand as Expand
 import qualified HeX.Lex as Lex
 
-import qualified HeX.Parse.Common as PC
-import qualified HeX.Parse.Helpers as PU
-import HeX.Parse.Inhibited (parseCharLike, parseInhibited)
-import HeX.Parse.Stream (SimpExpandParser, SimpExpandParser)
+import HeX.Parse.Common
+import HeX.Parse.Helpers
+import HeX.Parse.Inhibited
+import HeX.Parse.Stream
 
 -- AST.
 data Number =
@@ -47,8 +47,8 @@ parseSigns :: SimpExpandParser Bool
 parseSigns = isPos <$> parseOptionalSigns
   where
     parseOptionalSigns =
-      PC.skipOptionalSpaces *>
-      P.sepEndBy (PU.satisfyThen signToPos) PC.skipOptionalSpaces
+      skipOptionalSpaces *>
+      P.sepEndBy (satisfyThen signToPos) skipOptionalSpaces
     isPos (True:xs) = isPos xs
     isPos (False:xs) = not $ isPos xs
     isPos [] = True
@@ -83,10 +83,10 @@ parseNormalInteger =
                                  -- , (, 16) <$> parseHexadecimalIntegerDigits
                                  -- , (, 8) <$> parseOctalIntegerDigits
           ]
-      PC.skipOneOptionalSpace
+      skipOneOptionalSpace
       return $ digitsToInteger base digits
     parseCharacter = do
-      PU.skipSatisfied isBacktick
+      skipSatisfied isBacktick
       parseInhibited parseCharLike
       where
         isBacktick (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 96}) =
@@ -94,7 +94,7 @@ parseNormalInteger =
         isBacktick _ = False
 
 parseDecimalIntegerDigit :: SimpExpandParser Int
-parseDecimalIntegerDigit = PU.satisfyThen charToDigit
+parseDecimalIntegerDigit = satisfyThen charToDigit
   where
     charToDigit (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 48}) =
       Just 0
@@ -120,7 +120,7 @@ parseDecimalIntegerDigit = PU.satisfyThen charToDigit
 
 parseHexadecimalIntegerDigits :: SimpExpandParser [Int]
 parseHexadecimalIntegerDigits =
-  PU.skipSatisfied isDoubleQuote *> P.some (PU.satisfyThen charToDigit)
+  skipSatisfied isDoubleQuote *> P.some (satisfyThen charToDigit)
   where
     isDoubleQuote (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 34}) =
       True
@@ -175,7 +175,7 @@ parseHexadecimalIntegerDigits =
 
 parseOctalIntegerDigits :: SimpExpandParser [Int]
 parseOctalIntegerDigits =
-  PU.skipSatisfied isSingleQuote *> P.some (PU.satisfyThen charToDigit)
+  skipSatisfied isSingleQuote *> P.some (satisfyThen charToDigit)
   where
     isSingleQuote (Expand.CharCat Lex.CharCat {cat = Lex.Other, char = 39}) =
       True
@@ -204,7 +204,7 @@ parseOctalIntegerDigits =
 parseRationalConstant :: SimpExpandParser Rational
 parseRationalConstant = do
   wholeNr <- decDigitsToInteger <$> P.many parseDecimalIntegerDigit
-  PU.skipSatisfied isDotOrComma
+  skipSatisfied isDotOrComma
   -- The fractional part represents its integer interpretation, divided by
   -- the next largest power of 10.
   -- TODO: If performance matters, maybe we can infer the denominator

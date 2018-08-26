@@ -3,6 +3,12 @@ module HeX.Unit where
 import Data.Ratio ((%))
 import Text.Printf (printf)
 
+tenK :: Int
+tenK = 10000
+
+hunK :: Int
+hunK = 100000
+
 -- Functions related to units used in the TeX world.
 -- A scaled point is defined as a fraction:
 -- * num = 2.54 * 1e7 = 25400000

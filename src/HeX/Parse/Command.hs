@@ -11,16 +11,13 @@ import Text.Megaparsec ((<|>))
 import qualified HeX.Expand as Expand
 import qualified HeX.Lex as Lex
 
-import qualified HeX.Parse.Common as PC
-import qualified HeX.Parse.Glue as PG
+import HeX.Parse.Common
+import HeX.Parse.Glue
 import HeX.Parse.Helpers
-       (NullSimpParser, ParseError, easyRunParser, satisfyThen,
-        skipOneOptionalSatisfied, skipSatisfied, skipSatisfiedEquals)
 import HeX.Parse.Inhibited
-       (parseBalancedText, parseCSName, parseGeneralText, parseInhibited)
-import qualified HeX.Parse.Length as PL
-import qualified HeX.Parse.Number as PN
-import HeX.Parse.Stream (ExpandedStream, SimpExpandParser)
+import HeX.Parse.Length
+import HeX.Parse.Number
+import HeX.Parse.Stream
 
 -- AST.
 data CharSource
@@ -91,8 +88,8 @@ data AllModesCommand
   -- | CloseOutput { streamNr :: Int, immediate :: Bool }
   -- | Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
   -- | AddWhatsit GeneralText
-  | AddPenalty PN.Number
-  | AddKern PL.Length
+  | AddPenalty Number
+  | AddKern Length
   -- | RemoveLastPenalty
   -- | RemoveLastKern
   -- | RemoveLastGlue
@@ -100,13 +97,13 @@ data AllModesCommand
   -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
   -- -- then can 'migrate' out.
   -- | AddInsertion {nr :: Int, contents :: VModeMaterial}
-  | AddGlue PG.Glue
+  | AddGlue Glue
   -- | AddLeaders {type :: LeadersType, template :: BoxOrRule, glue :: Glue}
   | AddSpace
   -- | AddBox Box
   -- | AddShiftedBox Distance Box
   -- | AddFetchedBox { register :: Int, unwrap, pop :: Bool } -- \box, \copy, \un{v,h}{box,copy}
-  | AddRule { width, height, depth :: Maybe PL.Length }
+  | AddRule { width, height, depth :: Maybe Length }
   -- | AddAlignedMaterial DesiredLength AlignmentMaterial
   | StartParagraph { indent :: Bool }
   | EndParagraph
@@ -184,7 +181,7 @@ relax = do
 ignorespaces :: AllModeCommandParser
 ignorespaces = do
   skipSatisfiedEquals Expand.IgnoreSpaces
-  PC.skipOptionalSpaces
+  skipOptionalSpaces
   return IgnoreSpaces
 
 changeCase :: AllModeCommandParser
@@ -212,10 +209,10 @@ macroToFont = do
   where
     parseFileName :: SimpExpandParser (Path Rel File)
     parseFileName = do
-      PC.skipOptionalSpaces
+      skipOptionalSpaces
       nameCodes <- P.some $ satisfyThen tokToChar
       let fileName = fmap C.chr nameCodes
-      skipSatisfied PC.isSpace
+      skipSatisfied isSpace
       case parseRelFile (fileName ++ ".tfm") of
         Just p -> return p
         Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
@@ -241,26 +238,26 @@ macroToFont = do
 
 skipOptionalEquals :: NullSimpParser ExpandedStream
 skipOptionalEquals = do
-  PC.skipOptionalSpaces
-  skipOneOptionalSatisfied PC.isEquals
+  skipOptionalSpaces
+  skipOneOptionalSatisfied isEquals
 
 addPenalty :: AllModeCommandParser
 addPenalty = do
   skipSatisfiedEquals Expand.AddPenalty
-  AddPenalty <$> PN.parseNumber
+  AddPenalty <$> parseNumber
 
 addKern :: AllModeCommandParser
 addKern = do
   skipSatisfiedEquals Expand.AddKern
-  AddKern <$> PL.parseLength
+  AddKern <$> parseLength
 
 addSpecifiedGlue :: Expand.Axis -> AllModeCommandParser
 addSpecifiedGlue mode = do
   skipSatisfied $ checkModeAndToken mode (== Expand.AddSpecifiedGlue)
-  AddGlue <$> PG.parseGlue
+  AddGlue <$> parseGlue
 
 addSpace :: AllModeCommandParser
-addSpace = const AddSpace <$> skipSatisfied PC.isSpace
+addSpace = const AddSpace <$> skipSatisfied isSpace
 
 addRule :: Expand.Axis -> AllModeCommandParser
 addRule mode = do
@@ -269,7 +266,7 @@ addRule mode = do
   parseRuleSpecification cmd
   where
     parseRuleSpecification cmd = do
-      PC.skipOptionalSpaces
+      skipOptionalSpaces
       x <-
         P.optional $
         P.try $
@@ -278,16 +275,16 @@ addRule mode = do
         Just newCmd -> parseRuleSpecification newCmd
         Nothing -> return cmd
     parseRuleWidth cmd = do
-      PC.skipKeyword "width"
-      ln <- PL.parseLength
+      skipKeyword "width"
+      ln <- parseLength
       return cmd {width = Just ln}
     parseRuleHeight cmd = do
-      PC.skipKeyword "height"
-      ln <- PL.parseLength
+      skipKeyword "height"
+      ln <- parseLength
       return cmd {height = Just ln}
     parseRuleDepth cmd = do
-      PC.skipKeyword "depth"
-      ln <- PL.parseLength
+      skipKeyword "depth"
+      ln <- parseLength
       return cmd {depth = Just ln}
 
 startParagraph :: AllModeCommandParser
@@ -314,7 +311,7 @@ defineMacro = do
   (defGlobal, defExpand) <- satisfyThen tokToDef
   cs <- parseInhibited parseCSName
   params <- parseParameters
-  skipSatisfied PC.isExplicitLeftBrace
+  skipSatisfied isExplicitLeftBrace
   when defExpand $ error "expanded-def not implemented"
   _contents <- parseInhibited parseBalancedText
   return $
@@ -394,8 +391,8 @@ enterHMode = do
   return EnterHMode
   where
     startsHMode x
-      | PC.isLetter x = True
-      | PC.isOther x = True
+      | isLetter x = True
+      | isOther x = True
       | otherwise = False
     -- TODO:
     -- - \char

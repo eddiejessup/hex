@@ -6,11 +6,9 @@ import qualified Text.Megaparsec as P
 
 import HeX.Unit (PhysicalUnit(..))
 
-import qualified HeX.Parse.Common as PC
+import HeX.Parse.Common
 import HeX.Parse.Number
-       (NormalInteger, parseNormalInteger, parseRationalConstant,
-        parseSigns)
-import HeX.Parse.Stream (SimpExpandParser)
+import HeX.Parse.Stream
 
 -- AST.
 data Length =
@@ -90,10 +88,10 @@ parseUnit =
     parseInternalKeywordUnit =
       let parseUnitLit =
             P.choice
-              [ P.try $ PC.parseKeywordToValue "em" Em
-              , P.try $ PC.parseKeywordToValue "ex" Ex
+              [ P.try $ parseKeywordToValue "em" Em
+              , P.try $ parseKeywordToValue "ex" Ex
               ]
-      in InternalUnit <$> parseUnitLit <* PC.skipOneOptionalSpace
+      in InternalUnit <$> parseUnitLit <* skipOneOptionalSpace
     parsePhysicalUnit
       -- TODO: Use 'try' because keywords with common prefixes lead the parser
       -- down a blind alley. Could refactor to avoid, but it would be ugly.
@@ -104,18 +102,18 @@ parseUnit =
      =
       let parseUnitLit =
             P.choice
-              [ P.try $ PC.parseKeywordToValue "bp" BigPoint
-              , P.try $ PC.parseKeywordToValue "cc" Cicero
-              , P.try $ PC.parseKeywordToValue "cm" Centimetre
-              , P.try $ PC.parseKeywordToValue "dd" Didot
-              , P.try $ PC.parseKeywordToValue "in" Inch
-              , P.try $ PC.parseKeywordToValue "mm" Millimetre
-              , P.try $ PC.parseKeywordToValue "pc" Pica
-              , P.try $ PC.parseKeywordToValue "pt" Point
-              , P.try $ PC.parseKeywordToValue "sp" ScaledPoint
+              [ P.try $ parseKeywordToValue "bp" BigPoint
+              , P.try $ parseKeywordToValue "cc" Cicero
+              , P.try $ parseKeywordToValue "cm" Centimetre
+              , P.try $ parseKeywordToValue "dd" Didot
+              , P.try $ parseKeywordToValue "in" Inch
+              , P.try $ parseKeywordToValue "mm" Millimetre
+              , P.try $ parseKeywordToValue "pc" Pica
+              , P.try $ parseKeywordToValue "pt" Point
+              , P.try $ parseKeywordToValue "sp" ScaledPoint
               ]
-      in (PhysicalUnit <$> PC.parseOptionalKeyword "true" <*> parseUnitLit) <*
-         PC.skipOneOptionalSpace
+      in (PhysicalUnit <$> parseOptionalKeyword "true" <*> parseUnitLit) <*
+         skipOneOptionalSpace
 
 parseFactor :: SimpExpandParser Factor
 -- NOTE: The order matters here: The TeX grammar seems to be ambiguous: '2.2'

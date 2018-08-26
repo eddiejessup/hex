@@ -26,20 +26,17 @@ import qualified HeX.BreakList as BL
 import HeX.BreakList.Line (bestRoute, setParagraph)
 import HeX.BreakList.Page
        (PageBreakJudgment(..), pageBreakJudgment, setPage)
-import HeX.Config as Config
-import qualified HeX.Config as Conf
+import HeX.Config
 import qualified HeX.Expand as Expand
 import qualified HeX.Lex as Lex
 import qualified HeX.Parse as P
-import HeX.Parse.Stream
-       (ExpandedStream, insertLexTokenE, insertLexTokensE)
 import qualified HeX.Unit as Unit
 
 csToFontNr :: Lex.ControlSequenceLike -> Int
 csToFontNr (Lex.ControlSequenceProper (Lex.ControlWord "thefont")) =
   Expand.theFontNr
 
-currentFontInfo :: Monad m => MaybeT (Conf.ConfReaderT m) TexFont
+currentFontInfo :: Monad m => MaybeT (ConfReaderT m) TexFont
 currentFontInfo
   -- Maybe font number isn't set.
  = do
@@ -86,7 +83,7 @@ selectFont n = do
   modify (\conf -> conf {currentFontNr = Just n})
   return B.FontSelection {fontNr = n}
 
-characterBox :: Monad m => Int -> MaybeT (Conf.ConfReaderT m) B.Character
+characterBox :: Monad m => Int -> MaybeT (ConfReaderT m) B.Character
 characterBox code = do
   font <- currentFontInfo
   let toSP = TFM.designScaleSP font
@@ -95,7 +92,7 @@ characterBox code = do
   return
     B.Character {code = code, width = toSP w, height = toSP h, depth = toSP d}
 
-spaceGlue :: Monad m => MaybeT (Conf.ConfReaderT m) BL.Glue
+spaceGlue :: Monad m => MaybeT (ConfReaderT m) BL.Glue
 spaceGlue = do
   font@TexFont {spacing = d, spaceStretch = str, spaceShrink = shr} <-
     currentFontInfo
@@ -164,12 +161,12 @@ evaluatePenalty :: P.Number -> BL.Penalty
 evaluatePenalty = BL.Penalty . fromIntegral . evaluateNumber
 
 applyChangeCaseToStream ::
-     ExpandedStream
+     P.ExpandedStream
   -> Expand.VDirection
   -> Expand.BalancedText
-  -> ExpandedStream
+  -> P.ExpandedStream
 applyChangeCaseToStream s d (Expand.BalancedText ts) =
-  insertLexTokensE s $ changeCase d <$> ts
+  P.insertLexTokensE s $ changeCase d <$> ts
     -- Set the character code of each character token to its
     -- \uccode or \lccode value, if that value is non-zero.
     -- Don't change the category code.
@@ -182,7 +179,7 @@ applyChangeCaseToStream s d (Expand.BalancedText ts) =
         switch Expand.Upward = C.toUpper
         switch Expand.Downward = C.toLower
 
-defineMacro :: ExpandedStream -> P.AssignmentBody -> ExpandedStream
+defineMacro :: P.ExpandedStream -> P.AssignmentBody -> P.ExpandedStream
 defineMacro (P.ExpandedStream ls csMap) (P.DefineMacro name params conts False False) =
   P.ExpandedStream ls csMap'
   where
@@ -195,8 +192,8 @@ runReaderOnState f = runReader f <$> get
 -- We build a paragraph list in reverse order.
 extractParagraph ::
      [BL.BreakableHListElem]
-  -> ExpandedStream
-  -> ConfStateT IO ([BL.BreakableHListElem], ExpandedStream)
+  -> P.ExpandedStream
+  -> ConfStateT IO ([BL.BreakableHListElem], P.ExpandedStream)
 extractParagraph acc stream =
   case eCom of
     Left x -> error $ show x
@@ -210,7 +207,7 @@ extractParagraph acc stream =
       -- (Note that we pass stream, not stream'.)
          -> do
           let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
-          modStream $ insertLexTokenE stream parToken
+          modStream $ P.insertLexTokenE stream parToken
         P.AddCharacter {code = i} -> do
           charBox <- runReaderOnState (runMaybeT (characterBox i))
           hCharBox <-
@@ -278,7 +275,7 @@ extractParagraph acc stream =
                   modAccum (indentBox : acc)
                 else continueUnchanged
             P.ExpandMacro (Expand.Macro [] (Expand.BalancedText ts)) ->
-              modStream $ insertLexTokensE stream' ts
+              modStream $ P.insertLexTokensE stream' ts
             P.Assign P.Assignment {body = m@P.DefineMacro {}} ->
               modStream $ defineMacro stream' m
   where
@@ -288,7 +285,7 @@ extractParagraph acc stream =
     continueUnchanged = extractParagraph acc stream'
 
 extractParagraphLineBoxes ::
-     Bool -> ExpandedStream -> ConfStateT IO ([[B.HBoxElem]], ExpandedStream)
+     Bool -> P.ExpandedStream -> ConfStateT IO ([[B.HBoxElem]], P.ExpandedStream)
 extractParagraphLineBoxes indent stream = do
   desiredW <- gets (`lengthParameter` DesiredWidth)
   lineTol <- gets (`integerParameter` LineTolerance)
@@ -434,8 +431,8 @@ extractPages ::
      [B.Page]
   -> CurrentPage
   -> [BL.BreakableVListElem]
-  -> ExpandedStream
-  -> ConfStateT IO ([B.Page], ExpandedStream)
+  -> P.ExpandedStream
+  -> ConfStateT IO ([B.Page], P.ExpandedStream)
 extractPages pages cur acc stream =
   case eCom of
     Left x -> error $ show x
@@ -495,7 +492,7 @@ extractPages pages cur acc stream =
             -- Commands to start horizontal mode.
             P.StartParagraph indent -> addParagraphToPage indent
             P.ExpandMacro (Expand.Macro [] (Expand.BalancedText ts)) ->
-              modStream $ insertLexTokensE stream' ts
+              modStream $ P.insertLexTokensE stream' ts
             P.Assign P.Assignment {body = m@P.DefineMacro {}} ->
               modStream $ defineMacro stream' m
         P.EnterHMode -> addParagraphToPage True

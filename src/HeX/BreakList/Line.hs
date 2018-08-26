@@ -3,14 +3,16 @@
 
 module HeX.BreakList.Line where
 
+import Data.Maybe
 import Prelude hiding (lines)
 
 import Control.Applicative (liftA2)
 import Data.List (intercalate)
 
 import qualified Adjacent as A
-
 import qualified HeX.Box as B
+import qualified HeX.Unit as UN
+
 import HeX.BreakList
 
 data Break a = Break
@@ -21,7 +23,7 @@ data Break a = Break
 
 data Line = Line
   { contents :: [BreakableHListElem]
-  , status :: ListStatus
+  , status :: GlueStatus
   }
 
 data Route = Route
@@ -43,17 +45,14 @@ instance Show a => Show (Break a) where
 
 allBreaks :: [BreakableHListElem] -> [Break BreakableHListElem]
 allBreaks = inner [] . A.toAdjacents
-    -- Bit pretentious: fAnd maps two functions 'f' and 'g' into one
-    -- function whose result is 'f x && g x'.
   where
-    fAnd = liftA2 (&&)
     discardAfterBreak =
-      fAnd (isDiscardable . A.fromAdjacent) (not . isBreakItem)
+      liftA2 (&&) (isDiscardable . A.fromAdjacent) (isNothing . toBreakItem)
     trimAfterBreak = A.fromAdjacents . dropWhile discardAfterBreak
     trimBeforeBreak this seen =
-      if isGlue this
-        then seen
-        else this : seen
+      case toGlue this of
+        Just _ -> seen
+        Nothing -> this : seen
     inner seen [] = [Break {before = reverse seen, after = [], item = NoBreak}]
     inner seen (thisAdj@(A.Adjacency (_, this, _)):rest) =
       case toBreakItem thisAdj of
@@ -99,18 +98,18 @@ bestRouteInner desiredWidth tolerance linePenalty cs =
               _ -> minimum $ bestRouteFromBreak True <$> considerableBreaks
   where
     analyzeBreak Break {before = bef} =
-      let _status = listGlueSetRatio desiredWidth bef
-      in (_status, listStatusBadness _status)
+      let _status = listGlueStatus desiredWidth bef
+      in (_status, badness _status)
     isSensibleBreak (_, (NaturallyBad Full Unfixable, _)) = False
     isSensibleBreak (_, (_, _)) = True
     -- "any penalty that is −10000 or less is considered so small that TeX
     -- will always break there."
-    isMandatoryBreak (Break {item = br}, _) = breakPenalty br <= -tenK
+    isMandatoryBreak (Break {item = br}, _) = breakPenalty br <= -UN.tenK
     isConsiderableBreak (Break {item = br}, (_, b))
       -- "TeX will not even consider such a line if p ≥ 10000, or b exceeds the
       -- current tolerance or pretolerance."
       -- But also:
-     = breakPenalty br < tenK && b <= tolerance
+     = breakPenalty br < UN.tenK && b <= tolerance
     bestRouteFromBreak addDemerit (Break {before = bef, after = aft, item = br}, (_status, bad)) =
       let d =
             if addDemerit
@@ -149,7 +148,7 @@ setParagraph getRoute cs@(end:rest) = fmap setLine lns
     -- Append \penalty10k \hfil \penalty-10k.
     -- Add extra bits to finish the list.
     csFinished =
-      (HPenalty $ Penalty $ -tenK) :
-      hFilGlue : (HPenalty $ Penalty tenK) : csTrimmed
+      (HPenalty $ Penalty $ -UN.tenK) :
+      HGlue filGlue: (HPenalty $ Penalty UN.tenK) : csTrimmed
     lns = getRoute $ reverse csFinished
-    setLine Line {contents = lncs, status = _status} = setListElems _status lncs
+    setLine Line {contents = lncs, status = _status} = set _status lncs

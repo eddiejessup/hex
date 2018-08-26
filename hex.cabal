@@ -25,6 +25,10 @@ library
                      , HeX.BreakList
                      , HeX.BreakList.Line
                      , HeX.BreakList.Page
+                     , HeX.BreakList.Elem
+                     , HeX.BreakList.Glue
+                     , HeX.BreakList.Judge
+                     , HeX.BreakList.Set
 
                      , HeX.Box
                      , HeX.Box.Draw

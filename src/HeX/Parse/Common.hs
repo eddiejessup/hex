@@ -11,10 +11,7 @@ import qualified HeX.Expand as Expand
 import qualified HeX.Lex as Lex
 
 import HeX.Parse.Helpers
-       (MatchToken, NullSimpParser, NullSimpParser, skipManySatisfied,
-        skipOneOptionalSatisfied)
-import qualified HeX.Parse.Helpers as PU
-import HeX.Parse.Stream (ExpandedStream(..), SimpExpandParser)
+import HeX.Parse.Stream
 
 skipOneOptionalSpace :: NullSimpParser ExpandedStream
 skipOneOptionalSpace = skipOneOptionalSatisfied isSpace
@@ -66,7 +63,7 @@ matchNonActiveCharacterUncased _ _ = False
 skipKeyword :: String -> NullSimpParser ExpandedStream
 skipKeyword s =
   skipOptionalSpaces *>
-  mapM_ (PU.skipSatisfied . matchNonActiveCharacterUncased) s
+  mapM_ (skipSatisfied . matchNonActiveCharacterUncased) s
 
 parseOptionalKeyword :: String -> SimpExpandParser Bool
 parseOptionalKeyword s = isJust <$> P.optional (P.try $ skipKeyword s)

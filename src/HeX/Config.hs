@@ -46,8 +46,8 @@ data SpecialIntegerParameterName =
   PreviousBoxDepth
   deriving (Show, Enum, Bounded, Eq)
 
-instance (Enum a, Bounded a, Show a, Show b) => Show (a -> b) where
-  show f = show $ fmap (\p -> (p, f p)) [minBound ..]
+-- instance (Enum a, Bounded a, Show a, Show b) => Show (a -> b) where
+--   show f = show $ fmap (\p -> (p, f p)) [minBound ..]
 
 data Config = Config
   { currentFontNr :: Maybe Int
@@ -57,7 +57,7 @@ data Config = Config
   , lengthParameter :: LengthParameterName -> Int
   , glueParameter :: GlueParameterName -> BL.Glue
   , specialIntegerParameter :: SpecialIntegerParameterName -> Int
-  } deriving (Show)
+  }
 
 type ConfStateT = StateT Config
 

@@ -7,16 +7,15 @@ import qualified Text.Megaparsec as P
 
 import qualified HeX.Expand as Expand
 import qualified HeX.Lex as Lex
-import qualified HeX.Parse.Common as PC
-import HeX.Parse.Helpers (skipManySatisfied)
-import qualified HeX.Parse.Helpers as PU
+
+import HeX.Parse.Common
+import HeX.Parse.Helpers
 import HeX.Parse.Stream
-       (ExpandedStream(..), SimpExpandParser, SimpLexParser)
 
 parseInhibited :: SimpLexParser a -> SimpExpandParser a
 parseInhibited p = do
   P.State {stateInput = ExpandedStream lStream csMap} <- P.getParserState
-  case PU.easyRunParser p lStream of
+  case easyRunParser p lStream of
     (_, Left _) -> error "ohnoes"
     (P.State lStr pos prc w, Right v) -> do
       P.setParserState (P.State (ExpandedStream lStr csMap) pos prc w)
@@ -25,7 +24,7 @@ parseInhibited p = do
 parseNestedBraces :: Int -> SimpLexParser [Lex.Token]
 parseNestedBraces 0 = return []
 parseNestedBraces n = do
-  (x, nextN) <- PU.satisfyThen parseNext
+  (x, nextN) <- satisfyThen parseNext
   case nextN of
     0 -> return []
     posN -> (x :) <$> parseNestedBraces posN
@@ -40,7 +39,7 @@ parseBalancedText :: SimpLexParser Expand.BalancedText
 parseBalancedText = Expand.BalancedText <$> parseNestedBraces 1
 
 parseCharLike :: SimpLexParser Integer
-parseCharLike = PU.satisfyThen tokToCharLike
+parseCharLike = satisfyThen tokToCharLike
   where
     tokToCharLike (Lex.CharCatToken Lex.CharCat {char = c}) =
       Just $ fromIntegral c
@@ -49,7 +48,7 @@ parseCharLike = PU.satisfyThen tokToCharLike
     tokToCharLike _ = Nothing
 
 parseCSName :: SimpLexParser Lex.ControlSequenceLike
-parseCSName = PU.satisfyThen tokToCSLike
+parseCSName = satisfyThen tokToCSLike
   where
     tokToCSLike (Lex.CharCatToken Lex.CharCat {cat = Lex.Active, char = c}) =
       Just $ Lex.ActiveCharacter c
@@ -60,8 +59,8 @@ parseGeneralText :: SimpExpandParser Expand.BalancedText
 parseGeneralText = do
   skipManySatisfied isFillerItem
   -- TODO: Maybe other things can act as left braces.
-  PU.skipSatisfied PC.isExplicitLeftBrace
+  skipSatisfied isExplicitLeftBrace
   parseInhibited parseBalancedText
   where
     isFillerItem Expand.Relax = True
-    isFillerItem t = PC.isSpace t
+    isFillerItem t = isSpace t

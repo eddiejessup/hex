@@ -4,11 +4,11 @@ module HeX.Parse.Glue where
 
 import qualified Text.Megaparsec as P
 
-import qualified HeX.Parse.Common as PC
-import HeX.Parse.Helpers (skipSatisfied)
-import HeX.Parse.Length (Factor, Length, parseFactor, parseLength)
-import HeX.Parse.Number (parseSigns)
-import HeX.Parse.Stream (SimpExpandParser)
+import HeX.Parse.Common
+import HeX.Parse.Helpers
+import HeX.Parse.Length
+import HeX.Parse.Number
+import HeX.Parse.Stream
 
 -- AST.
 data Glue =
@@ -34,7 +34,7 @@ parseGlue :: SimpExpandParser Glue
 parseGlue =
   P.choice
     [ parseExplicitGlue
-                     -- , parseInternalGlue
+ -- , parseInternalGlue
     ]
   where
     parseExplicitGlue =
@@ -43,16 +43,16 @@ parseGlue =
 parseFlex :: String -> SimpExpandParser (Maybe Flex)
 parseFlex s =
   P.choice
-    [Just <$> P.try parsePresentFlex, const Nothing <$> PC.skipOptionalSpaces]
+    [Just <$> P.try parsePresentFlex, const Nothing <$> skipOptionalSpaces]
   where
     parsePresentFlex =
-      PC.skipKeyword s *>
+      skipKeyword s *>
       P.choice
         [FilFlex <$> P.try parseFilLength, FiniteFlex <$> P.try parseLength]
 
 parseFilLength :: SimpExpandParser FilLength
 parseFilLength = do
   let parseSomeLs =
-        P.some (skipSatisfied $ PC.matchNonActiveCharacterUncased 'l')
-      parseOrder = PC.skipKeyword "fi" *> (length <$> parseSomeLs)
+        P.some (skipSatisfied $ matchNonActiveCharacterUncased 'l')
+      parseOrder = skipKeyword "fi" *> (length <$> parseSomeLs)
   FilLength <$> parseSigns <*> parseFactor <*> parseOrder
