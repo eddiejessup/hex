@@ -253,19 +253,17 @@ data PrimitiveToken
 instance Ord PrimitiveToken where
   compare _ _ = EQ
 
-
-data ExpandableToken
+data SyntaxCommandHead
   = ChangeCaseToken VDirection -- \uppercase, \lowercase
+  | CSName
   | MacroToken Macro
   deriving (Show, Eq)
 
-instance Ord ExpandableToken where
-  compare _ _ = EQ
+data ResolvedToken
+  = SyntaxCommandHead SyntaxCommandHead
+  | PrimitiveToken PrimitiveToken
+  | EndCSName
+  deriving (Show, Eq)
 
 instance Ord ResolvedToken where
   compare _ _ = EQ
-
-data ResolvedToken
-  = ExpandableToken ExpandableToken
-  | PrimitiveToken PrimitiveToken
-  deriving (Show, Eq)

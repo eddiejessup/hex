@@ -163,7 +163,7 @@ defineMacro :: E.ExpandedStream -> E.AssignmentBody -> E.ExpandedStream
 defineMacro (E.ExpandedStream (R.ResolvedStream ls csMap)) (E.DefineMacro name params conts False False) =
   E.ExpandedStream (R.ResolvedStream ls csMap')
   where
-    newMacro = R.ExpandableToken $ R.MacroToken $ R.Macro params conts
+    newMacro = R.SyntaxCommandHead $ R.MacroToken $ R.Macro params conts
     csMap' = HMap.insert name newMacro csMap
 
 runReaderOnState :: MonadState r f => Reader r b -> f b
@@ -254,8 +254,6 @@ extractParagraph acc stream =
                   indentBox <- gets parIndentBox
                   modAccum (indentBox : acc)
                 else continueUnchanged
-            -- E.ExpandMacro (R.Macro [] (R.BalancedText ts)) ->
-            --   modStream $ E.insertLexTokensE stream' ts
             E.Assign E.Assignment {body = m@E.DefineMacro {}} ->
               modStream $ defineMacro stream' m
   where
@@ -471,8 +469,6 @@ extractPages pages cur acc stream =
               modAccum (BL.VRule rule : acc)
             -- Commands to start horizontal mode.
             E.StartParagraph indent -> addParagraphToPage indent
-            -- E.ExpandMacro (R.Macro [] (R.BalancedText ts)) ->
-            --   modStream $ E.insertLexTokensE stream' ts
             E.Assign E.Assignment {body = m@E.DefineMacro {}} ->
               modStream $ defineMacro stream' m
         E.EnterHMode -> addParagraphToPage True

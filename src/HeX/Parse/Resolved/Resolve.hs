@@ -20,9 +20,9 @@ defaultCSMap =
     , ( Lex.ControlSequenceProper (Lex.ControlWord "ignorespaces")
       , PrimitiveToken IgnoreSpaces)
     , ( Lex.ControlSequenceProper (Lex.ControlWord "uppercase")
-      , ExpandableToken $ ChangeCaseToken Upward)
+      , SyntaxCommandHead $ ChangeCaseToken Upward)
     , ( Lex.ControlSequenceProper (Lex.ControlWord "lowercase")
-      , ExpandableToken $ ChangeCaseToken Downward)
+      , SyntaxCommandHead $ ChangeCaseToken Downward)
     , ( Lex.ControlSequenceProper (Lex.ControlWord "penalty")
       , PrimitiveToken AddPenalty)
     , ( Lex.ControlSequenceProper (Lex.ControlWord "kern")
@@ -79,7 +79,7 @@ defaultCSMap =
     , ( Lex.ControlSequenceProper (Lex.ControlWord "xdef")
       , PrimitiveToken $ DefineMacro {global = True, expand = True})
     , ( Lex.ControlSequenceProper (Lex.ControlWord "amacro")
-      , ExpandableToken $
+      , SyntaxCommandHead $
         MacroToken $
         Macro [] $
         BalancedText
