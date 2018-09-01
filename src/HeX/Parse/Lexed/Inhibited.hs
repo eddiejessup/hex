@@ -36,7 +36,7 @@ parseCharLike = satisfyThen tokToCharLike
   where
     tokToCharLike (Lex.CharCatToken Lex.CharCat {char = c}) =
       Just $ fromIntegral c
-    tokToCharLike (Lex.ControlSequence (Lex.ControlSymbol char)) =
+    tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence [char])) =
       Just $ fromIntegral $ C.ord char
     tokToCharLike _ = Nothing
 
@@ -45,5 +45,5 @@ parseCSName = satisfyThen tokToCSLike
   where
     tokToCSLike (Lex.CharCatToken Lex.CharCat {cat = Lex.Active, char = c}) =
       Just $ Lex.ActiveCharacter c
-    tokToCSLike (Lex.ControlSequence cs) = Just $ Lex.ControlSequenceProper cs
+    tokToCSLike (Lex.ControlSequenceToken cs) = Just $ Lex.ControlSequenceProper cs
     tokToCSLike _ = Nothing

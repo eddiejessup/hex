@@ -56,7 +56,7 @@ instance P.Stream ResolvedStream where
     -- Resolve the token.
     let t =
           case lt of
-            (Lex.ControlSequence cs) ->
+            (Lex.ControlSequenceToken cs) ->
               let val = HMap.lookup (Lex.ControlSequenceProper cs) _csMap
                   err = error ("no such control sequence found: " ++ show cs)
               in fromMaybe err val

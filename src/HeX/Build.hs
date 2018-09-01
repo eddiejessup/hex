@@ -32,7 +32,7 @@ import qualified HeX.Parse.Resolved as R
 import qualified HeX.Unit as Unit
 
 csToFontNr :: Lex.ControlSequenceLike -> Int
-csToFontNr (Lex.ControlSequenceProper (Lex.ControlWord "thefont")) =
+csToFontNr (Lex.ControlSequenceProper (Lex.ControlSequence "thefont")) =
   R.theFontNr
 
 currentFontInfo :: Monad m => MaybeT (ConfReaderT m) TexFont
@@ -186,7 +186,7 @@ extractParagraph acc stream =
         -- primitive.
       -- (Note that we pass stream, not stream'.)
          -> do
-          let parToken = Lex.ControlSequence $ Lex.ControlWord "par"
+          let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
           modStream $ E.insertLexTokenE stream parToken
         E.AddCharacter {code = i} -> do
           charBox <- runReaderOnState (runMaybeT (characterBox i))

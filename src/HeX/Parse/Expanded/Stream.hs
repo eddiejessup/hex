@@ -13,7 +13,6 @@ import qualified HeX.Lex as Lex
 import HeX.Parse.Helpers
 import HeX.Parse.Lexed
 
-import HeX.Parse.Lexed (BalancedText(..))
 import HeX.Parse.Resolved (PrimitiveToken)
 import HeX.Parse.Resolved as R
 
@@ -39,18 +38,19 @@ changeCase dir (Lex.CharCatToken (Lex.CharCat char cat)) =
     switch R.Downward = toLower
 changeCase _ t = t
 
-
 -- Things I can't easily parse outside this module, because of the recursive
 -- parsing in ExpandedStream.
 -- Constraining only the stream token type won't work easily either, because
 -- the functions currently depend on the ExpandedStream type per se.
 parseInhibited :: SimpLexParser a -> SimpExpandParser a
 parseInhibited p = do
-  P.State {stateInput = ExpandedStream (R.ResolvedStream lStream csMap)} <- P.getParserState
+  P.State {stateInput = ExpandedStream (R.ResolvedStream lStream csMap)} <-
+    P.getParserState
   case easyRunParser p lStream of
     (_, Left _) -> error "ohnoes"
     (P.State lStream' pos prc w, Right v) -> do
-      P.setParserState (P.State (ExpandedStream $ R.ResolvedStream lStream' csMap) pos prc w)
+      P.setParserState
+        (P.State (ExpandedStream $ R.ResolvedStream lStream' csMap) pos prc w)
       return v
 
 parseGeneralText :: SimpParser ExpandedStream BalancedText
@@ -63,13 +63,17 @@ parseGeneralText = do
     isFillerItem R.Relax = True
     isFillerItem t = isSpace t
 
-parseChangeCase :: SimpParser ExpandedStream BalancedText
-parseChangeCase = parseGeneralText
+parseCSNameArgs :: SimpParser ExpandedStream [CharCode]
+parseCSNameArgs = do
+  chars <- P.many $ satisfyThen tokToChar
+  skipSatisfiedEquals (R.SyntaxCommandArg R.EndCSName)
+  return chars
+  where
+    tokToChar (R.CharCat Lex.CharCat {char = c}) = Just c
+    tokToChar _ = Nothing
 
-
-
-
-
+parseChangeCaseArgs :: SimpParser ExpandedStream BalancedText
+parseChangeCaseArgs = parseGeneralText
 
 instance P.Stream ExpandedStream where
   type Token ExpandedStream = PrimitiveToken
@@ -99,28 +103,30 @@ instance P.Stream ExpandedStream where
     -- Get the next resolved token.
    = do
     (rt, rs') <- P.take1_ rs
+    let es' = ExpandedStream rs'
     case rt
       -- If it's a primitive token, provide that.
           of
-      PrimitiveToken pt -> return (pt, ExpandedStream rs')
+      PrimitiveToken pt -> return (pt, es')
       -- If it indicates the start of a syntax command.
       SyntaxCommandHead (ChangeCaseToken direction)
         -- Parse the remainder of the syntax command.
        ->
-        case easyRunParser parseChangeCase (ExpandedStream rs') of
-          (_, Left _) -> error "ohnoes"
-          (P.State es _ _ _, Right (BalancedText caseToks))
+        case easyRunParser parseChangeCaseArgs es' of
+          (_, Left parseError) -> error $ show parseError
+          (P.State es'' _ _ _, Right (BalancedText caseToks))
             -- Now perform take1_ on the stream after parsing, with the new
             -- tokens inserted.
            ->
-            P.take1_ $
-            insertLexTokensE es $ changeCase direction <$> caseToks
+            P.take1_ $ insertLexTokensE es'' $ changeCase direction <$> caseToks
       SyntaxCommandHead (MacroToken (Macro [] (BalancedText mToks))) ->
-            P.take1_ $
-            insertLexTokensE (ExpandedStream rs') mToks
+        P.take1_ $ insertLexTokensE es' mToks
       -- SyntaxCommandHead CSName ->
-      --   case easyRunParser parseCSName (ExpandedStream rs') of
-
+      --   case easyRunParser parseCSNameArgs es' of
+      --     (_, Left parseError) -> error $ show parseError
+      --     (P.State es' _ _ _, Right (charToks)) ->
+      --       let csNameCSTok = Lex.ControlSequenceToken $ Lex.ControlSequence charToks
+      --       in P.take1_ $ insertLexTokenE es' $ csNameCSTok
 
 type SimpExpandParser = P.Parsec () ExpandedStream
 

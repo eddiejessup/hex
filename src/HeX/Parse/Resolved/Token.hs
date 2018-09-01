@@ -73,9 +73,14 @@ data ModedCommandPrimitiveToken
   | AddRule -- \hrule, \vrule
   deriving (Show, Eq)
 
+data SyntaxCommandArg
+  = EndCSName
+  deriving (Show, Eq)
+
 data PrimitiveToken
+  = SyntaxCommandArg SyntaxCommandArg
   -- Starters of commands.
-  = Relax -- \relax
+  | Relax -- \relax
   -- | RightBrace -- }
   -- | BeginGroup -- \begingroup
   -- | EndGroup -- \endgroup
@@ -262,7 +267,6 @@ data SyntaxCommandHead
 data ResolvedToken
   = SyntaxCommandHead SyntaxCommandHead
   | PrimitiveToken PrimitiveToken
-  | EndCSName
   deriving (Show, Eq)
 
 instance Ord ResolvedToken where

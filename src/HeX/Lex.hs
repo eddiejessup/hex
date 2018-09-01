@@ -8,9 +8,8 @@ import Data.Hashable (Hashable, hashWithSalt)
 import qualified HeX.Categorise as Cat
 import HeX.Categorise (CharCode)
 
-data ControlSequence
-  = ControlSymbol Char
-  | ControlWord String
+newtype ControlSequence
+  = ControlSequence String
   deriving (Show, Eq)
 
 data ControlSequenceLike
@@ -23,8 +22,7 @@ instance Hashable ControlSequenceLike where
   hashWithSalt s (ActiveCharacter cc) = hashWithSalt s cc
 
 instance Hashable ControlSequence where
-  hashWithSalt s (ControlSymbol c) = hashWithSalt s c
-  hashWithSalt s (ControlWord w) = hashWithSalt s w
+  hashWithSalt s (ControlSequence w) = hashWithSalt s w
 
 -- Not all Catcodes make it past the lexer, which we can represent in the
 -- type system.
@@ -49,7 +47,7 @@ data CharCat = CharCat
 
 data Token
   = CharCatToken CharCat
-  | ControlSequence ControlSequence
+  | ControlSequenceToken ControlSequence
   deriving (Show, Eq)
 
 instance Ord Token where
@@ -116,19 +114,19 @@ extractToken getCC state cs = do
       -- Control sequence: Grab it.
       | Cat.Escape <- cat1 = do
         (cc2@Cat.CharCat {cat = cat2}, rest') <- getCC rest
-        let (contSeq, rest2) =
+        let (controlChars, rest2) =
               if isLetter cat2
                 then let (ccsNameRest, rest'') =
                            chopBreak getCC (not . isLetter . Cat.cat) rest'
                          cwName = fmap (C.chr . Cat.char) (cc2 : ccsNameRest)
-                     in (ControlWord cwName, rest'')
-                else (ControlSymbol $ (C.chr . Cat.char) cc2, rest')
+                     in (cwName, rest'')
+                else ([(C.chr . Cat.char) cc2], rest')
             nextState =
               case cat2 of
                 Cat.Space -> SkippingBlanks
                 Cat.Letter -> SkippingBlanks
                 _ -> LineMiddle
-        return (ControlSequence contSeq, nextState, rest2)
+        return (ControlSequenceToken $ ControlSequence controlChars, nextState, rest2)
       -- Comment: Ignore rest' of line and switch to line-begin.
       | Cat.Comment <- cat1 =
         extractToken getCC LineBegin $
@@ -139,7 +137,7 @@ extractToken getCC state cs = do
       -- Empty line: Make a paragraph.
       | LineBegin <- state
       , Cat.EndOfLine <- cat1 =
-        Just (ControlSequence $ ControlWord "par", LineBegin, rest)
+        Just (ControlSequenceToken $ ControlSequence "par", LineBegin, rest)
       -- Simple tokeniser cases
       | Cat.BeginGroup <- cat1 =
         Just
