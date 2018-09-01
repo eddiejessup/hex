@@ -42,7 +42,6 @@ library
                      , HeX.Parse.Resolved.Stream
                      , HeX.Parse.Resolved.Token
                      , HeX.Parse.Resolved.Resolve
-                     , HeX.Parse.Resolved.SyntaxCommand
 
                      , HeX.Parse.Expanded
                      , HeX.Parse.Expanded.Stream

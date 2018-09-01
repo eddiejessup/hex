@@ -3,7 +3,7 @@
 
 module HeX.Parse.Expanded.Common where
 
-import Data.Char (chr, ord, toLower, toUpper)
+import Data.Char (chr, toLower, toUpper)
 import Data.Functor (($>))
 import Data.Maybe (isJust)
 import qualified Text.Megaparsec as P
@@ -11,7 +11,6 @@ import qualified Text.Megaparsec as P
 import qualified HeX.Lex as Lex
 
 import HeX.Parse.Helpers
-import HeX.Parse.Lexed
 import HeX.Parse.Resolved (PrimitiveToken)
 import qualified HeX.Parse.Resolved as R
 
