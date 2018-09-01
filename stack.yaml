@@ -1,4 +1,4 @@
-resolver: lts-12.7
+resolver: lts-12.8
 
 packages:
 - .
@@ -14,7 +14,7 @@ extra-deps:
 extra-package-dbs: []
 
 ghc-options:
-  "$everything": -O0 -j4
+  "$everything": -O0 -j4 -Wall
 
 flags:
   hsdev:
