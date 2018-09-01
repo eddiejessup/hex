@@ -85,7 +85,7 @@ library
 
 executable hex
   hs-source-dirs:      app
-  main-is:             Main.hs
+  main-is:             HeX.hs
   ghc-options:         -threaded
   build-depends:       base
                      , hex
