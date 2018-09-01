@@ -343,14 +343,8 @@ leaveHMode = do
   return LeaveHMode
   where
     endsHMode R.End = True
+    endsHMode (R.ModedCommand R.Vertical _) = True
     -- endsHMode Dump = True
-    -- TODO:
-    -- - AddUnwrappedFetchedBox Vertical
-    -- - AddUnwrappedFetchedBox Vertical
-    -- - AddAlignedMaterial Horizontal
-    -- - AddRule Horizontal
-    -- - AddSpecifiedGlue Vertical
-    -- - AddPresetGlue Vertical
     endsHMode _ = False
 
 addCharacter :: HModeCommandParser
@@ -381,6 +375,7 @@ enterHMode = do
   skipSatisfied startsHMode
   return EnterHMode
   where
+    startsHMode (R.ModedCommand R.Horizontal _) = True
     startsHMode x
       | isLetter x = True
       | isOther x = True
@@ -388,12 +383,6 @@ enterHMode = do
     -- TODO:
     -- - \char
     -- - TokenForCharacter
-    -- - AddUnwrappedFetchedBox Horizontal
-    -- - AddUnwrappedFetchedBox Horizontal
-    -- - AddAlignedMaterial Vertical
-    -- - AddRule Vertical
-    -- - AddSpecifiedGlue Horizontal
-    -- - AddPresetGlue Horizontal
     -- - AddAccentedCharacter
     -- - AddItalicCorrection
     -- - AddDiscretionaryText
