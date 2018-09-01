@@ -21,7 +21,7 @@ data CatCode
   | Invalid -- 15
   deriving (Show, Eq, Enum)
 
-type CharCode = Int
+type CharCode = Char
 
 data CharCat = CharCat
   { char :: CharCode
@@ -31,26 +31,26 @@ data CharCat = CharCat
 type CharCatMap = HMap.HashMap CharCode CatCode
 
 defaultCatCode :: CharCode -> CatCode
-defaultCatCode n
-  | n == 92 = Escape -- '\'
-  | n == 32 = Space -- ' '
-  | n == 37 = Comment -- '%'
-  | n == 0 = Ignored -- Null
+defaultCatCode c
+  | c == '\\' = Escape
+  | c == ' ' = Space
+  | c == '%' = Comment
+  | c == toEnum 0 = Ignored -- Null
     -- NON-STANDARD
-  | n == 10 = EndOfLine
-  | n == 13 = EndOfLine
-  | n == 127 = Invalid
-  | n `elem` [97 .. 122] = Letter -- 'a' to 'z'.
-  | n `elem` [65 .. 90] = Letter -- 'A' to 'Z'.
+  | c == '\n' = EndOfLine
+  | c == '\r' = EndOfLine
+  | c == toEnum 127 = Invalid
+  | c `elem` ['a' .. 'z'] = Letter
+  | c `elem` ['A' .. 'Z'] = Letter
   | otherwise = Other
 
 defaultCharCatMap :: CharCatMap
 defaultCharCatMap =
-  HMap.fromList $ fmap (\n -> (n, defaultCatCode n)) [0 .. 127]
+  HMap.fromList $ fmap (\n -> (toEnum n, defaultCatCode $ toEnum n)) [0 .. 127]
 
 -- Add in some useful extras beyond the technical defaults.
 extras :: [(CharCode, CatCode)]
-extras = [(94, Superscript), (123, BeginGroup), (125, EndGroup)]
+extras = [('^', Superscript), ('{', BeginGroup), ('}', EndGroup)]
 
 usableCharCatMap :: CharCatMap
 usableCharCatMap =
@@ -68,9 +68,11 @@ extractCharCat charToCat (n1:n2:n3:rest)
  =
   let cat1 = charToCat n1
       n3Triod =
-        if n3 < 64
-          then n3 + 64
-          else n3 - 64
+        toEnum $
+        fromEnum n3 +
+        (if fromEnum n3 < 64
+           then 64
+           else (-64))
       charCatTriod = CharCat {char = n3Triod, cat = charToCat n3Triod}
       charCatSimple = CharCat {char = n1, cat = cat1}
   in if (cat1 == Superscript) && (n1 == n2) && (charToCat n3 /= EndOfLine)

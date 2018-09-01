@@ -3,7 +3,7 @@
 
 module HeX.Parse.Expanded.Stream where
 
-import Data.Char (chr, ord, toLower, toUpper)
+import Data.Char (toLower, toUpper)
 import Data.Proxy
 import qualified Text.Megaparsec as P
 
@@ -31,9 +31,8 @@ type PrimitiveTokens = [PrimitiveToken]
 -- Don't change the category code.
 changeCase :: VDirection -> Lex.Token -> Lex.Token
 changeCase dir (Lex.CharCatToken (Lex.CharCat char cat)) =
-  Lex.CharCatToken $ Lex.CharCat (modChar char) cat
+  Lex.CharCatToken $ Lex.CharCat (switch dir char) cat
   where
-    modChar = ord . switch dir . chr
     switch R.Upward = toUpper
     switch R.Downward = toLower
 changeCase _ t = t

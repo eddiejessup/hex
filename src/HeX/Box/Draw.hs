@@ -40,7 +40,7 @@ instance DVIAble FontSelection where
   toDVI FontSelection {fontNr = fNr} = [D.SelectFont fNr]
 
 instance DVIAble Character where
-  toDVI Character {code = c} = [D.Character {charNr = c, move = True}]
+  toDVI Character {char = c} = [D.Character {charNr = fromEnum c, move = True}]
 
 instance DVIAble HBoxElem where
   toDVI (HChild b) =

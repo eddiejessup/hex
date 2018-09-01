@@ -32,12 +32,12 @@ parseBalancedText :: SimpLexParser BalancedText
 parseBalancedText = BalancedText <$> parseNestedBraces 1
 
 parseCharLike :: SimpLexParser Integer
-parseCharLike = satisfyThen tokToCharLike
+parseCharLike = fromIntegral . C.ord <$> satisfyThen tokToCharLike
   where
     tokToCharLike (Lex.CharCatToken Lex.CharCat {char = c}) =
-      Just $ fromIntegral c
-    tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence [char])) =
-      Just $ fromIntegral $ C.ord char
+      Just c
+    tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence [c])) =
+      Just c
     tokToCharLike _ = Nothing
 
 parseCSName :: SimpLexParser Lex.ControlSequenceLike

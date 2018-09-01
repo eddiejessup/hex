@@ -6,7 +6,6 @@ import Prelude hiding (writeFile)
 
 import Control.Monad.Trans.State.Lazy (runStateT)
 import Data.ByteString.Lazy (writeFile)
-import Data.Char (ord)
 import Data.Maybe
 import System.Console.GetOpt
 import System.Environment
@@ -46,7 +45,7 @@ parseArgs argStr =
 
 run :: FilePath -> FilePath -> IO ()
 run inFName outFName = do
-  contentsCode <- fmap ord <$> readFile inFName
+  contentsCode <- readFile inFName
   let stream = newExpandStream contentsCode defaultCSMap
   conf <- newConfig
   ((pages, _), _) <- runStateT (extractPages [] newCurrentPage [] stream) conf

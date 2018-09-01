@@ -35,7 +35,7 @@ import Data.HashMap.Lazy
 import TFM.Common
 
 data Character = Character
-  { code :: Int
+  { code :: Char
   , width :: Rational
   , height :: Rational
   , depth :: Rational
@@ -103,7 +103,7 @@ readCharInfo _smallestCharCode charInfoStr extStr wStr hStr dStr iStr _code =
                  , repeater = _repeater
                  }
   in Character
-     { code = _code
+     { code = toEnum _code
      , width = _width
      , height = _height
      , depth = _depth
@@ -120,7 +120,7 @@ readCharInfos ::
   -> ByteString
   -> ByteString
   -> ByteString
-  -> HashMap Int Character
+  -> HashMap Char Character
 readCharInfos _smallestCharCode _largestCharCode cInfoStr extStr wStr hStr dStr iStr =
   let charList =
         fmap

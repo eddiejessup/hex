@@ -26,6 +26,7 @@ import HeX.BreakList.Line (bestRoute, setParagraph)
 import HeX.BreakList.Page
        (PageBreakJudgment(..), pageBreakJudgment, setPage)
 import HeX.Config
+import HeX.Categorise (CharCode)
 import qualified HeX.Lex as Lex
 import qualified HeX.Parse.Expanded as E
 import qualified HeX.Parse.Resolved as R
@@ -82,14 +83,14 @@ selectFont n = do
   modify (\conf -> conf {currentFontNr = Just n})
   return B.FontSelection {fontNr = n}
 
-characterBox :: Monad m => Int -> MaybeT (ConfReaderT m) B.Character
-characterBox code = do
+characterBox :: Monad m => CharCode -> MaybeT (ConfReaderT m) B.Character
+characterBox char = do
   font <- currentFontInfo
   let toSP = TFM.designScaleSP font
   TFMC.Character {width = w, height = h, depth = d} <-
-    MaybeT (return $ HMap.lookup code $ characters font)
+    MaybeT (return $ HMap.lookup char $ characters font)
   return
-    B.Character {code = code, width = toSP w, height = toSP h, depth = toSP d}
+    B.Character {char = char, width = toSP w, height = toSP h, depth = toSP d}
 
 spaceGlue :: Monad m => MaybeT (ConfReaderT m) BL.Glue
 spaceGlue = do
@@ -188,11 +189,11 @@ extractParagraph acc stream =
          -> do
           let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
           modStream $ E.insertLexTokenE stream parToken
-        E.AddCharacter {code = i} -> do
-          charBox <- runReaderOnState (runMaybeT (characterBox i))
+        E.AddCharacter {char = c} -> do
+          charBox <- runReaderOnState (runMaybeT (characterBox c))
           hCharBox <-
             case BL.HCharacter <$> charBox of
-              Just c -> return c
+              Just char -> return char
               Nothing -> fail "Could not get character info"
           modAccum $ hCharBox : acc
         E.HAllModesCommand aCom ->

@@ -2,7 +2,6 @@
 
 module HeX.Lex where
 
-import qualified Data.Char as C
 import Data.Hashable (Hashable, hashWithSalt)
 
 import qualified HeX.Categorise as Cat
@@ -60,8 +59,7 @@ data LexState
   deriving (Eq, Show)
 
 spaceTok :: Token
--- 32 means ' '.
-spaceTok = CharCatToken CharCat {char = 32, cat = Space}
+spaceTok = CharCatToken CharCat {char = ' ', cat = Space}
 
 chopDropWhile :: ([b] -> Maybe (a, [b])) -> (a -> Bool) -> [b] -> [b]
 chopDropWhile _ _ [] = []
@@ -118,9 +116,9 @@ extractToken getCC state cs = do
               if isLetter cat2
                 then let (ccsNameRest, rest'') =
                            chopBreak getCC (not . isLetter . Cat.cat) rest'
-                         cwName = fmap (C.chr . Cat.char) (cc2 : ccsNameRest)
+                         cwName = fmap Cat.char (cc2 : ccsNameRest)
                      in (cwName, rest'')
-                else ([(C.chr . Cat.char) cc2], rest')
+                else ([Cat.char cc2], rest')
             nextState =
               case cat2 of
                 Cat.Space -> SkippingBlanks

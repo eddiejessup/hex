@@ -2,7 +2,6 @@
 
 module HeX.Box where
 
-import qualified Data.Char as C
 import Path (Abs, File, Path)
 
 import TFM (TexFont)
@@ -46,14 +45,14 @@ newtype FontSelection = FontSelection
   } deriving (Show)
 
 data Character = Character
-  { code :: Int
+  { char :: Char
   , width :: Int
   , height :: Int
   , depth :: Int
   }
 
 instance Show Character where
-  show c = "'" ++ [C.chr $ code c] ++ "'"
+  show c = "'" ++ [char c] ++ "'"
 
 newtype SetGlue = SetGlue
   { glueDimen :: Int

@@ -29,7 +29,7 @@ data TexFont = TexFont
   , mathSymbolParams :: Maybe F.MathSymbolParams
   , mathExtensionParams :: Maybe F.MathExtensionParams
   , ligKerns :: [LigKernInstr]
-  , characters :: HashMap Int Character
+  , characters :: HashMap Char Character
   } deriving (Show)
 
 newTFM :: BG.Get TexFont

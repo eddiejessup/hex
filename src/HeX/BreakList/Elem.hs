@@ -1,7 +1,6 @@
 module HeX.BreakList.Elem where
 
 import qualified Adjacent as A
-import qualified Data.Char as C
 
 import Data.Maybe
 import qualified HeX.Box as B
@@ -72,12 +71,12 @@ instance Show BreakableHListElem where
   show (HCharacter e) = show e
   showList a = (show (foldr append [] a) ++)
     where
-      append (HCharacter B.Character {B.code = n}) [] = [Sentence [C.chr n]]
+      append (HCharacter B.Character {B.char = c}) [] = [Sentence [c]]
       append x [] = [NonSentence x]
       append y r@(x:xs)
-        | HCharacter B.Character {B.code = n} <- y
-        , (Sentence cs) <- x = Sentence (C.chr n : cs) : xs
-        | HCharacter B.Character {B.code = n} <- y = Sentence [C.chr n] : r
+        | HCharacter B.Character {B.char = c} <- y
+        , (Sentence cs) <- x = Sentence (c : cs) : xs
+        | HCharacter B.Character {B.char = c} <- y = Sentence [c] : r
         | otherwise = NonSentence y : r
 
 -- Just for the purposes of showing the list more compactly.

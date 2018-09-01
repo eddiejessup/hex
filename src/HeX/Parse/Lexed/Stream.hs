@@ -3,7 +3,6 @@
 
 module HeX.Parse.Lexed.Stream where
 
-import qualified Data.Char as C
 import Data.Foldable (foldl')
 import Data.Proxy
 import Data.String.Utils (replace)
@@ -27,7 +26,7 @@ showSrc s = replace "\n" "\\n" (take 30 s)
 instance Show LexStream where
   show LexStream {codes = cs, lexTokens = ts, lexState = ls} =
     show ls ++
-    "; to-lex: " ++ show ts ++ "; \"" ++ showSrc (fmap C.chr cs) ++ "\""
+    "; to-lex: " ++ show ts ++ "; \"" ++ showSrc cs ++ "\""
 
 instance P.Stream LexStream where
   type Token LexStream = Lex.Token

@@ -3,7 +3,7 @@
 
 module HeX.Parse.Expanded.Common where
 
-import Data.Char (chr, toLower, toUpper)
+import Data.Char (toLower, toUpper)
 import Data.Functor (($>))
 import Data.Maybe (isJust)
 import qualified Text.Megaparsec as P
@@ -30,7 +30,7 @@ isNonActiveCharacter :: PrimitiveToken -> Bool
 isNonActiveCharacter = not . isActiveCharacter
 
 isEquals :: PrimitiveToken -> Bool
-isEquals (R.CharCat Lex.CharCat {cat = Lex.Other, char = 61}) = True
+isEquals (R.CharCat Lex.CharCat {cat = Lex.Other, char = '='}) = True
 isEquals _ = False
 
 isCategory :: Lex.LexCatCode -> PrimitiveToken -> Bool
@@ -51,7 +51,7 @@ isExplicitLeftBrace = isCategory Lex.BeginGroup
 
 matchNonActiveCharacterUncased :: Char -> PrimitiveToken -> Bool
 matchNonActiveCharacterUncased a t@(R.CharCat Lex.CharCat {char = c}) =
-  isNonActiveCharacter t && (chr c `elem` [toUpper a, toLower a])
+  isNonActiveCharacter t && (c `elem` [toUpper a, toLower a])
 matchNonActiveCharacterUncased _ _ = False
 
 skipOneOptionalSpace :: (P.Stream s, P.Token s ~ PrimitiveToken) => NullSimpParser s

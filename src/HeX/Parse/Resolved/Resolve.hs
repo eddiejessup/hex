@@ -84,7 +84,7 @@ defaultCSMap =
         Macro [] $
         BalancedText
           [ Lex.ControlSequenceToken $ Lex.ControlSequence "uppercase"
-          , Lex.CharCatToken $ Lex.CharCat 123 Lex.BeginGroup
-          , Lex.CharCatToken $ Lex.CharCat 99 Lex.Letter
+          , Lex.CharCatToken $ Lex.CharCat '{' Lex.BeginGroup
+          , Lex.CharCatToken $ Lex.CharCat 'c' Lex.Letter
           ])
     ]

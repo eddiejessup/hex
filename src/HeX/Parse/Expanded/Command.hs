@@ -3,12 +3,12 @@
 module HeX.Parse.Expanded.Command where
 
 import Control.Monad (when)
-import qualified Data.Char as C
 import Path (File, Path, Rel, parseRelFile)
 import qualified Text.Megaparsec as P
 import Text.Megaparsec ((<|>))
 
 import qualified HeX.Lex as Lex
+import HeX.Categorise (CharCode)
 
 import HeX.Parse.Helpers
 
@@ -123,7 +123,7 @@ data HModeCommand
   -- | AddAdjustment VModeMaterial
   -- | AddControlSpace
   | AddCharacter { method :: CharSource
-                 , code :: Int }
+                 , char :: CharCode }
   -- | AddAccentedCharacter { accentCode :: Int, targetCode :: Maybe Int, assignments :: [Assignment]}
   -- | AddItalicCorrection
   -- | AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
@@ -201,8 +201,7 @@ macroToFont = do
     parseFileName :: SimpExpandParser (Path Rel File)
     parseFileName = do
       skipOptionalSpaces
-      nameCodes <- P.some $ satisfyThen tokToChar
-      let fileName = fmap C.chr nameCodes
+      fileName <- P.some $ satisfyThen tokToChar
       skipSatisfied isSpace
       case parseRelFile (fileName ++ ".tfm") of
         Just p -> return p
@@ -211,19 +210,19 @@ macroToFont = do
     -- 'Other' Characters for decimal digits are OK.
     tokToChar (R.CharCat Lex.CharCat {cat = Lex.Other, char = c}) =
       case c of
-        48 -> Just c
-        49 -> Just c
-        50 -> Just c
-        51 -> Just c
-        52 -> Just c
-        53 -> Just c
-        54 -> Just c
-        55 -> Just c
-        56 -> Just c
-        57 -> Just c
+        '0' -> Just c
+        '1' -> Just c
+        '2' -> Just c
+        '3' -> Just c
+        '4' -> Just c
+        '5' -> Just c
+        '6' -> Just c
+        '7' -> Just c
+        '8' -> Just c
+        '9' -> Just c
       -- Not in the spec, but let's say "/" and "." are OK.
-        46 -> Just c
-        47 -> Just c
+        '/' -> Just c
+        '.' -> Just c
         _ -> Nothing
     tokToChar _ = Nothing
 
@@ -350,7 +349,7 @@ leaveHMode = do
 addCharacter :: HModeCommandParser
 addCharacter = do
   c <- satisfyThen charToCode
-  return AddCharacter {method = ExplicitChar, code = c}
+  return AddCharacter {method = ExplicitChar, char = c}
   where
     charToCode (R.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) =
       Just c
