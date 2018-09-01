@@ -4,13 +4,13 @@ A reimplementation of the interpreter for the TeX programming language.
 
 ## Usage
 
+Run `hex --help` for usage information.
+
 ### Prerequisites
 
 HeX outputs DVI format files, as per the specification of TeX in the TeXbook. Unless you have a DVI viewer available, you might want to convert these files to PDF.
 
 The program `gs` (Ghostscript) can perform this conversion, with the command `dvipdf`. It should be available from your package manager.
-
-Run `hex --help` for usage information.
 
 ### Examples
 
@@ -43,7 +43,7 @@ Features that are present:
 - Page breaking
 - Macros without parameters
 - Glue, kerns, rules
-- Some syntactic commands (such as `\uppercase`, `csname`)
+- Some syntactic commands (such as `\uppercase`, `\csname`)
 - Some typesetting commands (such as `\noindent`, `\penalty`)
 
 Features that are absent:
@@ -68,6 +68,6 @@ I've also written a more complete version of this same project, [implemented in 
 
 ## Acknowledgments
 
-- [Donald Knuth](https://www-cs-faculty.stanford.edu/~knuth/vita.html), for TeX and the TeXbook
+- [Donald Knuth](https://www-cs-faculty.stanford.edu/~knuth/vita.html), for TeX and the TeXbook.
 - [Fabrice Salvaire](https://www.fabrice-salvaire.fr/en/), for the [PyDVI](https://github.com/FabriceSalvaire/PyDVI) library on which this project's TFM parsing logic is based.
-- [Andrew Snowden](http://www-personal.umich.edu/~asnowden/), for the [description of the DVI language](https://web.archive.org/web/20070403030353/http://www.math.umd.edu/~asnowden/comp-cont/dvi.html) that was used to develop this project's DVI writing logic
+- [Andrew Snowden](http://www-personal.umich.edu/~asnowden/), for the [description of the DVI language](https://web.archive.org/web/20070403030353/http://www.math.umd.edu/~asnowden/comp-cont/dvi.html) that was used to develop this project's DVI writing logic.
