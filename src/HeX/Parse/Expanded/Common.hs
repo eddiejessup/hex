@@ -8,6 +8,7 @@ import Data.Functor (($>))
 import Data.Maybe (isJust)
 import qualified Text.Megaparsec as P
 
+import HeX.Categorise (CharCode)
 import qualified HeX.Lex as Lex
 
 import HeX.Parse.Helpers
@@ -71,3 +72,9 @@ parseOptionalKeyword s = isJust <$> P.optional (P.try $ skipKeyword s)
 
 parseKeywordToValue :: (P.Stream s, P.Token s ~ PrimitiveToken) => String -> b -> SimpParser s b
 parseKeywordToValue s = (skipKeyword s $>)
+
+parseManyChars :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s [CharCode]
+parseManyChars = P.many $ satisfyThen tokToChar
+  where
+    tokToChar (R.CharCat Lex.CharCat {char = c}) = Just c
+    tokToChar _ = Nothing

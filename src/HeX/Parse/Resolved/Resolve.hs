@@ -59,6 +59,10 @@ defaultCSMap =
       , PrimitiveToken $ ModedCommand Horizontal AddRule)
     , ( Lex.ControlSequenceProper (Lex.ControlSequence "font")
       , PrimitiveToken MacroToFont)
+    , ( Lex.ControlSequenceProper (Lex.ControlSequence "csname")
+      , SyntaxCommandHead CSName)
+    , ( Lex.ControlSequenceProper (Lex.ControlSequence "endcsname")
+      , PrimitiveToken $ SyntaxCommandArg EndCSName)
     -- Temporary pragmatism.
     , ( Lex.ControlSequenceProper (Lex.ControlSequence "selectfont")
       , PrimitiveToken $ TokenForFont theFontNr)

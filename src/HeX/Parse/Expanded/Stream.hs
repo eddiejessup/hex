@@ -63,16 +63,8 @@ parseGeneralText = do
     isFillerItem t = isSpace t
 
 parseCSNameArgs :: SimpParser ExpandedStream [CharCode]
-parseCSNameArgs = do
-  chars <- P.many $ satisfyThen tokToChar
-  skipSatisfiedEquals (R.SyntaxCommandArg R.EndCSName)
-  return chars
-  where
-    tokToChar (R.CharCat Lex.CharCat {char = c}) = Just c
-    tokToChar _ = Nothing
-
-parseChangeCaseArgs :: SimpParser ExpandedStream BalancedText
-parseChangeCaseArgs = parseGeneralText
+parseCSNameArgs =
+  parseManyChars <* skipSatisfiedEquals (R.SyntaxCommandArg R.EndCSName)
 
 instance P.Stream ExpandedStream where
   type Token ExpandedStream = PrimitiveToken
@@ -111,21 +103,27 @@ instance P.Stream ExpandedStream where
       SyntaxCommandHead (ChangeCaseToken direction)
         -- Parse the remainder of the syntax command.
        ->
-        case easyRunParser parseChangeCaseArgs es' of
+        case easyRunParser parseGeneralText es' of
           (_, Left parseError) -> error $ show parseError
           (P.State es'' _ _ _, Right (BalancedText caseToks))
             -- Now perform take1_ on the stream after parsing, with the new
             -- tokens inserted.
            ->
-            P.take1_ $ insertLexTokensE es'' $ changeCase direction <$> caseToks
-      SyntaxCommandHead (MacroToken (Macro [] (BalancedText mToks))) ->
-        P.take1_ $ insertLexTokensE es' mToks
-      -- SyntaxCommandHead CSName ->
-      --   case easyRunParser parseCSNameArgs es' of
-      --     (_, Left parseError) -> error $ show parseError
-      --     (P.State es' _ _ _, Right (charToks)) ->
-      --       let csNameCSTok = Lex.ControlSequenceToken $ Lex.ControlSequence charToks
-      --       in P.take1_ $ insertLexTokenE es' $ csNameCSTok
+            (P.take1_ . insertLexTokensE es'') $
+            changeCase direction <$> caseToks
+      SyntaxCommandHead (MacroToken (Macro [] (BalancedText macroToks))) ->
+        (P.take1_ . insertLexTokensE es') macroToks
+      SyntaxCommandHead CSName ->
+        case easyRunParser parseCSNameArgs es' of
+          (_, Left parseError) -> error $ show parseError
+          (P.State es'' _ _ _, Right charToks)
+            -- TODO: if control sequence doesn't exist, define one that holds
+            -- '\relax'.
+           ->
+            (P.take1_ .
+             insertLexTokenE es'' .
+             Lex.ControlSequenceToken . Lex.ControlSequence)
+              charToks
 
 type SimpExpandParser = P.Parsec () ExpandedStream
 
