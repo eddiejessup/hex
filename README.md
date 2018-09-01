@@ -69,5 +69,5 @@ I've also written a more complete version of this same project, [implemented in 
 ## Acknowledgments
 
 - [Donald Knuth](https://www-cs-faculty.stanford.edu/~knuth/vita.html), for TeX and the TeXbook
-- [Fabrice Salvaire](https://www.fabrice-salvaire.fr/en/) for the [PyDVI](https://github.com/FabriceSalvaire/PyDVI) library, on which this project's TFM parsing logic is based.
-- [Andrew Snowden](http://www-personal.umich.edu/~asnowden/) for the [description of the DVI language](https://web.archive.org/web/20070403030353/http://www.math.umd.edu/~asnowden/comp-cont/dvi.html), which was used to develop this project's DVI writing logic
+- [Fabrice Salvaire](https://www.fabrice-salvaire.fr/en/), for the [PyDVI](https://github.com/FabriceSalvaire/PyDVI) library on which this project's TFM parsing logic is based.
+- [Andrew Snowden](http://www-personal.umich.edu/~asnowden/), for the [description of the DVI language](https://web.archive.org/web/20070403030353/http://www.math.umd.edu/~asnowden/comp-cont/dvi.html) that was used to develop this project's DVI writing logic
