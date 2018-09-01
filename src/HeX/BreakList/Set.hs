@@ -1,19 +1,20 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module HeX.BreakList.Set where
 
 import qualified HeX.Box as B
 
 import HeX.BreakList.Elem
-import HeX.BreakList.Judge
 import HeX.BreakList.Glue
+import HeX.BreakList.Judge
 
-class Settable a b where
-  set :: GlueStatus -> a -> [b]
+class Settable a where
+  type Result a :: *
+  set :: GlueStatus -> a -> [Result a]
 
-instance Settable BreakableHListElem B.HBoxElem where
+instance Settable BreakableHListElem where
+  type Result BreakableHListElem = B.HBoxElem
   set ls (HGlue g) = B.HGlue <$> set ls g
   set _ (HPenalty _) = []
   set _ (HListBox b) = [B.HChild b]
@@ -23,7 +24,8 @@ instance Settable BreakableHListElem B.HBoxElem where
   set _ (HFontSelection a) = [B.HFontSelection a]
   set _ (HCharacter a) = [B.HCharacter a]
 
-instance Settable BreakableVListElem B.VBoxElem where
+instance Settable BreakableVListElem where
+  type Result BreakableVListElem = B.VBoxElem
   set ls (VGlue g) = B.VGlue <$> set ls g
   set _ (VPenalty _) = []
   set _ (VListBox b) = [B.VChild b]
@@ -34,11 +36,13 @@ instance Settable BreakableVListElem B.VBoxElem where
 
 -- We can set a list of settable values by concatenating the result of setting
 -- each value.
-instance (Settable a b) => Settable [a] b where
-  set _status = concatMap (set _status)
+instance Settable a => Settable [a] where
+  type Result [a] = Result a
+  set = concatMap . set
 
-instance Settable Glue B.SetGlue where
-    set ls g@Glue {dimen = d} = [B.SetGlue $ d + glueDiff ls g]
+instance Settable Glue where
+  type Result Glue = B.SetGlue
+  set ls g@Glue {dimen = d} = [B.SetGlue $ d + glueDiff ls g]
 
 -- Suppose the line order is i, and the glue has natural width u, and
 -- flexibility f_j, corresponding to its amount and order of stretch or shrink
