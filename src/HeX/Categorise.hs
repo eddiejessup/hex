@@ -73,10 +73,9 @@ extractCharCat charToCat (n1:n2:n3:rest)
         (if fromEnum n3 < 64
            then 64
            else (-64))
-      charCatTriod = CharCat {char = n3Triod, cat = charToCat n3Triod}
-      charCatSimple = CharCat {char = n1, cat = cat1}
+      charCatTriod = CharCat n3Triod $ charToCat n3Triod
+      charCatSimple = CharCat n1 cat1
   in if (cat1 == Superscript) && (n1 == n2) && (charToCat n3 /= EndOfLine)
        then Just (charCatTriod, rest)
        else Just (charCatSimple, n2 : n3 : rest)
-extractCharCat charToCat (n1:rest) =
-  Just (CharCat {char = n1, cat = charToCat n1}, rest)
+extractCharCat charToCat (n1:rest) = Just (CharCat n1 $ charToCat n1, rest)
