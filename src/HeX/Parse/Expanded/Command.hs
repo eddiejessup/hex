@@ -158,7 +158,6 @@ parseAllModeCommand mode =
     , addRule mode
     , startParagraph
     , endParagraph
-    -- , expandMacro
     , defineMacro
     ]
 
@@ -286,14 +285,6 @@ startParagraph = satisfyThen parToCom
 
 endParagraph :: AllModeCommandParser
 endParagraph = const EndParagraph <$> skipSatisfiedEquals R.EndParagraph
-
--- expandMacro :: AllModeCommandParser
--- expandMacro = do
---   macro <- satisfyThen tokToMacro
---   return $ ExpandMacro macro
---   where
---     tokToMacro (R.MacroToken m) = Just m
---     tokToMacro _ = Nothing
 
 defineMacro :: AllModeCommandParser
 defineMacro = do
