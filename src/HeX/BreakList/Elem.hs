@@ -34,8 +34,9 @@ class BreakableListElem a where
   isBox :: a -> Bool
   toBreakItem :: A.Adjacency a -> Maybe BreakItem
   naturalLength :: a -> Int
-  naturalListLength :: [a] -> Int
-  naturalListLength = sum . fmap naturalLength
+
+naturalListLength :: BreakableListElem a => [a] -> Int
+naturalListLength = sum . fmap naturalLength
 
 -- TODO: WhatsIt, Leaders, Mark, Insertion
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
