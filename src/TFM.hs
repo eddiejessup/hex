@@ -4,16 +4,17 @@ module TFM
   , designScaleSP
   , readTFM
   , readTFMFancy
-  ) where
+  )
+where
 
-import Prelude hiding (readFile)
+import           Prelude                 hiding ( readFile )
 
-import Data.Binary.Get
-import Data.ByteString.Lazy
-import HeX.Unit
-import Path
+import           Data.Binary.Get
+import           Data.ByteString.Lazy
+import           HeX.Unit
+import           Path
 
-import TFM.Parse
+import           TFM.Parse
 
 designSizeSP :: TexFont -> Rational
 designSizeSP f = toScaledPoint (designFontSize f) Point

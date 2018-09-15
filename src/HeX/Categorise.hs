@@ -26,7 +26,10 @@ type CharCode = Char
 data CharCat = CharCat
   { char :: CharCode
   , cat :: CatCode
-  } deriving (Show)
+  }
+
+instance Show CharCat where
+  show (CharCat c ct) = show ct ++ " '" ++ [c] ++ "'"
 
 type CharCatMap = HMap.HashMap CharCode CatCode
 
@@ -59,6 +62,10 @@ usableCharCatMap =
 catLookup :: CharCatMap -> CharCode -> CatCode
 catLookup m n = HMap.lookupDefault Invalid n m
 
+defaultCharToCat, usableCharToCat :: CharCode -> CatCode
+defaultCharToCat = catLookup defaultCharCatMap
+usableCharToCat = catLookup usableCharCatMap
+
 extractCharCat ::
      (CharCode -> CatCode) -> [CharCode] -> Maybe (CharCat, [CharCode])
 extractCharCat _ [] = Nothing
@@ -73,9 +80,7 @@ extractCharCat charToCat (n1:n2:n3:rest)
         (if fromEnum n3 < 64
            then 64
            else (-64))
-      charCatTriod = CharCat n3Triod $ charToCat n3Triod
-      charCatSimple = CharCat n1 cat1
   in if (cat1 == Superscript) && (n1 == n2) && (charToCat n3 /= EndOfLine)
-       then Just (charCatTriod, rest)
-       else Just (charCatSimple, n2 : n3 : rest)
+       then Just (CharCat n3Triod $ charToCat n3Triod, rest)
+       else Just (CharCat n1 cat1, n2 : n3 : rest)
 extractCharCat charToCat (n1:rest) = Just (CharCat n1 $ charToCat n1, rest)

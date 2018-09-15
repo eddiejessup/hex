@@ -18,12 +18,23 @@ import HeX.Parse.Resolved.Resolve
 data ResolvedStream =
   ResolvedStream LexStream
                  CSMap
+  deriving (Show)
 
 newResolvedStream :: [CharCode] -> CSMap -> ResolvedStream
-newResolvedStream _ccMap = ResolvedStream (newLexStream _ccMap)
-
+newResolvedStream = ResolvedStream . newLexStream
 
 type ResolvedTokens = [ResolvedToken]
+
+resolveToken :: CSMap -> Lex.Token -> ResolvedToken
+resolveToken _csMap (Lex.ControlSequenceToken cs)
+  = 
+  let
+    val = HMap.lookup (Lex.ControlSequenceProper cs) _csMap
+    err = error ("no such control sequence found: " ++ show cs)
+  in fromMaybe err val
+-- TODO: Active characters.
+resolveToken _ (Lex.CharCatToken cc)
+  = PrimitiveToken $ CharCat cc
 
 instance P.Stream ResolvedStream where
   type Token ResolvedStream = ResolvedToken
@@ -53,16 +64,7 @@ instance P.Stream ResolvedStream where
     -- Get the token and updated sub-stream.
    = do
     (lt, s') <- P.take1_ s
-    -- Resolve the token.
-    let t =
-          case lt of
-            (Lex.ControlSequenceToken cs) ->
-              let val = HMap.lookup (Lex.ControlSequenceProper cs) _csMap
-                  err = error ("no such control sequence found: " ++ show cs)
-              in fromMaybe err val
-        -- TODO: Active characters.
-            (Lex.CharCatToken cc) -> PrimitiveToken $ CharCat cc
-    return (t, ResolvedStream s' _csMap)
+    return (resolveToken _csMap lt, ResolvedStream s' _csMap)
 
 type SimpResolveParser = P.Parsec () ResolvedStream
 

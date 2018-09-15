@@ -20,9 +20,10 @@ import HeX.Parse.Expanded.Common
 
 newtype ExpandedStream =
   ExpandedStream R.ResolvedStream
+  deriving (Show)
 
 newExpandStream :: [CharCode] -> R.CSMap -> ExpandedStream
-newExpandStream cs csMap = ExpandedStream $ newResolvedStream cs csMap
+newExpandStream cs = ExpandedStream . newResolvedStream cs
 
 type PrimitiveTokens = [PrimitiveToken]
 
@@ -95,16 +96,15 @@ instance P.Stream ExpandedStream where
    = do
     (rt, rs') <- P.take1_ rs
     let es' = ExpandedStream rs'
-    case rt
+    case rt of
       -- If it's a primitive token, provide that.
-          of
       PrimitiveToken pt -> return (pt, es')
       -- If it indicates the start of a syntax command.
       SyntaxCommandHead (ChangeCaseToken direction)
         -- Parse the remainder of the syntax command.
        ->
         case easyRunParser parseGeneralText es' of
-          (_, Left parseError) -> error $ show parseError
+          (_, Left parseError) -> error $ "Error while parsing changecase command: " ++ show parseError
           (P.State es'' _ _ _, Right (BalancedText caseToks))
             -- Now perform take1_ on the stream after parsing, with the new
             -- tokens inserted.
@@ -115,15 +115,12 @@ instance P.Stream ExpandedStream where
         (P.take1_ . insertLexTokensE es') macroToks
       SyntaxCommandHead CSName ->
         case easyRunParser parseCSNameArgs es' of
-          (_, Left parseError) -> error $ show parseError
+          (_, Left parseError) -> error $ "Error while parsing csname arguments: " ++ show parseError
           (P.State es'' _ _ _, Right charToks)
             -- TODO: if control sequence doesn't exist, define one that holds
             -- '\relax'.
-           ->
-            (P.take1_ .
-             insertLexTokenE es'' .
-             Lex.ControlSequenceToken . Lex.ControlSequence)
-              charToks
+           
+           -> (P.take1_ . insertLexTokenE es'' . Lex.ControlSequenceToken . Lex.ControlSequence) charToks
 
 type SimpExpandParser = P.Parsec () ExpandedStream
 

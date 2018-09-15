@@ -111,20 +111,19 @@ extractToken getCC state cs = do
     extractTokenRest (Cat.CharCat n cat1) rest
       -- Control sequence: Grab it.
       | Cat.Escape <- cat1 = do
-        (Cat.CharCat char2 cat2, rest') <- getCC rest
-        let (controlChars, rest2) =
+        (cc2@(Cat.CharCat _ cat2), rest') <- getCC rest
+        let (controlCCs, rest2) =
               if isLetter cat2
-                then let (cwNameCCsRest, rest'') =
-                           chopBreak getCC (not . isLetter . Cat.cat) rest'
-                     in (char2 : fmap Cat.char cwNameCCsRest, rest'')
-                else ([char2], rest')
+                then let (cwNameCCsRest, rest'') = chopBreak getCC (not . isLetter . Cat.cat) rest'
+                     in (cc2 : cwNameCCsRest, rest'')
+                else ([cc2], rest')
             nextState =
               case cat2 of
                 Cat.Space -> SkippingBlanks
                 Cat.Letter -> SkippingBlanks
                 _ -> LineMiddle
         return
-          ( ControlSequenceToken $ ControlSequence controlChars
+          ( ControlSequenceToken $ ControlSequence $ fmap Cat.char controlCCs
           , nextState
           , rest2)
       -- Comment: Ignore rest' of line and switch to line-begin.

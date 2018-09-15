@@ -171,11 +171,11 @@ runReaderOnState :: MonadState r f => Reader r b -> f b
 runReaderOnState f = runReader f <$> get
 
 -- We build a paragraph list in reverse order.
-extractParagraph ::
+extractParagraphInner ::
      [BL.BreakableHListElem]
   -> E.ExpandedStream
   -> ConfStateT IO ([BL.BreakableHListElem], E.ExpandedStream)
-extractParagraph acc stream =
+extractParagraphInner acc stream =
   case eCom of
     Left x -> error $ show x
     Right com ->
@@ -259,18 +259,22 @@ extractParagraph acc stream =
               modStream $ defineMacro stream' m
   where
     (PS.State {stateInput = stream'}, eCom) = E.extractHModeCommand stream
-    modAccum ac = extractParagraph ac stream'
-    modStream = extractParagraph acc
-    continueUnchanged = extractParagraph acc stream'
+    modAccum ac = extractParagraphInner ac stream'
+    modStream = extractParagraphInner acc
+    continueUnchanged = extractParagraphInner acc stream'
+
+extractParagraph :: Bool -> E.ExpandedStream -> ConfStateT IO ([BL.BreakableHListElem], E.ExpandedStream)
+extractParagraph indent stream = do
+  indentBox <- gets parIndentBox
+  extractParagraphInner [indentBox | indent] stream
 
 extractParagraphLineBoxes ::
      Bool -> E.ExpandedStream -> ConfStateT IO ([[B.HBoxElem]], E.ExpandedStream)
 extractParagraphLineBoxes indent stream = do
+  (hList, stream') <- extractParagraph indent stream
   desiredW <- gets (`lengthParameter` DesiredWidth)
   lineTol <- gets (`integerParameter` LineTolerance)
   linePen <- gets (`integerParameter` LinePenalty)
-  indentBox <- gets parIndentBox
-  (hList, stream') <- extractParagraph [indentBox | indent] stream
   let getRoute = bestRoute desiredW lineTol linePen
       elemLists = setParagraph getRoute hList
   return (elemLists, stream')
@@ -406,13 +410,13 @@ addVListElems ::
   -> ConfStateT m [BL.BreakableVListElem]
 addVListElems = foldM addVListElem
 
-extractPages ::
+extractPagesInner ::
      [B.Page]
   -> CurrentPage
   -> [BL.BreakableVListElem]
   -> E.ExpandedStream
   -> ConfStateT IO ([B.Page], E.ExpandedStream)
-extractPages pages cur acc stream =
+extractPagesInner pages cur acc stream =
   case eCom of
     Left x -> error $ show x
     Right com ->
@@ -420,8 +424,8 @@ extractPages pages cur acc stream =
     -- Command to end recursion.
             of
         E.End -> do
-          lastPage <- runPageBuilder cur (reverse acc)
-          let pagesFinal = pages ++ lastPage
+          lastPages <- runPageBuilder cur (reverse acc)
+          let pagesFinal = pages ++ lastPages
           return (pagesFinal, stream')
         E.VAllModesCommand aCom ->
           case aCom
@@ -475,7 +479,7 @@ extractPages pages cur acc stream =
         E.EnterHMode -> addParagraphToPage True
   where
     (PS.State {stateInput = stream'}, eCom) = E.extractVModeCommand stream
-    continueSamePage = extractPages pages cur
+    continueSamePage = extractPagesInner pages cur
     modAccum ac = continueSamePage ac stream'
     modStream = continueSamePage acc
     continueUnchanged = continueSamePage acc stream'
@@ -490,3 +494,5 @@ extractPages pages cur acc stream =
       let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
       acc' <- addVListElems acc $ BL.VListBox . toBox <$> lineBoxes
       continueSamePage acc' stream''
+
+extractPages = extractPagesInner [] newCurrentPage []

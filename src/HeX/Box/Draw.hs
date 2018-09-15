@@ -14,7 +14,6 @@ instance DVIAble Box where
   toDVI Box {contents = HBoxContents cs} = concatMap toDVI cs
   toDVI Box {contents = VBoxContents cs} = concatMap toDVI cs
 
--- TODO: Don't know how to handle depth.
 instance DVIAble Rule where
   toDVI Rule {width = w, height = h, depth = d} =
     [D.Rule {height = h + d, width = w, move = True}]
@@ -26,6 +25,7 @@ instance DVIAble Kern where
   toDVI Kern {} = []
 
 instance DVIAble FontDefinition where
+  -- TODO: Improve mapping of name and path.
   toDVI FontDefinition { fontNr = fNr
                        , fontPath = path
                        , fontName = name
