@@ -3,20 +3,22 @@
 
 module HeX.Parse.Expanded.Stream where
 
-import Data.Char (toLower, toUpper)
-import Data.Proxy
-import qualified Text.Megaparsec as P
+import           Data.Char                      ( toLower
+                                                , toUpper
+                                                )
+import           Data.Proxy
+import qualified Text.Megaparsec               as P
 
-import HeX.Categorise (CharCode)
-import qualified HeX.Lex as Lex
+import           HeX.Categorise                 ( CharCode )
+import qualified HeX.Lex                       as Lex
 
-import HeX.Parse.Helpers
-import HeX.Parse.Lexed
+import           HeX.Parse.Helpers
+import           HeX.Parse.Lexed
 
-import HeX.Parse.Resolved (PrimitiveToken)
-import HeX.Parse.Resolved as R
+import           HeX.Parse.Resolved             ( PrimitiveToken )
+import           HeX.Parse.Resolved            as R
 
-import HeX.Parse.Expanded.Common
+import           HeX.Parse.Expanded.Common
 
 newtype ExpandedStream =
   ExpandedStream R.ResolvedStream
@@ -33,9 +35,9 @@ type PrimitiveTokens = [PrimitiveToken]
 changeCase :: VDirection -> Lex.Token -> Lex.Token
 changeCase dir (Lex.CharCatToken (Lex.CharCat char cat)) =
   Lex.CharCatToken $ Lex.CharCat (switch dir char) cat
-  where
-    switch R.Upward = toUpper
-    switch R.Downward = toLower
+ where
+  switch R.Upward   = toUpper
+  switch R.Downward = toLower
 changeCase _ t = t
 
 -- Things I can't easily parse outside this module, because of the recursive
@@ -44,10 +46,10 @@ changeCase _ t = t
 -- the functions currently depend on the ExpandedStream type per se.
 parseInhibited :: SimpLexParser a -> SimpExpandParser a
 parseInhibited p = do
-  P.State {stateInput = ExpandedStream (R.ResolvedStream lStream csMap)} <-
+  P.State { stateInput = ExpandedStream (R.ResolvedStream lStream csMap) } <-
     P.getParserState
   case easyRunParser p lStream of
-    (_, Left _) -> error "ohnoes"
+    (_                         , Left _ ) -> error "ohnoes"
     (P.State lStream' pos prc w, Right v) -> do
       P.setParserState
         (P.State (ExpandedStream $ R.ResolvedStream lStream' csMap) pos prc w)
@@ -59,9 +61,9 @@ parseGeneralText = do
   -- TODO: Maybe other things can act as left braces.
   skipSatisfied isExplicitLeftBrace
   parseInhibited parseBalancedText
-  where
-    isFillerItem R.Relax = True
-    isFillerItem t = isSpace t
+ where
+  isFillerItem R.Relax = True
+  isFillerItem t       = isSpace t
 
 parseCSNameArgs :: SimpParser ExpandedStream [CharCode]
 parseCSNameArgs =
@@ -119,7 +121,7 @@ instance P.Stream ExpandedStream where
           (P.State es'' _ _ _, Right charToks)
             -- TODO: if control sequence doesn't exist, define one that holds
             -- '\relax'.
-           
+
            -> (P.take1_ . insertLexTokenE es'' . Lex.ControlSequenceToken . Lex.ControlSequence) charToks
 
 type SimpExpandParser = P.Parsec () ExpandedStream
