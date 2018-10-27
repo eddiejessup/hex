@@ -1,7 +1,7 @@
 module HeX.Parse.Resolved.Token where
 
-import qualified HeX.Lex as Lex
-import HeX.Parse.Lexed
+import qualified HeX.Lex                       as Lex
+import           HeX.Parse.Lexed
 
 data HDirection
   = Leftward
@@ -54,14 +54,10 @@ data BoxRegisterAttribute
   | IsVoid
   deriving (Show, Eq)
 
-data MacroParameter = MacroParameter
-  { nr :: Int
-  , delimiter :: [Lex.Token]
-  } deriving (Show, Eq)
-
-data Macro =
-  Macro [MacroParameter]
-        BalancedText
+data MacroContents
+  = MacroContents { preParamTokens :: [Lex.Token]
+                  , paramDelimTokens :: [[Lex.Token]]
+                  , replacementTokens :: BalancedText }
   deriving (Show, Eq)
 
 data ModedCommandPrimitiveToken
@@ -261,7 +257,7 @@ instance Ord PrimitiveToken where
 data SyntaxCommandHead
   = ChangeCaseToken VDirection -- \uppercase, \lowercase
   | CSName
-  | MacroToken Macro
+  | MacroToken MacroContents
   deriving (Show, Eq)
 
 data ResolvedToken

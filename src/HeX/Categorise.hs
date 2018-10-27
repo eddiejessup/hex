@@ -53,7 +53,11 @@ defaultCharCatMap =
 
 -- Add in some useful extras beyond the technical defaults.
 extras :: [(CharCode, CatCode)]
-extras = [('^', Superscript), ('{', BeginGroup), ('}', EndGroup)]
+extras
+  = [ ('^', Superscript)
+    , ('{', BeginGroup)
+    , ('}', EndGroup)
+    , ('#', Parameter) ]
 
 usableCharCatMap :: CharCatMap
 usableCharCatMap =

@@ -85,7 +85,7 @@ defaultCSMap =
     , ( Lex.ControlSequenceProper (Lex.ControlSequence "amacro")
       , SyntaxCommandHead $
         MacroToken $
-        Macro [] $
+        MacroContents [] [] $
         BalancedText
           [ Lex.ControlSequenceToken $ Lex.ControlSequence "uppercase"
           , Lex.CharCatToken $ Lex.CharCat '{' Lex.BeginGroup

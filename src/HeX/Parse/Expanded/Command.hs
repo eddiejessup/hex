@@ -36,8 +36,7 @@ data MacroPrefix
 
 data AssignmentBody
   = DefineMacro { name :: Lex.ControlSequenceLike
-                , parameters :: [R.MacroParameter]
-                , contents :: BalancedText
+                , contents :: R.MacroContents
                 , long, outer :: Bool }
   -- | ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
   -- | SetVariable VariableAssignment
@@ -286,23 +285,46 @@ startParagraph = satisfyThen parToCom
 endParagraph :: AllModeCommandParser
 endParagraph = const EndParagraph <$> skipSatisfiedEquals R.EndParagraph
 
+data Digit
+  = One
+  | Two
+  | Three
+  | Four
+  | Five
+  | Six
+  | Seven
+  | Eight
+  | Nine
+  deriving (Enum)
+
+digitToChar :: Digit -> Char
+digitToChar One = '1'
+digitToChar Two = '2'
+digitToChar Three = '3'
+digitToChar Four = '4'
+digitToChar Five = '5'
+digitToChar Six = '6'
+digitToChar Seven = '7'
+digitToChar Eight = '8'
+digitToChar Nine = '9'
+
 defineMacro :: AllModeCommandParser
 defineMacro = do
   prefixes <- P.many $ satisfyThen tokToPrefix
   (defGlobal, defExpand) <- satisfyThen tokToDef
   cs <- parseInhibited parseCSName
-  params <- parseParameters
+  preParamToks <- parsePreParamTokens
+  paramToks <- parseParameters
   skipSatisfied isExplicitLeftBrace
   when defExpand $ error "expanded-def not implemented"
-  _contents <- parseInhibited parseBalancedText
+  replaceToks <- parseInhibited parseBalancedText
   return $
     Assign $
     Assignment
     { body =
         DefineMacro
         { name = cs
-        , parameters = params
-        , contents = _contents
+        , contents = R.MacroContents preParamToks paramToks replaceToks
         , long = Long `elem` prefixes
         , outer = Outer `elem` prefixes
         }
@@ -313,11 +335,21 @@ defineMacro = do
     tokToPrefix R.Outer = Just Outer
     tokToPrefix R.Long = Just Long
     tokToPrefix _ = Nothing
+
     tokToDef R.DefineMacro {global = _global, expand = _expand} =
       Just (_global, _expand)
     tokToDef _ = Nothing
-    -- TODO.
-    parseParameters = return []
+
+    parsePreParamTokens = return []
+    -- TODO: Finish
+    -- TODO: Parse without expansion.
+    parseParameters = P.option [] (parseParameter One)
+
+parseParameter :: Digit -> SimpExpandParser [a]
+parseParameter dig = do
+  skipSatisfied $ isCategory Lex.Parameter
+  skipSatisfied (\t@(R.CharCat Lex.CharCat {char=c}) -> isLetterOrOther t && c == digitToChar dig)
+  return []
 
 -- HMode.
 type HModeCommandParser = SimpExpandParser HModeCommand

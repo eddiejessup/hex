@@ -113,7 +113,7 @@ instance P.Stream ExpandedStream where
            ->
             (P.take1_ . insertLexTokensE es'') $
             changeCase direction <$> caseToks
-      SyntaxCommandHead (MacroToken (Macro [] (BalancedText macroToks))) ->
+      SyntaxCommandHead (MacroToken (MacroContents [] [] (BalancedText macroToks))) ->
         (P.take1_ . insertLexTokensE es') macroToks
       SyntaxCommandHead CSName ->
         case easyRunParser parseCSNameArgs es' of
