@@ -53,6 +53,7 @@ library
                      , HeX.Parse.Expanded.Glue
 
                      , Adjacent
+                     , Math.Byte
 
                      , TFM
                      , TFM.Parse
@@ -64,6 +65,7 @@ library
                      , TFM.FontParams
 
                      , DVI.Encode
+                     , DVI.Instruction
                      , DVI.Document
   build-depends:       base
                      , containers

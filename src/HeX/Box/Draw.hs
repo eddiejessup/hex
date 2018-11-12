@@ -3,6 +3,7 @@
 
 module HeX.Box.Draw where
 
+import qualified DVI.Instruction as DI
 import qualified DVI.Document as D
 
 import HeX.Box
@@ -16,7 +17,7 @@ instance DVIAble Box where
 
 instance DVIAble Rule where
   toDVI Rule {width = w, height = h, depth = d} =
-    [D.Rule {height = h + d, width = w, move = True}]
+    [D.Rule {height = h + d, width = w, move = DI.Set}]
 
 instance DVIAble SetGlue where
   toDVI SetGlue {} = []
@@ -40,7 +41,7 @@ instance DVIAble FontSelection where
   toDVI FontSelection {fontNr = fNr} = [D.SelectFont fNr]
 
 instance DVIAble Character where
-  toDVI Character {char = c} = [D.Character {charNr = fromEnum c, move = True}]
+  toDVI Character {char = c} = [D.Character (fromEnum c) DI.Set]
 
 instance DVIAble HBoxElem where
   toDVI (HChild b) =
