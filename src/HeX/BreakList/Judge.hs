@@ -34,28 +34,25 @@ glueStatus :: Int -> Glue -> GlueStatus
 glueStatus excessLength (Glue _ _stretch _shrink)
   -- The glue ratio is r = [excess length]/[flex]i.
   -- The natural width x is compared to the desired width w.
- =
-  case compare excessLength 0
-       -- If x = w, all glue gets its natural width.
-        of
-    EQ -> NaturallyGood
-       -- Otherwise the glue will be modified, by computing a “glue set ratio” r
-       -- and a “glue set order” i
-    LT -> NaturallyBad Bare $ stretchStatus (fromIntegral excessLength) _stretch
-    GT -> NaturallyBad Full $ shrinkStatus (fromIntegral excessLength) _shrink
+  -- If x = w, all glue gets its natural width.
+  | excessLength == 0 = NaturallyGood
+  -- Otherwise the glue will be modified, by computing a “glue set ratio” r
+  -- and a “glue set order” i
+  | excessLength < 0 = NaturallyBad Bare $ stretchStatus _stretch
+  | otherwise = NaturallyBad Full $ shrinkStatus _shrink
   where
-    stretchStatus e GlueFlex {factor = f, order = o}
+    stretchStatus GlueFlex {factor = f, order = o}
       -- No stretchability.
       | f == 0 = Unfixable
-      | otherwise = Fixable {ratio = -(e / f), order = o}
-    shrinkStatus e GlueFlex {factor = f, order = o}
+      | otherwise = Fixable {ratio = -(fromIntegral excessLength / f), order = o}
+    shrinkStatus GlueFlex {factor = f, order = o}
       -- No shrinkability.
       | f == 0 = Unfixable
-      | e > f = Unfixable
+      | fromIntegral excessLength > f = Unfixable
        -- r is set to 1 if i = 0 and x − w > z0, because the maximum
        -- shrinkability must not be exceeded.
       | o == 0 = Fixable {ratio = 1, order = o}
-      | otherwise = Fixable {ratio = e / f, order = o}
+      | otherwise = Fixable {ratio = fromIntegral excessLength / f, order = o}
 
 -- TODO: Use types to ensure number is within bounds, such as <= tenK.
 data Badness
