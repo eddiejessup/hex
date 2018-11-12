@@ -1,19 +1,20 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module HeX.BreakList.Line where
 
-import Data.Maybe
-import Prelude hiding (lines)
+import           Data.Maybe
+import           Prelude                 hiding ( lines )
 
-import Control.Applicative (liftA2)
-import Data.List (intercalate)
+import           Control.Applicative            ( liftA2 )
+import           Data.List                      ( intercalate )
 
-import qualified Adjacent as A
-import qualified HeX.Box as B
-import qualified HeX.Unit as UN
+import qualified Adjacent                      as A
+import qualified HeX.Box                       as B
+import qualified HeX.Unit                      as UN
 
-import HeX.BreakList
+import           HeX.BreakList
 
 data Break a = Break
   { before :: [a]
@@ -43,112 +44,104 @@ instance Show a => Show (Break a) where
     "\nBefore: " ++ show b ++ "\nBreak at: " ++ show k ++ "\nAfter: " ++ show a
   showList bs = ((intercalate "\n" $ fmap show bs) ++)
 
-allBreaks :: [BreakableHListElem] -> [Break BreakableHListElem]
+allBreaks :: BreakableListElem a => [a] -> [Break a]
 allBreaks = inner [] . A.toAdjacents
-  where
-    discardAfterBreak =
-      liftA2 (&&) (isDiscardable . A.fromAdjacent) (isNothing . toBreakItem)
-    trimAfterBreak = A.fromAdjacents . dropWhile discardAfterBreak
-    trimBeforeBreak this seen =
-      case toGlue this of
-        Just _ -> seen
-        Nothing -> this : seen
-    inner seen [] = [Break {before = reverse seen, after = [], item = NoBreak}]
-    inner seen (thisAdj@(A.Adjacency (_, this, _)):rest) =
-      case toBreakItem thisAdj of
-        Nothing -> inner (this : seen) rest
-        Just b ->
-          let brk =
-                Break
-                { before = reverse $ trimBeforeBreak this seen
-                , after = trimAfterBreak rest
-                , item = b
-                }
-          in brk : inner (this : seen) rest
+ where
+  discardAfterBreak =
+    liftA2 (&&) (isDiscardable . A.fromAdjacent) (isNothing . toBreakItem)
+  trimAfterBreak = A.fromAdjacents . dropWhile discardAfterBreak
+
+  trimBeforeBreak (toGlue -> Just _) seen = seen
+  trimBeforeBreak this               seen = this : seen
+
+  inner seen [] = [Break {before = reverse seen, after = [], item = NoBreak}]
+  inner seen (thisAdj@(A.Adjacency (_, this, _)) : rest) =
+    case toBreakItem thisAdj of
+      Nothing -> inner (this : seen) rest
+      Just b ->
+        let brk = Break
+              { before = reverse $ trimBeforeBreak this seen
+              , after  = trimAfterBreak rest
+              , item   = b
+              }
+        in  brk : inner (this : seen) rest
 
 -- Optimised filter for cases where we know that once a test has gone from true
 -- to false, the test will never again succeed.
 touchyFilter :: (a -> Bool) -> [a] -> [a]
 touchyFilter _ [] = []
-touchyFilter test (x:xs)
-  | test x = x : takeWhile test xs
-  | otherwise = touchyFilter test xs
+touchyFilter test (x : xs) | test x    = x : takeWhile test xs
+                           | otherwise = touchyFilter test xs
 
 -- Expects contents in reading order.
 bestRouteInner :: Int -> Int -> Int -> [BreakableHListElem] -> Route
 bestRouteInner _ _ _ [] = Route {lines = [], demerit = 0}
-bestRouteInner desiredWidth tolerance linePenalty cs =
-  let breaks = allBreaks cs
+bestRouteInner desiredWidth tolerance linePenalty cs
+  = let
+      breaks         = allBreaks cs
       analyzedBreaks = zip breaks $ analyzeBreak <$> breaks
       sensibleBreaks = do
-        (brk, (_status, _badness)) <-
-          touchyFilter isSensibleBreak analyzedBreaks
-        bNr <-
-          case _badness of
-            FiniteBadness b -> return b
-            _ -> fail ""
+        (brk, (_status, _badness)) <- touchyFilter isSensibleBreak
+                                                   analyzedBreaks
+        bNr <- case _badness of
+          FiniteBadness b -> return b
+          _               -> fail ""
         return (brk, (_status, bNr))
-      considerableBreaks = filter isConsiderableBreak sensibleBreaks
-  in case filter isMandatoryBreak sensibleBreaks of
-       x:_ -> bestRouteFromBreak False x
-       [] ->
-         let 
-         in case considerableBreaks of
-              [] -> noBreakRoute
-              _ -> minimum $ bestRouteFromBreak True <$> considerableBreaks
-  where
-    analyzeBreak Break {before = bef} =
-      let _status = listGlueStatus desiredWidth bef
-      in (_status, badness _status)
-    isSensibleBreak (_, (NaturallyBad Full Unfixable, _)) = False
-    isSensibleBreak (_, (_, _)) = True
-    -- "any penalty that is −10000 or less is considered so small that TeX
-    -- will always break there."
-    isMandatoryBreak (Break {item = br}, _) = breakPenalty br <= -UN.tenK
-    isConsiderableBreak (Break {item = br}, (_, b))
-      -- "TeX will not even consider such a line if p ≥ 10000, or b exceeds the
-      -- current tolerance or pretolerance."
-      -- But also:
-     = breakPenalty br < UN.tenK && b <= tolerance
-    bestRouteFromBreak addDemerit (Break {before = bef, after = aft, item = br}, (_status, bad)) =
-      let d =
-            if addDemerit
-              then lineDemerit bad br
-              else 0
+    in
+      case filter isMandatoryBreak sensibleBreaks of
+        x : _ -> bestRouteFromBreak False x
+        []    -> case filter isConsiderableBreak sensibleBreaks of
+          [] -> noBreakRoute
+          bs -> minimum $ bestRouteFromBreak True <$> bs
+ where
+  analyzeBreak Break { before = bef } =
+    let _status = listGlueStatus desiredWidth bef in (_status, badness _status)
+  isSensibleBreak (_, (NaturallyBad Full Unfixable, _)) = False
+  isSensibleBreak (_, (_, _)                          ) = True
+  -- "any penalty that is −10000 or less is considered so small that TeX
+  -- will always break there."
+  isMandatoryBreak (Break { item = br }, _) = breakPenalty br <= -UN.tenK
+  isConsiderableBreak (Break { item = br }, (_, b)) =
+    breakPenalty br < UN.tenK && b <= tolerance
+  -- "TeX will not even consider such a line if p ≥ 10000, or b exceeds the
+  -- current tolerance or pretolerance."
+  -- But also:
+  bestRouteFromBreak addDemerit (Break { before = bef, after = aft, item = br }, (_status, bad))
+    = let d        = if addDemerit then lineDemerit bad br else 0
           subRoute = bestRouteInner desiredWidth tolerance linePenalty aft
           thisLine = Line {contents = bef, status = _status}
-      in appendToRoute subRoute thisLine d
-    appendToRoute Route {lines = subLns, demerit = subD} ln d =
-      Route {lines = ln : subLns, demerit = subD + d}
-    noBreakRoute =
-      Route
-      { lines = [Line {contents = cs, status = NaturallyBad Full Unfixable}]
-      , demerit = -1
-      }
-    lineDemerit bad br =
-      let breakDemerit = breakPenalty br ^ (2 :: Int)
-          listDemerit = (linePenalty + bad) ^ (2 :: Int)
-      in breakDemerit + listDemerit
+      in  appendToRoute subRoute thisLine d
+  appendToRoute Route { lines = subLns, demerit = subD } ln d =
+    Route {lines = ln : subLns, demerit = subD + d}
+  noBreakRoute = Route
+    { lines   = [Line {contents = cs, status = NaturallyBad Full Unfixable}]
+    , demerit = -1
+    }
+  lineDemerit bad br =
+    let breakDemerit = breakPenalty br ^ (2 :: Int)
+        listDemerit  = (linePenalty + bad) ^ (2 :: Int)
+    in  breakDemerit + listDemerit
 
 bestRoute :: Int -> Int -> Int -> [BreakableHListElem] -> [Line]
 bestRoute x y z cs = lines $ bestRouteInner x y z cs
 
 -- Expects contents in reverse order.
 -- Returns lines in reading order.
-setParagraph ::
-     ([BreakableHListElem] -> [Line]) -> [BreakableHListElem] -> [[B.HBoxElem]]
-setParagraph _ [] = []
-setParagraph getRoute cs@(end:rest) = fmap setLine lns
+setParagraph
+  :: ([BreakableHListElem] -> [Line]) -> [BreakableHListElem] -> [[B.HBoxElem]]
+setParagraph _        []              = []
+setParagraph getRoute cs@(end : rest) = fmap setLine lns
     -- Remove the final item if it's glue.
-  where
-    csTrimmed =
-      case end of
-        HGlue _ -> rest
-        _ -> cs
-    -- Append \penalty10k \hfil \penalty-10k.
-    -- Add extra bits to finish the list.
-    csFinished =
-      (HPenalty $ Penalty $ -UN.tenK) :
-      HGlue filGlue: (HPenalty $ Penalty UN.tenK) : csTrimmed
-    lns = getRoute $ reverse csFinished
-    setLine Line {contents = lncs, status = _status} = set _status lncs
+ where
+  csTrimmed = case end of
+    HGlue _ -> rest
+    _       -> cs
+  -- Append \penalty10k \hfil \penalty-10k.
+  -- Add extra bits to finish the list.
+  csFinished =
+    (HPenalty $ Penalty $ -UN.tenK)
+      : HGlue filGlue
+      : (HPenalty $ Penalty UN.tenK)
+      : csTrimmed
+  lns = getRoute $ reverse csFinished
+  setLine Line { contents = lncs, status = _status } = set _status lncs

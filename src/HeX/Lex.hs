@@ -70,21 +70,21 @@ chopDropWhile getNext test cs = case getNext cs of
   Just (next, rest) ->
     if test next then chopDropWhile getNext test rest else rest
 
-chopBreakInner
-  :: [a] -> ([b] -> Maybe (a, [b])) -> (a -> Bool) -> [b] -> ([a], [b])
-chopBreakInner acc _       _    [] = (acc, [])
-chopBreakInner acc getNext test cs = case getNext cs of
-  Nothing           -> (acc, [])
-  Just (next, rest) -> if test next
-    then (acc, cs)
-    else chopBreakInner (next : acc) getNext test rest
-
 -- Given a function that chops one 'a' from [b], and a stopping criterion on
 -- 'a', get [a] up to but not including the succeeding item, and the rest of
 -- the list, including the elements that generated the stopping 'a'.
 chopBreak :: ([b] -> Maybe (a, [b])) -> (a -> Bool) -> [b] -> ([a], [b])
-chopBreak get test cs = revFirst $ chopBreakInner [] get test cs
-  where revFirst (a, b) = (reverse a, b)
+chopBreak get test cs = revFirst $ inner [] get cs
+  where
+    revFirst (a, b) = (reverse a, b)
+
+    inner acc _       [] = (acc, [])
+    inner acc getNext cs' = case getNext cs' of
+      Nothing           -> (acc, [])
+      Just (next, rest) -> if test next
+        then (acc, cs')
+        else inner (next : acc) getNext rest
+
 
 isLetter :: Cat.CatCode -> Bool
 isLetter Cat.Letter = True
