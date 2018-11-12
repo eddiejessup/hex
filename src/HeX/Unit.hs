@@ -76,18 +76,15 @@ class Length u where
 
 -- pointToScaledPoint a = a * fromIntegral pointInScaledPoint
 instance Length PhysicalUnit where
-  inScaledPoint u =
-    case u of
-      Point -> fromIntegral pointInScaledPoint
-      Pica -> fromIntegral $ picaInPoint * pointInScaledPoint
-      Inch -> inchInPoint * inScaledPoint Point
-      BigPoint ->
-        inchInPoint * inScaledPoint Point / fromIntegral inchInBigPoint
-      Centimetre -> 10 * inScaledPoint Millimetre
-      Millimetre -> inScaledPoint Inch / inchInMM
-      Didot -> didotInPoint * inScaledPoint Point
-      Cicero -> 12 * inScaledPoint Didot
-      ScaledPoint -> 1
+  inScaledPoint Point = fromIntegral pointInScaledPoint
+  inScaledPoint Pica = fromIntegral $ picaInPoint * pointInScaledPoint
+  inScaledPoint Inch = inchInPoint * inScaledPoint Point
+  inScaledPoint BigPoint = inchInPoint * inScaledPoint Point / fromIntegral inchInBigPoint
+  inScaledPoint Centimetre = 10 * inScaledPoint Millimetre
+  inScaledPoint Millimetre = inScaledPoint Inch / inchInMM
+  inScaledPoint Didot = didotInPoint * inScaledPoint Point
+  inScaledPoint Cicero = 12 * inScaledPoint Didot
+  inScaledPoint ScaledPoint = 1
 
 showFrac :: Real n => n -> String
 showFrac n = printf "%.1f" (realToFrac n :: Double)
