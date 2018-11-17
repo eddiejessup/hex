@@ -116,15 +116,6 @@ appendEntry (prevInEdges, rs, chunk) x@Break =
 appendEntry (prevInEdges, rs, chunk) x =
     (prevInEdges, rs, x:chunk)
 
-bestRoute :: [Entry] -> Route
-bestRoute xs =
-    let
-        (prevInEdges, rs, chunk) = foldl' appendEntry ([InEdge [] Root], [], []) xs
-        -- Force a final 'break' representing the end of the paragraph.
-        inEdges = stretchInEdge chunk <$> prevInEdges
-        acceptableDInEdges = toOnlyAcceptables $ withStatus <$> inEdges
-    in shortestRoute acceptableDInEdges rs
-
 shortestRoute :: [WithDistance InEdge] -> [Route] -> Route
 shortestRoute [] _ = Route [] 0
 shortestRoute ies rs = minimum (getBSR <$> ies)
@@ -137,6 +128,16 @@ shortestRoute ies rs = minimum (getBSR <$> ies)
                 Route sevs sd = rs !! sourceNodeIdx
             in
                 Route (ev:sevs) (ed + sd)
+
+bestRoute :: [Entry] -> Route
+bestRoute xs =
+    let
+        (prevInEdges, rs, chunk) = foldl' appendEntry ([InEdge [] Root], [], []) xs
+        -- Force a final 'break' representing the end of the paragraph.
+        inEdges = stretchInEdge chunk <$> prevInEdges
+        acceptableDInEdges = toOnlyAcceptables $ withStatus <$> inEdges
+    in shortestRoute acceptableDInEdges rs
+
 
 main :: IO ()
 main = do
