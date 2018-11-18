@@ -24,7 +24,7 @@ import qualified HeX.Unit as Unit
 type FontInfoMap = HMap.HashMap Int TexFont
 
 -- Integers.
-newtype LineTolerance = LineTolerance { unTolerance :: Int } deriving (Eq, Show, Num)
+newtype LineTolerance = LineTolerance { unLineTolerance :: Int } deriving (Eq, Show, Num)
 newtype LinePenalty = LinePenalty { unLinePenalty :: Int } deriving (Eq, Show, Num)
 newtype Magnification = Magnification { unMagnification :: Int } deriving (Eq, Ord, Enum, Show, Num, Real, Integral)
 

@@ -9,7 +9,8 @@ import           Data.Maybe
 import           Prelude                 hiding ( lines )
 import Data.List.Extra hiding (lines)
 
--- import           Control.Applicative            ( liftA2 )
+import           Control.Applicative            ( empty )
+import           Control.Monad                  ( guard )
 -- import           Data.List                      ( intercalate )
 
 import qualified Adjacent                      as A
@@ -34,18 +35,6 @@ data Line = Line
 --   { lines :: [Line]
 --   , demerit :: Int
 --   }
-
--- instance Eq Route where
---   (==) a b = demerit a == demerit b
-
--- instance Ord Route where
---   compare a b = compare (demerit a) (demerit b)
-
--- instance Show a => Show (Break a) where
---   show Break {before = b, after = a, item = k} =
---     "Break ->" ++
---     "\nBefore: " ++ show b ++ "\nBreak at: " ++ show k ++ "\nAfter: " ++ show a
---   showList bs = ((intercalate "\n" $ fmap show bs) ++)
 
 -- allBreaks :: BreakableListElem a => [a] -> [Break a]
 -- allBreaks = inner [] . A.toAdjacents
@@ -155,11 +144,11 @@ instance Eq Route' where
 instance Ord Route' where
   compare (Route' _ a) (Route' _ b) = compare a b
 
-judgeEdge :: EdgeValue -> EdgeStatus
-judgeEdge xs = listGlueStatus 30750000 $ A.fromAdjacents xs
+judgeEdge :: DesiredWidth -> EdgeValue -> EdgeStatus
+judgeEdge dw xs = listGlueStatus (unDesiredWidth dw) $ A.fromAdjacents xs
 
-withStatus :: InEdge -> WithStatus InEdge
-withStatus e@(InEdge v _) = WithSummary e $ judgeEdge v
+withStatus :: DesiredWidth -> InEdge -> WithStatus InEdge
+withStatus dw e@(InEdge v _) = WithSummary e $ judgeEdge dw v
 
 lineDemerit :: LinePenalty -> BadnessSize -> BreakItem -> Demerit
 lineDemerit lp b br =
@@ -167,18 +156,20 @@ lineDemerit lp b br =
       listDemerit = (unLinePenalty lp + unBadnessSize b) ^ (2 :: Int)
   in Demerit $ breakDemerit + listDemerit
 
-toOnlyAcceptables :: LinePenalty -> BreakItem -> [WithStatus InEdge] -> [WithDistance InEdge]
-toOnlyAcceptables lp br ds = do
+toOnlyAcceptables :: LineTolerance -> LinePenalty -> BreakItem -> [WithStatus InEdge] -> [WithDistance InEdge]
+toOnlyAcceptables tol lp br ds = do
     WithSummary y st <- ds
-    _demerit <- case badness st of
-      FiniteBadness b -> return $ lineDemerit lp (BadnessSize b) br
-      _ -> fail ""
-    return $ WithSummary y (st, _demerit)
+    case badness st of
+      FiniteBadness b -> do
+        -- TODO
+        guard $ breakPenalty br < UN.tenK && b <= unLineTolerance tol
+        let _demerit = lineDemerit lp (BadnessSize b) br
+        return $ WithSummary y (st, _demerit)
+      _ -> empty
 
 toOnlyPromisings :: [WithStatus a] -> [WithStatus a]
 toOnlyPromisings ds = [WithSummary y d | (WithSummary y d) <- ds, isPromising d]
   where
-    -- isPromising TooFull = False
     isPromising (NaturallyBad Full Unfixable) = False
     isPromising _ = True
 
@@ -188,16 +179,16 @@ growInEdge c (InEdge cs n) = InEdge (c : cs) n
 stretchInEdge :: [Entry] -> InEdge -> InEdge
 stretchInEdge s (InEdge cs n) = InEdge (s ++ cs) n
 
-appendEntry :: LinePenalty -> ([InEdge], [Route'], [Entry]) -> Entry -> ([InEdge], [Route'], [Entry])
-appendEntry _ (prevInEdges, rs, chunk) x@(toBreakItem -> Nothing) =
+appendEntry :: DesiredWidth -> LineTolerance -> LinePenalty -> ([InEdge], [Route'], [Entry]) -> Entry -> ([InEdge], [Route'], [Entry])
+appendEntry _ _ _ (prevInEdges, rs, chunk) x@(toBreakItem -> Nothing) =
   (prevInEdges, rs, x:chunk)
-appendEntry lp (prevInEdges, rs, chunk) x@(toBreakItem -> Just br) =
+appendEntry dw tol lp (prevInEdges, rs, chunk) x@(toBreakItem -> Just br) =
   let
     inEdges = stretchInEdge chunk <$> prevInEdges
-    promisingDInEdges = toOnlyPromisings $ withStatus <$> inEdges
+    promisingDInEdges = toOnlyPromisings $ withStatus dw <$> inEdges
     promisingInEdges = value <$> promisingDInEdges
   in
-    case toOnlyAcceptables lp br promisingDInEdges of
+    case toOnlyAcceptables tol lp br promisingDInEdges of
       -- If we can't break at this point acceptably somehow, just treat
       -- like a non-break character.
       -- [] -> (promisingInEdges, rs, [x])
@@ -228,9 +219,9 @@ newtype BadnessSize = BadnessSize { unBadnessSize :: Int } deriving (Eq, Show, N
 bestRoute :: DesiredWidth -> LineTolerance -> LinePenalty -> [BreakableHListElem] -> [Line]
 bestRoute dw tol lp xs =
   let
-    (prevInEdges, rs, chunk) = foldl' (appendEntry lp) ([InEdge [] Root], [], []) (A.toAdjacents xs)
+    (prevInEdges, rs, chunk) = foldl' (appendEntry dw tol lp) ([InEdge [] Root], [], []) (A.toAdjacents xs)
     inEdges = stretchInEdge chunk <$> prevInEdges
-    acceptableDInEdges = toOnlyAcceptables lp NoBreak $ withStatus <$> inEdges
+    acceptableDInEdges = toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
     (Route' lns _) = shortestRoute acceptableDInEdges rs
   in
     (\(Line' ev st) -> Line (reverse $ A.fromAdjacents ev) st) <$> reverse lns
