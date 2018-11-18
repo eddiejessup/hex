@@ -121,41 +121,41 @@ evaluateUnit (E.PhysicalUnit _ u) = Unit.inScaledPoint u
 evaluateUnit (E.InternalUnit E.Em) = 10
 evaluateUnit (E.InternalUnit E.Ex) = 10
 
-evaluateNormalLength :: Int -> E.NormalLength -> Int
-evaluateNormalLength mag (E.LengthSemiConstant f u@(E.PhysicalUnit isTrue _)) =
+evaluateNormalLength :: Magnification -> E.NormalLength -> Int
+evaluateNormalLength m (E.LengthSemiConstant f u@(E.PhysicalUnit isTrue _)) =
   round $ evalF isTrue * evaluateUnit u
   where
     evalF False = evaluateFactor f
-    evalF True = evalF False * 1000 / fromIntegral mag
+    evalF True = evalF False * 1000 / fromIntegral m
 evaluateNormalLength _ (E.LengthSemiConstant f u) =
   round $ evaluateFactor f * evaluateUnit u
 
-evaluateULength :: Int -> E.UnsignedLength -> Int
-evaluateULength mag (E.NormalLengthAsULength nLn) = evaluateNormalLength mag nLn
+evaluateULength :: Magnification -> E.UnsignedLength -> Int
+evaluateULength m (E.NormalLengthAsULength nLn) = evaluateNormalLength m nLn
 
-evaluateLength :: Int -> E.Length -> Int
-evaluateLength mag (E.Length True uLn) = evaluateULength mag uLn
-evaluateLength mag (E.Length False uLn) = -(evaluateULength mag uLn)
+evaluateLength :: Magnification -> E.Length -> Int
+evaluateLength m (E.Length True uLn) = evaluateULength m uLn
+evaluateLength m (E.Length False uLn) = -(evaluateULength m uLn)
 
-evaluateFlex :: Int -> Maybe E.Flex -> BL.GlueFlex
-evaluateFlex mag (Just (E.FiniteFlex ln)) =
-  BL.GlueFlex {factor = fromIntegral $ evaluateLength mag ln, order = 0}
+evaluateFlex :: Magnification -> Maybe E.Flex -> BL.GlueFlex
+evaluateFlex m (Just (E.FiniteFlex ln)) =
+  BL.GlueFlex {factor = fromIntegral $ evaluateLength m ln, order = 0}
 evaluateFlex _ (Just (E.FilFlex (E.FilLength True f ord))) =
   BL.GlueFlex {factor = evaluateFactor f, order = ord}
 evaluateFlex _ (Just (E.FilFlex (E.FilLength False f ord))) =
   BL.GlueFlex {factor = -(evaluateFactor f), order = ord}
 evaluateFlex _ Nothing = BL.noFlex
 
-evaluateGlue :: Int -> E.Glue -> BL.Glue
-evaluateGlue mag (E.ExplicitGlue dim str shr) =
+evaluateGlue :: Magnification -> E.Glue -> BL.Glue
+evaluateGlue m (E.ExplicitGlue dim str shr) =
   BL.Glue
-  { dimen = evaluateLength mag dim
-  , stretch = evaluateFlex mag str
-  , shrink = evaluateFlex mag shr
+  { dimen = evaluateLength m dim
+  , stretch = evaluateFlex m str
+  , shrink = evaluateFlex m shr
   }
 
-evaluateKern :: Int -> E.Length -> B.Kern
-evaluateKern mag = B.Kern . evaluateLength mag
+evaluateKern :: Magnification -> E.Length -> B.Kern
+evaluateKern m = B.Kern . evaluateLength m
 
 evaluatePenalty :: E.Number -> BL.Penalty
 evaluatePenalty = BL.Penalty . fromIntegral . evaluateNumber
@@ -217,10 +217,10 @@ extractParagraphInner acc stream =
               modAccum $ fontDef : acc
             E.AddPenalty n -> modAccum $ BL.HPenalty (evaluatePenalty n) : acc
             E.AddKern ln -> do
-              mag <- gets (`integerParameter` Magnification)
+              mag <- gets magnification
               modAccum $ BL.HKern (evaluateKern mag ln) : acc
             E.AddGlue g -> do
-              mag <- gets (`integerParameter` Magnification)
+              mag <- gets magnification
               modAccum $ BL.HGlue (evaluateGlue mag g) : acc
             E.AddSpace -> do
               glue <- runReaderOnState (runMaybeT spaceGlue)
@@ -230,7 +230,7 @@ extractParagraphInner acc stream =
                   Nothing -> fail "Could not get space glue"
               modAccum $ hGlue : acc
             E.AddRule {width = w, height = h, depth = d} -> do
-              mag <- gets (`integerParameter` Magnification)
+              mag <- gets magnification
               let evalW =
                     case w of
                       Nothing ->
@@ -272,9 +272,9 @@ extractParagraphLineBoxes ::
      Bool -> E.ExpandedStream -> ConfStateT IO ([[B.HBoxElem]], E.ExpandedStream)
 extractParagraphLineBoxes indent stream = do
   (hList, stream') <- extractParagraph indent stream
-  desiredW <- gets (`lengthParameter` DesiredWidth)
-  lineTol <- gets (`integerParameter` LineTolerance)
-  linePen <- gets (`integerParameter` LinePenalty)
+  desiredW <- gets desiredWidth
+  lineTol <- gets lineTolerance
+  linePen <- gets linePenalty
   let getRoute = bestRoute desiredW lineTol linePen
       elemLists = setParagraph getRoute hList
   return (elemLists, stream')
@@ -288,7 +288,7 @@ newCurrentPage = ([], Nothing, Nothing)
 runPageBuilder ::
      Monad m => CurrentPage -> [BL.BreakableVListElem] -> ConfStateT m [B.Page]
 runPageBuilder (cur, _, _) [] = do
-  desiredH <- gets (`lengthParameter` DesiredHeight)
+  desiredH <- gets desiredHeight
   return [setPage desiredH $ reverse cur]
 runPageBuilder (cur, costBest, iBest) (x:xs)
   -- If the current vlist has no boxes, we discard a discardable item.
@@ -299,7 +299,7 @@ runPageBuilder (cur, costBest, iBest) (x:xs)
   -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
   -- the cost c of breaking at this point.
   | BL.isDiscardable x = do
-    desiredH <- gets (`lengthParameter` DesiredHeight)
+    desiredH <- gets desiredHeight
     case BL.toBreakItem (Adjacency (headMay cur, x, headMay xs))
       -- If we can't break here, just add it to the list and continue.
           of
@@ -370,21 +370,12 @@ addVListElem acc e =
     _ -> return $ e : acc
   where
     addVListBox b = do
-      prevDepth <- gets (`specialIntegerParameter` PreviousBoxDepth)
+      prevDepth <- gets $ unPreviousBoxDepth . previousBoxDepth
       -- TODO:
-      (BL.Glue baselineLength blineStretch blineShrink) <-
-        gets (`glueParameter` BaselineGlue)
-      blineLengthMin <- gets (`lengthParameter` BaselineLengthMin)
-      minBlineGlue <- gets (`glueParameter` MinBaselineGlue)
-      modify
-        (\conf ->
-           conf
-           { specialIntegerParameter =
-               updateFuncMap
-                 (specialIntegerParameter conf)
-                 PreviousBoxDepth
-                 (B.naturalDepth e)
-           })
+      BL.Glue baselineLength blineStretch blineShrink <- gets $ unBaselineGlue . baselineGlue
+      blineLengthMin <- gets $ unBaselineLengthMin . baselineLengthMin
+      minBlineGlue <- gets $ unMinBaselineGlue . minBaselineGlue
+      modify (\conf -> conf { previousBoxDepth = PreviousBoxDepth $ B.naturalDepth e })
       return $
         if prevDepth <= -Unit.oneKPt
           then e : acc
@@ -396,10 +387,7 @@ addVListElem acc e =
                    glue =
                      BL.VGlue $
                      if proposedBaselineLength >= blineLengthMin
-                       then BL.Glue
-                              proposedBaselineLength
-                              blineStretch
-                              blineShrink
+                       then BL.Glue proposedBaselineLength blineStretch blineShrink
                        else minBlineGlue
                in e : glue : acc
 
@@ -449,28 +437,24 @@ extractPagesInner pages cur acc stream =
               modAccum $ fontDef : acc
             E.AddPenalty n -> modAccum $ BL.VPenalty (evaluatePenalty n) : acc
             E.AddKern ln -> do
-              mag <- gets (`integerParameter` Magnification)
+              mag <- gets magnification
               modAccum $ BL.VKern (evaluateKern mag ln) : acc
             E.AddGlue g -> do
-              mag <- gets (`integerParameter` Magnification)
+              mag <- gets magnification
               modAccum $ BL.VGlue (evaluateGlue mag g) : acc
             E.AddRule {width = w, height = h, depth = d} -> do
-              desiredW <- gets (`lengthParameter` DesiredWidth)
-              mag <- gets (`integerParameter` Magnification)
-              let evalW =
-                    case w of
-                      Nothing -> desiredW
-                      Just ln -> evaluateLength mag ln
-                  evalH =
-                    case h of
-                      Nothing ->
-                        Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                      Just ln -> evaluateLength mag ln
-                  evalD =
-                    case d of
-                      Nothing -> 0
-                      Just ln -> evaluateLength mag ln
-                  rule = B.Rule {width = evalW, height = evalH, depth = evalD}
+              mag <- gets magnification
+              evalW <- case w of
+                Nothing -> gets $ unDesiredWidth . desiredWidth
+                Just ln -> return $ evaluateLength mag ln
+              let evalH = case h of
+                    -- TODO.
+                    Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+                    Just ln -> evaluateLength mag ln
+                  evalD = case d of
+                    Nothing -> 0
+                    Just ln -> evaluateLength mag ln
+              let rule = B.Rule {width = evalW, height = evalH, depth = evalD}
               modAccum (BL.VRule rule : acc)
             -- Commands to start horizontal mode.
             E.StartParagraph indent -> addParagraphToPage indent
@@ -490,7 +474,7 @@ extractPagesInner pages cur acc stream =
       -- Paraboxes returned in reading order.
      = do
       (lineBoxes, stream'') <- extractParagraphLineBoxes indent stream
-      desiredW <- gets (`lengthParameter` DesiredWidth)
+      desiredW <- gets $ unDesiredWidth . desiredWidth
       let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
       acc' <- addVListElems acc $ BL.VListBox . toBox <$> lineBoxes
       continueSamePage acc' stream''

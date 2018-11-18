@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -22,41 +23,44 @@ import qualified HeX.Unit as Unit
 
 type FontInfoMap = HMap.HashMap Int TexFont
 
-data IntegerParameterName
-  = LineTolerance
-  | LinePenalty
-  | Magnification
-  deriving (Show, Enum, Bounded, Eq)
+-- Integers.
+newtype LineTolerance = LineTolerance { unTolerance :: Int } deriving (Eq, Show, Num)
+newtype LinePenalty = LinePenalty { unLinePenalty :: Int } deriving (Eq, Show, Num)
+newtype Magnification = Magnification { unMagnification :: Int } deriving (Eq, Ord, Enum, Show, Num, Real, Integral)
 
-data LengthParameterName
-  = DesiredWidth
-  | DesiredHeight
-    -- Minimum distance between baselines.
-  | BaselineLengthMin
-  | ParIndent
-  deriving (Show, Enum, Bounded, Eq)
+-- Lengths.
+newtype DesiredWidth = DesiredWidth { unDesiredWidth :: Int } deriving (Eq, Show, Num)
+newtype DesiredHeight = DesiredHeight { unDesiredHeight :: Int } deriving (Eq, Show, Num)
+-- Minimum distance between baselines.
+newtype BaselineLengthMin = BaselineLengthMin { unBaselineLengthMin :: Int } deriving (Eq, Show, Num)
+newtype ParIndent = ParIndent { unParIndent :: Int } deriving (Eq, Show, Num)
 
-data GlueParameterName
-  -- Aimed actual distance between baselines.
-  = BaselineGlue
-  | MinBaselineGlue
-  deriving (Show, Enum, Bounded, Eq)
+-- Glues.
+-- Aimed actual distance between baselines.
+newtype BaselineGlue = BaselineGlue { unBaselineGlue :: BL.Glue } deriving (Show)
+newtype MinBaselineGlue = MinBaselineGlue { unMinBaselineGlue :: BL.Glue } deriving (Show)
 
-data SpecialIntegerParameterName =
-  PreviousBoxDepth
-  deriving (Show, Enum, Bounded, Eq)
-
--- instance (Enum a, Bounded a, Show a, Show b) => Show (a -> b) where
---   show f = show $ fmap (\p -> (p, f p)) [minBound ..]
+-- Special integers.
+newtype PreviousBoxDepth = PreviousBoxDepth { unPreviousBoxDepth :: Int } deriving (Show)
 
 data Config = Config
   { currentFontNr :: Maybe Int
   , fontInfoMap :: FontInfoMap
   , fontDirectories :: [AbsPathToDir]
-  , integerParameter :: IntegerParameterName -> Int
-  , lengthParameter :: LengthParameterName -> Int
-  , glueParameter :: GlueParameterName -> BL.Glue
-  , specialIntegerParameter :: SpecialIntegerParameterName -> Int
+
+  , lineTolerance :: LineTolerance
+  , linePenalty :: LinePenalty
+  , magnification :: Magnification
+
+  , desiredWidth :: DesiredWidth
+  , desiredHeight :: DesiredHeight
+  , baselineLengthMin :: BaselineLengthMin
+  , parIndent :: ParIndent
+
+  , baselineGlue :: BaselineGlue
+  , minBaselineGlue :: MinBaselineGlue
+
+  , previousBoxDepth :: PreviousBoxDepth
   }
 
 type ConfStateT = StateT Config
@@ -71,10 +75,16 @@ newConfig = do
     { currentFontNr = Nothing
     , fontInfoMap = HMap.empty
     , fontDirectories = [cwd]
-    , integerParameter = newIntegerParameter
-    , lengthParameter = newLengthParameter
-    , glueParameter = newGlueParameter
-    , specialIntegerParameter = newSpecialIntegerParameter
+    , lineTolerance = LineTolerance 500
+    , linePenalty = LinePenalty 10
+    , magnification = Magnification 1000
+    , desiredWidth = DesiredWidth 30750000
+    , desiredHeight = DesiredHeight 37500000
+    , baselineLengthMin = BaselineLengthMin 0
+    , parIndent = ParIndent $ Unit.toScaledPointApprox (20 :: Int) Unit.Point
+    , baselineGlue = BaselineGlue $ BL.Glue (Unit.toScaledPointApprox (12 :: Int) Unit.Point) BL.noFlex BL.noFlex
+    , minBaselineGlue = MinBaselineGlue $ BL.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) BL.noFlex BL.noFlex
+    , previousBoxDepth = PreviousBoxDepth $ -Unit.oneKPt
     }
 
 parIndentBox :: Config -> BL.BreakableHListElem
@@ -82,34 +92,8 @@ parIndentBox conf =
   BL.HListBox
     B.Box
     { contents = B.HBoxContents []
-    , desiredLength = B.To $ conf `lengthParameter` ParIndent
+    , desiredLength = B.To $ unParIndent $ parIndent conf
     }
-
-newIntegerParameter :: IntegerParameterName -> Int
-newIntegerParameter LineTolerance = 500
-newIntegerParameter LinePenalty = 10
-newIntegerParameter Magnification = 1000
-
-newLengthParameter :: LengthParameterName -> Int
-newLengthParameter DesiredWidth = 30750000
-newLengthParameter DesiredHeight = 37500000
-newLengthParameter BaselineLengthMin = 0
-newLengthParameter ParIndent = Unit.toScaledPointApprox (20 :: Int) Unit.Point
-
-newGlueParameter :: GlueParameterName -> BL.Glue
-newGlueParameter BaselineGlue =
-  BL.Glue (Unit.toScaledPointApprox (12 :: Int) Unit.Point) BL.noFlex BL.noFlex
-newGlueParameter MinBaselineGlue =
-  BL.Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) BL.noFlex BL.noFlex
-
-newSpecialIntegerParameter :: SpecialIntegerParameterName -> Int
-newSpecialIntegerParameter PreviousBoxDepth = -Unit.oneKPt
-
-updateFuncMap :: Eq a => (a -> b) -> a -> b -> (a -> b)
-updateFuncMap f k v k' =
-  if k' == k
-    then v
-    else f k'
 
 -- Path stuff
 type PathToFile b = Path b File

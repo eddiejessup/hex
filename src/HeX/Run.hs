@@ -4,7 +4,7 @@ module HeX.Run where
 
 import Prelude hiding (writeFile)
 
-import Control.Monad.Trans.State.Lazy (runStateT)
+import Control.Monad.Trans.State.Lazy
 import Data.ByteString.Lazy (ByteString)
 import Data.List (intercalate)
 import qualified Text.Megaparsec as P
@@ -18,7 +18,7 @@ import HeX.Box.Draw
 import HeX.Build
 import HeX.Categorise
 import HeX.Lex (extractToken, LexState(..))
-import HeX.Config (newConfig, Config(..), IntegerParameterName(..))
+import HeX.Config
 import HeX.Parse.Resolved (defaultCSMap, resolveToken)
 import HeX.Parse.Expanded
 
@@ -157,9 +157,9 @@ runDVI xs =
 codesToDVIRaw :: [CharCode] -> IO [EncodableInstruction]
 codesToDVIRaw xs = do
   (pages, conf) <- codesToPages xs
-  let mag = conf `integerParameter` Magnification
+  let mag = magnification conf
   let instrs = toDVI pages
-  case parseInstructions instrs mag of
+  case parseInstructions instrs (unMagnification mag) of
     Left err -> ioError $ userError err
     Right encInstrs -> return $ reverse encInstrs
 
