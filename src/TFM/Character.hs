@@ -78,10 +78,9 @@ readCharInfo _smallestCharCode charInfoStr extStr wStr hStr dStr iStr _code =
       italicIdx = italicTagByte `shiftR` 6
       tag = italicTagByte .&. 0x3
       -- Get a dimension from some dimension table, at some index
-      getDim str i =
-        if i == 0
-          then 0
-          else runGetAt getFixWord str i
+      getDim str i
+        | i == 0 = 0
+        | otherwise = runGetAt getFixWord str i
       _width = getDim wStr widthIdx
       _height = getDim hStr heightIdx
       _depth = getDim dStr depthIdx

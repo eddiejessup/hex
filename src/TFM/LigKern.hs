@@ -119,8 +119,7 @@ readLigKerns ligKernStr kernStr
     in fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
   where
     ligKernTblLengthWords = length ligKernStr `div` 4
-    instrSets = chunksOf 4 . fmap fromIntegral $ unpack ligKernStr
-    readSet = readInstrSet instrSets
+    readSet = readInstrSet $ (chunksOf 4 . fmap fromIntegral) (unpack ligKernStr)
     sets = fmap readSet [0 .. ligKernTblLengthWords - 1]
     (firstSkipByte, _, _, _) = head sets
     (lastSkipByte, _, _, _) = last sets
