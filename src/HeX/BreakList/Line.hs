@@ -11,7 +11,6 @@ import Data.List.Extra hiding (lines)
 
 import           Control.Applicative            ( empty )
 import           Control.Monad                  ( guard )
--- import           Data.List                      ( intercalate )
 
 import qualified Adjacent                      as A
 import qualified HeX.Box                       as B
@@ -20,101 +19,13 @@ import           HeX.Config
 
 import           HeX.BreakList
 
--- data Break a = Break
---   { before :: [a]
---   , after :: [a]
---   , item :: BreakItem
---   }
+newtype BadnessSize = BadnessSize { unBadnessSize :: Int } deriving (Eq, Show, Num)
 
 data Line = Line
   { contents :: [BreakableHListElem]
   , status :: GlueStatus
   }
-
--- data Route = Route
---   { lines :: [Line]
---   , demerit :: Int
---   }
-
--- allBreaks :: BreakableListElem a => [a] -> [Break a]
--- allBreaks = inner [] . A.toAdjacents
---  where
---   discardAfterBreak =
---     liftA2 (&&) (isDiscardable . A.fromAdjacent) (isNothing . toBreakItem)
---   trimAfterBreak = A.fromAdjacents . dropWhile discardAfterBreak
-
---   trimBeforeBreak (toGlue -> Just _) seen = seen
---   trimBeforeBreak this               seen = this : seen
-
---   inner seen [] = [Break {before = reverse seen, after = [], item = NoBreak}]
---   inner seen (thisAdj@(A.Adjacency (_, this, _)) : rest) =
---     case toBreakItem thisAdj of
---       Nothing -> inner (this : seen) rest
---       Just b ->
---         let brk = Break
---               { before = reverse $ trimBeforeBreak this seen
---               , after  = trimAfterBreak rest
---               , item   = b
---               }
---         in  brk : inner (this : seen) rest
-
--- -- Optimised filter for cases where we know that once a test has gone from true
--- -- to false, the test will never again succeed.
--- touchyFilter :: (a -> Bool) -> [a] -> [a]
--- touchyFilter _ [] = []
--- touchyFilter test (x : xs) | test x    = x : takeWhile test xs
---                            | otherwise = touchyFilter test xs
-
--- -- Expects contents in reading order.
--- bestRouteInner :: Int -> Int -> Int -> [BreakableHListElem] -> Route
--- bestRouteInner _ _ _ [] = Route {lines = [], demerit = 0}
--- bestRouteInner desiredWidth tolerance linePenalty cs
---   = let
---       breaks         = allBreaks cs
---       analyzedBreaks = zip breaks $ analyzeBreak <$> breaks
---       sensibleBreaks = do
---         (brk, (_status, _badness)) <- touchyFilter isSensibleBreak
---                                                    analyzedBreaks
---         bNr <- case _badness of
---           FiniteBadness b -> return b
---           _               -> fail ""
---         return (brk, (_status, bNr))
---     in
---       case filter isMandatoryBreak sensibleBreaks of
---         x : _ -> bestRouteFromBreak False x
---         []    -> case filter isConsiderableBreak sensibleBreaks of
---           [] -> noBreakRoute
---           bs -> minimum $ bestRouteFromBreak True <$> bs
---  where
---   analyzeBreak Break { before = bef } =
---     let _status = listGlueStatus desiredWidth bef in (_status, badness _status)
---   isSensibleBreak (_, (NaturallyBad Full Unfixable, _)) = False
---   isSensibleBreak (_, (_, _)                          ) = True
---   -- "any penalty that is −10000 or less is considered so small that TeX
---   -- will always break there."
---   isMandatoryBreak (Break { item = br }, _) = breakPenalty br <= -UN.tenK
---   isConsiderableBreak (Break { item = br }, (_, b)) =
---     breakPenalty br < UN.tenK && b <= tolerance
---   -- "TeX will not even consider such a line if p ≥ 10000, or b exceeds the
---   -- current tolerance or pretolerance."
---   -- But also:
---   bestRouteFromBreak addDemerit (Break { before = bef, after = aft, item = br }, (_status, bad))
---     = let d        = if addDemerit then _lineDemerit bad br else 0
---           subRoute = bestRouteInner desiredWidth tolerance linePenalty aft
---           thisLine = Line {contents = bef, status = _status}
---       in  appendToRoute subRoute thisLine d
---   _lineDemerit bad br =
---     let breakDemerit = breakPenalty br ^ (2 :: Int)
---         listDemerit  = (linePenalty + bad) ^ (2 :: Int)
---     in breakDemerit + listDemerit
---   appendToRoute Route { lines = subLns, demerit = subD } ln d =
---     Route {lines = ln : subLns, demerit = subD + d}
---   noBreakRoute = Route
---     { lines   = [Line {contents = cs, status = NaturallyBad Full Unfixable}]
---     , demerit = -1
---     }
-
--- *** Under construction ***
+  deriving Show
 
 type Entry = A.Adjacency BreakableHListElem
 newtype Demerit = Demerit Int
@@ -127,28 +38,27 @@ type EdgeValue = [Entry]
 data Node = Root | Branch Int
   deriving Show
 
-data InEdge = InEdge EdgeValue Node
+newtype IsDiscarding = IsDiscarding Bool
+
+data InEdge = InEdge EdgeValue Node IsDiscarding
 
 data WithSummary a b = WithSummary {value :: a, summary :: b}
+  deriving Show
 type WithDistance a = WithSummary a (EdgeStatus, EdgeDistance)
 type WithStatus a = WithSummary a EdgeStatus
 
-data Line' = Line' EdgeValue EdgeStatus
-  deriving Show
-data Route' = Route' [Line'] EdgeDistance
+data Route = Route [WithStatus EdgeValue] EdgeDistance
   deriving Show
 
-instance Eq Route' where
-  (Route' _ a) == (Route' _ b) = a == b
+instance Eq Route where
+  (Route _ distA) == (Route _ distB) = distA == distB
 
-instance Ord Route' where
-  compare (Route' _ a) (Route' _ b) = compare a b
-
-judgeEdge :: DesiredWidth -> EdgeValue -> EdgeStatus
-judgeEdge dw xs = listGlueStatus (unDesiredWidth dw) $ A.fromAdjacents xs
+instance Ord Route where
+  compare (Route _ distA) (Route _ distB) = compare distA distB
 
 withStatus :: DesiredWidth -> InEdge -> WithStatus InEdge
-withStatus dw e@(InEdge v _) = WithSummary e $ judgeEdge dw v
+withStatus (DesiredWidth dw) e@(InEdge v _ _)
+  = WithSummary e (listGlueStatus dw $ A.fromAdjacents v)
 
 lineDemerit :: LinePenalty -> BadnessSize -> BreakItem -> Demerit
 lineDemerit lp b br =
@@ -160,91 +70,132 @@ toOnlyAcceptables :: LineTolerance -> LinePenalty -> BreakItem -> [WithStatus In
 toOnlyAcceptables tol lp br ds = do
     WithSummary y st <- ds
     case badness st of
+      InfiniteBadness -> empty
       FiniteBadness b -> do
-        -- TODO
         guard $ breakPenalty br < UN.tenK && b <= unLineTolerance tol
         let _demerit = lineDemerit lp (BadnessSize b) br
         return $ WithSummary y (st, _demerit)
-      _ -> empty
 
-toOnlyPromisings :: [WithStatus a] -> [WithStatus a]
-toOnlyPromisings ds = [WithSummary y d | (WithSummary y d) <- ds, isPromising d]
+toOnlyPromisings :: [WithStatus a] -> [a]
+toOnlyPromisings ds = [y | (WithSummary y d) <- ds, isPromising d]
   where
     isPromising (NaturallyBad Full Unfixable) = False
     isPromising _ = True
 
-growInEdge :: Entry -> InEdge -> InEdge
-growInEdge c (InEdge cs n) = InEdge (c : cs) n
+inEdgeCons :: Entry -> InEdge -> InEdge
+inEdgeCons c e@(InEdge cs n (IsDiscarding discarding))
+  | discarding && isDiscardable (A.fromAdjacent c) = e
+  | otherwise = InEdge (c : cs) n (IsDiscarding False)
 
-stretchInEdge :: [Entry] -> InEdge -> InEdge
-stretchInEdge s (InEdge cs n) = InEdge (s ++ cs) n
+inEdgeConcat :: [Entry] -> InEdge -> InEdge
+inEdgeConcat xs e = foldr inEdgeCons e xs
 
-appendEntry :: DesiredWidth -> LineTolerance -> LinePenalty -> ([InEdge], [Route'], [Entry]) -> Entry -> ([InEdge], [Route'], [Entry])
-appendEntry _ _ _ (prevInEdges, rs, chunk) x@(toBreakItem -> Nothing) =
-  (prevInEdges, rs, x:chunk)
+finaliseInEdge :: Entry -> InEdge -> InEdge
+-- If the break-point is at glue, then the line doesn't include that glue.
+finaliseInEdge (A.Adjacency (_, HGlue _, _)) e = e
+-- If the break is at some other type of break, the line includes it.
+finaliseInEdge x (InEdge cs n discard) = InEdge (x:cs) n discard
+
+-- Notation:
+-- - An 'Acceptable' line is one that can be realistically considered as being
+--   part of an acceptable paragraph.
+-- - A 'Promising' line is one that is bare enough that it is either
+--   'acceptable' now, or may be acceptable in the future. Conversely, a line
+--   that is not promising is one that is so full that it isn't acceptable now,
+--   and will never become acceptable. We can remove such edges from
+--   consideration, because we know that once a line is not promising, it will
+--   never become acceptable.
+appendEntry :: DesiredWidth -> LineTolerance -> LinePenalty -> ([InEdge], [Route], [Entry]) -> Entry -> ([InEdge], [Route], [Entry])
 appendEntry dw tol lp (prevInEdges, rs, chunk) x@(toBreakItem -> Just br) =
   let
-    inEdges = stretchInEdge chunk <$> prevInEdges
-    promisingDInEdges = toOnlyPromisings $ withStatus dw <$> inEdges
-    promisingInEdges = value <$> promisingDInEdges
+    -- Extend the accumulating edges with the normal-items 'chunk' we have
+    -- accumulated since seeing the last break item.
+    inEdges = inEdgeConcat chunk <$> prevInEdges
+    -- Here, we just consider the in-edges 'unfinalised', i.e. without each
+    -- edge's lines stripped to the form used in an actual break. This is
+    -- because the edges may be passed on to subsequent calls, in such form, to
+    -- build up longer lines.
+    promisingInEdges = toOnlyPromisings $ withStatus dw <$> inEdges
+    -- Here, we 'finalise' the promising edges, then must get the status again,
+    -- to get 'candidate' edges to actually break.
+    candidateBrokenDInEdges = withStatus dw . finaliseInEdge x <$> promisingInEdges
   in
-    case toOnlyAcceptables tol lp br promisingDInEdges of
-      -- If we can't break at this point acceptably somehow, just treat
-      -- like a non-break character.
-      -- [] -> (promisingInEdges, rs, [x])
+    -- We filter the candidates to those that we could actually accept.
+    case toOnlyAcceptables tol lp br candidateBrokenDInEdges of
+      -- If we can't break at this point acceptably somehow, just treat the
+      -- break item like a non-break item.
       [] -> (promisingInEdges, rs, [x])
+      -- If we have some acceptable edges, this is a fruitful avenue to
+      -- explore.
       acceptableDInEdges ->
         let
-            grownPromisingInEdges = growInEdge x <$> promisingInEdges
-            newInEdges = InEdge [] (Branch $ length rs) : grownPromisingInEdges
-            r' = shortestRoute acceptableDInEdges rs
+          -- For subsequent calls, build up the still-promising edges with
+          -- the break item added.
+          grownPromisingInEdges = inEdgeCons x <$> promisingInEdges
+          -- Add a new edge representing the possibility to break here. Note
+          -- we set this edge to 'discarding', so that subsequent discardable
+          -- items won't be added.
+          newInEdge = InEdge [] (Branch $ length rs) (IsDiscarding True)
+          -- Add that new edge to the existing, now-grown, edges.
+          newInEdges = newInEdge : grownPromisingInEdges
+          -- Find the best way to reach this break-point, given the
+          -- acceptable previous lines and the known best ways to reach those
+          -- lines.
+          newRoute = shortestRoute acceptableDInEdges rs
         in
-            (newInEdges, r':rs, [])
+          -- The new state should contain:
+          -- - The ongoing edges that are still promising
+          -- - The optimal route to reach this break, appended to the list of
+          --   node best-routes.
+          -- - A new empty chunk, to accumulate the contents we see until the
+          --   next break.
+          (newInEdges, newRoute:rs, [])
+-- If we see a non-break item, the new state is the same as the old, but with
+-- the item appended to the accumulated items 'chunk'.
+appendEntry _ _ _ (prevInEdges, rs, chunk) x = (prevInEdges, rs, x:chunk)
 
-shortestRoute :: [WithDistance InEdge] -> [Route'] -> Route'
-shortestRoute [] _ = Route' [] $ Demerit 0
-shortestRoute ies rs = minimum (getBSR <$> ies)
-    where
-        getBSR (WithSummary (InEdge ev Root) (st, ed))
-            = Route' [Line' ev st] ed
-        getBSR (WithSummary (InEdge ev (Branch sn)) (st, ed))
-            = let
-                sourceNodeIdx = length rs - sn - 1
-                Route' sevs sd = rs !! sourceNodeIdx
-            in
-                Route' (Line' ev st:sevs) (ed + sd)
-
-newtype BadnessSize = BadnessSize { unBadnessSize :: Int } deriving (Eq, Show, Num)
+shortestRoute :: [WithDistance InEdge] -> [Route] -> Route
+shortestRoute [] _ = Route [] $ Demerit 0
+shortestRoute es rs = minimum (bestSubroute <$> es)
+  where
+    bestSubroute (WithSummary (InEdge ev Root _) (st, ed))
+      = Route [WithSummary ev st] ed
+    bestSubroute (WithSummary (InEdge ev (Branch sn) _) (st, ed))
+      = let
+        sourceNodeIdx = length rs - sn - 1
+        Route sevs sd = rs !! sourceNodeIdx
+      in
+        Route (WithSummary ev st:sevs) (ed + sd)
 
 bestRoute :: DesiredWidth -> LineTolerance -> LinePenalty -> [BreakableHListElem] -> [Line]
 bestRoute dw tol lp xs =
   let
-    (prevInEdges, rs, chunk) = foldl' (appendEntry dw tol lp) ([InEdge [] Root], [], []) (A.toAdjacents xs)
-    inEdges = stretchInEdge chunk <$> prevInEdges
+    initialState = ([InEdge [] Root (IsDiscarding False)], [], [])
+    (prevInEdges, rs, chunk) = foldl' (appendEntry dw tol lp) initialState (A.toAdjacents xs)
+    inEdges = inEdgeConcat chunk <$> prevInEdges
     acceptableDInEdges = toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
-    (Route' lns _) = shortestRoute acceptableDInEdges rs
+    (Route lns _) = shortestRoute acceptableDInEdges rs
   in
-    (\(Line' ev st) -> Line (reverse $ A.fromAdjacents ev) st) <$> reverse lns
-    -- [Line (take 10 xs) NaturallyGood, Line (take 20 xs) NaturallyGood]
-
--- *** Under construction ***
+    (\(WithSummary ev st) -> Line (reverse $ A.fromAdjacents ev) st) <$> reverse lns
 
 -- Expects contents in reverse order.
 -- Returns lines in reading order.
 setParagraph :: ([BreakableHListElem] -> [Line]) -> [BreakableHListElem] -> [[B.HBoxElem]]
 setParagraph _        []              = []
-setParagraph getRoute cs@(end : rest) = fmap setLine lns
+setParagraph getRoute (x:xs) =
+  let
     -- Remove the final item if it's glue.
- where
-  csTrimmed = case end of
-    HGlue _ -> rest
-    _       -> cs
-  -- Append \penalty10k \hfil \penalty-10k.
-  -- Add extra bits to finish the list.
-  csFinished =
-    (HPenalty $ Penalty $ -UN.tenK)
-      : HGlue filGlue
-      : (HPenalty $ Penalty UN.tenK)
-      : csTrimmed
-  lns = getRoute $ reverse csFinished
-  setLine Line { contents = lncs, status = _status } = set _status lncs
+    xsTrimmed = case x of
+      HGlue _ -> xs
+      _       -> x:xs
+    -- Add extra bits to finish the list.
+    -- Append \penalty10k \hfil \penalty-10k.
+    xsFinished =
+      (HPenalty $ Penalty $ -UN.tenK)
+        : HGlue filGlue
+        : (HPenalty $ Penalty UN.tenK)
+        : xsTrimmed
+  in
+    setLine <$> getRoute (reverse xsFinished)
+  where
+    setLine (Line conts _status) = set _status conts

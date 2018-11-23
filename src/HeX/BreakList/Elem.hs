@@ -28,7 +28,7 @@ newtype Penalty =
 instance Show Penalty where
   show (Penalty p) = "|p" ++ show p ++ "|"
 
-class BreakableListElem a where
+class Show a => BreakableListElem a where
   toGlue :: a -> Maybe Glue
   isDiscardable :: a -> Bool
   isBox :: a -> Bool

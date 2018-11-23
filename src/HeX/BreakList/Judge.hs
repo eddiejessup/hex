@@ -51,7 +51,7 @@ glueStatus excessLength (Glue _ _stretch _shrink)
       | fromIntegral excessLength > f = Unfixable
        -- r is set to 1 if i = 0 and x − w > z0, because the maximum
        -- shrinkability must not be exceeded.
-      | o == 0 = Fixable {ratio = 1, order = o}
+      -- | o == 0 = Fixable {ratio = 1, order = o}
       | otherwise = Fixable {ratio = fromIntegral excessLength / f, order = o}
 
 -- TODO: Use types to ensure number is within bounds, such as <= tenK.
