@@ -93,7 +93,7 @@ getRuleInstruction mode h w =
   let op = case mode of
         Put -> PutRule
         Set -> SetRule
-  in EncodableInstruction op $ fmap (IntArgVal . U4 . fromIntegral) [h, w]
+  in EncodableInstruction op $ fmap (IntArgVal . U4 . fromIntegral) [w, h]
 
 getMoveInstruction :: Direction -> Int -> Either String EncodableInstruction
 getMoveInstruction d dist =
