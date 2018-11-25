@@ -479,4 +479,5 @@ extractPagesInner pages cur acc stream =
       acc' <- addVListElems acc $ BL.VListBox . toBox <$> lineBoxes
       continueSamePage acc' stream''
 
+extractPages :: E.ExpandedStream -> ConfStateT IO ([B.Page], E.ExpandedStream)
 extractPages = extractPagesInner [] newCurrentPage []

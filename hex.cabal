@@ -51,6 +51,7 @@ library
                      , HeX.Parse.Expanded.Number
                      , HeX.Parse.Expanded.Length
                      , HeX.Parse.Expanded.Glue
+                     , HeX.Parse.Expanded.Assignment
 
                      , Adjacent
                      , Math.Byte

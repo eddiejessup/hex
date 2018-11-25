@@ -2,17 +2,15 @@
 
 module HeX.Parse.Expanded.Command where
 
-import Control.Monad (when)
-import Path (File, Path, Rel, parseRelFile)
 import qualified Text.Megaparsec as P
 import Text.Megaparsec ((<|>))
+import Data.Functor (($>))
 
 import qualified HeX.Lex as Lex
 import HeX.Categorise (CharCode)
 
 import HeX.Parse.Helpers
 
-import HeX.Parse.Lexed.Inhibited
 import qualified HeX.Parse.Resolved.Token as R
 
 import HeX.Parse.Expanded.Common
@@ -20,50 +18,15 @@ import HeX.Parse.Expanded.Glue
 import HeX.Parse.Expanded.Length
 import HeX.Parse.Expanded.Number
 import HeX.Parse.Expanded.Stream
+import HeX.Parse.Expanded.Assignment
 
 -- AST.
+
 data CharSource
   = ExplicitChar
   | CodeChar
   | TokenChar
   deriving (Show)
-
-data MacroPrefix
-  = Long
-  | Outer
-  | Global
-  deriving (Eq)
-
-data AssignmentBody
-  = DefineMacro { name :: Lex.ControlSequenceLike
-                , contents :: R.MacroContents
-                , long, outer :: Bool }
-  -- | ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
-  -- | SetVariable VariableAssignment
-  -- | ModifyVariable VariableModificatxion
-  -- | AssignCode { codeType :: CodeType, codeIndex, value :: Int }
-  -- | Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
-  -- | FutureLet { name :: ControlSequenceLike, token1, token2 :: Token}
-  | SelectFont Int
-  -- | SetFamilyMember {member :: FamilyMember, font :: Font}
-  -- | SetParShape
-  -- | Read
-  -- | DefineBox
-  -- TEMP: Dummy label constructor until properly implemented.
-  | DefineFont Lex.ControlSequenceLike
-               (Path Rel File)
-  -- -- Global assignments.
-  -- | SetFontAttribute
-  -- | SetHyphenation
-  -- | SetBoxSize
-  -- | SetInteractionMode
-  -- | SetSpecialVariable
-  deriving (Show)
-
-data Assignment = Assignment
-  { body :: AssignmentBody
-  , global :: Bool
-  } deriving (Show)
 
 data AllModesCommand
   = Assign Assignment
@@ -140,16 +103,18 @@ extractVModeCommand ::
 extractVModeCommand = easyRunParser parseVModeCommand
 
 -- Parse.
--- All-mode Commands.
-type AllModeCommandParser = SimpExpandParser AllModesCommand
 
-parseAllModeCommand :: R.Axis -> SimpExpandParser AllModesCommand
+type AllModeCommandParser = SimpExpandParser AllModesCommand
+type HModeCommandParser = SimpExpandParser HModeCommand
+type VModeCommandParser = SimpExpandParser VModeCommand
+
+-- All-mode Commands.
+
+parseAllModeCommand :: R.Axis -> AllModeCommandParser
 parseAllModeCommand mode =
   P.choice
     [ relax
     , ignorespaces
-    , tokenForFont
-    , macroToFont
     , addPenalty
     , addKern
     , addSpecifiedGlue mode
@@ -157,8 +122,7 @@ parseAllModeCommand mode =
     , addRule mode
     , startParagraph
     , endParagraph
-    , defineMacro
-    ]
+    , Assign <$> parseAssignment ]
 
 checkModeAndToken ::
      R.Axis
@@ -168,85 +132,40 @@ checkModeAndToken ::
 checkModeAndToken m1 chk (R.ModedCommand m2 tok) = (m1 == m2) && chk tok
 checkModeAndToken _ _ _ = False
 
+-- \relax.
 relax :: AllModeCommandParser
-relax = do
-  skipSatisfiedEquals R.Relax
-  return Relax
+relax = skipSatisfiedEquals R.Relax $> Relax
 
+-- \ignorespaces.
 ignorespaces :: AllModeCommandParser
 ignorespaces = do
   skipSatisfiedEquals R.IgnoreSpaces
   skipOptionalSpaces
   return IgnoreSpaces
 
-tokenForFont :: AllModeCommandParser
-tokenForFont = satisfyThen tokToCom
-  where
-    tokToCom (R.TokenForFont n) =
-      Just $ Assign Assignment {body = SelectFont n, global = False}
-    tokToCom _ = Nothing
-
--- \font <control-sequence> <equals> <file-name> <at-clause>
-macroToFont :: AllModeCommandParser
-macroToFont = do
-  skipSatisfiedEquals R.MacroToFont
-  cs <- parseInhibited parseCSName
-  skipOptionalEquals
-  fontPath <- parseFileName
-  return $ Assign Assignment {body = DefineFont cs fontPath, global = False}
-    -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-  where
-    parseFileName :: SimpExpandParser (Path Rel File)
-    parseFileName = do
-      skipOptionalSpaces
-      fileName <- P.some $ satisfyThen tokToChar
-      skipSatisfied isSpace
-      case parseRelFile (fileName ++ ".tfm") of
-        Just p -> return p
-        Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
-    tokToChar (R.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) = Just c
-    -- 'Other' Characters for decimal digits are OK.
-    tokToChar (R.CharCat Lex.CharCat {cat = Lex.Other, char = c}) =
-      case c of
-        '0' -> Just c
-        '1' -> Just c
-        '2' -> Just c
-        '3' -> Just c
-        '4' -> Just c
-        '5' -> Just c
-        '6' -> Just c
-        '7' -> Just c
-        '8' -> Just c
-        '9' -> Just c
-      -- Not in the spec, but let's say "/" and "." are OK.
-        '/' -> Just c
-        '.' -> Just c
-        _ -> Nothing
-    tokToChar _ = Nothing
-
-skipOptionalEquals :: NullSimpParser ExpandedStream
-skipOptionalEquals = do
-  skipOptionalSpaces
-  skipOneOptionalSatisfied isEquals
-
+-- \penalty 100.
 addPenalty :: AllModeCommandParser
 addPenalty = do
   skipSatisfiedEquals R.AddPenalty
   AddPenalty <$> parseNumber
 
+-- \kern 100.
 addKern :: AllModeCommandParser
 addKern = do
   skipSatisfiedEquals R.AddKern
   AddKern <$> parseLength
 
+-- \hskip 10pt and such.
 addSpecifiedGlue :: R.Axis -> AllModeCommandParser
 addSpecifiedGlue mode = do
   skipSatisfied $ checkModeAndToken mode (== R.AddSpecifiedGlue)
   AddGlue <$> parseGlue
 
+-- ' '.
 addSpace :: AllModeCommandParser
-addSpace = const AddSpace <$> skipSatisfied isSpace
+addSpace = skipSatisfied isSpace $> AddSpace
 
+-- \hrule and such.
 addRule :: R.Axis -> AllModeCommandParser
 addRule mode = do
   skipSatisfied $ checkModeAndToken mode (== R.AddRule)
@@ -285,74 +204,7 @@ startParagraph = satisfyThen parToCom
 endParagraph :: AllModeCommandParser
 endParagraph = const EndParagraph <$> skipSatisfiedEquals R.EndParagraph
 
-data Digit
-  = One
-  | Two
-  | Three
-  | Four
-  | Five
-  | Six
-  | Seven
-  | Eight
-  | Nine
-  deriving (Enum)
-
-digitToChar :: Digit -> Char
-digitToChar One = '1'
-digitToChar Two = '2'
-digitToChar Three = '3'
-digitToChar Four = '4'
-digitToChar Five = '5'
-digitToChar Six = '6'
-digitToChar Seven = '7'
-digitToChar Eight = '8'
-digitToChar Nine = '9'
-
-defineMacro :: AllModeCommandParser
-defineMacro = do
-  prefixes <- P.many $ satisfyThen tokToPrefix
-  (defGlobal, defExpand) <- satisfyThen tokToDef
-  cs <- parseInhibited parseCSName
-  preParamToks <- parsePreParamTokens
-  paramToks <- parseParameters
-  skipSatisfied isExplicitLeftBrace
-  when defExpand $ error "expanded-def not implemented"
-  replaceToks <- parseInhibited parseBalancedText
-  return $
-    Assign $
-    Assignment
-    { body =
-        DefineMacro
-        { name = cs
-        , contents = R.MacroContents preParamToks paramToks replaceToks
-        , long = Long `elem` prefixes
-        , outer = Outer `elem` prefixes
-        }
-    , global = defGlobal || Global `elem` prefixes
-    }
-  where
-    tokToPrefix R.Global = Just Global
-    tokToPrefix R.Outer = Just Outer
-    tokToPrefix R.Long = Just Long
-    tokToPrefix _ = Nothing
-
-    tokToDef R.DefineMacro {global = _global, expand = _expand} =
-      Just (_global, _expand)
-    tokToDef _ = Nothing
-
-    parsePreParamTokens = return []
-    -- TODO: Finish
-    -- TODO: Parse without expansion.
-    parseParameters = P.option [] (parseParameter One)
-
-parseParameter :: Digit -> SimpExpandParser [a]
-parseParameter dig = do
-  skipSatisfied $ isCategory Lex.Parameter
-  skipSatisfied (\t@(R.CharCat Lex.CharCat {char=c}) -> isLetterOrOther t && c == digitToChar dig)
-  return []
-
 -- HMode.
-type HModeCommandParser = SimpExpandParser HModeCommand
 
 parseHModeCommand :: SimpExpandParser HModeCommand
 parseHModeCommand =
@@ -360,9 +212,7 @@ parseHModeCommand =
   (HAllModesCommand <$> parseAllModeCommand R.Horizontal)
 
 leaveHMode :: HModeCommandParser
-leaveHMode = do
-  skipSatisfied endsHMode
-  return LeaveHMode
+leaveHMode = skipSatisfied endsHMode $> LeaveHMode
   where
     endsHMode R.End = True
     endsHMode (R.ModedCommand R.Vertical _) = True
@@ -380,22 +230,18 @@ addCharacter = do
     charToCode _ = Nothing
 
 -- VMode.
-type VModeCommandParser = SimpExpandParser VModeCommand
 
 parseVModeCommand :: SimpExpandParser VModeCommand
 parseVModeCommand =
   P.choice [enterHMode, end] <|>
   (VAllModesCommand <$> parseAllModeCommand R.Vertical)
 
+-- \end.
 end :: VModeCommandParser
-end = do
-  skipSatisfiedEquals R.End
-  return End
+end = skipSatisfiedEquals R.End $> End
 
 enterHMode :: VModeCommandParser
-enterHMode = do
-  skipSatisfied startsHMode
-  return EnterHMode
+enterHMode = skipSatisfied startsHMode $> EnterHMode
   where
     startsHMode (R.ModedCommand R.Horizontal _) = True
     startsHMode x
