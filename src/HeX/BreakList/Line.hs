@@ -12,7 +12,7 @@ import Data.List.Extra hiding (lines)
 import           Control.Applicative            ( empty )
 import           Control.Monad                  ( guard )
 
-import qualified Adjacent                      as A
+import qualified Data.Adjacent                      as A
 import qualified HeX.Box                       as B
 import qualified HeX.Unit                      as UN
 import           HeX.Config

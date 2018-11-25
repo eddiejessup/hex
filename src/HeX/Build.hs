@@ -15,7 +15,7 @@ import Path
 import Safe (headMay)
 import qualified Text.Megaparsec as PS
 
-import Adjacent (Adjacency(..))
+import Data.Adjacent (Adjacency(..))
 import qualified TFM
 import TFM (TexFont(..))
 import qualified TFM.Character as TFMC

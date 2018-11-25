@@ -3,7 +3,7 @@ module DVI.Instruction where
 import Safe (lastDef)
 import System.FilePath (splitFileName)
 
-import Math.Byte
+import Data.Byte
 import DVI.Encode
 
 data MoveMode = Put | Set

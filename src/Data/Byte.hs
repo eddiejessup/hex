@@ -1,12 +1,13 @@
-module Math.Byte where
+module Data.Byte where
+
+data Signedness = Signed | Unsigned
+data SignableInt = SignableInt Signedness Int
 
 isSignedNrExpressibleInNBits :: Int -> Int -> Bool
 isSignedNrExpressibleInNBits nrBits n =
   let x = 2 ^ (nrBits - 1)
   in (-x <= n) && (n <= x - 1)
 
-data Signedness = Signed | Unsigned
-data SignableInt = SignableInt Signedness Int
 
 toSignableInt :: Signedness -> Int -> Either String SignableInt
 toSignableInt Signed n

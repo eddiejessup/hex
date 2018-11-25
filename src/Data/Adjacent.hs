@@ -1,4 +1,4 @@
-module Adjacent where
+module Data.Adjacent where
 
 newtype Adjacency a =
   Adjacency (Maybe a, a, Maybe a)

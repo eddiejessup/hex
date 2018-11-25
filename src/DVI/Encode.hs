@@ -6,7 +6,7 @@ import Data.Char (ord)
 import qualified Data.Int as I
 import qualified Data.Word as W
 
-import Math.Byte
+import Data.Byte
 
 class Encodable a where
   encode :: a -> BLS.ByteString

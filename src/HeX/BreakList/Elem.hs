@@ -1,6 +1,6 @@
 module HeX.BreakList.Elem where
 
-import qualified Adjacent as A
+import qualified Data.Adjacent as A
 
 import Data.Maybe
 import qualified HeX.Box as B
