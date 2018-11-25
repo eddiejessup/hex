@@ -77,4 +77,4 @@ getTableParams
        ("Incorrect table lengths: read " ++
         show _fileLengthWords ++
         " is not equal to inferred " ++ show inferredFileLengthWords))
-  return (tableToLength, _smallestCharCode, _largestCharCode)
+  pure (tableToLength, _smallestCharCode, _largestCharCode)

@@ -64,7 +64,7 @@ instance P.Stream ResolvedStream where
     -- Get the token and updated sub-stream.
    = do
     (lt, s') <- P.take1_ s
-    return (resolveToken _csMap lt, ResolvedStream s' _csMap)
+    pure (resolveToken _csMap lt, ResolvedStream s' _csMap)
 
 type SimpResolveParser = P.Parsec () ResolvedStream
 

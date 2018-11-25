@@ -23,17 +23,17 @@ pickOp (o1, o2, _, o4) v = case v of
 getVariByteOpAndArg :: (Operation, Operation, Operation, Operation) -> SignableInt -> Either String (Operation, ArgVal)
 getVariByteOpAndArg ops sI = do
     iArgVal <- intArgValFromSignableInt sI
-    return (pickOp ops iArgVal, IntArgVal iArgVal)
+    pure (pickOp ops iArgVal, IntArgVal iArgVal)
 
 getVariByteInstruction :: (Operation, Operation, Operation, Operation) -> SignableInt -> Either String EncodableInstruction
 getVariByteInstruction ops sI = do
   (op, arg) <- getVariByteOpAndArg ops sI
-  return $ EncodableInstruction op [arg]
+  pure $ EncodableInstruction op [arg]
 
 getSelectFontNrInstruction :: Int -> Either String EncodableInstruction
 getSelectFontNrInstruction fNr
   | fNr < 64 =
-    return $ EncodableInstruction (toEnum $ fNr + fromEnum SelectFontNr0) []
+    pure $ EncodableInstruction (toEnum $ fNr + fromEnum SelectFontNr0) []
   | otherwise = do
     sI <- toUnsignedInt fNr
     getVariByteInstruction (Select1ByteFontNr, Select2ByteFontNr, Select3ByteFontNr, Select4ByteFontNr) sI
@@ -73,15 +73,15 @@ getDefineFontInstruction fNr fPath scaleFactor designSize fontChecksum = do
         , StringArgVal fPath -- font_path
         ]
   if fPath == (dirPath ++ fileName)
-    then return ()
+    then pure ()
     else fail $
          "Split path badly: " ++
          fPath ++ " not equal to (" ++ dirPath ++ ", " ++ fileName ++ ")"
-  return $ EncodableInstruction _op args
+  pure $ EncodableInstruction _op args
 
 getCharacterInstruction :: Int -> MoveMode -> Either String EncodableInstruction
 getCharacterInstruction code Set
-  | code < 128 = return $ EncodableInstruction (toEnum $ code + fromEnum SetChar0) []
+  | code < 128 = pure $ EncodableInstruction (toEnum $ code + fromEnum SetChar0) []
 getCharacterInstruction code mode
   = toUnsignedInt code >>= getVariByteInstruction (ops mode) 
   where

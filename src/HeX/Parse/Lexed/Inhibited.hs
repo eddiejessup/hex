@@ -15,11 +15,11 @@ newtype BalancedText =
   deriving (Show, Eq)
 
 parseNestedBraces :: Int -> SimpLexParser [Lex.Token]
-parseNestedBraces 0 = return []
+parseNestedBraces 0 = pure []
 parseNestedBraces n = do
   (x, nextN) <- satisfyThen parseNext
   case nextN of
-    0 -> return []
+    0 -> pure []
     posN -> (x :) <$> parseNestedBraces posN
   where
     parseNext x@(Lex.CharCatToken Lex.CharCat {cat = Lex.BeginGroup}) =

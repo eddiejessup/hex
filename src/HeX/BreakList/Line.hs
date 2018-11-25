@@ -74,7 +74,7 @@ toOnlyAcceptables tol lp br ds = do
       FiniteBadness b -> do
         guard $ breakPenalty br < UN.tenK && b <= unLineTolerance tol
         let _demerit = lineDemerit lp (BadnessSize b) br
-        return $ WithSummary y (st, _demerit)
+        pure $ WithSummary y (st, _demerit)
 
 toOnlyPromisings :: [WithStatus a] -> [a]
 toOnlyPromisings ds = [y | (WithSummary y d) <- ds, isPromising d]

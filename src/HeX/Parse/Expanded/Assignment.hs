@@ -77,7 +77,7 @@ macroToFont = do
   cs <- parseInhibited parseCSName
   skipOptionalEquals
   fontPath <- parseFileName
-  return $ Assignment {body = DefineFont cs fontPath, global = False}
+  pure $ Assignment {body = DefineFont cs fontPath, global = False}
     -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
   where
     parseFileName :: SimpExpandParser (Path Rel File)
@@ -86,7 +86,7 @@ macroToFont = do
       fileName <- P.some $ satisfyThen tokToChar
       skipSatisfied isSpace
       case parseRelFile (fileName ++ ".tfm") of
-        Just p -> return p
+        Just p -> pure p
         Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
     tokToChar (R.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) = Just c
     -- 'Other' Characters for decimal digits are OK.
@@ -146,7 +146,7 @@ defineMacro = do
   skipSatisfied isExplicitLeftBrace
   when defExpand $ error "expanded-def not implemented"
   replaceToks <- parseInhibited parseBalancedText
-  return $
+  pure $
     Assignment
     { body =
         DefineMacro
@@ -167,7 +167,7 @@ defineMacro = do
       Just (_global, _expand)
     tokToDef _ = Nothing
 
-    parsePreParamTokens = return []
+    parsePreParamTokens = pure []
     -- TODO: Finish
     -- TODO: Parse without expansion.
     parseParameters = P.option [] (parseParameter One)
@@ -176,4 +176,4 @@ parseParameter :: Digit -> SimpExpandParser [a]
 parseParameter dig = do
   skipSatisfied $ isCategory Lex.Parameter
   skipSatisfied (\t@(R.CharCat Lex.CharCat {char=c}) -> isLetterOrOther t && c == digitToChar dig)
-  return []
+  pure []

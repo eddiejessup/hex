@@ -53,7 +53,7 @@ parseInhibited p = do
     (P.State lStream' pos prc w, Right v) -> do
       P.setParserState
         (P.State (ExpandedStream $ R.ResolvedStream lStream' csMap) pos prc w)
-      return v
+      pure v
 
 parseGeneralText :: SimpParser ExpandedStream BalancedText
 parseGeneralText = do
@@ -100,7 +100,7 @@ instance P.Stream ExpandedStream where
     let es' = ExpandedStream rs'
     case rt of
       -- If it's a primitive token, provide that.
-      PrimitiveToken pt -> return (pt, es')
+      PrimitiveToken pt -> pure (pt, es')
       -- If it indicates the start of a syntax command.
       SyntaxCommandHead (ChangeCaseToken direction)
         -- Parse the remainder of the syntax command.

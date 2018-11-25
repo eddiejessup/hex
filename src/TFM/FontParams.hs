@@ -59,7 +59,7 @@ readMathSymbolParams scheme =
     then do
       [_num1, _num2, _num3, _denom1, _denom2, _sup1, _sup2, _sup3, _sub1, _sub2, _supdrop, _subdrop, _delim1, _delim2, _axisHeight] <-
         replicateM 15 getFixWord
-      return $
+      pure $
         Just
           MathSymbolParams
           { num1 = _num1
@@ -78,7 +78,7 @@ readMathSymbolParams scheme =
           , delim2 = _delim2
           , axisHeight = _axisHeight
           }
-    else return Nothing
+    else pure Nothing
 
 readMathExtensionParams :: ByteString -> Get (Maybe MathExtensionParams)
 readMathExtensionParams scheme =
@@ -86,13 +86,13 @@ readMathExtensionParams scheme =
     then do
       _defaultRuleThickness <- getFixWord
       _bigOpSpacing <- replicateM 5 getFixWord
-      return $
+      pure $
         Just
           MathExtensionParams
           { defaultRuleThickness = _defaultRuleThickness
           , bigOpSpacing = _bigOpSpacing
           }
-    else return Nothing
+    else pure Nothing
 
 getFontParams :: ByteString -> Get FontParams
 getFontParams scheme = do

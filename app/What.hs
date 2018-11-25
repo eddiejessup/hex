@@ -142,5 +142,5 @@ bestRoute xs =
 main :: IO ()
 main = do
     let r = bestRoute input
-    r `seq` return ()
+    r `seq` pure ()
     -- print r

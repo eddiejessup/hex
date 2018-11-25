@@ -62,7 +62,7 @@ usage = usageInfo header options where header = "Usage: hex [OPTION...] file"
 
 parseArgs :: [String] -> IO ([Flag], [String])
 parseArgs argStr = case getOpt Permute options argStr of
-  (o, n, []  ) -> return (o, n)
+  (o, n, []  ) -> pure (o, n)
   (_, _, errs) -> ioError $ userError $ concat errs ++ usage
 
 run :: FilePath -> FilePath -> ([CharCode] -> IO ByteString) -> IO ()

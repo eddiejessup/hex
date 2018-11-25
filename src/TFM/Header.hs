@@ -37,7 +37,7 @@ getHeader charInfoPos
   _characterCodingScheme <-
     if postDesignPos < charInfoPos
       then getBCPL
-      else return empty
+      else pure empty
     -- Compute where the next section should start, and where we actually are,
     -- and skip past the difference.
   let postSchemePos = postDesignPos + characterCodingSchemeLength
@@ -49,7 +49,7 @@ getHeader charInfoPos
   _family <-
     if postSchemePos < charInfoPos
       then getBCPL
-      else return empty
+      else pure empty
     -- Again, skip past any remaining data until the next section.
   let postFamilyPos = postSchemePos + familyLength
   postFamilyNowPos <- fromIntegral <$> bytesRead

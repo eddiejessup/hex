@@ -11,8 +11,8 @@ data SignableInt = SignableInt Signedness Int
 toSignableInt :: Signedness -> Int -> Either String SignableInt
 toSignableInt Signed n
   | n < 0 = fail "Number argument for unsigned is negative"
-  | otherwise = return $ SignableInt Signed n
-toSignableInt s n = return $ SignableInt s n
+  | otherwise = pure $ SignableInt Signed n
+toSignableInt s n = pure $ SignableInt s n
 
 toSignedInt, toUnsignedInt :: Int -> Either String SignableInt
 toSignedInt = toSignableInt Signed

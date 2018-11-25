@@ -41,7 +41,7 @@ get4Word8Ints = do
   b2 <- getWord8Int
   b3 <- getWord8Int
   b4 <- getWord8Int
-  return (b1, b2, b3, b4)
+  pure (b1, b2, b3, b4)
 
 runGetStrict :: Get a -> ByteString -> a
 runGetStrict a s = runGet a $ BSL.fromStrict s

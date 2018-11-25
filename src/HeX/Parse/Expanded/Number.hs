@@ -39,7 +39,7 @@ data NormalInteger
 -- data InternalLength = TODO
 -- data InternalGlue = TODO
 -- Parsing.
--- Restrict return type, and therefore accumulator, to Integer, to disallow
+-- Restrict pure type, and therefore accumulator, to Integer, to disallow
 -- overflow.
 digitsToInteger :: Integral n => n -> [n] -> Integer
 digitsToInteger base = foldl (\a b -> a * fromIntegral base + fromIntegral b) 0
@@ -86,7 +86,7 @@ parseNormalInteger = P.choice
                                -- , (, 8) <$> parseOctalIntegerDigits
                                                                           ]
     skipOneOptionalSpace
-    return $ digitsToInteger base digits
+    pure $ digitsToInteger base digits
   parseCharacter = do
     skipSatisfied isBacktick
     parseInhibited parseCharLike
@@ -180,7 +180,7 @@ parseRationalConstant = do
   let fraction =
         fromIntegral (decDigitsToInteger fracDigits) % (10 ^ length fracDigits)
   -- Convert the whole number to a rational, and add it to the fraction.
-  return $ fromIntegral wholeNr + fraction
+  pure $ fromIntegral wholeNr + fraction
  where
   decDigitsToInteger = digitsToInteger 10
   isDotOrComma (R.CharCat (Lex.CharCat ',' Lex.Other)) = True

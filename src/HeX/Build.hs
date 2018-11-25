@@ -46,7 +46,7 @@ currentFontInfo
   -- current font info directly instead of a lookup.
   fInfo <-
     HMap.lookup <$> MaybeT (return maybeFontNr) <*> lift (asks fontInfoMap)
-  MaybeT $ return fInfo
+  MaybeT $ pure fInfo
 
 defineFont ::
      (MonadState Config m, MonadIO m)
@@ -60,7 +60,7 @@ defineFont cs fPath = do
     Just fontDef@B.FontDefinition {fontInfo = font} -> do
       modify
         (\conf -> conf {fontInfoMap = HMap.insert fNr font $ fontInfoMap conf})
-      return fontDef
+      pure fontDef
     Nothing -> fail "Could not define font"
   where
     fNr = csToFontNr cs
@@ -81,7 +81,7 @@ defineFont cs fPath = do
 selectFont :: Monad m => Int -> ConfStateT m B.FontSelection
 selectFont n = do
   modify (\conf -> conf {currentFontNr = Just n})
-  return B.FontSelection {fontNr = n}
+  pure B.FontSelection {fontNr = n}
 
 characterBox :: Monad m => CharCode -> MaybeT (ConfReaderT m) B.Character
 characterBox char = do
@@ -98,7 +98,7 @@ spaceGlue = do
     currentFontInfo
   let toSP = TFM.designScaleSP font
       toFlex = BL.finiteFlex . fromIntegral . toSP
-  return BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
+  pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
 evaluateNormalInteger :: E.NormalInteger -> Integer
 evaluateNormalInteger (E.IntegerConstant n) = n
@@ -193,7 +193,7 @@ extractParagraphInner acc stream =
           charBox <- runReaderOnState (runMaybeT (characterBox c))
           hCharBox <-
             case BL.HCharacter <$> charBox of
-              Just char -> return char
+              Just char -> pure char
               Nothing -> fail "Could not get character info"
           modAccum $ hCharBox : acc
         E.HAllModesCommand aCom ->
@@ -201,7 +201,7 @@ extractParagraphInner acc stream =
             -- Command to end recursion.
             -- \par: end the current paragraph.
                 of
-            E.EndParagraph -> return (acc, stream')
+            E.EndParagraph -> pure (acc, stream')
             -- Commands to do nothing.
             E.Relax -> continueUnchanged
             E.IgnoreSpaces -> continueUnchanged
@@ -226,7 +226,7 @@ extractParagraphInner acc stream =
               glue <- runReaderOnState (runMaybeT spaceGlue)
               hGlue <-
                 case glue of
-                  Just sg -> return $ BL.HGlue sg
+                  Just sg -> pure $ BL.HGlue sg
                   Nothing -> fail "Could not get space glue"
               modAccum $ hGlue : acc
             E.AddRule {width = w, height = h, depth = d} -> do
@@ -277,7 +277,7 @@ extractParagraphLineBoxes indent stream = do
   linePen <- gets linePenalty
   let getRoute = bestRoute desiredW lineTol linePen
       elemLists = setParagraph getRoute hList
-  return (elemLists, stream')
+  pure (elemLists, stream')
 
 -- current items, best cost, breakpoint for that cost.
 type CurrentPage = ([BL.BreakableVListElem], Maybe Int, Maybe Int)
@@ -289,7 +289,7 @@ runPageBuilder ::
      Monad m => CurrentPage -> [BL.BreakableVListElem] -> ConfStateT m [B.Page]
 runPageBuilder (cur, _, _) [] = do
   desiredH <- gets desiredHeight
-  return [setPage desiredH $ reverse cur]
+  pure [setPage desiredH $ reverse cur]
 runPageBuilder (cur, costBest, iBest) (x:xs)
   -- If the current vlist has no boxes, we discard a discardable item.
   | not $ any BL.isBox cur =
@@ -367,7 +367,7 @@ addVListElem ::
 addVListElem acc e =
   case e of
     (BL.VListBox b) -> addVListBox b
-    _ -> return $ e : acc
+    _ -> pure $ e : acc
   where
     addVListBox b = do
       prevDepth <- gets $ unPreviousBoxDepth . previousBoxDepth
@@ -376,7 +376,7 @@ addVListElem acc e =
       blineLengthMin <- gets $ unBaselineLengthMin . baselineLengthMin
       minBlineGlue <- gets $ unMinBaselineGlue . minBaselineGlue
       modify (\conf -> conf { previousBoxDepth = PreviousBoxDepth $ B.naturalDepth e })
-      return $
+      pure $
         if prevDepth <= -Unit.oneKPt
           then e : acc
           else let proposedBaselineLength =
@@ -414,7 +414,7 @@ extractPagesInner pages cur acc stream =
         E.End -> do
           lastPages <- runPageBuilder cur (reverse acc)
           let pagesFinal = pages ++ lastPages
-          return (pagesFinal, stream')
+          pure (pagesFinal, stream')
         E.VAllModesCommand aCom ->
           case aCom
             -- Commands to do nothing.
@@ -446,7 +446,7 @@ extractPagesInner pages cur acc stream =
               mag <- gets magnification
               evalW <- case w of
                 Nothing -> gets $ unDesiredWidth . desiredWidth
-                Just ln -> return $ evaluateLength mag ln
+                Just ln -> pure $ evaluateLength mag ln
               let evalH = case h of
                     -- TODO.
                     Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point

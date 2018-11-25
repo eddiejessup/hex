@@ -70,7 +70,7 @@ type ConfReaderT = ReaderT Config
 newConfig :: IO Config
 newConfig = do
   cwd <- fromJust . parseAbsDir <$> getCurrentDirectory
-  return $
+  pure $
     Config
     { currentFontNr = Nothing
     , fontInfoMap = HMap.empty

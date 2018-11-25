@@ -25,7 +25,7 @@ designScaleSP f x = round $ designSizeSP f * x
 readTFM :: FilePath -> IO TexFont
 readTFM path = do
   contents <- readFile path
-  return $ runGet newTFM contents
+  pure $ runGet newTFM contents
 
 readTFMFancy :: Path Abs File -> IO TexFont
 readTFMFancy = readTFM . toFilePath

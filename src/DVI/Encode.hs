@@ -305,14 +305,14 @@ data IntArgVal
 intArgValFromSignableInt :: SignableInt -> Either String IntArgVal
 intArgValFromSignableInt n@(SignableInt s i) =
   case (s, bytesNeeded n) of
-    (Signed, 1) -> return $ S1 $ fromIntegral i
-    (Signed, 2) -> return $ S2 $ fromIntegral i
-    (Signed, 3) -> return $ S4 $ fromIntegral i
-    (Signed, 4) -> return $ S4 $ fromIntegral i
-    (Unsigned, 1) -> return $ U1 $ fromIntegral i
-    (Unsigned, 2) -> return $ U2 $ fromIntegral i
-    (Unsigned, 3) -> return $ U4 $ fromIntegral i
-    (Unsigned, 4) -> return $ U4 $ fromIntegral i
+    (Signed, 1) -> pure $ S1 $ fromIntegral i
+    (Signed, 2) -> pure $ S2 $ fromIntegral i
+    (Signed, 3) -> pure $ S4 $ fromIntegral i
+    (Signed, 4) -> pure $ S4 $ fromIntegral i
+    (Unsigned, 1) -> pure $ U1 $ fromIntegral i
+    (Unsigned, 2) -> pure $ U2 $ fromIntegral i
+    (Unsigned, 3) -> pure $ U4 $ fromIntegral i
+    (Unsigned, 4) -> pure $ U4 $ fromIntegral i
     (_, b) -> fail $ "Cannot handle " ++ show b ++ " bytes"
 
 instance Encodable IntArgVal where

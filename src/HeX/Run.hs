@@ -27,7 +27,7 @@ import HeX.Parse.Expanded
 mChop' :: ([a] -> IO (Maybe [a])) -> [a] -> IO ()
 mChop' f xs =
   f xs >>= \case
-    Nothing -> return ()
+    Nothing -> pure ()
     Just xs'' -> mChop' f xs''
 
 runCat :: [CharCode] -> IO ()
@@ -37,23 +37,23 @@ runCat = mChop' (extractAndPrint usableCharToCat)
       case extractCharCat f s of
         Just (cc, s') -> do
           print cc
-          return $ Just s'
-        Nothing -> return Nothing
+          pure $ Just s'
+        Nothing -> pure Nothing
 
 -- Lex.
 
 chopLex' :: LexState -> [CharCode] -> IO ()
 chopLex' ls xs =
   extractAndPrintLex >>= \case
-    Nothing -> return ()
+    Nothing -> pure ()
     Just (ls', xs') -> chopLex' ls' xs'
   where
     extractAndPrintLex =
       case extractToken (extractCharCat usableCharToCat) ls xs of
         Just (tok, ls', s') -> do
           print tok
-          return $ Just (ls', s')
-        Nothing -> return Nothing
+          pure $ Just (ls', s')
+        Nothing -> pure Nothing
 
 runLex :: [CharCode] -> IO ()
 runLex = chopLex' LineBegin
@@ -63,15 +63,15 @@ runLex = chopLex' LineBegin
 chopResolved' :: LexState -> [CharCode] -> IO ()
 chopResolved' ls xs =
   extractAndPrintResolved >>= \case
-    Nothing -> return ()
+    Nothing -> pure ()
     Just (ls', xs') -> chopResolved' ls' xs'
   where
     extractAndPrintResolved =
       case extractToken (extractCharCat usableCharToCat) ls xs of
         Just (tok, lexState', s') -> do
           print $ resolveToken defaultCSMap tok
-          return $ Just (lexState', s')
-        Nothing -> return Nothing
+          pure $ Just (lexState', s')
+        Nothing -> pure Nothing
 
 runResolved :: [CharCode] -> IO ()
 runResolved = chopResolved' LineBegin
@@ -84,7 +84,7 @@ chopExpand' estream =
     Just (tok, estream') -> do
       print tok
       chopExpand' estream'
-    Nothing -> return ()
+    Nothing -> pure ()
 
 runExpand :: [CharCode] -> IO ()
 runExpand xs = chopExpand' $ newExpandStream xs defaultCSMap
@@ -97,7 +97,7 @@ chopCommand' estream =
     (P.State {P.stateInput = estream'}, Right com) -> do
       print com
       chopCommand' estream'
-    (_, Left (P.TrivialError _ (Just P.EndOfInput) _)) -> return ()
+    (_, Left (P.TrivialError _ (Just P.EndOfInput) _)) -> pure ()
     (_, Left err) -> error $ show err
 
 runCommand :: [CharCode] -> IO ()
@@ -109,7 +109,7 @@ codesToParaList :: [CharCode] -> IO [BreakableHListElem]
 codesToParaList xs = do
   let stream = newExpandStream xs defaultCSMap
   ((para, _), _) <- newConfig >>= runStateT (extractParagraph True stream)
-  return $ reverse para
+  pure $ reverse para
 
 runPara :: [CharCode] -> IO ()
 runPara xs =
@@ -122,7 +122,7 @@ codesToParaBoxes xs = do
   let stream = newExpandStream xs defaultCSMap
   ((para, _), _) <- newConfig >>= runStateT (extractParagraphLineBoxes True stream)
 
-  return $ reverse para
+  pure $ reverse para
 
 runSetPara :: [CharCode] -> IO ()
 runSetPara xs =
@@ -137,7 +137,7 @@ codesToPages xs = do
   let stream = newExpandStream xs defaultCSMap
   newConf <- newConfig
   ((pages, _), conf) <- runStateT (extractPages stream) newConf
-  return (pages, conf)
+  pure (pages, conf)
 
 printList :: Show a => [a] -> IO ()
 printList = putStrLn . intercalate "\n" . fmap show
@@ -161,7 +161,7 @@ codesToDVIRaw xs = do
   let instrs = toDVI pages
   case parseInstructions instrs (unMagnification mag) of
     Left err -> ioError $ userError err
-    Right encInstrs -> return $ reverse encInstrs
+    Right encInstrs -> pure $ reverse encInstrs
 
 runDVIRaw :: [CharCode] -> IO ()
 runDVIRaw xs = codesToDVIRaw xs >>= printList

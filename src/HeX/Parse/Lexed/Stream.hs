@@ -56,12 +56,12 @@ instance P.Stream LexStream where
   -- If the lex token buffer is empty.
   take1_ stream@(LexStream cs [] _lexState _ccMap) = do
     (lt, _lexState', cs') <- Lex.extractToken getCC _lexState cs
-    return (lt, stream {codes = cs', lexState = _lexState'})
+    pure (lt, stream {codes = cs', lexState = _lexState'})
     where
       getCC = Cat.extractCharCat (Cat.catLookup _ccMap)
   -- If there is a lex token in the buffer.
   take1_ stream@(LexStream _ (lt:lts) _ _) =
-    return (lt, stream {lexTokens = lts})
+    pure (lt, stream {lexTokens = lts})
 
 type SimpLexParser = P.Parsec () LexStream
 

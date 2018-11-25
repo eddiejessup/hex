@@ -141,7 +141,7 @@ ignorespaces :: AllModeCommandParser
 ignorespaces = do
   skipSatisfiedEquals R.IgnoreSpaces
   skipOptionalSpaces
-  return IgnoreSpaces
+  pure IgnoreSpaces
 
 -- \penalty 100.
 addPenalty :: AllModeCommandParser
@@ -180,19 +180,19 @@ addRule mode = do
         P.choice [parseRuleWidth cmd, parseRuleHeight cmd, parseRuleDepth cmd]
       case x of
         Just newCmd -> parseRuleSpecification newCmd
-        Nothing -> return cmd
+        Nothing -> pure cmd
     parseRuleWidth cmd = do
       skipKeyword "width"
       ln <- parseLength
-      return cmd {width = Just ln}
+      pure cmd {width = Just ln}
     parseRuleHeight cmd = do
       skipKeyword "height"
       ln <- parseLength
-      return cmd {height = Just ln}
+      pure cmd {height = Just ln}
     parseRuleDepth cmd = do
       skipKeyword "depth"
       ln <- parseLength
-      return cmd {depth = Just ln}
+      pure cmd {depth = Just ln}
 
 startParagraph :: AllModeCommandParser
 startParagraph = satisfyThen parToCom
@@ -222,7 +222,7 @@ leaveHMode = skipSatisfied endsHMode $> LeaveHMode
 addCharacter :: HModeCommandParser
 addCharacter = do
   c <- satisfyThen charToCode
-  return AddCharacter {method = ExplicitChar, char = c}
+  pure AddCharacter {method = ExplicitChar, char = c}
   where
     charToCode (R.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) =
       Just c
