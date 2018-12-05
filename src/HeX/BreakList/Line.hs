@@ -7,12 +7,12 @@ module HeX.BreakList.Line where
 
 import           Data.Maybe
 import           Prelude                 hiding ( lines )
-import Data.List.Extra hiding (lines)
+import           Data.List.Extra         hiding ( lines )
 
 import           Control.Applicative            ( empty )
 import           Control.Monad                  ( guard )
 
-import qualified Data.Adjacent                      as A
+import qualified Data.Adjacent                 as A
 import qualified HeX.Box                       as B
 import qualified HeX.Unit                      as UN
 import           HeX.Config

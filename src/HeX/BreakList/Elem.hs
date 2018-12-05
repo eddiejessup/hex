@@ -1,13 +1,15 @@
 module HeX.BreakList.Elem where
 
-import qualified Data.Adjacent as A
+import qualified Data.Adjacent                 as A
 
-import Data.Maybe
-import qualified HeX.Box as B
-import HeX.Box (Dimensioned, naturalWidth)
+import           Data.Maybe
+import qualified HeX.Box                       as B
+import           HeX.Box                        ( Dimensioned
+                                                , naturalWidth
+                                                )
 
-import HeX.BreakList.Glue
-import HeX.BreakList.Judge
+import           HeX.BreakList.Glue
+import           HeX.BreakList.Judge
 
 data BreakItem
   = GlueBreak Glue

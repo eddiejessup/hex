@@ -2,23 +2,23 @@
 
 module HeX.Parse.Expanded.Command where
 
-import qualified Text.Megaparsec as P
-import Text.Megaparsec ((<|>))
-import Data.Functor (($>))
+import qualified Text.Megaparsec               as P
+import           Text.Megaparsec                ( (<|>) )
+import           Data.Functor                   ( ($>) )
 
-import qualified HeX.Lex as Lex
-import HeX.Categorise (CharCode)
+import qualified HeX.Lex                       as Lex
+import           HeX.Categorise                 ( CharCode )
 
-import HeX.Parse.Helpers
+import           HeX.Parse.Helpers
 
-import qualified HeX.Parse.Resolved.Token as R
+import qualified HeX.Parse.Resolved.Token      as R
 
-import HeX.Parse.Expanded.Common
-import HeX.Parse.Expanded.Glue
-import HeX.Parse.Expanded.Length
-import HeX.Parse.Expanded.Number
-import HeX.Parse.Expanded.Stream
-import HeX.Parse.Expanded.Assignment
+import           HeX.Parse.Expanded.Common
+import           HeX.Parse.Expanded.Glue
+import           HeX.Parse.Expanded.Length
+import           HeX.Parse.Expanded.Number
+import           HeX.Parse.Expanded.Stream
+import           HeX.Parse.Expanded.Assignment
 
 -- AST.
 

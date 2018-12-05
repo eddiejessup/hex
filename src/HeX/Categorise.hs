@@ -1,6 +1,6 @@
 module HeX.Categorise where
 
-import qualified Data.HashMap.Strict as HMap
+import qualified Data.HashMap.Strict           as HMap
 
 data CatCode
   = Escape -- 0

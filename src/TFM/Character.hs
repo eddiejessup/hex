@@ -28,11 +28,11 @@ module TFM.Character where
 --   is, a character that is built from smaller pieces so that it can be made
 --   arbitrarily large. The pieces are specified in 'exten[remainder]'.
 -- """
-import Data.Bits
-import Data.ByteString
-import Data.HashMap.Lazy
+import           Data.Bits
+import           Data.ByteString
+import           Data.HashMap.Lazy
 
-import TFM.Common
+import           TFM.Common
 
 data Character = Character
   { code :: Char

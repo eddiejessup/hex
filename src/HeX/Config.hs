@@ -5,21 +5,21 @@
 
 module HeX.Config where
 
-import Control.Monad.Extra
-import Control.Monad.IO.Class
-import Control.Monad.State.Lazy (StateT)
-import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.Reader (ReaderT)
-import qualified Data.HashMap.Strict as HMap
-import Data.Maybe (fromJust)
-import Path
-import System.Directory
+import           Control.Monad.Extra
+import           Control.Monad.IO.Class
+import           Control.Monad.State.Lazy       ( StateT )
+import           Control.Monad.Trans.Maybe
+import           Control.Monad.Trans.Reader     ( ReaderT )
+import qualified Data.HashMap.Strict           as HMap
+import           Data.Maybe                     ( fromJust )
+import           Path
+import           System.Directory
 
-import TFM (TexFont)
+import           TFM                            ( TexFont )
 
-import qualified HeX.Box as B
-import qualified HeX.BreakList as BL
-import qualified HeX.Unit as Unit
+import qualified HeX.Box                       as B
+import qualified HeX.BreakList                 as BL
+import qualified HeX.Unit                      as Unit
 
 type FontInfoMap = HMap.HashMap Int TexFont
 

@@ -1,12 +1,14 @@
 module TFM.LigKern where
 
-import Prelude hiding (length)
+import           Prelude                 hiding ( length )
 
-import Data.Bits
-import Data.ByteString hiding (head, last)
-import Data.List.Split
+import           Data.Bits
+import           Data.ByteString         hiding ( head
+                                                , last
+                                                )
+import           Data.List.Split
 
-import TFM.Common
+import           TFM.Common
 
 -- The lig/kern array contains instructions explaining how to handle special
 -- letter pairs. Each instruction consists of four bytes:

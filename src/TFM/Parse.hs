@@ -1,18 +1,22 @@
 module TFM.Parse
   ( TexFont(..)
   , newTFM
-  ) where
+  )
+where
 
-import qualified Data.Binary.Get as BG
-import Data.ByteString
-import Data.HashMap.Strict
+import qualified Data.Binary.Get               as BG
+import           Data.ByteString
+import           Data.HashMap.Strict
 
-import TFM.Character
-import TFM.Common
-import qualified TFM.FontParams as F
-import qualified TFM.Header as H
-import TFM.LigKern
-import TFM.Table (Table(..), getTableParams, tablePosBytes)
+import           TFM.Character
+import           TFM.Common
+import qualified TFM.FontParams                as F
+import qualified TFM.Header                    as H
+import           TFM.LigKern
+import           TFM.Table                      ( Table(..)
+                                                , getTableParams
+                                                , tablePosBytes
+                                                )
 
 data TexFont = TexFont
   { checksum :: Int

@@ -1,13 +1,13 @@
 module TFM.Common where
 
-import Prelude hiding (drop)
+import           Prelude                 hiding ( drop )
 
 -- Convert a quantity in units of words, into the equivalent in bytes.
-import Data.Binary
-import Data.Binary.Get
-import Data.ByteString
-import qualified Data.ByteString.Lazy as BSL
-import Data.Ratio ((%))
+import           Data.Binary
+import           Data.Binary.Get
+import           Data.ByteString
+import qualified Data.ByteString.Lazy          as BSL
+import           Data.Ratio                     ( (%) )
 
 -- The increment by which real numbers can be specified.
 fixWordScale :: Rational

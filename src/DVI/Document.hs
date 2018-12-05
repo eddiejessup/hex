@@ -1,12 +1,12 @@
 module DVI.Document where
 
-import Control.Monad
-import Safe (lastDef)
+import           Control.Monad
+import           Safe                           ( lastDef )
 
-import TFM
+import           TFM
 
-import DVI.Encode
-import DVI.Instruction
+import           DVI.Encode
+import           DVI.Instruction
 
 -- Encode abstract instructions.
 data Instruction

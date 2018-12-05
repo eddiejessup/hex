@@ -2,14 +2,14 @@
 
 module HeX.Parse.Expanded.Glue where
 
-import qualified Text.Megaparsec as P
+import qualified Text.Megaparsec               as P
 
-import HeX.Parse.Helpers
+import           HeX.Parse.Helpers
 
-import HeX.Parse.Expanded.Common
-import HeX.Parse.Expanded.Length
-import HeX.Parse.Expanded.Number
-import HeX.Parse.Expanded.Stream
+import           HeX.Parse.Expanded.Common
+import           HeX.Parse.Expanded.Length
+import           HeX.Parse.Expanded.Number
+import           HeX.Parse.Expanded.Stream
 
 -- AST.
 data Glue =

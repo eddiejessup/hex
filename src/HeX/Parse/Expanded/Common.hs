@@ -3,17 +3,19 @@
 
 module HeX.Parse.Expanded.Common where
 
-import Data.Char (toLower, toUpper)
-import Data.Functor (($>))
-import Data.Maybe (isJust)
-import qualified Text.Megaparsec as P
+import           Data.Char                      ( toLower
+                                                , toUpper
+                                                )
+import           Data.Functor                   ( ($>) )
+import           Data.Maybe                     ( isJust )
+import qualified Text.Megaparsec               as P
 
-import HeX.Categorise (CharCode)
-import qualified HeX.Lex as Lex
+import           HeX.Categorise                 ( CharCode )
+import qualified HeX.Lex                       as Lex
 
-import HeX.Parse.Helpers
-import HeX.Parse.Resolved (PrimitiveToken)
-import qualified HeX.Parse.Resolved as R
+import           HeX.Parse.Helpers
+import           HeX.Parse.Resolved             ( PrimitiveToken )
+import qualified HeX.Parse.Resolved            as R
 
 isTokenForFont :: PrimitiveToken -> Bool
 isTokenForFont (R.TokenForFont _) = True

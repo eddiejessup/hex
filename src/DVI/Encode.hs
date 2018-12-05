@@ -1,12 +1,12 @@
 module DVI.Encode where
 
-import qualified Data.Binary as B
-import qualified Data.ByteString.Lazy as BLS
-import Data.Char (ord)
-import qualified Data.Int as I
-import qualified Data.Word as W
+import qualified Data.Binary                   as B
+import qualified Data.ByteString.Lazy          as BLS
+import           Data.Char                      ( ord )
+import qualified Data.Int                      as I
+import qualified Data.Word                     as W
 
-import Data.Byte
+import           Data.Byte
 
 class Encodable a where
   encode :: a -> BLS.ByteString
@@ -290,7 +290,7 @@ data ArgVal
   deriving (Show)
 
 instance Encodable ArgVal where
-  encode (IntArgVal v) = encode v
+  encode (IntArgVal    v) = encode v
   encode (StringArgVal v) = BLS.pack $ fmap (fromIntegral . ord) v
 
 data IntArgVal
@@ -303,17 +303,16 @@ data IntArgVal
   deriving (Show)
 
 intArgValFromSignableInt :: SignableInt -> Either String IntArgVal
-intArgValFromSignableInt n@(SignableInt s i) =
-  case (s, bytesNeeded n) of
-    (Signed, 1) -> pure $ S1 $ fromIntegral i
-    (Signed, 2) -> pure $ S2 $ fromIntegral i
-    (Signed, 3) -> pure $ S4 $ fromIntegral i
-    (Signed, 4) -> pure $ S4 $ fromIntegral i
-    (Unsigned, 1) -> pure $ U1 $ fromIntegral i
-    (Unsigned, 2) -> pure $ U2 $ fromIntegral i
-    (Unsigned, 3) -> pure $ U4 $ fromIntegral i
-    (Unsigned, 4) -> pure $ U4 $ fromIntegral i
-    (_, b) -> fail $ "Cannot handle " ++ show b ++ " bytes"
+intArgValFromSignableInt n@(SignableInt s i) = case (s, bytesNeeded n) of
+  (Signed  , 1) -> pure $ S1 $ fromIntegral i
+  (Signed  , 2) -> pure $ S2 $ fromIntegral i
+  (Signed  , 3) -> pure $ S4 $ fromIntegral i
+  (Signed  , 4) -> pure $ S4 $ fromIntegral i
+  (Unsigned, 1) -> pure $ U1 $ fromIntegral i
+  (Unsigned, 2) -> pure $ U2 $ fromIntegral i
+  (Unsigned, 3) -> pure $ U4 $ fromIntegral i
+  (Unsigned, 4) -> pure $ U4 $ fromIntegral i
+  (_       , b) -> fail $ "Cannot handle " ++ show b ++ " bytes"
 
 instance Encodable IntArgVal where
   encode (U1 v) = B.encode v

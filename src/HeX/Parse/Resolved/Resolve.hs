@@ -1,11 +1,11 @@
 module HeX.Parse.Resolved.Resolve where
 
-import qualified Data.HashMap.Strict as HMap
+import qualified Data.HashMap.Strict           as HMap
 
-import qualified HeX.Lex as Lex
+import qualified HeX.Lex                       as Lex
 
-import HeX.Parse.Lexed
-import HeX.Parse.Resolved.Token
+import           HeX.Parse.Lexed
+import           HeX.Parse.Resolved.Token
 
 theFontNr :: Int
 theFontNr = 1

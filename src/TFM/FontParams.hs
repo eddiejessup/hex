@@ -1,12 +1,14 @@
 module TFM.FontParams where
 
 -- Define some structures containing core parameters of the font, and some
-import Control.Monad
-import Data.Binary
-import Data.ByteString hiding (elem, pack)
-import Data.ByteString.Char8 (pack)
+import           Control.Monad
+import           Data.Binary
+import           Data.ByteString         hiding ( elem
+                                                , pack
+                                                )
+import           Data.ByteString.Char8          ( pack )
 
-import TFM.Common
+import           TFM.Common
 
 -- Character coding schemes that should have the corresponding extra sets of
 -- font parameters.

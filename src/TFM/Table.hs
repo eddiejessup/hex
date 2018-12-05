@@ -1,9 +1,9 @@
 module TFM.Table where
 
-import Control.Monad
-import Data.Binary
+import           Control.Monad
+import           Data.Binary
 
-import TFM.Common
+import           TFM.Common
 
 headerDataLengthWordsMin, headerPointerWords, headerPointerBytes :: Int
 -- The minimum length of the header.

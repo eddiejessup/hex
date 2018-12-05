@@ -3,11 +3,11 @@
 
 module HeX.BreakList.Set where
 
-import qualified HeX.Box as B
+import qualified HeX.Box                       as B
 
-import HeX.BreakList.Elem
-import HeX.BreakList.Glue
-import HeX.BreakList.Judge
+import           HeX.BreakList.Elem
+import           HeX.BreakList.Glue
+import           HeX.BreakList.Judge
 
 class Settable a where
   type Result a :: *

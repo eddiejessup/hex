@@ -3,10 +3,10 @@
 
 module HeX.Box.Draw where
 
-import qualified DVI.Instruction as DI
-import qualified DVI.Document as D
+import qualified DVI.Instruction               as DI
+import qualified DVI.Document                  as D
 
-import HeX.Box
+import           HeX.Box
 
 class DVIAble a where
   toDVI :: a -> [D.Instruction]

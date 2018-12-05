@@ -1,10 +1,10 @@
 module DVI.Instruction where
 
-import Safe (lastDef)
-import System.FilePath (splitFileName)
+import           Safe                           ( lastDef )
+import           System.FilePath                ( splitFileName )
 
-import Data.Byte
-import DVI.Encode
+import           Data.Byte
+import           DVI.Encode
 
 data MoveMode = Put | Set
   deriving Show
@@ -20,12 +20,18 @@ pickOp (o1, o2, _, o4) v = case v of
   (S4 _) -> o4
   (U4 _) -> o4
 
-getVariByteOpAndArg :: (Operation, Operation, Operation, Operation) -> SignableInt -> Either String (Operation, ArgVal)
+getVariByteOpAndArg
+  :: (Operation, Operation, Operation, Operation)
+  -> SignableInt
+  -> Either String (Operation, ArgVal)
 getVariByteOpAndArg ops sI = do
-    iArgVal <- intArgValFromSignableInt sI
-    pure (pickOp ops iArgVal, IntArgVal iArgVal)
+  iArgVal <- intArgValFromSignableInt sI
+  pure (pickOp ops iArgVal, IntArgVal iArgVal)
 
-getVariByteInstruction :: (Operation, Operation, Operation, Operation) -> SignableInt -> Either String EncodableInstruction
+getVariByteInstruction
+  :: (Operation, Operation, Operation, Operation)
+  -> SignableInt
+  -> Either String EncodableInstruction
 getVariByteInstruction ops sI = do
   (op, arg) <- getVariByteOpAndArg ops sI
   pure $ EncodableInstruction op [arg]

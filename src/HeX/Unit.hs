@@ -1,7 +1,7 @@
 module HeX.Unit where
 
-import Data.Ratio ((%))
-import Text.Printf (printf)
+import           Data.Ratio                     ( (%) )
+import           Text.Printf                    ( printf )
 
 tenK :: Int
 tenK = 10000

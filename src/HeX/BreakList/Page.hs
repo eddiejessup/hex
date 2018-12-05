@@ -4,9 +4,9 @@ module HeX.BreakList.Page where
 
 import HeX.BreakList
 
-import qualified HeX.Unit as UN
-import qualified HeX.Box as B
-import HeX.Config
+import qualified HeX.Unit                      as UN
+import qualified HeX.Box                       as B
+import           HeX.Config
 
 data PageBreakJudgment
   -- Penalty >= 10k.

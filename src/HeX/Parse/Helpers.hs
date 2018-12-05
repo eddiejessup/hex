@@ -3,10 +3,10 @@
 
 module HeX.Parse.Helpers where
 
-import Data.Functor (($>))
-import Data.List.NonEmpty (NonEmpty((:|)))
-import qualified Data.Set as Set
-import qualified Text.Megaparsec as P
+import           Data.Functor                   ( ($>) )
+import           Data.List.NonEmpty             ( NonEmpty((:|)) )
+import qualified Data.Set                      as Set
+import qualified Text.Megaparsec               as P
 
 -- Helpers.
 type SimpParser s = P.Parsec () s

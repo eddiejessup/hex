@@ -2,13 +2,13 @@
 
 module HeX.Parse.Expanded.Length where
 
-import qualified Text.Megaparsec as P
+import qualified Text.Megaparsec               as P
 
-import HeX.Unit (PhysicalUnit(..))
+import           HeX.Unit                       ( PhysicalUnit(..) )
 
-import HeX.Parse.Expanded.Common
-import HeX.Parse.Expanded.Number
-import HeX.Parse.Expanded.Stream
+import           HeX.Parse.Expanded.Common
+import           HeX.Parse.Expanded.Number
+import           HeX.Parse.Expanded.Stream
 
 -- AST.
 data Length =

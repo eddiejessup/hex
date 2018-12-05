@@ -2,11 +2,14 @@
 
 module HeX.Box where
 
-import Path (Abs, File, Path)
+import           Path                           ( Abs
+                                                , File
+                                                , Path
+                                                )
 
-import TFM (TexFont)
+import           TFM                            ( TexFont )
 
-import qualified HeX.Unit as Unit
+import qualified HeX.Unit                      as Unit
 
 data Direction
   = Horizontal

@@ -2,19 +2,23 @@
 
 module HeX.Parse.Expanded.Assignment where
 
-import Control.Monad (when)
-import Path (File, Path, Rel, parseRelFile)
-import qualified Text.Megaparsec as P
+import           Control.Monad                  ( when )
+import           Path                           ( File
+                                                , Path
+                                                , Rel
+                                                , parseRelFile
+                                                )
+import qualified Text.Megaparsec               as P
 
-import qualified HeX.Lex as Lex
+import qualified HeX.Lex                       as Lex
 
-import HeX.Parse.Helpers
+import           HeX.Parse.Helpers
 
-import HeX.Parse.Lexed.Inhibited
-import qualified HeX.Parse.Resolved.Token as R
+import           HeX.Parse.Lexed.Inhibited
+import qualified HeX.Parse.Resolved.Token      as R
 
-import HeX.Parse.Expanded.Common
-import HeX.Parse.Expanded.Stream
+import           HeX.Parse.Expanded.Common
+import           HeX.Parse.Expanded.Stream
 
 -- AST.
 

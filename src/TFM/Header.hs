@@ -1,17 +1,16 @@
 module TFM.Header where
 
+import           Control.Monad
+import           Data.Binary
+import           Data.Binary.Get
+import           Data.ByteString
+
+import           TFM.Common
+
 -- The length of the character coding scheme and font family sections,
 -- respectively.
-import Control.Monad
-import Data.Binary
-import Data.Binary.Get
-import Data.ByteString
-
-import TFM.Common
-
 characterCodingSchemeLength, familyLength :: Int
 characterCodingSchemeLength = 40
-
 familyLength = 20
 
 -- The information stored in the header table of a TFM file.

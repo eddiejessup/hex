@@ -4,33 +4,47 @@
 
 module HeX.Build where
 
-import Control.Monad (foldM)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.State.Lazy
-       (MonadState, get, gets, lift, liftIO, modify)
-import Control.Monad.Trans.Maybe (MaybeT(..), runMaybeT)
-import Control.Monad.Trans.Reader (Reader, asks, runReader)
-import qualified Data.HashMap.Strict as HMap
-import Path
-import Safe (headMay)
-import qualified Text.Megaparsec as PS
+import           Control.Monad                  ( foldM )
+import           Control.Monad.IO.Class         ( MonadIO )
+import           Control.Monad.State.Lazy       ( MonadState
+                                                , get
+                                                , gets
+                                                , lift
+                                                , liftIO
+                                                , modify
+                                                )
+import           Control.Monad.Trans.Maybe      ( MaybeT(..)
+                                                , runMaybeT
+                                                )
+import           Control.Monad.Trans.Reader     ( Reader
+                                                , asks
+                                                , runReader
+                                                )
+import qualified Data.HashMap.Strict           as HMap
+import           Path
+import           Safe                           ( headMay )
+import qualified Text.Megaparsec               as PS
 
-import Data.Adjacent (Adjacency(..))
+import           Data.Adjacent                  ( Adjacency(..) )
 import qualified TFM
-import TFM (TexFont(..))
-import qualified TFM.Character as TFMC
+import           TFM                            ( TexFont(..) )
+import qualified TFM.Character                 as TFMC
 
-import qualified HeX.Box as B
-import qualified HeX.BreakList as BL
-import HeX.BreakList.Line (bestRoute, setParagraph)
-import HeX.BreakList.Page
-       (PageBreakJudgment(..), pageBreakJudgment, setPage)
-import HeX.Config
-import HeX.Categorise (CharCode)
-import qualified HeX.Lex as Lex
-import qualified HeX.Parse.Expanded as E
-import qualified HeX.Parse.Resolved as R
-import qualified HeX.Unit as Unit
+import qualified HeX.Box                       as B
+import qualified HeX.BreakList                 as BL
+import           HeX.BreakList.Line             ( bestRoute
+                                                , setParagraph
+                                                )
+import           HeX.BreakList.Page             ( PageBreakJudgment(..)
+                                                , pageBreakJudgment
+                                                , setPage
+                                                )
+import           HeX.Config
+import           HeX.Categorise                 ( CharCode )
+import qualified HeX.Lex                       as Lex
+import qualified HeX.Parse.Expanded            as E
+import qualified HeX.Parse.Resolved            as R
+import qualified HeX.Unit                      as Unit
 
 csToFontNr :: Lex.ControlSequenceLike -> Int
 csToFontNr (Lex.ControlSequenceProper (Lex.ControlSequence "thefont")) =

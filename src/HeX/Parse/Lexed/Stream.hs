@@ -3,13 +3,13 @@
 
 module HeX.Parse.Lexed.Stream where
 
-import Data.Foldable (foldl')
-import Data.Proxy
-import Data.String.Utils (replace)
-import qualified Text.Megaparsec as P
+import           Data.Foldable                  ( foldl' )
+import           Data.Proxy
+import           Data.String.Utils              ( replace )
+import qualified Text.Megaparsec               as P
 
-import qualified HeX.Categorise as Cat
-import qualified HeX.Lex as Lex
+import qualified HeX.Categorise                as Cat
+import qualified HeX.Lex                       as Lex
 
 type LexTokens = [Lex.Token]
 

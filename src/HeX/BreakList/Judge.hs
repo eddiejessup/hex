@@ -2,9 +2,9 @@
 
 module HeX.BreakList.Judge where
 
-import qualified HeX.Unit as UN
+import qualified HeX.Unit                      as UN
 
-import HeX.BreakList.Glue
+import           HeX.BreakList.Glue
 
 data Fixable
   = Fixable { ratio :: Rational

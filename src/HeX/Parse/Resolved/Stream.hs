@@ -2,18 +2,18 @@
 
 module HeX.Parse.Resolved.Stream where
 
-import qualified Data.HashMap.Strict as HMap
-import Data.Maybe
-import Data.Proxy
-import qualified Text.Megaparsec as P
+import qualified Data.HashMap.Strict           as HMap
+import           Data.Maybe
+import           Data.Proxy
+import qualified Text.Megaparsec               as P
 
-import HeX.Categorise (CharCode)
-import qualified HeX.Lex as Lex
+import           HeX.Categorise                 ( CharCode )
+import qualified HeX.Lex                       as Lex
 
-import HeX.Parse.Lexed.Stream
+import           HeX.Parse.Lexed.Stream
 
-import HeX.Parse.Resolved.Token
-import HeX.Parse.Resolved.Resolve
+import           HeX.Parse.Resolved.Token
+import           HeX.Parse.Resolved.Resolve
 
 data ResolvedStream =
   ResolvedStream LexStream

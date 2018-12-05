@@ -2,13 +2,13 @@
 
 module HeX.Parse.Lexed.Inhibited where
 
-import qualified Data.Char as C
+import qualified Data.Char                     as C
 
-import qualified HeX.Lex as Lex
+import qualified HeX.Lex                       as Lex
 
-import HeX.Parse.Helpers
+import           HeX.Parse.Helpers
 
-import HeX.Parse.Lexed.Stream
+import           HeX.Parse.Lexed.Stream
 
 newtype BalancedText =
   BalancedText [Lex.Token]

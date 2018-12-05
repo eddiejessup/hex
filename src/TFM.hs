@@ -1,10 +1,10 @@
 module TFM
-  ( module TFM.Parse
-  , designSizeSP
-  , designScaleSP
-  , readTFM
-  , readTFMFancy
-  )
+    ( module TFM.Parse
+    , designSizeSP
+    , designScaleSP
+    , readTFM
+    , readTFMFancy
+    )
 where
 
 import           Prelude                 hiding ( readFile )
@@ -24,8 +24,8 @@ designScaleSP f x = round $ designSizeSP f * x
 
 readTFM :: FilePath -> IO TexFont
 readTFM path = do
-  contents <- readFile path
-  pure $ runGet newTFM contents
+    contents <- readFile path
+    pure $ runGet newTFM contents
 
 readTFMFancy :: Path Abs File -> IO TexFont
 readTFMFancy = readTFM . toFilePath

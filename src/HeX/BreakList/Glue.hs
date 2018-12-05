@@ -1,6 +1,6 @@
 module HeX.BreakList.Glue where
 
-import qualified HeX.Unit as UN
+import qualified HeX.Unit                      as UN
 
 -- Flex.
 

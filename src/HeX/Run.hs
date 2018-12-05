@@ -2,25 +2,31 @@
 
 module HeX.Run where
 
-import Prelude hiding (writeFile)
+import           Prelude                 hiding ( writeFile )
 
-import Control.Monad.Trans.State.Lazy
-import Data.ByteString.Lazy (ByteString)
-import Data.List (intercalate)
-import qualified Text.Megaparsec as P
+import           Control.Monad.Trans.State.Lazy
+import           Data.ByteString.Lazy           ( ByteString )
+import           Data.List                      ( intercalate )
+import qualified Text.Megaparsec               as P
 
-import DVI.Document (parseInstructions)
-import DVI.Encode (encode, EncodableInstruction)
+import           DVI.Document                   ( parseInstructions )
+import           DVI.Encode                     ( encode
+                                                , EncodableInstruction
+                                                )
 
-import HeX.BreakList
-import HeX.Box
-import HeX.Box.Draw
-import HeX.Build
-import HeX.Categorise
-import HeX.Lex (extractToken, LexState(..))
-import HeX.Config
-import HeX.Parse.Resolved (defaultCSMap, resolveToken)
-import HeX.Parse.Expanded
+import           HeX.BreakList
+import           HeX.Box
+import           HeX.Box.Draw
+import           HeX.Build
+import           HeX.Categorise
+import           HeX.Lex                        ( extractToken
+                                                , LexState(..)
+                                                )
+import           HeX.Config
+import           HeX.Parse.Resolved             ( defaultCSMap
+                                                , resolveToken
+                                                )
+import           HeX.Parse.Expanded
 
 -- Cat
 
