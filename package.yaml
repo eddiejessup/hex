@@ -1,0 +1,44 @@
+name:                hex
+version:             0.1.0.0
+github:              "eddiejessup/hex"
+license:             BSD3
+author:              "Elliot Marsden"
+maintainer:          "elliot.marsden@gmail.com"
+copyright:           "Copyright (c) 2017 Elliot Marsden"
+
+extra-source-files:
+- README.md
+
+description:         Please see the README on GitHub at <https://github.com/eddiejessup/hex#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- containers
+- bytestring
+- binary
+- split
+- filepath
+- megaparsec
+- MissingH
+- directory
+- path
+- mtl
+- unordered-containers
+- hashable
+- safe
+- transformers
+- extra
+
+library:
+  source-dirs: src
+
+executables:
+  hex:
+    main:                HeX.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - hex

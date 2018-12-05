@@ -3,19 +3,9 @@ resolver: lts-12.9
 packages:
 - .
 
-extra-deps:
-- git: git@github.com:eddiejessup/hsdev.git
-  commit: 9b53972
-- haskell-names-0.9.2
-- hformat-0.3.3.0
-- simple-log-0.9.6
-- text-region-0.3.1.0
+extra-deps: []
 
 extra-package-dbs: []
 
 ghc-options:
   "$everything": -O0 -j4 -Wall
-
-flags:
-  hsdev:
-    docs: false
