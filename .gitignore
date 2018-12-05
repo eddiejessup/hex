@@ -6,3 +6,4 @@
 *.log
 *.tfm
 support/
+hex.cabal
