@@ -31,42 +31,42 @@ data CharSource
 data AllModesCommand
   = Assign Assignment
   | Relax
-  -- | LeftBrace
-  -- | RightBrace
-  -- | BeginGroup
-  -- | EndGroup
-  -- | ShowToken Token
-  -- | ShowBox Int
-  -- | ShowLists
-  -- | ShowInternalQuantity InternalQuantity
-  -- | ShipOut Box
+  -- \| LeftBrace
+  -- \| RightBrace
+  -- \| BeginGroup
+  -- \| EndGroup
+  -- \| ShowToken Token
+  -- \| ShowBox Int
+  -- \| ShowLists
+  -- \| ShowInternalQuantity InternalQuantity
+  -- \| ShipOut Box
   | IgnoreSpaces
-  -- | SetAfterAssignmentToken Token
-  -- | AddToAfterGroupTokens Tokens
-  -- | Message MessageStream GeneralText
-  -- | OpenInput { streamNr :: Int, fileName :: String }
-  -- | CloseInput { streamNr :: Int }
-  -- | OpenOutput { streamNr :: Int, fileName :: String, immediate :: Bool }
-  -- | CloseOutput { streamNr :: Int, immediate :: Bool }
-  -- | Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
-  -- | AddWhatsit GeneralText
+  -- \| SetAfterAssignmentToken Token
+  -- \| AddToAfterGroupTokens Tokens
+  -- \| Message MessageStream GeneralText
+  -- \| OpenInput { streamNr :: Int, fileName :: String }
+  -- \| CloseInput { streamNr :: Int }
+  -- \| OpenOutput { streamNr :: Int, fileName :: String, immediate :: Bool }
+  -- \| CloseOutput { streamNr :: Int, immediate :: Bool }
+  -- \| Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
+  -- \| AddWhatsit GeneralText
   | AddPenalty Number
   | AddKern Length
-  -- | RemoveLastPenalty
-  -- | RemoveLastKern
-  -- | RemoveLastGlue
-  -- | AddMark GeneralText
+  -- \| RemoveLastPenalty
+  -- \| RemoveLastKern
+  -- \| RemoveLastGlue
+  -- \| AddMark GeneralText
   -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
   -- -- then can 'migrate' out.
-  -- | AddInsertion {nr :: Int, contents :: VModeMaterial}
+  -- \| AddInsertion {nr :: Int, contents :: VModeMaterial}
   | AddGlue Glue
-  -- | AddLeaders {type :: LeadersType, template :: BoxOrRule, glue :: Glue}
+  -- \| AddLeaders {type :: LeadersType, template :: BoxOrRule, glue :: Glue}
   | AddSpace
-  -- | AddBox Box
-  -- | AddShiftedBox Distance Box
-  -- | AddFetchedBox { register :: Int, unwrap, pop :: Bool } -- \box, \copy, \un{v,h}{box,copy}
+  -- \| AddBox Box
+  -- \| AddShiftedBox Distance Box
+  -- \| AddFetchedBox { register :: Int, unwrap, pop :: Bool } -- \box, \copy, \un{v,h}{box,copy}
   | AddRule { width, height, depth :: Maybe Length }
-  -- | AddAlignedMaterial DesiredLength AlignmentMaterial
+  -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
   | StartParagraph { indent :: Bool }
   | EndParagraph
   deriving (Show)
@@ -75,20 +75,20 @@ data VModeCommand
   = VAllModesCommand AllModesCommand
   | EnterHMode
   | End
-  -- | Dump
+  -- \| Dump
   deriving (Show)
 
 data HModeCommand
   = HAllModesCommand AllModesCommand
   | LeaveHMode
-  -- | EnterMathMode
-  -- | AddAdjustment VModeMaterial
-  -- | AddControlSpace
+  -- \| EnterMathMode
+  -- \| AddAdjustment VModeMaterial
+  -- \| AddControlSpace
   | AddCharacter { method :: CharSource
                  , char :: CharCode }
-  -- | AddAccentedCharacter { accentCode :: Int, targetCode :: Maybe Int, assignments :: [Assignment]}
-  -- | AddItalicCorrection
-  -- | AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
+  -- \| AddAccentedCharacter { accentCode :: Int, targetCode :: Maybe Int, assignments :: [Assignment]}
+  -- \| AddItalicCorrection
+  -- \| AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
   deriving (Show)
 
 -- Entry-points.

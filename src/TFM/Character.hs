@@ -4,12 +4,12 @@ module TFM.Character where
 
 -- The character info array contains, for each character, six fields packed
 -- into four bytes:
--- * 8 bits: width_index
--- * 4 bits: height_index * 16
--- * 4 bits: depth_index
--- * 6 bits: italic_index * 4
--- * 2 bits: tag
--- * 8 bits: remainder
+-- > 8 bits: width_index
+-- > 4 bits: height_index > 16
+-- > 4 bits: depth_index
+-- > 6 bits: italic_index > 4
+-- > 2 bits: tag
+-- > 8 bits: remainder
 -- The width of a character is 'width[width_index]', in design-size units. The
 -- TFM format provides up to 16 heights, 16 depths, and 64 italic corrections.
 -- Incidentally, 'width[0] = height[0] = depth[0] = italic[0] = 0' should
@@ -18,16 +18,15 @@ module TFM.Character where
 -- character is valid if and only if it lies between 'lowest_char_code' and
 -- 'upper_char_code' and has a nonzero width index.
 -- The tag field has four values indicating how to interpret the remainder:
--- * 0: 'no_tag': a vanilla character; the remainder is unused
--- * 1, 'lig_tag': the character has a ligature/kerning program starting at
+-- > 0: 'no_tag': a vanilla character; the remainder is unused
+-- > 1, 'lig_tag': the character has a ligature/kerning program starting at
 --   'lig_kern[remainder]'
--- * 2, 'list_tag': this character is part of a chain of characters of
+-- > 2, 'list_tag': this character is part of a chain of characters of
 --   ascending sizes, and not the largest in the chain. The remainder field
 --   gives the character code of the next larger character.
--- * 3, 'ext_tag': this character code represents an extensible character, that
+-- > 3, 'ext_tag': this character code represents an extensible character, that
 --   is, a character that is built from smaller pieces so that it can be made
 --   arbitrarily large. The pieces are specified in 'exten[remainder]'.
--- """
 import           Data.Bits
 import           Data.ByteString
 import           Data.HashMap.Lazy

@@ -11,9 +11,9 @@ hunK = 100000
 
 -- Functions related to units used in the TeX world.
 -- A scaled point is defined as a fraction:
--- * num = 2.54 * 1e7 = 25400000
--- * den = 7227 * 2^16 = 473628672
--- * 1 scaled point = num / den = 5.4 nm
+-- > num = 2.54 * 1e7 = 25400000
+-- > den = 7227 * 2^16 = 473628672
+-- > 1 scaled point = num / den = 5.4 nm
 -- The DVI format's base unit is 100 nm.
 -- Basic facts.
 -- 1 pica is 12 points.

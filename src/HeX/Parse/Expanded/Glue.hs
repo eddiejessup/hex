@@ -16,7 +16,7 @@ data Glue =
   ExplicitGlue Length
                (Maybe Flex)
                (Maybe Flex)
-  -- | InternalGlue Bool InternalGlue
+  -- \| InternalGlue Bool InternalGlue
   deriving (Show)
 
 data Flex

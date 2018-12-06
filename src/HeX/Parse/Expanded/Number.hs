@@ -23,7 +23,7 @@ data Number =
 
 data UnsignedNumber =
   NormalIntegerAsUNumber NormalInteger
-  -- | CoercedInteger CoercedInteger
+  -- \| CoercedInteger CoercedInteger
   deriving (Show)
 
 -- Think: 'un-coerced integer'.
@@ -32,7 +32,7 @@ data NormalInteger
       =
   IntegerConstant Integer
   deriving (Show)-- = InternalLengthAsInt InternalLength
-  -- | InternalGlueAsInt InternalGlue
+  -- \| InternalGlueAsInt InternalGlue
 
 -- data CoercedInteger
 -- data InternalInteger = TODO

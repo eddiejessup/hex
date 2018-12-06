@@ -18,7 +18,7 @@ data Length =
 
 data UnsignedLength =
   NormalLengthAsULength NormalLength
-  -- | CoercedLength CoercedLength
+  -- \| CoercedLength CoercedLength
   deriving (Show)
 
 -- Think: 'un-coerced length'.
@@ -48,9 +48,9 @@ data Unit
 data InternalUnit
   = Em
   | Ex
-  -- | InternalIntegerUnit InternalInteger
-  -- | InternalLengthUnit InternalLength
-  -- | InternalGlueUnit InternalGlue
+  -- \| InternalIntegerUnit InternalInteger
+  -- \| InternalLengthUnit InternalLength
+  -- \| InternalGlueUnit InternalGlue
   deriving (Show)
 
 -- data CoercedLength

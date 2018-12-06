@@ -32,26 +32,26 @@ data AssignmentBody
   = DefineMacro { name :: Lex.ControlSequenceLike
                 , contents :: R.MacroContents
                 , long, outer :: Bool }
-  -- | ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
-  -- | SetVariable VariableAssignment
-  -- | ModifyVariable VariableModificatxion
-  -- | AssignCode { codeType :: CodeType, codeIndex, value :: Int }
-  -- | Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
-  -- | FutureLet { name :: ControlSequenceLike, token1, token2 :: Token}
+  -- \| ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
+  -- \| SetVariable VariableAssignment
+  -- \| ModifyVariable VariableModificatxion
+  -- \| AssignCode { codeType :: CodeType, codeIndex, value :: Int }
+  -- \| Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
+  -- \| FutureLet { name :: ControlSequenceLike, token1, token2 :: Token}
   | SelectFont Int
-  -- | SetFamilyMember {member :: FamilyMember, font :: Font}
-  -- | SetParShape
-  -- | Read
-  -- | DefineBox
+  -- \| SetFamilyMember {member :: FamilyMember, font :: Font}
+  -- \| SetParShape
+  -- \| Read
+  -- \| DefineBox
   -- TEMP: Dummy label constructor until properly implemented.
   | DefineFont Lex.ControlSequenceLike
                (Path Rel File)
   -- -- Global assignments.
-  -- | SetFontAttribute
-  -- | SetHyphenation
-  -- | SetBoxSize
-  -- | SetInteractionMode
-  -- | SetSpecialVariable
+  -- \| SetFontAttribute
+  -- \| SetHyphenation
+  -- \| SetBoxSize
+  -- \| SetInteractionMode
+  -- \| SetSpecialVariable
   deriving (Show)
 
 data Assignment = Assignment
