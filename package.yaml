@@ -40,5 +40,6 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -optP-Wno-nonportable-include-path
     dependencies:
     - hex
