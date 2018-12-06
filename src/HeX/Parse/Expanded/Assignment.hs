@@ -11,12 +11,9 @@ import           Path                           ( File
 import qualified Text.Megaparsec               as P
 
 import qualified HeX.Lex                       as Lex
-
 import           HeX.Parse.Helpers
-
-import           HeX.Parse.Lexed.Inhibited
+import qualified HeX.Parse.Lexed.Inhibited     as Inh
 import qualified HeX.Parse.Resolved.Token      as R
-
 import           HeX.Parse.Expanded.Common
 import           HeX.Parse.Expanded.Stream
 
@@ -78,7 +75,7 @@ tokenForFont = satisfyThen tokToCom
 macroToFont :: AssignmentParser
 macroToFont = do
   skipSatisfiedEquals R.MacroToFont
-  cs <- parseInhibited parseCSName
+  cs <- parseInhibited Inh.parseCSName
   skipOptionalEquals
   fontPath <- parseFileName
   pure $ Assignment {body = DefineFont cs fontPath, global = False}
@@ -117,45 +114,22 @@ skipOptionalEquals = do
   skipOptionalSpaces
   skipOneOptionalSatisfied isEquals
 
-data Digit
-  = One
-  | Two
-  | Three
-  | Four
-  | Five
-  | Six
-  | Seven
-  | Eight
-  | Nine
-  deriving (Enum)
-
-digitToChar :: Digit -> Char
-digitToChar One = '1'
-digitToChar Two = '2'
-digitToChar Three = '3'
-digitToChar Four = '4'
-digitToChar Five = '5'
-digitToChar Six = '6'
-digitToChar Seven = '7'
-digitToChar Eight = '8'
-digitToChar Nine = '9'
+-- ParseMacro.
 
 defineMacro :: AssignmentParser
 defineMacro = do
   prefixes <- P.many $ satisfyThen tokToPrefix
   (defGlobal, defExpand) <- satisfyThen tokToDef
-  cs <- parseInhibited parseCSName
-  preParamToks <- parsePreParamTokens
-  paramToks <- parseParameters
-  skipSatisfied isExplicitLeftBrace
+  cs <- parseInhibited Inh.parseCSName
+  (preParamToks, paramDelims) <- parseInhibited Inh.parseParamText
   when defExpand $ error "expanded-def not implemented"
-  replaceToks <- parseInhibited parseBalancedText
+  replaceToks <- parseInhibited Inh.parseBalancedText
   pure $
     Assignment
     { body =
         DefineMacro
         { name = cs
-        , contents = R.MacroContents preParamToks paramToks replaceToks
+        , contents = R.MacroContents preParamToks (R.MacroParameter <$> paramDelims) replaceToks
         , long = Long `elem` prefixes
         , outer = Outer `elem` prefixes
         }
@@ -170,14 +144,3 @@ defineMacro = do
     tokToDef R.DefineMacro {global = _global, expand = _expand} =
       Just (_global, _expand)
     tokToDef _ = Nothing
-
-    parsePreParamTokens = pure []
-    -- TODO: Finish
-    -- TODO: Parse without expansion.
-    parseParameters = P.option [] (parseParameter One)
-
-parseParameter :: Digit -> SimpExpandParser [a]
-parseParameter dig = do
-  skipSatisfied $ isCategory Lex.Parameter
-  skipSatisfied (\t@(R.CharCat Lex.CharCat {char=c}) -> isLetterOrOther t && c == digitToChar dig)
-  pure []

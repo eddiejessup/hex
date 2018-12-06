@@ -32,6 +32,9 @@ satisfy f = P.token testTok Nothing
         then Right x
         else Left (Just (P.Tokens (x :| [])), Set.empty)
 
+manySatisfied :: P.Stream s => MatchToken s -> SimpParser s [P.Token s]
+manySatisfied testTok = P.many $ satisfy testTok
+
 skipSatisfied :: P.Stream s => MatchToken s -> NullSimpParser s
 skipSatisfied f = P.token testTok Nothing
   where
@@ -59,11 +62,3 @@ skipOneOptionalSatisfied = skipOptional . skipSatisfied
 
 skipManySatisfied :: P.Stream s => MatchToken s -> NullSimpParser s
 skipManySatisfied = P.skipMany . skipSatisfied
--- setExpansion :: Bool -> Stream -> Stream
--- setExpansion e s = s{expand=e}
--- setExpansionState :: Bool -> ParseState -> ParseState
--- setExpansionState e st@P.State{stateInput=stream} = st{P.stateInput=setExpansion e stream}
--- disableExpansion :: NullParser
--- disableExpansion = P.updateParserState $ setExpansionState False
--- enableExpansion :: NullParser
--- enableExpansion = P.updateParserState $ setExpansionState True

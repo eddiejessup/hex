@@ -49,7 +49,7 @@ parseInhibited p = do
   P.State { stateInput = ExpandedStream (R.ResolvedStream lStream csMap) } <-
     P.getParserState
   case easyRunParser p lStream of
-    (_                         , Left _ ) -> error "ohnoes"
+    (_                         , Left s ) -> error $ "ohnoes: " ++ show s
     (P.State lStream' pos prc w, Right v) -> do
       P.setParserState
         (P.State (ExpandedStream $ R.ResolvedStream lStream' csMap) pos prc w)

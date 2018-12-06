@@ -54,9 +54,12 @@ data BoxRegisterAttribute
   | IsVoid
   deriving (Show, Eq)
 
+newtype MacroParameter = MacroParameter [Lex.Token]
+  deriving (Show, Eq)
+
 data MacroContents
   = MacroContents { preParamTokens :: [Lex.Token]
-                  , paramDelimTokens :: [[Lex.Token]]
+                  , parameters :: [MacroParameter]
                   , replacementTokens :: BalancedText }
   deriving (Show, Eq)
 
