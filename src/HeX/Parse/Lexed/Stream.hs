@@ -64,6 +64,9 @@ instance P.Stream LexStream where
   take1_ stream@(LexStream _ (lt:lts) _ _) =
     pure (lt, stream {lexTokens = lts})
 
+  takeN_ = undefined
+  takeWhile_ = undefined
+
 type SimpLexParser = SimpParser LexStream
 
 newLexStream :: [Cat.CharCode] -> LexStream

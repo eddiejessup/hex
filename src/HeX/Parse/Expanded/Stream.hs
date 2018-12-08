@@ -162,6 +162,9 @@ instance P.Stream ExpandedStream where
               -- '\relax'.
               (P.take1_ . insertLexTokenE es'' . Lex.ControlSequenceToken . Lex.ControlSequence) charToks
 
+  takeN_ = undefined
+  takeWhile_ = undefined
+
 insertLexTokenE :: ExpandedStream -> Lex.Token -> ExpandedStream
 insertLexTokenE (ExpandedStream rs) t = ExpandedStream (insertLexTokenR rs t)
 

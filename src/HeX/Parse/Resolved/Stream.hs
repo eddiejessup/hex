@@ -66,6 +66,9 @@ instance P.Stream ResolvedStream where
     (lt, s') <- P.take1_ s
     pure (resolveToken _csMap lt, ResolvedStream s' _csMap)
 
+  takeN_ = undefined
+  takeWhile_ = undefined
+
 type SimpResolveParser = P.Parsec () ResolvedStream
 
 insertLexTokenR :: ResolvedStream -> Lex.Token -> ResolvedStream
