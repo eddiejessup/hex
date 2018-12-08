@@ -118,24 +118,31 @@ skipOptionalEquals = do
 
 defineMacro :: AssignmentParser
 defineMacro = do
+  -- Macro prefixes.
   prefixes <- P.many $ satisfyThen tokToPrefix
+  -- \def-like thing.
   (defGlobal, defExpand) <- satisfyThen tokToDef
+  -- Macro's name.
   cs <- parseInhibited Inh.parseCSName
+  -- Parameter text.
   (preParamToks, paramDelims) <- parseInhibited Inh.parseParamText
+  -- TODO: Support expanded-def.
   when defExpand $ error "expanded-def not implemented"
-  replaceToks <- parseInhibited Inh.parseBalancedText
+  -- Replacement text.
+  replaceToks <- parseInhibited Inh.parseMacroText
   pure $
     Assignment
     { body =
         DefineMacro
         { name = cs
-        , contents = R.MacroContents preParamToks (R.MacroParameter <$> paramDelims) replaceToks
+        , contents = R.MacroContents preParamToks paramDelims replaceToks
         , long = Long `elem` prefixes
         , outer = Outer `elem` prefixes
         }
     , global = defGlobal || Global `elem` prefixes
     }
   where
+    -- TODO: Can avoid this manual mapping by putting it in the token.
     tokToPrefix R.Global = Just Global
     tokToPrefix R.Outer = Just Outer
     tokToPrefix R.Long = Just Long

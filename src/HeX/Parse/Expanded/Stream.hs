@@ -7,22 +7,24 @@ import           Data.Char                      ( toLower
                                                 , toUpper
                                                 )
 import           Data.Proxy
+import qualified Data.Map.Strict               as Map
+import           Data.Map.Strict                ( (!?) )
 import qualified Text.Megaparsec               as P
 
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
-
 import           HeX.Parse.Helpers
 import           HeX.Parse.Lexed
-
+import qualified HeX.Parse.Lexed.Inhibited     as Inh
 import           HeX.Parse.Resolved             ( PrimitiveToken )
 import           HeX.Parse.Resolved            as R
-
 import           HeX.Parse.Expanded.Common
 
 newtype ExpandedStream =
   ExpandedStream R.ResolvedStream
   deriving (Show)
+
+type SimpExpandParser = SimpParser ExpandedStream
 
 newExpandStream :: [CharCode] -> R.CSMap -> ExpandedStream
 newExpandStream cs = ExpandedStream . newResolvedStream cs
@@ -55,7 +57,7 @@ parseInhibited p = do
         (P.State (ExpandedStream $ R.ResolvedStream lStream' csMap) pos prc w)
       pure v
 
-parseGeneralText :: SimpParser ExpandedStream BalancedText
+parseGeneralText :: SimpExpandParser BalancedText
 parseGeneralText = do
   skipManySatisfied isFillerItem
   -- TODO: Maybe other things can act as left braces.
@@ -65,9 +67,44 @@ parseGeneralText = do
   isFillerItem R.Relax = True
   isFillerItem t       = isSpace t
 
-parseCSNameArgs :: SimpParser ExpandedStream [CharCode]
+parseCSNameArgs :: SimpExpandParser [CharCode]
 parseCSNameArgs =
   parseManyChars <* skipSatisfiedEquals (R.SyntaxCommandArg R.EndCSName)
+
+parseMacroArgs :: MacroContents -> SimpLexParser (Map.Map Digit R.MacroArgument)
+parseMacroArgs MacroContents {preParamTokens=pre, parameters=params} = do
+  skipSatisfiedChunk pre
+  parseArgs params
+  where
+    parseArgs :: Map.Map Digit [Lex.Token] -> SimpLexParser (Map.Map Digit R.MacroArgument)
+    parseArgs ps = case Map.minViewWithKey ps of
+      -- If there are no parameters, expect no arguments.
+      Nothing -> pure Map.empty
+      Just ((dig, p), rest) -> case p of
+        -- If the parameter is undelimited, the argument is the next non-blank
+        -- token.
+        -- TODO: Unless it's a '{', in which case [...]
+        [] -> do
+          -- Skip blank tokens (assumed to mean spaces).
+          skipManySatisfied (Inh.isCategory Lex.Space)
+          t <- getToken
+          -- Use that token as the argument, then parse the remaining arguments.
+          (Map.insert dig (R.MacroArgument [t])) <$> (parseArgs rest)
+        -- TODO: Delimited parameters.
+        _ -> undefined
+
+renderMacroText :: [MacroTextToken] -> Map.Map Digit R.MacroArgument -> [Lex.Token]
+renderMacroText [] _ = []
+renderMacroText (t:ts) args = render t
+  where
+    render (MacroTextLexToken x) =
+      x:rest
+    render (MacroTextParamToken dig) =
+      case args !? dig of
+        Nothing -> error "No such parameter"
+        Just (MacroArgument arg) -> arg ++ rest
+
+    rest = renderMacroText ts args
 
 instance P.Stream ExpandedStream where
   type Token ExpandedStream = PrimitiveToken
@@ -102,29 +139,28 @@ instance P.Stream ExpandedStream where
       -- If it's a primitive token, provide that.
       PrimitiveToken pt -> pure (pt, es')
       -- If it indicates the start of a syntax command.
-      SyntaxCommandHead (ChangeCaseToken direction)
-        -- Parse the remainder of the syntax command.
-       ->
-        case easyRunParser parseGeneralText es' of
-          (_, Left parseError) -> error $ "Error while parsing changecase command: " ++ show parseError
-          (P.State es'' _ _ _, Right (BalancedText caseToks))
-            -- Now perform take1_ on the stream after parsing, with the new
-            -- tokens inserted.
-           ->
-            (P.take1_ . insertLexTokensE es'') $
-            changeCase direction <$> caseToks
-      SyntaxCommandHead (MacroToken (MacroContents [] [] (BalancedText macroToks))) ->
-        (P.take1_ . insertLexTokensE es') macroToks
-      SyntaxCommandHead CSName ->
-        case easyRunParser parseCSNameArgs es' of
-          (_, Left parseError) -> error $ "Error while parsing csname arguments: " ++ show parseError
-          (P.State es'' _ _ _, Right charToks)
-            -- TODO: if control sequence doesn't exist, define one that holds
-            -- '\relax'.
-
-           -> (P.take1_ . insertLexTokenE es'' . Lex.ControlSequenceToken . Lex.ControlSequence) charToks
-
-type SimpExpandParser = P.Parsec () ExpandedStream
+      -- Parse the remainder of the syntax command.
+      SyntaxCommandHead c -> case c of
+        (ChangeCaseToken direction) ->
+          case easyRunParser parseGeneralText es' of
+            (_, Left parseError) -> error $ "Error while parsing changecase command: " ++ show parseError
+            (P.State es'' _ _ _, Right (BalancedText caseToks)) ->
+              -- Now perform take1_ on the stream after parsing, with the new
+              -- tokens inserted.
+              (P.take1_ . insertLexTokensE es'') $ changeCase direction <$> caseToks
+        (MacroToken m@MacroContents {replacementTokens=(MacroText replaceToks)}) ->
+            case easyRunParser (parseInhibited $ parseMacroArgs m) es' of
+              (_, Left parseError) -> error $ "Error while parsing macro arguments: " ++ show parseError
+              (P.State es'' _ _ _, Right args) ->
+                let renderedToks = renderMacroText replaceToks args
+                in (P.take1_ . insertLexTokensE es'') renderedToks
+        CSName ->
+          case easyRunParser parseCSNameArgs es' of
+            (_, Left parseError) -> error $ "Error while parsing csname arguments: " ++ show parseError
+            (P.State es'' _ _ _, Right charToks) ->
+              -- TODO: if control sequence doesn't exist, define one that holds
+              -- '\relax'.
+              (P.take1_ . insertLexTokenE es'' . Lex.ControlSequenceToken . Lex.ControlSequence) charToks
 
 insertLexTokenE :: ExpandedStream -> Lex.Token -> ExpandedStream
 insertLexTokenE (ExpandedStream rs) t = ExpandedStream (insertLexTokenR rs t)

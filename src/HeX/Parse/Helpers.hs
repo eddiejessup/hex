@@ -32,8 +32,21 @@ satisfy f = P.token testTok Nothing
         then Right x
         else Left (Just (P.Tokens (x :| [])), Set.empty)
 
+getToken :: P.Stream s => SimpParser s (P.Token s)
+getToken = P.token Right Nothing
+
 manySatisfied :: P.Stream s => MatchToken s -> SimpParser s [P.Token s]
 manySatisfied testTok = P.many $ satisfy testTok
+
+satisfyThen :: P.Stream s => (P.Token s -> Maybe a) -> SimpParser s a
+satisfyThen f = P.token testTok Nothing
+  where
+    testTok x =
+      case f x of
+        Just y -> Right y
+        Nothing -> Left (Just (P.Tokens (x :| [])), Set.empty)
+
+-- Skipping.
 
 skipSatisfied :: P.Stream s => MatchToken s -> NullSimpParser s
 skipSatisfied f = P.token testTok Nothing
@@ -46,14 +59,6 @@ skipSatisfied f = P.token testTok Nothing
 skipSatisfiedEquals :: P.Stream s => P.Token s -> NullSimpParser s
 skipSatisfiedEquals t = skipSatisfied (== t)
 
-satisfyThen :: P.Stream s => (P.Token s -> Maybe a) -> SimpParser s a
-satisfyThen f = P.token testTok Nothing
-  where
-    testTok x =
-      case f x of
-        Just y -> Right y
-        Nothing -> Left (Just (P.Tokens (x :| [])), Set.empty)
-
 skipOptional :: P.Stream s => SimpParser s a -> NullSimpParser s
 skipOptional p = P.optional p $> ()
 
@@ -62,3 +67,9 @@ skipOneOptionalSatisfied = skipOptional . skipSatisfied
 
 skipManySatisfied :: P.Stream s => MatchToken s -> NullSimpParser s
 skipManySatisfied = P.skipMany . skipSatisfied
+
+skipSatisfiedChunk :: P.Stream s => [P.Token s] -> NullSimpParser s
+skipSatisfiedChunk [] = pure ()
+skipSatisfiedChunk (x:xs) = do
+  skipSatisfiedEquals x
+  skipSatisfiedChunk xs

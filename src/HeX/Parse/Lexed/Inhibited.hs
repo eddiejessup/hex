@@ -1,9 +1,12 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
 
 module HeX.Parse.Lexed.Inhibited where
 
 import qualified Data.Char                     as C
+import qualified Data.Map.Strict               as Map
 import           Text.Megaparsec                ( (<|>) )
+import           Data.Functor                   ( ($>) )
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
@@ -21,30 +24,105 @@ import           HeX.Parse.Lexed.Stream
 -- 9.  Just after a <$,3> token that begins math mode, to see if another $3 follows
 -- 10.  Just after a <‘,12> token that begins an alphabetic constant
 
-newtype BalancedText =
-  BalancedText [Lex.Token]
-  deriving (Show, Eq)
+data Digit
+  = One
+  | Two
+  | Three
+  | Four
+  | Five
+  | Six
+  | Seven
+  | Eight
+  | Nine
+  deriving (Eq, Ord, Bounded, Enum, Show)
+
+digitToChar :: Digit -> Char
+digitToChar One   = '1'
+digitToChar Two   = '2'
+digitToChar Three = '3'
+digitToChar Four  = '4'
+digitToChar Five  = '5'
+digitToChar Six   = '6'
+digitToChar Seven = '7'
+digitToChar Eight = '8'
+digitToChar Nine  = '9'
+
+charToDigit :: Char -> Maybe Digit
+charToDigit '1' = Just One
+charToDigit '2' = Just Two
+charToDigit '3' = Just Three
+charToDigit '4' = Just Four
+charToDigit '5' = Just Five
+charToDigit '6' = Just Six
+charToDigit '7' = Just Seven
+charToDigit '8' = Just Eight
+charToDigit '9' = Just Nine
+charToDigit _   = Nothing
 
 isCategory :: Lex.LexCatCode -> Lex.Token -> Bool
 isCategory a (Lex.CharCatToken Lex.CharCat{cat = b}) = a == b
 isCategory _ _ = False
 
+isLetterOrOther :: Lex.LexCatCode -> Bool
+isLetterOrOther Lex.Letter = True
+isLetterOrOther Lex.Other = True
+isLetterOrOther _ = False
+
+parseNestedBraces :: Int -> SimpLexParser (a, Ordering) -> SimpLexParser [a]
+parseNestedBraces 0 _ = pure []
+parseNestedBraces n parseNext = do
+  (x, change) <- parseNext
+  let nextN = case change of
+        LT -> pred n
+        GT -> succ n
+        EQ -> n
+  case nextN of
+    -- This early catch, rather than recursing, avoids returning the final '}'.
+    0 -> pure []
+    _ -> (x :) <$> parseNestedBraces nextN parseNext
+
+-- Part of case 7, \uppercase's body and such.
+
+newtype BalancedText = BalancedText [Lex.Token]
+  deriving (Show, Eq)
+
+tokToChange :: Lex.Token -> Ordering
+tokToChange (Lex.CharCatToken Lex.CharCat {cat = Lex.BeginGroup}) = GT
+tokToChange (Lex.CharCatToken Lex.CharCat {cat = Lex.EndGroup}) = LT
+tokToChange _ = EQ
+
 parseBalancedText :: SimpLexParser BalancedText
-parseBalancedText = BalancedText <$> parseNestedBraces 1
+parseBalancedText = BalancedText <$> parseNestedBraces 1 parseNext
   where
-    parseNestedBraces :: Int -> SimpLexParser [Lex.Token]
-    parseNestedBraces 0 = pure []
-    parseNestedBraces n = do
-      (x, nextN) <- satisfyThen parseNext
-      case nextN of
-        0 -> pure []
-        _ -> (x :) <$> parseNestedBraces nextN
-      where
-        parseNext x@(Lex.CharCatToken Lex.CharCat {cat = Lex.BeginGroup}) =
-          Just (x, succ n)
-        parseNext x@(Lex.CharCatToken Lex.CharCat {cat = Lex.EndGroup}) =
-          Just (x, pred n)
-        parseNext x = Just (x, n)
+    parseNext = getToken >>= (\x -> pure (x, tokToChange x))
+
+-- Part of case 7, macro replacement text.
+
+type MacroParameters = Map.Map Digit [Lex.Token]
+
+data MacroTextToken
+  = MacroTextLexToken Lex.Token
+  | MacroTextParamToken Digit
+  deriving (Eq, Show)
+
+newtype MacroText = MacroText [MacroTextToken]
+  deriving (Show, Eq)
+
+parseMacroText :: SimpLexParser MacroText
+parseMacroText = MacroText <$> parseNestedBraces 1 parseNext
+  where
+    parseNext :: SimpLexParser (MacroTextToken, Ordering)
+    parseNext = getToken >>= \case
+      (Lex.CharCatToken Lex.CharCat {cat = Lex.Parameter}) -> do
+        paramDig <- satisfyThen handleParamNr
+        pure (MacroTextParamToken paramDig, EQ)
+      t ->
+        pure (MacroTextLexToken t, tokToChange t)
+
+    handleParamNr (Lex.CharCatToken Lex.CharCat {char=chr, cat=cat})
+      | isLetterOrOther cat = charToDigit chr
+      | otherwise = Nothing
+    handleParamNr _ = Nothing
 
 -- Case 10.
 parseCharLike :: SimpLexParser Integer
@@ -69,36 +147,13 @@ parseCSName = satisfyThen tokToCSLike
 parseParamDelims :: SimpLexParser [Lex.Token]
 parseParamDelims = manySatisfied (not . endsDelim)
   where
-    endsDelim t = (isCategory Lex.Parameter t) || (isCategory Lex.BeginGroup t)
+    endsDelim t = isCategory Lex.Parameter t || isCategory Lex.BeginGroup t
 
-data Digit
-  = One
-  | Two
-  | Three
-  | Four
-  | Five
-  | Six
-  | Seven
-  | Eight
-  | Nine
-  deriving (Eq, Ord, Bounded, Enum)
-
-digitToChar :: Digit -> Char
-digitToChar One   = '1'
-digitToChar Two   = '2'
-digitToChar Three = '3'
-digitToChar Four  = '4'
-digitToChar Five  = '5'
-digitToChar Six   = '6'
-digitToChar Seven = '7'
-digitToChar Eight = '8'
-digitToChar Nine  = '9'
-
-maybeParseParametersFrom :: Digit -> SimpLexParser [[Lex.Token]]
+maybeParseParametersFrom :: Digit -> SimpLexParser MacroParameters
 maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
   where
     -- Parse the left-brace that indicates the end of parameters.
-    parseEndOfParams = skipSatisfied (isCategory Lex.BeginGroup) *> pure []
+    parseEndOfParams = skipSatisfied (isCategory Lex.BeginGroup) $> Map.empty
 
     -- Parse a present parameter, then the remaining parameters, if present.
     parseParametersFrom = do
@@ -108,7 +163,8 @@ maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
       -- Parse delimiter tokens after the parameter number, if present.
       thisParam <- parseParamDelims
       -- Return this parameter, plus any remaining parameters.
-      (thisParam:) <$> case dig of
+
+      Map.insert dig thisParam <$> case dig of
         -- If we are parsing parameter nine, there can't be any more, so we
         -- only expect to end the parameters.
         Nine -> parseEndOfParams
@@ -119,13 +175,9 @@ maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
     matchesDigit (Lex.CharCatToken Lex.CharCat {char=chr, cat=cat})
       | isLetterOrOther cat = chr == digitToChar dig
       | otherwise = False
-      where
-        isLetterOrOther Lex.Letter = True
-        isLetterOrOther Lex.Other = True
-        isLetterOrOther _ = False
     matchesDigit _ = False
 
-parseParamText :: SimpLexParser ([Lex.Token], [[Lex.Token]])
+parseParamText :: SimpLexParser ([Lex.Token], MacroParameters)
 parseParamText = do
   preParamToks <- parseParamDelims
   parameters <- maybeParseParametersFrom minBound

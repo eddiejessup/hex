@@ -1,6 +1,7 @@
 module HeX.Parse.Resolved.Resolve where
 
 import qualified Data.HashMap.Strict           as HMap
+import qualified Data.Map.Strict               as Map
 
 import qualified HeX.Lex                       as Lex
 
@@ -85,10 +86,10 @@ defaultCSMap =
     , ( Lex.ControlSequenceProper (Lex.ControlSequence "amacro")
       , SyntaxCommandHead $
         MacroToken $
-        MacroContents [] [] $
-        BalancedText
-          [ Lex.ControlSequenceToken $ Lex.ControlSequence "uppercase"
-          , Lex.CharCatToken $ Lex.CharCat '{' Lex.BeginGroup
-          , Lex.CharCatToken $ Lex.CharCat 'c' Lex.Letter
+        MacroContents [] Map.empty $
+        MacroText
+          [ MacroTextLexToken $ Lex.ControlSequenceToken $ Lex.ControlSequence "uppercase"
+          , MacroTextLexToken $ Lex.CharCatToken $ Lex.CharCat '{' Lex.BeginGroup
+          , MacroTextLexToken $ Lex.CharCatToken $ Lex.CharCat 'c' Lex.Letter
           ])
     ]

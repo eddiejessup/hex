@@ -10,6 +10,7 @@ import qualified Text.Megaparsec               as P
 
 import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
+import           HeX.Parse.Helpers
 
 type LexTokens = [Lex.Token]
 
@@ -63,7 +64,7 @@ instance P.Stream LexStream where
   take1_ stream@(LexStream _ (lt:lts) _ _) =
     pure (lt, stream {lexTokens = lts})
 
-type SimpLexParser = P.Parsec () LexStream
+type SimpLexParser = SimpParser LexStream
 
 newLexStream :: [Cat.CharCode] -> LexStream
 newLexStream cs =
