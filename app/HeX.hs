@@ -1,17 +1,13 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Main where
 
-import           HeX.Categorise
 import           Prelude                 hiding ( writeFile )
 
-import           Data.ByteString.Lazy           ( writeFile
-                                                , ByteString
-                                                )
+import           Data.ByteString.Lazy           ( writeFile )
 import           Data.Maybe
 import           System.Console.GetOpt
 import           System.Environment
-
+import           Safe                           ( lastDef )
+import           Control.Monad                  ( when )
 import           HeX.Run
 
 data Mode
@@ -26,17 +22,23 @@ data Mode
   | DVIMode
   | RawDVIMode
   | DVIWriteMode
-  deriving (Show)
+  deriving (Show, Eq)
 
 data Flag
   = Help
+  | Amble
   | Output FilePath
   | Mode Mode
-  deriving (Show)
+  deriving (Show, Eq)
+
+data Input
+  = Stdin
+  | File FilePath
 
 options :: [OptDescr Flag]
 options =
   [ Option ['h'] ["help"]   (NoArg Help)           "show usage information"
+  , Option ['a'] ["amble"]  (NoArg Amble) "prepend pre- and post-amble to input"
   , Option ['o'] ["output"] (OptArg output "FILE") "output to FILE"
   , Option ['m'] ["mode"]   (OptArg mode "MODE")   "output in mode MODE"
   ]
@@ -58,30 +60,45 @@ options =
   mode Nothing           = Mode DVIWriteMode
 
 usage :: String
-usage = usageInfo header options where header = "Usage: hex [OPTION...] file"
+usage = usageInfo header options
+  where header = "Usage: hex [OPTION...] [file]"
+
+preamble, postamble :: String
+preamble = "\\font\\thefont=cmr10 \\selectfont\n\n"
+postamble = "\n\n\\end\n"
 
 parseArgs :: [String] -> IO ([Flag], [String])
 parseArgs argStr = case getOpt Permute options argStr of
   (o, n, []  ) -> pure (o, n)
   (_, _, errs) -> ioError $ userError $ concat errs ++ usage
 
-run :: FilePath -> FilePath -> ([CharCode] -> IO ByteString) -> IO ()
-run inFName outFName fn = readFile inFName >>= fn >>= writeFile outFName
-
 main :: IO ()
-main = getArgs >>= parseArgs >>= \case
-  ([Help]             , []       ) -> putStrLn usage
-  ([]                 , [inFName]) -> run inFName "out.dvi" codesToDVIBytes
-  ([Mode CatMode     ], [inFName]) -> readFile inFName >>= runCat
-  ([Mode LexMode     ], [inFName]) -> readFile inFName >>= runLex
-  ([Mode ResolveMode ], [inFName]) -> readFile inFName >>= runResolved
-  ([Mode ExpandMode  ], [inFName]) -> readFile inFName >>= runExpand
-  ([Mode CommandMode ], [inFName]) -> readFile inFName >>= runCommand
-  ([Mode ParaListMode], [inFName]) -> readFile inFName >>= runPara
-  ([Mode ParaSetMode ], [inFName]) -> readFile inFName >>= runSetPara
-  ([Mode PageMode    ], [inFName]) -> readFile inFName >>= runPages
-  ([Mode DVIMode     ], [inFName]) -> readFile inFName >>= runDVI
-  ([Mode RawDVIMode  ], [inFName]) -> readFile inFName >>= runDVIRaw
-  ([Mode DVIWriteMode, Output outFName], [inFName]) ->
-    run inFName outFName codesToDVIBytes
-  (_, _) -> ioError $ userError usage
+main = do
+  (flags, args) <- getArgs >>= parseArgs
+
+  when (Help `elem` flags) (ioError $ userError usage)
+
+  inputRaw <- case args of
+    ["-"] -> getContents
+    [f  ] -> readFile f
+    _     -> ioError $ userError usage
+
+  let input = if Amble `elem` flags
+        then preamble ++ inputRaw ++ postamble
+        else inputRaw
+
+  let mode = lastDef DVIWriteMode [ m | (Mode m) <- flags ]
+  let dest = lastDef "out.dvi" [ f | (Output f) <- flags ]
+
+  case mode of
+    CatMode      -> runCat input
+    LexMode      -> runLex input
+    ResolveMode  -> runResolved input
+    ExpandMode   -> runExpand input
+    CommandMode  -> runCommand input
+    ParaListMode -> runPara input
+    ParaSetMode  -> runSetPara input
+    PageMode     -> runPages input
+    DVIMode      -> runDVI input
+    RawDVIMode   -> runDVIRaw input
+    DVIWriteMode -> codesToDVIBytes input >>= writeFile dest
