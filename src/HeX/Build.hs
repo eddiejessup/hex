@@ -249,75 +249,68 @@ extractParagraphLineBoxes indent stream = do
       elemLists = setParagraph getRoute hList
   pure (elemLists, stream')
 
--- current items, best cost, breakpoint for that cost.
-type CurrentPage = ([BL.BreakableVListElem], Maybe Int, Maybe Int)
+data CurrentPage = CurrentPage { items :: [BL.BreakableVListElem]
+                               , bestPointAndCost :: Maybe (Int, Int) }
 
 runPageBuilder
-  :: Monad m
-  => CurrentPage
-  -> [BL.BreakableVListElem]
-  -> ConfStateT m [B.Page]
-runPageBuilder (cur, _, _) [] = do
+  :: Monad m => CurrentPage -> [BL.BreakableVListElem] -> ConfStateT m [B.Page]
+runPageBuilder (CurrentPage cur _) [] = do
   desiredH <- gets desiredHeight
   pure [setPage desiredH $ reverse cur]
-runPageBuilder (cur, costBest, iBest) (x:xs)
+runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
   -- If the current vlist has no boxes, we discard a discardable item.
   | not $ any BL.isBox cur =
-    if BL.isDiscardable x
-      then runPageBuilder (cur, costBest, iBest) xs
-      else runPageBuilder (x : cur, costBest, iBest) xs
+    let nextXs = if BL.isDiscardable x then cur else x:cur
+    in runPageBuilder (CurrentPage nextXs _bestPointAndCost) xs
   -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
   -- the cost c of breaking at this point.
   | BL.isDiscardable x = do
     desiredH <- gets desiredHeight
-    case BL.toBreakItem (Adjacency (headMay cur, x, headMay xs))
+    case BL.toBreakItem (Adjacency (headMay cur, x, headMay xs)) of
       -- If we can't break here, just add it to the list and continue.
-          of
-      Nothing -> runPageBuilder (x : cur, costBest, iBest) xs
-      Just brk ->
-        let breakStatus = pageBreakJudgment cur brk desiredH
-        in case (breakStatus, iBest) of
-             (DoNotBreak, _) -> runPageBuilder (x : cur, costBest, iBest) xs
-          -- I don't think this condition will ever be satisfied, but if we
-          -- decide to break before any valid break-point has been considered,
-          -- just carry on.
-             (BreakPageAtBest, Nothing) ->
-               runPageBuilder (x : cur, costBest, iBest) xs
-          -- If c = ∞, we break at the best breakpoint so far.
-          -- The current vlist material following that best breakpoint is
-          -- returned to the recent contributions, to consider again.
-             (BreakPageAtBest, Just iB)
-              -- the `reverse` will put both of these into reading order.
-              ->
-               let (curNewPage, toReturn) = splitAt iB $ reverse cur
-                   newPage = setPage desiredH curNewPage
-              -- xs is also in reading order
-              -- We didn't actually split at x: x was just what made us compute
-              -- cost and notice we'd gone too far. So add it to the left-overs
-              -- to return.
-               in (newPage :) <$>
-                  runPageBuilder ([], Nothing, Nothing) (toReturn ++ (x : xs))
-          -- If p ≤ −10000, we know the best breakpoint is this one, so break
-          -- here.
-             (BreakPageHere, _)
-              -- the `reverse` will put this into reading order.
-              ->
-               let newPage = setPage desiredH $ reverse cur
-               in (newPage :) <$> runPageBuilder ([], Nothing, Nothing) xs
-          -- If the resulting cost <= the smallest cost seen so far, remember
-          -- the current breakpoint as the best so far.
-             (TrackCost cHere, _) ->
-               let thisCostAndI = (Just cHere, Just $ length cur)
-                   (costBestNew, iBestNew) =
-                     case costBest of
-                       Nothing -> thisCostAndI
-                       Just cBest ->
-                         if cHere > cBest
-                           then (costBest, iBest)
-                           else thisCostAndI
-               in runPageBuilder (x : cur, costBestNew, iBestNew) xs
+      Nothing -> usualContinue
+      Just brk -> case (pageBreakJudgment cur brk desiredH, _bestPointAndCost) of
+        (DoNotBreak, _) -> usualContinue
+        -- I don't think this condition will ever be satisfied, but if we
+        -- decide to break before any valid break-point has been considered,
+        -- just carry on.
+        (BreakPageAtBest, Nothing) -> usualContinue
+        -- If c = ∞, we break at the best breakpoint so far.
+        -- The current vlist material following that best breakpoint is
+        -- returned to the recent contributions, to consider again.
+        (BreakPageAtBest, Just (iBest, _)) ->
+         -- the `reverse` will put both of these into reading order.
+          let
+            (curNewPage, toReturn) = splitAt iBest $ reverse cur
+            newPage = setPage desiredH curNewPage
+         -- xs is also in reading order
+         -- We didn't actually split at x: x was just what made us compute
+         -- cost and notice we'd gone too far. So add it to the left-overs
+         -- to return.
+          in
+            (newPage :) <$> runPageBuilder newCurrentPage (toReturn ++ (x:xs))
+        -- If p ≤ −10000, we know the best breakpoint is this one, so break
+        -- here.
+        (BreakPageHere, _) ->
+         -- the `reverse` will put this into reading order.
+          let newPage = setPage desiredH $ reverse cur
+          in (newPage :) <$> runPageBuilder newCurrentPage xs
+        -- If the resulting cost <= the smallest cost seen so far, remember
+        -- the current breakpoint as the best so far.
+        (TrackCost cHere, _) ->
+          let
+            thisPointAndCost = Just (length cur, cHere)
+            newBestPointAndCost = case _bestPointAndCost of
+              Nothing -> thisPointAndCost
+              Just (_, cBest) ->
+                if cHere > cBest then _bestPointAndCost else thisPointAndCost
+          in
+            runPageBuilder (CurrentPage (x:cur) newBestPointAndCost) xs
   -- If we can't break here, just add it to the list and continue.
-  | otherwise = runPageBuilder (x : cur, costBest, iBest) xs
+  | otherwise = usualContinue
+  where
+    usualNextPage = CurrentPage (x:cur) _bestPointAndCost
+    usualContinue = runPageBuilder usualNextPage xs
 
 -- Assume we are adding a non-rule box of height h to the vertical list.
 -- Let \prevdepth = p, \lineskiplimit = l, \baselineskip = (b plus y minus z).
@@ -445,11 +438,12 @@ processVCommand oldStream newStream pages curPage acc com =
           modStream $ defineMacro newStream m
     E.EnterHMode -> addParagraphToPage True
 
+newCurrentPage :: CurrentPage
+newCurrentPage = CurrentPage [] Nothing
+
 extractPages :: E.ExpandedStream -> BuildMonad ([B.Page], E.ExpandedStream)
 extractPages = extractPagesInner [] newCurrentPage []
   where
-    newCurrentPage :: ([BL.BreakableVListElem], Maybe Int, Maybe Int)
-    newCurrentPage = ([], Nothing, Nothing)
 
     extractPagesInner
       :: [B.Page]
