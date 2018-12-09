@@ -338,20 +338,18 @@ addVListElem acc e = case e of
       blineLengthMin <- gets $ unBaselineLengthMin . baselineLengthMin
       minBlineGlue <- gets $ unMinBaselineGlue . minBaselineGlue
       modify (\conf -> conf { previousBoxDepth = PreviousBoxDepth $ B.naturalDepth e })
-      pure $
-        if prevDepth <= -Unit.oneKPt
-          then e : acc
-          else let proposedBaselineLength =
-                     baselineLength - prevDepth - B.naturalHeight b
-            -- Intuition: set the distance between baselines to \baselineskip, but no
-            -- closer than \lineskiplimit [theBaselineLengthMin], in which case
-            -- \lineskip [theMinBaselineGlue] is used.
-                   glue =
-                     BL.VGlue $
-                     if proposedBaselineLength >= blineLengthMin
-                       then BL.Glue proposedBaselineLength blineStretch blineShrink
-                       else minBlineGlue
-               in e : glue : acc
+      pure $ if prevDepth <= -Unit.oneKPt
+        then e : acc
+        else
+          let
+            proposedBaselineLength = baselineLength - prevDepth - B.naturalHeight b
+          -- Intuition: set the distance between baselines to \baselineskip, but no
+          -- closer than \lineskiplimit [theBaselineLengthMin], in which case
+          -- \lineskip [theMinBaselineGlue] is used.
+            glue = BL.VGlue $ if proposedBaselineLength >= blineLengthMin
+              then BL.Glue proposedBaselineLength blineStretch blineShrink
+              else minBlineGlue
+          in e : glue : acc
 
 addVListElems
   :: Monad m
