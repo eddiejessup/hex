@@ -5,6 +5,7 @@ module HeX.Run where
 import           Prelude                 hiding ( writeFile )
 
 import           Control.Monad.Trans.State.Lazy
+import           Control.Monad.Trans.Except     (runExceptT)
 import           Data.ByteString.Lazy           ( ByteString )
 import           Data.List                      ( intercalate )
 import qualified Text.Megaparsec               as P
@@ -100,22 +101,31 @@ runExpand xs = chopExpand' $ newExpandStream xs defaultCSMap
 chopCommand' :: ExpandedStream -> IO ()
 chopCommand' estream =
   case extractHModeCommand estream of
-    (P.State {P.stateInput = estream'}, Right com) -> do
+    Right (P.State {P.stateInput = estream'}, com) -> do
       print com
       chopCommand' estream'
-    (_, Left (P.TrivialError _ (Just P.EndOfInput) _)) -> pure ()
-    (_, Left err) -> error $ show err
+    Left (P.TrivialError _ (Just P.EndOfInput) _) -> pure ()
+    Left err -> error $ show err
 
 runCommand :: [CharCode] -> IO ()
 runCommand xs = chopCommand' $ newExpandStream xs defaultCSMap
+
+-- Generic.
+
+codesToSth :: [CharCode] -> (ExpandedStream -> BuildMonad (a, ExpandedStream)) -> IO a
+codesToSth xs f = do
+  let stream = newExpandStream xs defaultCSMap
+  conf <- newConfig
+  let eSth = evalStateT (f stream) conf
+  runExceptT eSth >>= \case
+    Right (sth, _) -> pure sth
+    Left err -> ioError $ userError $ show err
 
 -- Paragraph list.
 
 codesToParaList :: [CharCode] -> IO [BreakableHListElem]
 codesToParaList xs = do
-  let stream = newExpandStream xs defaultCSMap
-  ((para, _), _) <- newConfig >>= runStateT (extractParagraph True stream)
-  pure $ reverse para
+  reverse <$> codesToSth xs (extractParagraph True)
 
 runPara :: [CharCode] -> IO ()
 runPara xs =
@@ -125,10 +135,7 @@ runPara xs =
 
 codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
 codesToParaBoxes xs = do
-  let stream = newExpandStream xs defaultCSMap
-  ((para, _), _) <- newConfig >>= runStateT (extractParagraphLineBoxes True stream)
-
-  pure $ reverse para
+  reverse <$> codesToSth xs (extractParagraphLineBoxes True)
 
 runSetPara :: [CharCode] -> IO ()
 runSetPara xs =
@@ -138,32 +145,29 @@ runSetPara xs =
 
 -- Pages list.
 
-codesToPages :: [CharCode] -> IO ([Page], Config)
-codesToPages xs = do
-  let stream = newExpandStream xs defaultCSMap
-  newConf <- newConfig
-  ((pages, _), conf) <- runStateT (extractPages stream) newConf
-  pure (pages, conf)
+codesToPages :: [CharCode] -> IO [Page]
+codesToPages xs = codesToSth xs extractPages
 
 printList :: Show a => [a] -> IO ()
 printList = putStrLn . intercalate "\n" . fmap show
 
 runPages :: [CharCode] -> IO ()
 runPages xs =
-  fst <$> codesToPages xs >>= printList
+  codesToPages xs >>= printList
 
 -- DVI instructions.
 
 runDVI :: [CharCode] -> IO ()
 runDVI xs =
-  toDVI . fst <$> codesToPages xs >>= printList
+  toDVI <$> codesToPages xs >>= printList
 
 -- Raw DVI instructions.
 
 codesToDVIRaw :: [CharCode] -> IO [EncodableInstruction]
 codesToDVIRaw xs = do
-  (pages, conf) <- codesToPages xs
-  let mag = magnification conf
+  pages <- codesToPages xs
+  -- Who cares, it's for debugging
+  let mag = 1000
   let instrs = toDVI pages
   case parseInstructions instrs (unMagnification mag) of
     Left err -> ioError $ userError err

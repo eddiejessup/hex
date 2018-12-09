@@ -91,16 +91,20 @@ data HModeCommand
   -- \| AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
   deriving (Show)
 
--- Entry-points.
-extractHModeCommand ::
-     ExpandedStream
-  -> (P.State ExpandedStream, Either (ParseError ExpandedStream) HModeCommand)
-extractHModeCommand = easyRunParser parseHModeCommand
+type ExtractResult c = Either (ParseError ExpandedStream) (P.State ExpandedStream, c)
 
-extractVModeCommand ::
-     ExpandedStream
-  -> (P.State ExpandedStream, Either (ParseError ExpandedStream) VModeCommand)
-extractVModeCommand = easyRunParser parseVModeCommand
+extractResult :: SimpExpandParser c -> ExpandedStream -> ExtractResult c
+extractResult p stream = do
+  let (state, eCom) = easyRunParser p stream
+  com <- eCom
+  pure (state, com)
+
+-- Entry-points.
+extractHModeCommand :: ExpandedStream -> ExtractResult HModeCommand
+extractHModeCommand = extractResult parseHModeCommand
+
+extractVModeCommand :: ExpandedStream -> ExtractResult VModeCommand
+extractVModeCommand = extractResult parseVModeCommand
 
 -- Parse.
 
