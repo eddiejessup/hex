@@ -92,7 +92,7 @@ inEdgeConcat xs e = foldr inEdgeCons e xs
 
 finaliseInEdge :: Entry -> InEdge -> InEdge
 -- If the break-point is at glue, then the line doesn't include that glue.
-finaliseInEdge (A.Adjacency (_, HGlue _, _)) e = e
+finaliseInEdge (A.Adjacency (_, HVListElem (ListGlue _), _)) e = e
 -- If the break is at some other type of break, the line includes it.
 finaliseInEdge x (InEdge cs n discard) = InEdge (x:cs) n discard
 
@@ -180,22 +180,21 @@ bestRoute dw tol lp xs =
 
 -- Expects contents in reverse order.
 -- Returns lines in reading order.
-setParagraph :: ([BreakableHListElem] -> [Line]) -> [BreakableHListElem] -> [[B.HBoxElem]]
-setParagraph _        []              = []
-setParagraph getRoute (x:xs) =
+setParagraph
+  :: ([BreakableHListElem] -> [Line]) -> [BreakableHListElem] -> [[B.HBoxElem]]
+setParagraph _ [] = []
+setParagraph getRoute (x : xs) =
   let
     -- Remove the final item if it's glue.
-    xsTrimmed = case x of
-      HGlue _ -> xs
-      _       -> x:xs
-    -- Add extra bits to finish the list.
-    -- Append \penalty10k \hfil \penalty-10k.
-    xsFinished =
-      (HPenalty $ Penalty $ -UN.tenK)
-        : HGlue filGlue
-        : (HPenalty $ Penalty UN.tenK)
-        : xsTrimmed
-  in
-    setLine <$> getRoute (reverse xsFinished)
-  where
-    setLine (Line conts _status) = set _status conts
+      xsTrimmed = case x of
+        HVListElem (ListGlue _) -> xs
+        _                       -> x : xs
+      -- Add extra bits to finish the list.
+      -- Append \penalty10k \hfil \penalty-10k.
+      xsFinished =
+        (HVListElem $ ListPenalty $ Penalty $ -UN.tenK)
+          : (HVListElem $ ListGlue filGlue)
+          : (HVListElem $ ListPenalty $ Penalty UN.tenK)
+          : xsTrimmed
+  in  setLine <$> getRoute (reverse xsFinished)
+  where setLine (Line conts _status) = set _status conts

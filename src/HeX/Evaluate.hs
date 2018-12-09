@@ -7,13 +7,6 @@ import qualified HeX.Parse.Expanded            as E
 import qualified HeX.Unit                      as Unit
 import qualified HeX.BreakList                 as BL
 import qualified HeX.Box                       as B
-import           HeX.BreakList.Line             ( bestRoute
-                                                , setParagraph
-                                                )
-import           HeX.BreakList.Page             ( PageBreakJudgment(..)
-                                                , pageBreakJudgment
-                                                , setPage
-                                                )
 
 evaluateNormalInteger :: E.NormalInteger -> Integer
 evaluateNormalInteger (E.IntegerConstant n) = n

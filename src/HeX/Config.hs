@@ -88,12 +88,9 @@ newConfig = do
     }
 
 parIndentBox :: Config -> BL.BreakableHListElem
-parIndentBox conf =
-  BL.HListBox
-    B.Box
-    { contents = B.HBoxContents []
-    , desiredLength = B.To $ unParIndent $ parIndent conf
-    }
+parIndentBox conf = BL.HVListElem $ BL.ListBox $
+  B.Box { contents = B.HBoxContents []
+        , desiredLength = B.To $ unParIndent $ parIndent conf }
 
 -- Path stuff
 type PathToFile b = Path b File

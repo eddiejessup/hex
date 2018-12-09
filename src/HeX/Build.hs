@@ -152,41 +152,39 @@ processHCommand oldStream newStream acc com =
       modStream $ E.insertLexTokenE oldStream parToken
     E.AddCharacter {char = c} -> do
       charBox <- runReaderOnState (runMaybeT (characterBox c))
-      hCharBox <- case BL.HCharacter <$> charBox of
-          Just char -> pure char
-          Nothing -> fail "Could not get character info"
+      hCharBox <- case charBox of
+        Just char -> pure $ BL.ListCharacter char
+        Nothing -> fail "Could not get character info"
       modAccum $ hCharBox : acc
     E.HAllModesCommand aCom -> case aCom of
-      -- Command to end recursion.
-      -- \par: end the current paragraph.
-      E.EndParagraph -> pure (acc, newStream, False)
-      -- Commands to do nothing.
       E.Relax -> continueUnchanged
       E.IgnoreSpaces -> continueUnchanged
-      -- Commands to modify the input stream.
-      -- E.ChangeCase d bt ->
-      --   modStream $ applyChangeCaseToStream newStream d bt
-      -- Commands to modify the list.
-      E.Assign E.Assignment {body = E.SelectFont fNr} -> do
-        fontSel <- BL.HFontSelection <$> selectFont fNr
-        modAccum $ fontSel : acc
-      E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
-        fontDef <- BL.HFontDefinition <$> defineFont cs fPath
-        modAccum $ fontDef : acc
-      E.AddPenalty n -> modAccum $ BL.HPenalty (evaluatePenalty n) : acc
-      E.AddKern ln -> do
-        mag <- gets magnification
-        modAccum $ BL.HKern (evaluateKern mag ln) : acc
-      E.AddGlue g -> do
-        mag <- gets magnification
-        modAccum $ BL.HGlue (evaluateGlue mag g) : acc
+      -- \indent: An empty box of width \parindent is appended to the current
+      -- list, and the space factor is set to 1000.
+      -- TODO: Space factor.
+      E.StartParagraph indent ->
+        if indent
+          then do
+            indentBox <- gets parIndentBox
+            modAccum (indentBox : acc)
+          else continueUnchanged
+      -- \par: end the current paragraph.
+      E.EndParagraph -> pure (acc, newStream, False)
       E.AddSpace -> do
         glue <- runReaderOnState (runMaybeT spaceGlue)
         hGlue <-
           case glue of
-            Just sg -> pure $ BL.HGlue sg
+            Just sg -> pure $ BL.HVListElem $ BL.ListGlue sg
             Nothing -> fail "Could not get space glue"
         modAccum $ hGlue : acc
+      E.AddPenalty n ->
+        modAccum $ (BL.HVListElem $ BL.ListPenalty (evaluatePenalty n)) : acc
+      E.AddKern ln -> do
+        mag <- gets magnification
+        modAccum $ (BL.HVListElem $ BL.ListKern (evaluateKern mag ln)) : acc
+      E.AddGlue g -> do
+        mag <- gets magnification
+        modAccum $ (BL.HVListElem $ BL.ListGlue (evaluateGlue mag g)) : acc
       E.AddRule {width = w, height = h, depth = d} -> do
         mag <- gets magnification
         let evalW =
@@ -203,16 +201,15 @@ processHCommand oldStream newStream acc com =
                 Nothing -> 0
                 Just ln -> evaluateLength mag ln
             rule = B.Rule {width = evalW, height = evalH, depth = evalD}
-        modAccum $ BL.HRule rule : acc
-      -- \indent: An empty box of width \parindent is appended to the current
-      -- list, and the space factor is set to 1000.
-      -- TODO: Space factor.
-      E.StartParagraph indent ->
-        if indent
-          then do
-            indentBox <- gets parIndentBox
-            modAccum (indentBox : acc)
-          else continueUnchanged
+        modAccum $ (BL.HVListElem $ BL.ListRule rule) : acc
+      -- E.ChangeCase d bt ->
+      --   modStream $ applyChangeCaseToStream newStream d bt
+      E.Assign E.Assignment {body = E.SelectFont fNr} -> do
+        fontSel <- BL.HVListElem . BL.ListFontSelection <$> selectFont fNr
+        modAccum $ fontSel : acc
+      E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
+        fontDef <- BL.HVListElem . BL.ListFontDefinition <$> defineFont cs fPath
+        modAccum $ fontDef : acc
       E.Assign E.Assignment {body = m@E.DefineMacro {}} ->
         modStream $ defineMacro newStream m
 
@@ -328,7 +325,7 @@ addVListElem
   -> BL.BreakableVListElem
   -> ConfStateT m [BL.BreakableVListElem]
 addVListElem acc e = case e of
-    (BL.VListBox b) -> addVListBox b
+    (BL.ListBox b) -> addVListBox b
     _ -> pure $ e : acc
   where
     addVListBox b = do
@@ -346,7 +343,7 @@ addVListElem acc e = case e of
           -- Intuition: set the distance between baselines to \baselineskip, but no
           -- closer than \lineskiplimit [theBaselineLengthMin], in which case
           -- \lineskip [theMinBaselineGlue] is used.
-            glue = BL.VGlue $ if proposedBaselineLength >= blineLengthMin
+            glue = BL.ListGlue $ if proposedBaselineLength >= blineLengthMin
               then BL.Glue proposedBaselineLength blineStretch blineShrink
               else minBlineGlue
           in e : glue : acc
@@ -381,7 +378,7 @@ processVCommand oldStream newStream pages curPage acc com =
       (lineBoxes, mStream) <- extractParagraphLineBoxes indent oldStream
       desiredW <- gets $ unDesiredWidth . desiredWidth
       let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
-      newAcc <- addVListElems acc $ BL.VListBox . toBox <$> lineBoxes
+      newAcc <- addVListElems acc $ BL.ListBox . toBox <$> lineBoxes
       continueSamePage newAcc mStream
   in case com of
     -- End recursion.
@@ -391,31 +388,22 @@ processVCommand oldStream newStream pages curPage acc com =
       pure (pagesFinal, curPage, acc, newStream, False)
     E.VAllModesCommand aCom ->
       case aCom of
-        -- Commands to do nothing.
         E.Relax -> continueUnchanged
         E.IgnoreSpaces -> continueUnchanged
-        -- <space token> has no effect in vertical modes.
-        E.AddSpace -> continueUnchanged
+        -- Commands to start horizontal mode.
+        E.StartParagraph indent -> addParagraphToPage indent
         -- \par does nothing in vertical mode.
         E.EndParagraph -> continueUnchanged
-        -- Commands to modify the input stream.
-        -- E.ChangeCase d bt ->
-        --   modStream $ applyChangeCaseToStream newStream d bt
-        -- Commands to modify the list.
-        E.Assign E.Assignment {body = E.SelectFont fNr} -> do
-          fontSel <- BL.VFontSelection <$> selectFont fNr
-          modAccum $ fontSel : acc
-        E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
-          fontDef <- BL.VFontDefinition <$> defineFont cs fPath
-          modAccum $ fontDef : acc
+        -- <space token> has no effect in vertical modes.
+        E.AddSpace -> continueUnchanged
         E.AddPenalty n ->
-          modAccum $ BL.VPenalty (evaluatePenalty n) : acc
+          modAccum $ BL.ListPenalty (evaluatePenalty n) : acc
         E.AddKern ln -> do
           mag <- gets magnification
-          modAccum $ BL.VKern (evaluateKern mag ln) : acc
+          modAccum $ BL.ListKern (evaluateKern mag ln) : acc
         E.AddGlue g -> do
           mag <- gets magnification
-          modAccum $ BL.VGlue (evaluateGlue mag g) : acc
+          modAccum $ BL.ListGlue (evaluateGlue mag g) : acc
         E.AddRule {width = w, height = h, depth = d} -> do
           mag <- gets magnification
           evalW <- case w of
@@ -429,9 +417,15 @@ processVCommand oldStream newStream pages curPage acc com =
                 Nothing -> 0
                 Just ln -> evaluateLength mag ln
           let rule = B.Rule {width = evalW, height = evalH, depth = evalD}
-          modAccum (BL.VRule rule : acc)
-        -- Commands to start horizontal mode.
-        E.StartParagraph indent -> addParagraphToPage indent
+          modAccum (BL.ListRule rule : acc)
+        -- E.ChangeCase d bt ->
+        --   modStream $ applyChangeCaseToStream newStream d bt
+        E.Assign E.Assignment {body = E.SelectFont fNr} -> do
+          fontSel <- BL.ListFontSelection <$> selectFont fNr
+          modAccum $ fontSel : acc
+        E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
+          fontDef <- BL.ListFontDefinition <$> defineFont cs fPath
+          modAccum $ fontDef : acc
         E.Assign E.Assignment {body = m@E.DefineMacro {}} ->
           modStream $ defineMacro newStream m
     E.EnterHMode -> addParagraphToPage True

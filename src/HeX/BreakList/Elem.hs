@@ -1,13 +1,12 @@
 module HeX.BreakList.Elem where
 
 import qualified Data.Adjacent                 as A
-
 import           Data.Maybe
+
 import qualified HeX.Box                       as B
 import           HeX.Box                        ( Dimensioned
                                                 , naturalWidth
                                                 )
-
 import           HeX.BreakList.Glue
 import           HeX.BreakList.Judge
 
@@ -24,8 +23,7 @@ breakPenalty (KernBreak _) = 0
 breakPenalty NoBreak = 0
 breakPenalty (PenaltyBreak (Penalty p)) = p
 
-newtype Penalty =
-  Penalty Int
+newtype Penalty = Penalty Int
 
 instance Show Penalty where
   show (Penalty p) = "|p" ++ show p ++ "|"
@@ -43,43 +41,32 @@ naturalListLength = sum . fmap naturalLength
 -- TODO: WhatsIt, Leaders, Mark, Insertion
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 data BreakableHListElem
-  = HListBox B.Box
-  | HRule B.Rule
-  | HGlue Glue
-  | HKern B.Kern
-  | HPenalty Penalty
-  | HFontDefinition B.FontDefinition
-  | HFontSelection B.FontSelection
-  | HCharacter B.Character
+  = HVListElem BreakableVListElem
+  | ListCharacter B.Character
 
 data BreakableVListElem
-  = VListBox B.Box
-  | VRule B.Rule
-  | VGlue Glue
-  | VKern B.Kern
-  | VPenalty Penalty
-  | VFontDefinition B.FontDefinition
-  | VFontSelection B.FontSelection
+  = ListBox B.Box
+  | ListRule B.Rule
+  | ListGlue Glue
+  | ListKern B.Kern
+  | ListPenalty Penalty
+  | ListFontDefinition B.FontDefinition
+  | ListFontSelection B.FontSelection
 
 -- Show.
 
 instance Show BreakableHListElem where
-  show (HListBox e) = show e
-  show (HRule e) = show e
-  show (HGlue e) = show e
-  show (HKern e) = show e
-  show (HPenalty e) = show e
-  show (HFontDefinition e) = show e
-  show (HFontSelection e) = show e
-  show (HCharacter e) = show e
+  show (HVListElem e) = show e
+  show (ListCharacter e) = show e
+
   showList a = (show (foldr append [] a) ++)
     where
-      append (HCharacter B.Character {B.char = c}) [] = [Sentence [c]]
+      append (ListCharacter B.Character {B.char = c}) [] = [Sentence [c]]
       append x [] = [NonSentence x]
       append y r@(x:xs)
-        | HCharacter B.Character {B.char = c} <- y
+        | ListCharacter B.Character {B.char = c} <- y
         , (Sentence cs) <- x = Sentence (c : cs) : xs
-        | HCharacter B.Character {B.char = c} <- y = Sentence [c] : r
+        | ListCharacter B.Character {B.char = c} <- y = Sentence [c] : r
         | otherwise = NonSentence y : r
 
 -- Just for the purposes of showing the list more compactly.
@@ -92,110 +79,115 @@ instance Show CondensedHListElem where
   show (NonSentence x) = show x
 
 instance Show BreakableVListElem where
-  show (VListBox e) = show e
-  show (VRule e) = show e
-  show (VGlue e) = show e
-  show (VKern e) = show e
-  show (VPenalty e) = show e
-  show (VFontDefinition e) = show e
-  show (VFontSelection e) = show e
+  show (ListBox e) = show e
+  show (ListRule e) = show e
+  show (ListGlue e) = show e
+  show (ListKern e) = show e
+  show (ListPenalty e) = show e
+  show (ListFontDefinition e) = show e
+  show (ListFontSelection e) = show e
 
 -- Dimensioned.
 
 instance Dimensioned BreakableHListElem where
-  naturalWidth (HListBox b) = B.naturalWidth b
-  naturalWidth (HRule r) = B.naturalWidth r
-  naturalWidth (HGlue g) = dimen g
-  naturalWidth (HKern k) = B.kernDimen k
-  naturalWidth (HPenalty _) = 0
-  naturalWidth (HFontDefinition _) = 0
-  naturalWidth (HFontSelection _) = 0
-  naturalWidth (HCharacter c) = naturalWidth c
-  naturalHeight (HListBox b) = B.naturalHeight b
-  naturalHeight (HRule r) = B.naturalHeight r
-  naturalHeight (HGlue _) = 0
-  naturalHeight (HKern _) = 0
-  naturalHeight (HPenalty _) = 0
-  naturalHeight (HFontDefinition _) = 0
-  naturalHeight (HFontSelection _) = 0
-  naturalHeight (HCharacter c) = B.naturalHeight c
-  naturalDepth (HListBox b) = B.naturalDepth b
-  naturalDepth (HRule r) = B.naturalDepth r
-  naturalDepth (HGlue _) = 0
-  naturalDepth (HKern _) = 0
-  naturalDepth (HPenalty _) = 0
-  naturalDepth (HFontDefinition _) = 0
-  naturalDepth (HFontSelection _) = 0
-  naturalDepth (HCharacter c) = B.naturalDepth c
+  naturalWidth (HVListElem (ListBox b)) = B.naturalWidth b
+  naturalWidth (HVListElem (ListRule r)) = B.naturalWidth r
+  naturalWidth (HVListElem (ListGlue g)) = dimen g
+  naturalWidth (HVListElem (ListKern k)) = B.kernDimen k
+  naturalWidth (HVListElem (ListPenalty _)) = 0
+  naturalWidth (HVListElem (ListFontDefinition _)) = 0
+  naturalWidth (HVListElem (ListFontSelection _)) = 0
+  naturalWidth (ListCharacter c) = naturalWidth c
+
+  naturalHeight (HVListElem (ListBox b)) = B.naturalHeight b
+  naturalHeight (HVListElem (ListRule r)) = B.naturalHeight r
+  naturalHeight (HVListElem (ListGlue _)) = 0
+  naturalHeight (HVListElem (ListKern _)) = 0
+  naturalHeight (HVListElem (ListPenalty _)) = 0
+  naturalHeight (HVListElem (ListFontDefinition _)) = 0
+  naturalHeight (HVListElem (ListFontSelection _)) = 0
+  naturalHeight (ListCharacter c) = B.naturalHeight c
+
+  naturalDepth (HVListElem (ListBox b)) = B.naturalDepth b
+  naturalDepth (HVListElem (ListRule r)) = B.naturalDepth r
+  naturalDepth (HVListElem (ListGlue _)) = 0
+  naturalDepth (HVListElem (ListKern _)) = 0
+  naturalDepth (HVListElem (ListPenalty _)) = 0
+  naturalDepth (HVListElem (ListFontDefinition _)) = 0
+  naturalDepth (HVListElem (ListFontSelection _)) = 0
+  naturalDepth (ListCharacter c) = B.naturalDepth c
 
 instance Dimensioned BreakableVListElem where
-  naturalWidth (VListBox b) = B.naturalWidth b
-  naturalWidth (VRule r) = B.naturalWidth r
-  naturalWidth (VGlue _) = 0
-  naturalWidth (VKern _) = 0
-  naturalWidth (VPenalty _) = 0
-  naturalWidth (VFontDefinition _) = 0
-  naturalWidth (VFontSelection _) = 0
-  naturalHeight (VListBox b) = B.naturalHeight b
-  naturalHeight (VRule r) = B.naturalHeight r
-  naturalHeight (VGlue g) = dimen g
-  naturalHeight (VKern k) = B.kernDimen k
-  naturalHeight (VPenalty _) = 0
-  naturalHeight (VFontDefinition _) = 0
-  naturalHeight (VFontSelection _) = 0
-  naturalDepth (VListBox b) = B.naturalDepth b
-  naturalDepth (VRule r) = B.naturalDepth r
-  naturalDepth (VGlue _) = 0
-  naturalDepth (VKern _) = 0
-  naturalDepth (VPenalty _) = 0
-  naturalDepth (VFontDefinition _) = 0
-  naturalDepth (VFontSelection _) = 0
+  naturalWidth (ListBox b) = B.naturalWidth b
+  naturalWidth (ListRule r) = B.naturalWidth r
+  naturalWidth (ListGlue _) = 0
+  naturalWidth (ListKern _) = 0
+  naturalWidth (ListPenalty _) = 0
+  naturalWidth (ListFontDefinition _) = 0
+  naturalWidth (ListFontSelection _) = 0
+
+  naturalHeight (ListBox b) = B.naturalHeight b
+  naturalHeight (ListRule r) = B.naturalHeight r
+  naturalHeight (ListGlue g) = dimen g
+  naturalHeight (ListKern k) = B.kernDimen k
+  naturalHeight (ListPenalty _) = 0
+  naturalHeight (ListFontDefinition _) = 0
+  naturalHeight (ListFontSelection _) = 0
+
+  naturalDepth (ListBox b) = B.naturalDepth b
+  naturalDepth (ListRule r) = B.naturalDepth r
+  naturalDepth (ListGlue _) = 0
+  naturalDepth (ListKern _) = 0
+  naturalDepth (ListPenalty _) = 0
+  naturalDepth (ListFontDefinition _) = 0
+  naturalDepth (ListFontSelection _) = 0
 
 -- BreakableListElem.
 
 instance BreakableListElem BreakableHListElem where
-  toGlue (HGlue g) = Just g
-  toGlue _ = Nothing
-  isDiscardable (HGlue _) = True
-  isDiscardable (HKern _) = True
-  isDiscardable (HPenalty _) = True
-  isDiscardable _ = False
-  isBox (HListBox _) = True
-  isBox (HRule _) = True
-  isBox (HCharacter _) = True
-  isBox _ = False
-    -- TODO: Add math formula conditions.
-  toBreakItem (A.Adjacency a) =
-    case a of
-      (Just x, HGlue g, _) ->
-        if isDiscardable x
-          then Nothing
-          else Just $ GlueBreak g
-      (_, HKern k, Just (HGlue _)) -> Just $ KernBreak k
-      (_, HPenalty p, _) -> Just $ PenaltyBreak p
-    -- TODO: Discretionary break and Math-off.
-      _ -> Nothing
+  toGlue (HVListElem e) = toGlue e
+  toGlue (ListCharacter _) = Nothing
+
+  isDiscardable (HVListElem e) = isDiscardable e
+  isDiscardable (ListCharacter _) = False
+
+  isBox (HVListElem e) = isBox e
+  isBox (ListCharacter _) = True
+
+  -- TODO: Add math formula conditions.
+  -- TODO: Discretionary break and Math-off.
+
+  toBreakItem (A.Adjacency a) = case a of
+    (Just x, HVListElem (ListGlue g), _) ->
+      if isDiscardable x then Nothing else Just $ GlueBreak g
+    (_, HVListElem (ListKern k), Just (HVListElem (ListGlue _))) ->
+      Just $ KernBreak k
+    (_, HVListElem (ListPenalty p), _) -> Just $ PenaltyBreak p
+    _ -> Nothing
+
   naturalLength = B.naturalWidth
 
 instance BreakableListElem BreakableVListElem where
-  toGlue (VGlue g) = Just g
+  toGlue (ListGlue g) = Just g
   toGlue _ = Nothing
-  isDiscardable (VGlue _) = True
-  isDiscardable (VKern _) = True
-  isDiscardable (VPenalty _) = True
+
+  isDiscardable (ListGlue _) = True
+  isDiscardable (ListKern _) = True
+  isDiscardable (ListPenalty _) = True
   isDiscardable _ = False
-  isBox (VListBox _) = True
-  isBox (VRule _) = True
+
+  isBox (ListBox _) = True
+  isBox (ListRule _) = True
   isBox _ = False
-  toBreakItem (A.Adjacency a) =
-    case a of
-      (Just x, VGlue g, _) ->
-        if isDiscardable x
-          then Nothing
-          else Just $ GlueBreak g
-      (_, VKern k, Just VGlue {}) -> Just $ KernBreak k
-      (_, VPenalty p, _) -> Just $ PenaltyBreak p
-      _ -> Nothing
+
+  toBreakItem (A.Adjacency a) = case a of
+    (Just x, ListGlue g, _) ->
+      if isDiscardable x then Nothing else Just $ GlueBreak g
+    (_, ListKern k, Just ListGlue {}) ->
+      Just $ KernBreak k
+    (_, ListPenalty p, _) -> Just $ PenaltyBreak p
+    _ -> Nothing
+
   naturalLength = B.naturalHeight
 
 listGlueStatus :: BreakableListElem a => Int -> [a] -> GlueStatus
