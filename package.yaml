@@ -24,6 +24,7 @@ dependencies:
 - path
 - mtl
 - unordered-containers
+- parser-combinators
 - hashable
 - safe
 - transformers

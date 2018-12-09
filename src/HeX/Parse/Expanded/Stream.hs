@@ -62,7 +62,7 @@ parseGeneralText = do
   skipManySatisfied isFillerItem
   -- TODO: Maybe other things can act as left braces.
   skipSatisfied isExplicitLeftBrace
-  parseInhibited parseBalancedText
+  parseInhibited $ parseBalancedText Discard
  where
   isFillerItem R.Relax = True
   isFillerItem t       = isSpace t
@@ -71,29 +71,7 @@ parseCSNameArgs :: SimpExpandParser [CharCode]
 parseCSNameArgs =
   parseManyChars <* skipSatisfiedEquals (R.SyntaxCommandArg R.EndCSName)
 
-parseMacroArgs :: MacroContents -> SimpLexParser (Map.Map Digit R.MacroArgument)
-parseMacroArgs MacroContents {preParamTokens=pre, parameters=params} = do
-  skipSatisfiedChunk pre
-  parseArgs params
-  where
-    parseArgs :: Map.Map Digit [Lex.Token] -> SimpLexParser (Map.Map Digit R.MacroArgument)
-    parseArgs ps = case Map.minViewWithKey ps of
-      -- If there are no parameters, expect no arguments.
-      Nothing -> pure Map.empty
-      Just ((dig, p), rest) -> case p of
-        -- If the parameter is undelimited, the argument is the next non-blank
-        -- token.
-        -- TODO: Unless it's a '{', in which case [...]
-        [] -> do
-          -- Skip blank tokens (assumed to mean spaces).
-          skipManySatisfied (Inh.isCategory Lex.Space)
-          t <- getToken
-          -- Use that token as the argument, then parse the remaining arguments.
-          (Map.insert dig (R.MacroArgument [t])) <$> (parseArgs rest)
-        -- TODO: Delimited parameters.
-        _ -> undefined
-
-renderMacroText :: [MacroTextToken] -> Map.Map Digit R.MacroArgument -> [Lex.Token]
+renderMacroText :: [MacroTextToken] -> Map.Map Digit Inh.MacroArgument -> [Lex.Token]
 renderMacroText [] _ = []
 renderMacroText (t:ts) args = render t
   where

@@ -27,7 +27,7 @@ data MacroPrefix
 
 data AssignmentBody
   = DefineMacro { name :: Lex.ControlSequenceLike
-                , contents :: R.MacroContents
+                , contents :: Inh.MacroContents
                 , long, outer :: Bool }
   -- \| ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
   -- \| SetVariable VariableAssignment
@@ -135,7 +135,7 @@ defineMacro = do
     { body =
         DefineMacro
         { name = cs
-        , contents = R.MacroContents preParamToks paramDelims replaceToks
+        , contents = Inh.MacroContents preParamToks paramDelims replaceToks
         , long = Long `elem` prefixes
         , outer = Outer `elem` prefixes
         }

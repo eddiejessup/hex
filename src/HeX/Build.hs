@@ -175,10 +175,10 @@ evaluatePenalty :: E.Number -> BL.Penalty
 evaluatePenalty = BL.Penalty . fromIntegral . evaluateNumber
 
 defineMacro :: E.ExpandedStream -> E.AssignmentBody -> E.ExpandedStream
-defineMacro (E.ExpandedStream (R.ResolvedStream ls csMap)) (E.DefineMacro name (R.MacroContents [] params replaceText) False False) =
+defineMacro (E.ExpandedStream (R.ResolvedStream ls csMap)) (E.DefineMacro name macro False False) =
   E.ExpandedStream (R.ResolvedStream ls csMap')
   where
-    newMacro = R.SyntaxCommandHead $ R.MacroToken $ R.MacroContents [] params replaceText
+    newMacro = R.SyntaxCommandHead $ R.MacroToken macro
     csMap' = HMap.insert name newMacro csMap
 
 runReaderOnState :: MonadState r f => Reader r b -> f b

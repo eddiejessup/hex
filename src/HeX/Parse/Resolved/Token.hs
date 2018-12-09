@@ -54,15 +54,6 @@ data BoxRegisterAttribute
   | IsVoid
   deriving (Show, Eq)
 
-newtype MacroArgument = MacroArgument [Lex.Token]
-  deriving (Show, Eq)
-
-data MacroContents
-  = MacroContents { preParamTokens :: [Lex.Token]
-                  , parameters :: MacroParameters
-                  , replacementTokens :: MacroText }
-  deriving (Show, Eq)
-
 data ModedCommandPrimitiveToken
   = AddSpecifiedGlue -- \vskip, \hskip
   | AddPresetGlue PresetGlueType -- \{v,h}{fil,fill,filneg,ss}

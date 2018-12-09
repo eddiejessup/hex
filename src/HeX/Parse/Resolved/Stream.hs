@@ -9,9 +9,7 @@ import qualified Text.Megaparsec               as P
 
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
-
 import           HeX.Parse.Lexed.Stream
-
 import           HeX.Parse.Resolved.Token
 import           HeX.Parse.Resolved.Resolve
 
