@@ -118,6 +118,9 @@ parseMacroArgs MacroContents {preParamTokens=pre, parameters=params} = do
         argRaw <- case p of
           [] -> parseUndelimitedArgs
           delims -> parseDelimitedArgs [] delims
+        -- If the argument has the form ‘{⟨nested tokens⟩}’, where ⟨nested
+        -- tokens⟩ stands for any properly nested token sequence, the outermost
+        -- braces are removed.
         -- If appropriate, strip the argument; otherwise use the unstripped
         -- version.
         let arg = fromMaybe argRaw (getStripped argRaw)
@@ -154,8 +157,8 @@ parseMacroArgs MacroContents {preParamTokens=pre, parameters=params} = do
 
     -- Check if an argument has an outer '{}' pair that should be stripped, and
     -- do this if so.
-    -- If we got an empty argument, can consider this as 'stripped' to itself.
-    getStripped [] = pure []
+    -- If we got an empty argument, can consider this to 'strip' to itself.
+    getStripped [] = Nothing
     getStripped (a:xs) = do
       -- First token must be a '{'.
       guard $ isBeginGroup a
