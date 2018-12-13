@@ -159,7 +159,7 @@ runPages xs =
 
 runDVI :: [CharCode] -> IO ()
 runDVI xs =
-  toDVI <$> codesToPages xs >>= printList
+  pagesToDVI <$> codesToPages xs >>= printList
 
 -- Raw DVI instructions.
 
@@ -168,7 +168,7 @@ codesToDVIRaw xs = do
   pages <- codesToPages xs
   -- Who cares, it's for debugging
   let mag = 1000
-  let instrs = toDVI pages
+  let instrs = pagesToDVI pages
   case parseInstructions instrs (unMagnification mag) of
     Left err -> ioError $ userError err
     Right encInstrs -> pure $ reverse encInstrs
