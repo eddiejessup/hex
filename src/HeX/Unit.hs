@@ -9,6 +9,9 @@ tenK = 10000
 hunK :: Int
 hunK = 100000
 
+oneKPt :: Int
+oneKPt = toScaledPointApprox (1000 :: Int) Point
+
 -- Functions related to units used in the TeX world.
 -- A scaled point is defined as a fraction:
 -- > num = 2.54 * 1e7 = 25400000
@@ -60,31 +63,28 @@ data PhysicalUnit
   | ScaledPoint -- 'sp'
   deriving (Show)
 
-oneKPt :: Int
-oneKPt = toScaledPointApprox (1000 :: Int) Point
+inScaledPoint :: PhysicalUnit -> Rational
+inScaledPoint Point = fromIntegral pointInScaledPoint
+inScaledPoint Pica = fromIntegral $ picaInPoint * pointInScaledPoint
+inScaledPoint Inch = inchInPoint * inScaledPoint Point
+inScaledPoint BigPoint = inchInPoint * inScaledPoint Point / fromIntegral inchInBigPoint
+inScaledPoint Centimetre = 10 * inScaledPoint Millimetre
+inScaledPoint Millimetre = inScaledPoint Inch / inchInMM
+inScaledPoint Didot = didotInPoint * inScaledPoint Point
+inScaledPoint Cicero = 12 * inScaledPoint Didot
+inScaledPoint ScaledPoint = 1
 
-class Length u where
-  inScaledPoint :: u -> Rational
-  scaledPointIn :: u -> Rational
-  scaledPointIn = recip . inScaledPoint
-  toScaledPoint :: Real n => n -> u -> Rational
-  toScaledPoint n u = realToFrac n * inScaledPoint u
-  toScaledPointApprox :: Real n => n -> u -> Int
-  toScaledPointApprox n u = round $ toScaledPoint n u
-  fromScaledPoint :: u -> Rational
-  fromScaledPoint = recip . inScaledPoint
+scaledPointIn :: PhysicalUnit -> Rational
+scaledPointIn = recip . inScaledPoint
 
--- pointToScaledPoint a = a * fromIntegral pointInScaledPoint
-instance Length PhysicalUnit where
-  inScaledPoint Point = fromIntegral pointInScaledPoint
-  inScaledPoint Pica = fromIntegral $ picaInPoint * pointInScaledPoint
-  inScaledPoint Inch = inchInPoint * inScaledPoint Point
-  inScaledPoint BigPoint = inchInPoint * inScaledPoint Point / fromIntegral inchInBigPoint
-  inScaledPoint Centimetre = 10 * inScaledPoint Millimetre
-  inScaledPoint Millimetre = inScaledPoint Inch / inchInMM
-  inScaledPoint Didot = didotInPoint * inScaledPoint Point
-  inScaledPoint Cicero = 12 * inScaledPoint Didot
-  inScaledPoint ScaledPoint = 1
+toScaledPoint :: Real n => n -> PhysicalUnit -> Rational
+toScaledPoint n u = realToFrac n * inScaledPoint u
+
+toScaledPointApprox :: Real n => n -> PhysicalUnit -> Int
+toScaledPointApprox n u = round $ toScaledPoint n u
+
+fromScaledPoint :: PhysicalUnit -> Rational
+fromScaledPoint = recip . inScaledPoint
 
 showFrac :: Real n => n -> String
 showFrac n = printf "%.1f" (realToFrac n :: Double)

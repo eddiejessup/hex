@@ -124,7 +124,7 @@ codesToSth xs f = do
 -- Paragraph list.
 
 codesToParaList :: [CharCode] -> IO [BreakableHListElem]
-codesToParaList xs = do
+codesToParaList xs =
   reverse <$> codesToSth xs (extractParagraph True)
 
 runPara :: [CharCode] -> IO ()
@@ -134,7 +134,7 @@ runPara xs =
 -- Paragraph boxes.
 
 codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
-codesToParaBoxes xs = do
+codesToParaBoxes xs =
   reverse <$> codesToSth xs (extractParagraphLineBoxes True)
 
 runSetPara :: [CharCode] -> IO ()
