@@ -28,7 +28,7 @@ newtype Penalty = Penalty Int
 instance Show Penalty where
   show (Penalty p) = "|p" ++ show p ++ "|"
 
-class Show a => BreakableListElem a where
+class BreakableListElem a where
   toGlue :: a -> Maybe Glue
   isDiscardable :: a -> Bool
   isBox :: a -> Bool
@@ -43,6 +43,7 @@ naturalListLength = sum . fmap naturalLength
 data BreakableHListElem
   = HVListElem BreakableVListElem
   | ListCharacter B.Character
+  deriving (Show)
 
 data BreakableVListElem
   = ListBox B.Box
@@ -52,40 +53,26 @@ data BreakableVListElem
   | ListPenalty Penalty
   | ListFontDefinition B.FontDefinition
   | ListFontSelection B.FontSelection
+  deriving (Show)
 
--- Show.
+-- Display.
 
-instance Show BreakableHListElem where
-  show (HVListElem e) = show e
-  show (ListCharacter e) = show e
-
-  showList a = (show (foldr append [] a) ++)
-    where
-      append (ListCharacter B.Character {B.char = c}) [] = [Sentence [c]]
-      append x [] = [NonSentence x]
-      append y r@(x:xs)
-        | ListCharacter B.Character {B.char = c} <- y
-        , (Sentence cs) <- x = Sentence (c : cs) : xs
-        | ListCharacter B.Character {B.char = c} <- y = Sentence [c] : r
-        | otherwise = NonSentence y : r
-
--- Just for the purposes of showing the list more compactly.
+-- Just used to show the list more compactly.
 data CondensedHListElem
   = Sentence String
   | NonSentence BreakableHListElem
+  deriving (Show)
 
-instance Show CondensedHListElem where
-  show (Sentence s) = s
-  show (NonSentence x) = show x
-
-instance Show BreakableVListElem where
-  show (ListBox e) = show e
-  show (ListRule e) = show e
-  show (ListGlue e) = show e
-  show (ListKern e) = show e
-  show (ListPenalty e) = show e
-  show (ListFontDefinition e) = show e
-  show (ListFontSelection e) = show e
+condenseHList :: [BreakableHListElem] -> [CondensedHListElem]
+condenseHList = foldr append []
+  where
+    append (ListCharacter B.Character {B.char = c}) [] = [Sentence [c]]
+    append x [] = [NonSentence x]
+    append y r@(x:xs)
+      | ListCharacter B.Character {B.char = c} <- y
+      , (Sentence cs) <- x = Sentence (c : cs) : xs
+      | ListCharacter B.Character {B.char = c} <- y = Sentence [c] : r
+      | otherwise = NonSentence y : r
 
 -- Dimensioned.
 
