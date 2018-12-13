@@ -28,9 +28,16 @@ data CharSource
   | TokenChar
   deriving (Show)
 
-data AllModesCommand
+data ModeIndependentCommand
   = Assign Assignment
   | Relax
+  | IgnoreSpaces
+  | AddPenalty Number
+  | AddKern Length
+  | AddGlue Glue
+  deriving (Show)
+
+data AllModesCommand
   -- \| LeftBrace
   -- \| RightBrace
   -- \| BeginGroup
@@ -40,7 +47,6 @@ data AllModesCommand
   -- \| ShowLists
   -- \| ShowInternalQuantity InternalQuantity
   -- \| ShipOut Box
-  | IgnoreSpaces
   -- \| SetAfterAssignmentToken Token
   -- \| AddToAfterGroupTokens Tokens
   -- \| Message MessageStream GeneralText
@@ -50,8 +56,6 @@ data AllModesCommand
   -- \| CloseOutput { streamNr :: Int, immediate :: Bool }
   -- \| Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
   -- \| AddWhatsit GeneralText
-  | AddPenalty Number
-  | AddKern Length
   -- \| RemoveLastPenalty
   -- \| RemoveLastKern
   -- \| RemoveLastGlue
@@ -59,9 +63,8 @@ data AllModesCommand
   -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
   -- -- then can 'migrate' out.
   -- \| AddInsertion {nr :: Int, contents :: VModeMaterial}
-  | AddGlue Glue
   -- \| AddLeaders {type :: LeadersType, template :: BoxOrRule, glue :: Glue}
-  | AddSpace
+  = AddSpace
   -- \| AddBox Box
   -- \| AddShiftedBox Distance Box
   -- \| AddFetchedBox { register :: Int, unwrap, pop :: Bool } -- \box, \copy, \un{v,h}{box,copy}
@@ -69,6 +72,7 @@ data AllModesCommand
   -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
   | StartParagraph { indent :: Bool }
   | EndParagraph
+  | ModeIndependentCommand ModeIndependentCommand
   deriving (Show)
 
 data VModeCommand
@@ -108,24 +112,25 @@ extractVModeCommand = extractResult parseVModeCommand
 
 -- Parse.
 
-type AllModeCommandParser = SimpExpandParser AllModesCommand
-type HModeCommandParser = SimpExpandParser HModeCommand
-type VModeCommandParser = SimpExpandParser VModeCommand
-
 -- All-mode Commands.
 
-parseAllModeCommand :: R.Axis -> AllModeCommandParser
+parseAllModeCommand :: R.Axis -> SimpExpandParser AllModesCommand
 parseAllModeCommand mode =
+  P.choice
+    [ addSpace
+    , addRule mode
+    , startParagraph
+    , endParagraph
+    , ModeIndependentCommand <$> parseModeIndependentCommand mode ]
+
+parseModeIndependentCommand :: R.Axis -> SimpExpandParser ModeIndependentCommand
+parseModeIndependentCommand mode =
   P.choice
     [ relax
     , ignorespaces
     , addPenalty
     , addKern
     , addSpecifiedGlue mode
-    , addSpace
-    , addRule mode
-    , startParagraph
-    , endParagraph
     , Assign <$> parseAssignment ]
 
 checkModeAndToken ::
@@ -137,40 +142,40 @@ checkModeAndToken m1 chk (R.ModedCommand m2 tok) = (m1 == m2) && chk tok
 checkModeAndToken _ _ _ = False
 
 -- \relax.
-relax :: AllModeCommandParser
+relax :: SimpExpandParser ModeIndependentCommand
 relax = skipSatisfiedEquals R.Relax $> Relax
 
 -- \ignorespaces.
-ignorespaces :: AllModeCommandParser
+ignorespaces :: SimpExpandParser ModeIndependentCommand
 ignorespaces = do
   skipSatisfiedEquals R.IgnoreSpaces
   skipOptionalSpaces
   pure IgnoreSpaces
 
 -- \penalty 100.
-addPenalty :: AllModeCommandParser
+addPenalty :: SimpExpandParser ModeIndependentCommand
 addPenalty = do
   skipSatisfiedEquals R.AddPenalty
   AddPenalty <$> parseNumber
 
 -- \kern 100.
-addKern :: AllModeCommandParser
+addKern :: SimpExpandParser ModeIndependentCommand
 addKern = do
   skipSatisfiedEquals R.AddKern
   AddKern <$> parseLength
 
 -- \hskip 10pt and such.
-addSpecifiedGlue :: R.Axis -> AllModeCommandParser
+addSpecifiedGlue :: R.Axis -> SimpExpandParser ModeIndependentCommand
 addSpecifiedGlue mode = do
   skipSatisfied $ checkModeAndToken mode (== R.AddSpecifiedGlue)
   AddGlue <$> parseGlue
 
 -- ' '.
-addSpace :: AllModeCommandParser
+addSpace :: SimpExpandParser AllModesCommand
 addSpace = skipSatisfied isSpace $> AddSpace
 
 -- \hrule and such.
-addRule :: R.Axis -> AllModeCommandParser
+addRule :: R.Axis -> SimpExpandParser AllModesCommand
 addRule mode = do
   skipSatisfied $ checkModeAndToken mode (== R.AddRule)
   let cmd = AddRule {width = Nothing, height = Nothing, depth = Nothing}
@@ -198,14 +203,14 @@ addRule mode = do
       ln <- parseLength
       pure cmd {depth = Just ln}
 
-startParagraph :: AllModeCommandParser
+startParagraph :: SimpExpandParser AllModesCommand
 startParagraph = satisfyThen parToCom
   where
     parToCom (R.StartParagraph _indent) =
       Just StartParagraph {indent = _indent}
     parToCom _ = Nothing
 
-endParagraph :: AllModeCommandParser
+endParagraph :: SimpExpandParser AllModesCommand
 endParagraph = const EndParagraph <$> skipSatisfiedEquals R.EndParagraph
 
 -- HMode.
@@ -215,7 +220,7 @@ parseHModeCommand =
   P.choice [leaveHMode, addCharacter] <|>
   (HAllModesCommand <$> parseAllModeCommand R.Horizontal)
 
-leaveHMode :: HModeCommandParser
+leaveHMode :: SimpExpandParser HModeCommand
 leaveHMode = skipSatisfied endsHMode $> LeaveHMode
   where
     endsHMode R.End = True
@@ -223,7 +228,7 @@ leaveHMode = skipSatisfied endsHMode $> LeaveHMode
     -- endsHMode Dump = True
     endsHMode _ = False
 
-addCharacter :: HModeCommandParser
+addCharacter :: SimpExpandParser HModeCommand
 addCharacter = do
   c <- satisfyThen charToCode
   pure AddCharacter {method = ExplicitChar, char = c}
@@ -241,10 +246,10 @@ parseVModeCommand =
   (VAllModesCommand <$> parseAllModeCommand R.Vertical)
 
 -- \end.
-end :: VModeCommandParser
+end :: SimpExpandParser VModeCommand
 end = skipSatisfiedEquals R.End $> End
 
-enterHMode :: VModeCommandParser
+enterHMode :: SimpExpandParser VModeCommand
 enterHMode = skipSatisfied startsHMode $> EnterHMode
   where
     startsHMode (R.ModedCommand R.Horizontal _) = True

@@ -130,6 +130,37 @@ runReaderOnState f = runReader f <$> get
 
 type BuildMonad = ConfStateT (ExceptT (PH.ParseError E.ExpandedStream) IO)
 
+handleModeIndep
+  :: E.ExpandedStream
+  -> E.ModeIndependentCommand
+  -> BuildMonad ([BL.BreakableVListElem], E.ExpandedStream)
+handleModeIndep newStream com
+  =
+  let
+    modAccum acc = pure (acc, newStream)
+    modStream mStream = pure ([], mStream)
+    continueUnchanged = pure ([], newStream)
+  in case com of
+    E.Relax -> continueUnchanged
+    E.IgnoreSpaces -> continueUnchanged
+    E.AddPenalty n ->
+      modAccum [BL.ListPenalty (evaluatePenalty n)]
+    E.AddKern ln -> do
+      mag <- gets magnification
+      modAccum [BL.ListKern (evaluateKern mag ln)]
+    E.AddGlue g -> do
+      mag <- gets magnification
+      modAccum [BL.ListGlue (evaluateGlue mag g)]
+    -- E.ChangeCase d bt ->
+    --   modStream $ applyChangeCaseToStream newStream d bt
+    E.Assign E.Assignment {body = E.SelectFont fNr} -> do
+      fontSel <- BL.ListFontSelection <$> selectFont fNr
+      modAccum [fontSel]
+    E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
+      fontDef <- BL.ListFontDefinition <$> defineFont cs fPath
+      modAccum [fontDef]
+    E.Assign E.Assignment {body = m@E.DefineMacro {}} -> modStream $ defineMacro newStream m
+
 processHCommand
   :: E.ExpandedStream
   -> E.ExpandedStream
@@ -157,8 +188,6 @@ processHCommand oldStream newStream acc com =
         Nothing -> fail "Could not get character info"
       modAccum $ hCharBox : acc
     E.HAllModesCommand aCom -> case aCom of
-      E.Relax -> continueUnchanged
-      E.IgnoreSpaces -> continueUnchanged
       -- \indent: An empty box of width \parindent is appended to the current
       -- list, and the space factor is set to 1000.
       -- TODO: Space factor.
@@ -177,14 +206,6 @@ processHCommand oldStream newStream acc com =
             Just sg -> pure $ BL.HVListElem $ BL.ListGlue sg
             Nothing -> fail "Could not get space glue"
         modAccum $ hGlue : acc
-      E.AddPenalty n ->
-        modAccum $ (BL.HVListElem $ BL.ListPenalty (evaluatePenalty n)) : acc
-      E.AddKern ln -> do
-        mag <- gets magnification
-        modAccum $ (BL.HVListElem $ BL.ListKern (evaluateKern mag ln)) : acc
-      E.AddGlue g -> do
-        mag <- gets magnification
-        modAccum $ (BL.HVListElem $ BL.ListGlue (evaluateGlue mag g)) : acc
       E.AddRule {width = w, height = h, depth = d} -> do
         mag <- gets magnification
         let evalW =
@@ -202,16 +223,9 @@ processHCommand oldStream newStream acc com =
                 Just ln -> evaluateLength mag ln
             rule = B.Rule {width = evalW, height = evalH, depth = evalD}
         modAccum $ (BL.HVListElem $ BL.ListRule rule) : acc
-      -- E.ChangeCase d bt ->
-      --   modStream $ applyChangeCaseToStream newStream d bt
-      E.Assign E.Assignment {body = E.SelectFont fNr} -> do
-        fontSel <- BL.HVListElem . BL.ListFontSelection <$> selectFont fNr
-        modAccum $ fontSel : acc
-      E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
-        fontDef <- BL.HVListElem . BL.ListFontDefinition <$> defineFont cs fPath
-        modAccum $ fontDef : acc
-      E.Assign E.Assignment {body = m@E.DefineMacro {}} ->
-        modStream $ defineMacro newStream m
+      E.ModeIndependentCommand mcom -> do
+        (extraAcc, mStream) <- handleModeIndep newStream mcom
+        pure (((BL.HVListElem <$> extraAcc) ++ acc), mStream, True)
 
 extractParagraph
   :: Bool
@@ -367,7 +381,6 @@ processVCommand oldStream newStream pages curPage acc com =
   let
     continueSamePage newAcc mStream  = pure (pages, curPage, newAcc, mStream, True)
     modAccum newAcc = continueSamePage newAcc newStream
-    modStream mStream = continueSamePage acc mStream
     continueUnchanged = continueSamePage acc newStream
 
     addParagraphToPage indent = do
@@ -386,49 +399,30 @@ processVCommand oldStream newStream pages curPage acc com =
       lastPages <- runPageBuilder curPage (reverse acc)
       let pagesFinal = pages ++ lastPages
       pure (pagesFinal, curPage, acc, newStream, False)
-    E.VAllModesCommand aCom ->
-      case aCom of
-        E.Relax -> continueUnchanged
-        E.IgnoreSpaces -> continueUnchanged
-        -- Commands to start horizontal mode.
-        E.StartParagraph indent -> addParagraphToPage indent
-        -- \par does nothing in vertical mode.
-        E.EndParagraph -> continueUnchanged
-        -- <space token> has no effect in vertical modes.
-        E.AddSpace -> continueUnchanged
-        E.AddPenalty n ->
-          modAccum $ BL.ListPenalty (evaluatePenalty n) : acc
-        E.AddKern ln -> do
-          mag <- gets magnification
-          modAccum $ BL.ListKern (evaluateKern mag ln) : acc
-        E.AddGlue g -> do
-          mag <- gets magnification
-          modAccum $ BL.ListGlue (evaluateGlue mag g) : acc
-        E.AddRule {width = w, height = h, depth = d} -> do
-          mag <- gets magnification
-          evalW <- case w of
-            Nothing -> gets $ unDesiredWidth . desiredWidth
-            Just ln -> pure $ evaluateLength mag ln
-          let evalH = case h of
-                -- TODO.
-                Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> evaluateLength mag ln
-              evalD = case d of
-                Nothing -> 0
-                Just ln -> evaluateLength mag ln
-          let rule = B.Rule {width = evalW, height = evalH, depth = evalD}
-          modAccum (BL.ListRule rule : acc)
-        -- E.ChangeCase d bt ->
-        --   modStream $ applyChangeCaseToStream newStream d bt
-        E.Assign E.Assignment {body = E.SelectFont fNr} -> do
-          fontSel <- BL.ListFontSelection <$> selectFont fNr
-          modAccum $ fontSel : acc
-        E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
-          fontDef <- BL.ListFontDefinition <$> defineFont cs fPath
-          modAccum $ fontDef : acc
-        E.Assign E.Assignment {body = m@E.DefineMacro {}} ->
-          modStream $ defineMacro newStream m
     E.EnterHMode -> addParagraphToPage True
+    E.VAllModesCommand aCom -> case aCom of
+      E.StartParagraph indent -> addParagraphToPage indent
+      -- \par does nothing in vertical mode.
+      E.EndParagraph -> continueUnchanged
+      -- <space token> has no effect in vertical modes.
+      E.AddSpace -> continueUnchanged
+      E.AddRule {width = w, height = h, depth = d} -> do
+        mag <- gets magnification
+        evalW <- case w of
+          Nothing -> gets $ unDesiredWidth . desiredWidth
+          Just ln -> pure $ evaluateLength mag ln
+        let evalH = case h of
+              -- TODO.
+              Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+              Just ln -> evaluateLength mag ln
+            evalD = case d of
+              Nothing -> 0
+              Just ln -> evaluateLength mag ln
+        let rule = B.Rule {width = evalW, height = evalH, depth = evalD}
+        modAccum (BL.ListRule rule : acc)
+      E.ModeIndependentCommand mcom -> do
+        (extraAcc, mStream) <- handleModeIndep newStream mcom
+        continueSamePage (extraAcc ++ acc) mStream
 
 newCurrentPage :: CurrentPage
 newCurrentPage = CurrentPage [] Nothing
