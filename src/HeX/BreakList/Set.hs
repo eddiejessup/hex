@@ -15,24 +15,18 @@ class Settable a where
 
 instance Settable BreakableHListElem where
   type Result BreakableHListElem = B.HBoxElem
-  set ls (HVListElem    (ListGlue           g)) = B.HGlue <$> set ls g
-  set _  (HVListElem    (ListPenalty        _)) = []
-  set _  (HVListElem    (ListBox            b)) = [B.HChild b]
-  set _  (HVListElem    (ListRule           a)) = [B.HRule a]
-  set _  (HVListElem    (ListKern           a)) = [B.HKern a]
-  set _  (HVListElem    (ListFontDefinition a)) = [B.HFontDefinition a]
-  set _  (HVListElem    (ListFontSelection  a)) = [B.HFontSelection a]
-  set _  (ListCharacter a                     ) = [B.HCharacter a]
+  set ls (HVListElem    e) = B.HVBoxElem <$> set ls e
+  set _  (ListCharacter a) = [B.BoxCharacter a]
 
 instance Settable BreakableVListElem where
   type Result BreakableVListElem = B.VBoxElem
-  set ls (ListGlue           g) = B.VGlue <$> set ls g
+  set ls (ListGlue           g) = B.BoxGlue <$> set ls g
   set _  (ListPenalty        _) = []
-  set _  (ListBox            b) = [B.VChild b]
-  set _  (ListRule           a) = [B.VRule a]
-  set _  (ListKern           a) = [B.VKern a]
-  set _  (ListFontDefinition a) = [B.VFontDefinition a]
-  set _  (ListFontSelection  a) = [B.VFontSelection a]
+  set _  (ListBox            b) = [B.BoxChild b]
+  set _  (ListRule           a) = [B.BoxRule a]
+  set _  (ListKern           a) = [B.BoxKern a]
+  set _  (ListFontDefinition a) = [B.BoxFontDefinition a]
+  set _  (ListFontSelection  a) = [B.BoxFontSelection a]
 
 -- We can set a list of settable values by concatenating the result of setting
 -- each value.

@@ -225,7 +225,7 @@ processHCommand oldStream newStream acc com =
         modAccum $ (BL.HVListElem $ BL.ListRule rule) : acc
       E.ModeIndependentCommand mcom -> do
         (extraAcc, mStream) <- handleModeIndep newStream mcom
-        pure (((BL.HVListElem <$> extraAcc) ++ acc), mStream, True)
+        pure ((BL.HVListElem <$> extraAcc) ++ acc, mStream, True)
 
 extractParagraph
   :: Bool

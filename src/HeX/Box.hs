@@ -76,22 +76,17 @@ data Box = Box
 
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 data HBoxElem
-  = HChild Box
-  | HRule Rule
-  | HGlue SetGlue
-  | HKern Kern
-  | HFontDefinition FontDefinition
-  | HFontSelection FontSelection
-  | HCharacter Character
+  = HVBoxElem VBoxElem
+  | BoxCharacter Character
   deriving (Show)
 
 data VBoxElem
-  = VChild Box
-  | VRule Rule
-  | VGlue SetGlue
-  | VKern Kern
-  | VFontDefinition FontDefinition
-  | VFontSelection FontSelection
+  = BoxChild Box
+  | BoxRule Rule
+  | BoxGlue SetGlue
+  | BoxKern Kern
+  | BoxFontDefinition FontDefinition
+  | BoxFontSelection FontSelection
   deriving (Show)
 
 newtype Page =
@@ -114,47 +109,51 @@ instance Dimensioned Character where
   naturalDepth Character {depth = d} = d
 
 instance Dimensioned HBoxElem where
-  naturalWidth (HChild b) = naturalWidth b
-  naturalWidth (HRule r) = naturalWidth r
-  naturalWidth (HGlue g) = glueDimen g
-  naturalWidth (HKern k) = kernDimen k
-  naturalWidth (HFontDefinition _) = 0
-  naturalWidth (HFontSelection _) = 0
-  naturalWidth (HCharacter c) = naturalWidth c
-  naturalHeight (HChild b) = naturalHeight b
-  naturalHeight (HRule r) = naturalHeight r
-  naturalHeight (HGlue _) = 0
-  naturalHeight (HKern _) = 0
-  naturalHeight (HFontDefinition _) = 0
-  naturalHeight (HFontSelection _) = 0
-  naturalHeight (HCharacter c) = naturalHeight c
-  naturalDepth (HChild b) = naturalDepth b
-  naturalDepth (HRule r) = naturalDepth r
-  naturalDepth (HGlue _) = 0
-  naturalDepth (HKern _) = 0
-  naturalDepth (HFontDefinition _) = 0
-  naturalDepth (HFontSelection _) = 0
-  naturalDepth (HCharacter c) = naturalDepth c
+  naturalWidth (HVBoxElem (BoxChild b)) = naturalWidth b
+  naturalWidth (HVBoxElem (BoxRule r)) = naturalWidth r
+  naturalWidth (HVBoxElem (BoxGlue g)) = glueDimen g
+  naturalWidth (HVBoxElem (BoxKern k)) = kernDimen k
+  naturalWidth (HVBoxElem (BoxFontDefinition _)) = 0
+  naturalWidth (HVBoxElem (BoxFontSelection _)) = 0
+  naturalWidth (BoxCharacter c) = naturalWidth c
+
+  naturalHeight (HVBoxElem (BoxChild b)) = naturalHeight b
+  naturalHeight (HVBoxElem (BoxRule r)) = naturalHeight r
+  naturalHeight (HVBoxElem (BoxGlue _)) = 0
+  naturalHeight (HVBoxElem (BoxKern _)) = 0
+  naturalHeight (HVBoxElem (BoxFontDefinition _)) = 0
+  naturalHeight (HVBoxElem (BoxFontSelection _)) = 0
+  naturalHeight (BoxCharacter c) = naturalHeight c
+
+  naturalDepth (HVBoxElem (BoxChild b)) = naturalDepth b
+  naturalDepth (HVBoxElem (BoxRule r)) = naturalDepth r
+  naturalDepth (HVBoxElem (BoxGlue _)) = 0
+  naturalDepth (HVBoxElem (BoxKern _)) = 0
+  naturalDepth (HVBoxElem (BoxFontDefinition _)) = 0
+  naturalDepth (HVBoxElem (BoxFontSelection _)) = 0
+  naturalDepth (BoxCharacter c) = naturalDepth c
 
 instance Dimensioned VBoxElem where
-  naturalWidth (VChild b) = naturalWidth b
-  naturalWidth (VRule r) = naturalWidth r
-  naturalWidth (VGlue _) = 0
-  naturalWidth (VKern _) = 0
-  naturalWidth (VFontDefinition _) = 0
-  naturalWidth (VFontSelection _) = 0
-  naturalHeight (VChild b) = naturalHeight b
-  naturalHeight (VRule r) = naturalHeight r
-  naturalHeight (VGlue g) = glueDimen g
-  naturalHeight (VKern k) = kernDimen k
-  naturalHeight (VFontDefinition _) = 0
-  naturalHeight (VFontSelection _) = 0
-  naturalDepth (VChild b) = naturalDepth b
-  naturalDepth (VRule r) = naturalDepth r
-  naturalDepth (VGlue _) = 0
-  naturalDepth (VKern _) = 0
-  naturalDepth (VFontDefinition _) = 0
-  naturalDepth (VFontSelection _) = 0
+  naturalWidth (BoxChild b) = naturalWidth b
+  naturalWidth (BoxRule r) = naturalWidth r
+  naturalWidth (BoxGlue _) = 0
+  naturalWidth (BoxKern _) = 0
+  naturalWidth (BoxFontDefinition _) = 0
+  naturalWidth (BoxFontSelection _) = 0
+
+  naturalHeight (BoxChild b) = naturalHeight b
+  naturalHeight (BoxRule r) = naturalHeight r
+  naturalHeight (BoxGlue g) = glueDimen g
+  naturalHeight (BoxKern k) = kernDimen k
+  naturalHeight (BoxFontDefinition _) = 0
+  naturalHeight (BoxFontSelection _) = 0
+
+  naturalDepth (BoxChild b) = naturalDepth b
+  naturalDepth (BoxRule r) = naturalDepth r
+  naturalDepth (BoxGlue _) = 0
+  naturalDepth (BoxKern _) = 0
+  naturalDepth (BoxFontDefinition _) = 0
+  naturalDepth (BoxFontSelection _) = 0
 
 instance Dimensioned Box where
   naturalWidth Box {contents = (HBoxContents cs), desiredLength = Natural} =

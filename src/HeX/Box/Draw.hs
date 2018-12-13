@@ -44,31 +44,31 @@ instance DVIAble Character where
   toDVI Character {char = c} = [D.Character (fromEnum c) DI.Set]
 
 instance DVIAble HBoxElem where
-  toDVI (HChild b) =
+  toDVI (HVBoxElem (BoxChild b)) =
     [D.PushStack] ++
     toDVI b ++ [D.PopStack, D.MoveRight $ naturalWidth b]
     -- TODO: Rule.
-  toDVI (HGlue g) = [D.MoveRight $ glueDimen g]
-  toDVI (HKern k) = [D.MoveRight $ kernDimen k]
-  toDVI (HRule r) =
+  toDVI (HVBoxElem (BoxGlue g)) = [D.MoveRight $ glueDimen g]
+  toDVI (HVBoxElem (BoxKern k)) = [D.MoveRight $ kernDimen k]
+  toDVI (HVBoxElem (BoxRule r)) =
     [D.PushStack] ++
     toDVI r ++ [D.PopStack, D.MoveRight $ naturalWidth r]
-  toDVI (HFontDefinition e) = toDVI e
-  toDVI (HFontSelection e) = toDVI e
-  toDVI (HCharacter e) = toDVI e
+  toDVI (HVBoxElem e@(BoxFontDefinition _)) = toDVI e
+  toDVI (HVBoxElem e@(BoxFontSelection _)) = toDVI e
+  toDVI (BoxCharacter e) = toDVI e
 
 instance DVIAble VBoxElem where
-  toDVI (VChild b) =
+  toDVI (BoxChild b) =
     [D.PushStack] ++
     toDVI b ++ [D.PopStack, D.MoveDown $ naturalHeight b + naturalDepth b]
     -- TODO: Rule.
-  toDVI (VGlue g) = [D.MoveDown $ glueDimen g]
-  toDVI (VKern k) = [D.MoveDown $ kernDimen k]
-  toDVI (VRule r) =
+  toDVI (BoxGlue g) = [D.MoveDown $ glueDimen g]
+  toDVI (BoxKern k) = [D.MoveDown $ kernDimen k]
+  toDVI (BoxRule r) =
     [D.PushStack] ++
     toDVI r ++ [D.PopStack, D.MoveDown $ naturalHeight r + naturalDepth r]
-  toDVI (VFontDefinition e) = toDVI e
-  toDVI (VFontSelection e) = toDVI e
+  toDVI (BoxFontDefinition e) = toDVI e
+  toDVI (BoxFontSelection e) = toDVI e
 
 instance DVIAble Page where
   toDVI (Page vs) = D.BeginNewPage : concatMap toDVI vs
