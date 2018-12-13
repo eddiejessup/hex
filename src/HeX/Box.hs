@@ -10,6 +10,7 @@ import           Path                           ( Abs
 import           TFM                            ( TexFont )
 
 import qualified HeX.Unit                      as Unit
+import HeX.Dimensioned                          ( Dimensioned(..) )
 
 data Direction
   = Horizontal
@@ -27,6 +28,11 @@ data Rule = Rule
   , height :: Int
   , depth :: Int
   } deriving (Show)
+
+instance Dimensioned Rule where
+  naturalWidth Rule {width = w} = w
+  naturalHeight Rule {height = h} = h
+  naturalDepth Rule {depth = d} = d
 
 newtype Kern = Kern
   { kernDimen :: Int
@@ -57,6 +63,11 @@ data Character = Character
 instance Show Character where
   show c = "'" ++ [char c] ++ "'"
 
+instance Dimensioned Character where
+  naturalWidth Character {width = w} = w
+  naturalHeight Character {height = h} = h
+  naturalDepth Character {depth = d} = d
+
 newtype SetGlue = SetGlue
   { glueDimen :: Int
   }
@@ -74,39 +85,32 @@ data Box = Box
   , desiredLength :: DesiredLength
   } deriving (Show)
 
+instance Dimensioned Box where
+  naturalWidth Box {contents = (HBoxContents cs), desiredLength = Natural} =
+    sum $ fmap naturalWidth cs
+  naturalWidth Box {contents = (HBoxContents _), desiredLength = To to} = to
+  naturalWidth Box {contents = (VBoxContents [])} = 0
+  naturalWidth Box {contents = (VBoxContents cs)} =
+    maximum $ fmap naturalWidth cs
+  naturalHeight Box {contents = (HBoxContents [])} = 0
+  naturalHeight Box {contents = (HBoxContents cs)} =
+    maximum $ naturalHeight <$> cs
+  naturalHeight Box {contents = (VBoxContents cs), desiredLength = Natural} =
+    sum $ fmap naturalHeight cs
+  naturalHeight Box {contents = (VBoxContents _), desiredLength = To to} = to
+  naturalDepth Box {contents = (HBoxContents [])} = 0
+  naturalDepth Box {contents = (HBoxContents cs)} =
+    maximum $ naturalDepth <$> cs
+  -- TODO:
+  -- NaturalDepth
+  -- TODO.
+  -- Spread
+
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 data HBoxElem
   = HVBoxElem VBoxElem
   | BoxCharacter Character
   deriving (Show)
-
-data VBoxElem
-  = BoxChild Box
-  | BoxRule Rule
-  | BoxGlue SetGlue
-  | BoxKern Kern
-  | BoxFontDefinition FontDefinition
-  | BoxFontSelection FontSelection
-  deriving (Show)
-
-newtype Page =
-  Page [VBoxElem]
-  deriving (Show)
-
-class Dimensioned a where
-  naturalWidth :: a -> Int
-  naturalHeight :: a -> Int
-  naturalDepth :: a -> Int
-
-instance Dimensioned Rule where
-  naturalWidth Rule {width = w} = w
-  naturalHeight Rule {height = h} = h
-  naturalDepth Rule {depth = d} = d
-
-instance Dimensioned Character where
-  naturalWidth Character {width = w} = w
-  naturalHeight Character {height = h} = h
-  naturalDepth Character {depth = d} = d
 
 instance Dimensioned HBoxElem where
   naturalWidth (HVBoxElem (BoxChild b)) = naturalWidth b
@@ -133,6 +137,15 @@ instance Dimensioned HBoxElem where
   naturalDepth (HVBoxElem (BoxFontSelection _)) = 0
   naturalDepth (BoxCharacter c) = naturalDepth c
 
+data VBoxElem
+  = BoxChild Box
+  | BoxRule Rule
+  | BoxGlue SetGlue
+  | BoxKern Kern
+  | BoxFontDefinition FontDefinition
+  | BoxFontSelection FontSelection
+  deriving (Show)
+
 instance Dimensioned VBoxElem where
   naturalWidth (BoxChild b) = naturalWidth b
   naturalWidth (BoxRule r) = naturalWidth r
@@ -155,23 +168,5 @@ instance Dimensioned VBoxElem where
   naturalDepth (BoxFontDefinition _) = 0
   naturalDepth (BoxFontSelection _) = 0
 
-instance Dimensioned Box where
-  naturalWidth Box {contents = (HBoxContents cs), desiredLength = Natural} =
-    sum $ fmap naturalWidth cs
-  naturalWidth Box {contents = (HBoxContents _), desiredLength = To to} = to
-  naturalWidth Box {contents = (VBoxContents [])} = 0
-  naturalWidth Box {contents = (VBoxContents cs)} =
-    maximum $ fmap naturalWidth cs
-  naturalHeight Box {contents = (HBoxContents [])} = 0
-  naturalHeight Box {contents = (HBoxContents cs)} =
-    maximum $ naturalHeight <$> cs
-  naturalHeight Box {contents = (VBoxContents cs), desiredLength = Natural} =
-    sum $ fmap naturalHeight cs
-  naturalHeight Box {contents = (VBoxContents _), desiredLength = To to} = to
-  naturalDepth Box {contents = (HBoxContents [])} = 0
-  naturalDepth Box {contents = (HBoxContents cs)} =
-    maximum $ naturalDepth <$> cs
-  -- TODO:
-  -- NaturalDepth
-  -- TODO.
-  -- Spread
+newtype Page = Page [VBoxElem]
+  deriving (Show)

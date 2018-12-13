@@ -31,6 +31,7 @@ import qualified TFM
 import           TFM                            ( TexFont(..) )
 import qualified TFM.Character                 as TFMC
 
+import           HeX.Dimensioned                ( Dimensioned(..) )
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.BreakList.Line             ( bestRoute
@@ -348,12 +349,12 @@ addVListElem acc e = case e of
       BL.Glue baselineLength blineStretch blineShrink <- gets $ unBaselineGlue . baselineGlue
       blineLengthMin <- gets $ unBaselineLengthMin . baselineLengthMin
       minBlineGlue <- gets $ unMinBaselineGlue . minBaselineGlue
-      modify (\conf -> conf { previousBoxDepth = PreviousBoxDepth $ B.naturalDepth e })
+      modify (\conf -> conf { previousBoxDepth = PreviousBoxDepth $ naturalDepth e })
       pure $ if prevDepth <= -Unit.oneKPt
         then e : acc
         else
           let
-            proposedBaselineLength = baselineLength - prevDepth - B.naturalHeight b
+            proposedBaselineLength = baselineLength - prevDepth - naturalHeight b
           -- Intuition: set the distance between baselines to \baselineskip, but no
           -- closer than \lineskiplimit [theBaselineLengthMin], in which case
           -- \lineskip [theMinBaselineGlue] is used.

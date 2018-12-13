@@ -5,6 +5,7 @@ module HeX.Box.Draw where
 import qualified DVI.Instruction               as DI
 import qualified DVI.Document                  as D
 
+import           HeX.Dimensioned              ( Dimensioned(..) )
 import           HeX.Box
 
 boxContentsToDVI :: BoxContents -> [D.Instruction]
