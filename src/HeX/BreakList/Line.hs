@@ -197,4 +197,4 @@ setParagraph getRoute (x : xs) =
           : (HVListElem $ ListPenalty $ Penalty UN.tenK)
           : xsTrimmed
   in  setLine <$> getRoute (reverse xsFinished)
-  where setLine (Line conts _status) = set _status conts
+  where setLine (Line conts _status) = setHList _status conts

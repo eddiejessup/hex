@@ -1,42 +1,36 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module HeX.BreakList.Set where
 
-import qualified HeX.Box                       as B
+import Data.Maybe (mapMaybe)
 
+import qualified HeX.Box                       as B
 import           HeX.BreakList.Elem
 import           HeX.BreakList.Glue
 import           HeX.BreakList.Judge
 
-class Settable a where
-  type Result a :: *
-  set :: GlueStatus -> a -> [Result a]
+setHListElem :: GlueStatus -> BreakableHListElem -> Maybe B.HBoxElem
+setHListElem st (HVListElem    e) = B.HVBoxElem <$> setVListElem st e
+setHListElem _  (ListCharacter a) = Just $ B.BoxCharacter a
 
-instance Settable BreakableHListElem where
-  type Result BreakableHListElem = B.HBoxElem
-  set ls (HVListElem    e) = B.HVBoxElem <$> set ls e
-  set _  (ListCharacter a) = [B.BoxCharacter a]
+setVListElem :: GlueStatus -> BreakableVListElem -> Maybe B.VBoxElem
+setVListElem st (ListGlue           g) = Just $ B.BoxGlue $ setGlue st g
+setVListElem _  (ListPenalty        _) = Nothing
+setVListElem _  (ListBox            b) = Just $ B.BoxChild b
+setVListElem _  (ListRule           a) = Just $ B.BoxRule a
+setVListElem _  (ListKern           a) = Just $ B.BoxKern a
+setVListElem _  (ListFontDefinition a) = Just $ B.BoxFontDefinition a
+setVListElem _  (ListFontSelection  a) = Just $ B.BoxFontSelection a
 
-instance Settable BreakableVListElem where
-  type Result BreakableVListElem = B.VBoxElem
-  set ls (ListGlue           g) = B.BoxGlue <$> set ls g
-  set _  (ListPenalty        _) = []
-  set _  (ListBox            b) = [B.BoxChild b]
-  set _  (ListRule           a) = [B.BoxRule a]
-  set _  (ListKern           a) = [B.BoxKern a]
-  set _  (ListFontDefinition a) = [B.BoxFontDefinition a]
-  set _  (ListFontSelection  a) = [B.BoxFontSelection a]
+-- Set a list of list elements by concatenating the result of setting each
+-- value.
+setHList :: GlueStatus -> [BreakableHListElem] -> [B.HBoxElem]
+setHList st = mapMaybe (setHListElem st)
+setVList :: GlueStatus -> [BreakableVListElem] -> [B.VBoxElem]
+setVList st = mapMaybe (setVListElem st)
 
--- We can set a list of settable values by concatenating the result of setting
--- each value.
-instance Settable a => Settable [a] where
-  type Result [a] = Result a
-  set = concatMap . set
-
-instance Settable Glue where
-  type Result Glue = B.SetGlue
-  set ls g@Glue {dimen = d} = [B.SetGlue $ d + glueDiff ls g]
+setGlue :: GlueStatus -> Glue -> B.SetGlue
+setGlue st g@Glue {dimen = d} = B.SetGlue $ d + glueDiff st g
 
 -- Suppose the line order is i, and the glue has natural width u, and
 -- flexibility f_j, corresponding to its amount and order of stretch or shrink

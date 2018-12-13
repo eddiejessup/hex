@@ -37,4 +37,4 @@ pageBreakJudgment cs breakItem (DesiredHeight h) =
 setPage :: DesiredHeight -> [BreakableVListElem] -> B.Page
 setPage (DesiredHeight h) cs =
   let _status = listGlueStatus h cs
-  in B.Page $ set _status cs
+  in B.Page $ setVList _status cs
