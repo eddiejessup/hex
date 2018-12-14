@@ -2,8 +2,6 @@
 
 module HeX.BreakList.Judge where
 
-import           Data.Maybe                  ( mapMaybe )
-
 import qualified HeX.Unit                      as UN
 import           HeX.BreakList.Glue
 import           HeX.BreakList.BreakList           ( BreakableListElem(..) )

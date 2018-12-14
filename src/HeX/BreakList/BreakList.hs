@@ -5,7 +5,6 @@ import           Data.Maybe                    ( mapMaybe )
 import qualified Data.Adjacent                 as A
 
 import qualified HeX.Box                       as B
-import           HeX.Dimensioned                ( Dimensioned(..) )
 import           HeX.BreakList.Glue
 
 data BreakItem

@@ -1,20 +1,21 @@
 module Data.Adjacent where
 
-newtype Adjacency a =
-  Adjacency (Maybe a, a, Maybe a)
+data Adjacency a =
+  Adjacency { pre :: Maybe a
+            , v :: a
+            , post :: Maybe a}
   deriving (Show)
 
 toAdjacents :: [a] -> [Adjacency a]
 toAdjacents = inner Nothing
-  where
-    inner _       []     = []
-    inner _before [this] = [Adjacency (_before, this, Nothing)]
-    inner _before (this : _after : rest) =
-        Adjacency (_before, this, Just _after)
-            : inner (Just this) (_after : rest)
+ where
+  inner _    []  = []
+  inner _pre [_v] = [Adjacency _pre _v Nothing]
+  inner _pre (_v : xs@(_post : _)) =
+    Adjacency _pre _v (Just _post) : inner (Just _v) xs
 
-fromAdjacent :: Adjacency a -> a
-fromAdjacent (Adjacency (_, a, _)) = a
+fromAdjacency :: Adjacency a -> a
+fromAdjacency = v
 
-fromAdjacents :: [Adjacency a] -> [a]
-fromAdjacents = fmap fromAdjacent
+fromAdjacencies :: [Adjacency a] -> [a]
+fromAdjacencies = fmap fromAdjacency

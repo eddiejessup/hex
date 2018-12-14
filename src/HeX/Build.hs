@@ -278,7 +278,7 @@ runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
   -- the cost c of breaking at this point.
   | BL.isDiscardable x = do
     desiredH <- gets desiredHeight
-    case BL.toBreakItem (Adjacency (headMay cur, x, headMay xs)) of
+    case BL.toBreakItem Adjacency { pre = headMay cur, v = x, post = headMay xs } of
       -- If we can't break here, just add it to the list and continue.
       Nothing -> usualContinue
       Just brk -> case (pageBreakJudgment cur brk desiredH, _bestPointAndCost) of

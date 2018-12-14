@@ -58,7 +58,7 @@ instance Ord Route where
 
 withStatus :: DesiredWidth -> InEdge -> WithStatus InEdge
 withStatus (DesiredWidth dw) e@(InEdge v _ _)
-  = WithSummary e (listGlueStatus dw $ A.fromAdjacents v)
+  = WithSummary e (listGlueStatus dw $ A.fromAdjacencies v)
 
 lineDemerit :: LinePenalty -> BadnessSize -> BreakItem -> Demerit
 lineDemerit lp b br =
@@ -84,7 +84,7 @@ toOnlyPromisings ds = [y | (WithSummary y d) <- ds, isPromising d]
 
 inEdgeCons :: Entry -> InEdge -> InEdge
 inEdgeCons c e@(InEdge cs n (IsDiscarding discarding))
-  | discarding && isDiscardable (A.fromAdjacent c) = e
+  | discarding && isDiscardable (A.fromAdjacency c) = e
   | otherwise = InEdge (c : cs) n (IsDiscarding False)
 
 inEdgeConcat :: [Entry] -> InEdge -> InEdge
@@ -92,7 +92,7 @@ inEdgeConcat xs e = foldr inEdgeCons e xs
 
 finaliseInEdge :: Entry -> InEdge -> InEdge
 -- If the break-point is at glue, then the line doesn't include that glue.
-finaliseInEdge (A.Adjacency (_, HVListElem (ListGlue _), _)) e = e
+finaliseInEdge A.Adjacency { v = HVListElem (ListGlue _) } e = e
 -- If the break is at some other type of break, the line includes it.
 finaliseInEdge x (InEdge cs n discard) = InEdge (x:cs) n discard
 
@@ -176,7 +176,7 @@ bestRoute dw tol lp xs =
     acceptableDInEdges = toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
     (Route lns _) = shortestRoute acceptableDInEdges rs
   in
-    (\(WithSummary ev st) -> Line (reverse $ A.fromAdjacents ev) st) <$> reverse lns
+    (\(WithSummary ev st) -> Line (reverse $ A.fromAdjacencies ev) st) <$> reverse lns
 
 -- Expects contents in reverse order.
 -- Returns lines in reading order.

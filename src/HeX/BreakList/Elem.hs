@@ -1,6 +1,6 @@
 module HeX.BreakList.Elem where
 
-import qualified Data.Adjacent                 as A
+import           Data.Adjacent
 
 import qualified HeX.Box                       as B
 import           HeX.Dimensioned                ( Dimensioned(..) )
@@ -15,25 +15,21 @@ data BreakableHListElem
   deriving (Show)
 
 instance BreakableListElem BreakableHListElem where
-  toGlue (HVListElem e) = toGlue e
+  toGlue (HVListElem    e) = toGlue e
   toGlue (ListCharacter _) = Nothing
 
-  isDiscardable (HVListElem e) = isDiscardable e
+  isDiscardable (HVListElem    e) = isDiscardable e
   isDiscardable (ListCharacter _) = False
 
-  isBox (HVListElem e) = isBox e
+  isBox (HVListElem    e) = isBox e
   isBox (ListCharacter _) = True
 
-  -- TODO: Add math formula conditions.
-  -- TODO: Discretionary break and Math-off.
+-- TODO: Add math formula conditions.
+-- TODO: Discretionary break and Math-off.
 
-  toBreakItem (A.Adjacency a) = case a of
-    (Just x, HVListElem (ListGlue g), _) ->
-      if isDiscardable x then Nothing else Just $ GlueBreak g
-    (_, HVListElem (ListKern k), Just (HVListElem (ListGlue _))) ->
-      Just $ KernBreak k
-    (_, HVListElem (ListPenalty p), _) -> Just $ PenaltyBreak p
-    _ -> Nothing
+  toBreakItem (Adjacency (Just (HVListElem x)) (HVListElem y) (Just (HVListElem z)))
+    = toBreakItem $ Adjacency (Just x) y (Just z)
+  toBreakItem _ = Nothing
 
   naturalLength = naturalWidth
 
@@ -88,13 +84,13 @@ instance BreakableListElem BreakableVListElem where
   isBox (ListRule _) = True
   isBox _ = False
 
-  toBreakItem (A.Adjacency a) = case a of
-    (Just x, ListGlue g, _) ->
-      if isDiscardable x then Nothing else Just $ GlueBreak g
-    (_, ListKern k, Just ListGlue {}) ->
-      Just $ KernBreak k
-    (_, ListPenalty p, _) -> Just $ PenaltyBreak p
-    _ -> Nothing
+  toBreakItem Adjacency { pre = Just x, v = ListGlue g }
+    = if isDiscardable x then Nothing else Just $ GlueBreak g
+  toBreakItem Adjacency { v = ListKern k, post = Just (ListGlue _) }
+    = Just $ KernBreak k
+  toBreakItem Adjacency { v = ListPenalty p }
+    = Just $ PenaltyBreak p
+  toBreakItem _ = Nothing
 
   naturalLength = naturalHeight
 
