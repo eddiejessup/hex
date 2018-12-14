@@ -2,9 +2,11 @@
 
 module HeX.BreakList.Judge where
 
-import qualified HeX.Unit                      as UN
+import           Data.Maybe                  ( mapMaybe )
 
+import qualified HeX.Unit                      as UN
 import           HeX.BreakList.Glue
+import           HeX.BreakList.BreakList           ( BreakableListElem(..) )
 
 data Fixable
   = Fixable { ratio :: Rational
@@ -53,6 +55,10 @@ glueStatus excessLength (Glue _ _stretch _shrink)
        -- shrinkability must not be exceeded.
       -- \| o == 0 = Fixable {ratio = 1, order = o}
       | otherwise = Fixable {ratio = fromIntegral excessLength / f, order = o}
+
+listGlueStatus :: BreakableListElem a => Int -> [a] -> GlueStatus
+listGlueStatus desiredLength cs =
+  glueStatus (naturalListLength cs - desiredLength) (totalGlue cs)
 
 -- TODO: Use types to ensure number is within bounds, such as <= tenK.
 data Badness

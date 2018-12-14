@@ -1,40 +1,11 @@
 module HeX.BreakList.Elem where
 
 import qualified Data.Adjacent                 as A
-import           Data.Maybe
 
 import qualified HeX.Box                       as B
 import           HeX.Dimensioned                ( Dimensioned(..) )
 import           HeX.BreakList.Glue
-import           HeX.BreakList.Judge
-
-data BreakItem
-  = GlueBreak Glue
-  | KernBreak B.Kern
-  | PenaltyBreak Penalty
-  | NoBreak
-  deriving (Show)
-
-breakPenalty :: BreakItem -> Int
-breakPenalty (GlueBreak _) = 0
-breakPenalty (KernBreak _) = 0
-breakPenalty NoBreak = 0
-breakPenalty (PenaltyBreak (Penalty p)) = p
-
-newtype Penalty = Penalty Int
-
-instance Show Penalty where
-  show (Penalty p) = "|p" ++ show p ++ "|"
-
-class BreakableListElem a where
-  toGlue :: a -> Maybe Glue
-  isDiscardable :: a -> Bool
-  isBox :: a -> Bool
-  toBreakItem :: A.Adjacency a -> Maybe BreakItem
-  naturalLength :: a -> Int
-
-naturalListLength :: BreakableListElem a => [a] -> Int
-naturalListLength = sum . fmap naturalLength
+import           HeX.BreakList.BreakList        ( BreakableListElem(..), Penalty, BreakItem(..) )
 
 -- TODO: WhatsIt, Leaders, Mark, Insertion
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
@@ -170,8 +141,3 @@ condenseHList = foldr append []
       , (Sentence cs) <- x = Sentence (c : cs) : xs
       | ListCharacter B.Character {B.char = c} <- y = Sentence [c] : r
       | otherwise = NonSentence y : r
-
-listGlueStatus :: BreakableListElem a => Int -> [a] -> GlueStatus
-listGlueStatus desiredLength cs =
-  let totGlue = mconcat $ mapMaybe toGlue cs
-  in glueStatus (naturalListLength cs - desiredLength) totGlue
