@@ -95,7 +95,10 @@ data HModeCommand
   -- \| AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
   deriving (Show)
 
-type ExtractResult c = Either (ParseError ExpandedStream) (P.State ExpandedStream, c)
+-- Entry-points.
+
+type ExtractResult c
+  = Either (ParseError ExpandedStream) (P.State ExpandedStream, c)
 
 extractResult :: SimpExpandParser c -> ExpandedStream -> ExtractResult c
 extractResult p stream = do
@@ -103,7 +106,6 @@ extractResult p stream = do
   com <- eCom
   pure (state, com)
 
--- Entry-points.
 extractHModeCommand :: ExpandedStream -> ExtractResult HModeCommand
 extractHModeCommand = extractResult parseHModeCommand
 
@@ -133,13 +135,13 @@ parseModeIndependentCommand mode =
     , addSpecifiedGlue mode
     , Assign <$> parseAssignment ]
 
-checkModeAndToken ::
-     R.Axis
+checkModeAndToken
+  :: R.Axis
   -> (R.ModedCommandPrimitiveToken -> Bool)
   -> R.PrimitiveToken
   -> Bool
 checkModeAndToken m1 chk (R.ModedCommand m2 tok) = (m1 == m2) && chk tok
-checkModeAndToken _ _ _ = False
+checkModeAndToken _  _   _                       = False
 
 -- \relax.
 relax :: SimpExpandParser ModeIndependentCommand

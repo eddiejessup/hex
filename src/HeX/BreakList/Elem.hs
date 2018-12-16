@@ -7,62 +7,7 @@ import           HeX.Dimensioned                ( Dimensioned(..) )
 import           HeX.BreakList.Glue
 import           HeX.BreakList.BreakList        ( BreakableListElem(..), Penalty, BreakItem(..) )
 
--- TODO: WhatsIt, Leaders, Mark, Insertion
--- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
-data BreakableHListElem
-  = HVListElem BreakableVListElem
-  | ListCharacter B.Character
-  deriving (Show)
-
-instance BreakableListElem BreakableHListElem where
-  toGlue (HVListElem    e) = toGlue e
-  toGlue (ListCharacter _) = Nothing
-
-  isDiscardable (HVListElem    e) = isDiscardable e
-  isDiscardable (ListCharacter _) = False
-
-  isBox (HVListElem    e) = isBox e
-  isBox (ListCharacter _) = True
-
-  -- TODO: Add math formula conditions.
-  -- TODO: Discretionary break and Math-off.
-  toBreakItem Adjacency { pre = Just x, v = HVListElem (ListGlue g) }
-    = if isDiscardable x then Nothing else Just $ GlueBreak g
-  toBreakItem Adjacency { v = HVListElem (ListKern k), post = Just (HVListElem (ListGlue _)) }
-    = Just $ KernBreak k
-  toBreakItem Adjacency { v = HVListElem (ListPenalty p) }
-    = Just $ PenaltyBreak p
-  toBreakItem _ = Nothing
-
-  naturalLength = naturalWidth
-
-instance Dimensioned BreakableHListElem where
-  naturalWidth (HVListElem (ListBox b)) = naturalWidth b
-  naturalWidth (HVListElem (ListRule r)) = naturalWidth r
-  naturalWidth (HVListElem (ListGlue g)) = dimen g
-  naturalWidth (HVListElem (ListKern k)) = B.kernDimen k
-  naturalWidth (HVListElem (ListPenalty _)) = 0
-  naturalWidth (HVListElem (ListFontDefinition _)) = 0
-  naturalWidth (HVListElem (ListFontSelection _)) = 0
-  naturalWidth (ListCharacter c) = naturalWidth c
-
-  naturalHeight (HVListElem (ListBox b)) = naturalHeight b
-  naturalHeight (HVListElem (ListRule r)) = naturalHeight r
-  naturalHeight (HVListElem (ListGlue _)) = 0
-  naturalHeight (HVListElem (ListKern _)) = 0
-  naturalHeight (HVListElem (ListPenalty _)) = 0
-  naturalHeight (HVListElem (ListFontDefinition _)) = 0
-  naturalHeight (HVListElem (ListFontSelection _)) = 0
-  naturalHeight (ListCharacter c) = naturalHeight c
-
-  naturalDepth (HVListElem (ListBox b)) = naturalDepth b
-  naturalDepth (HVListElem (ListRule r)) = naturalDepth r
-  naturalDepth (HVListElem (ListGlue _)) = 0
-  naturalDepth (HVListElem (ListKern _)) = 0
-  naturalDepth (HVListElem (ListPenalty _)) = 0
-  naturalDepth (HVListElem (ListFontDefinition _)) = 0
-  naturalDepth (HVListElem (ListFontSelection _)) = 0
-  naturalDepth (ListCharacter c) = naturalDepth c
+-- Vertical list.
 
 data BreakableVListElem
   = ListBox B.Box
@@ -121,6 +66,65 @@ instance Dimensioned BreakableVListElem where
   naturalDepth (ListPenalty _) = 0
   naturalDepth (ListFontDefinition _) = 0
   naturalDepth (ListFontSelection _) = 0
+
+-- Horizontal list.
+
+-- TODO: WhatsIt, Leaders, Mark, Insertion
+-- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
+data BreakableHListElem
+  = HVListElem BreakableVListElem
+  | ListCharacter B.Character
+  deriving (Show)
+
+instance BreakableListElem BreakableHListElem where
+  toGlue (HVListElem    e) = toGlue e
+  toGlue (ListCharacter _) = Nothing
+
+  isDiscardable (HVListElem    e) = isDiscardable e
+  isDiscardable (ListCharacter _) = False
+
+  isBox (HVListElem    e) = isBox e
+  isBox (ListCharacter _) = True
+
+  -- TODO: Add math formula conditions.
+  -- TODO: Discretionary break and Math-off.
+  toBreakItem Adjacency { pre = Just x, v = HVListElem (ListGlue g) }
+    = if isDiscardable x then Nothing else Just $ GlueBreak g
+  toBreakItem Adjacency { v = HVListElem (ListKern k), post = Just (HVListElem (ListGlue _)) }
+    = Just $ KernBreak k
+  toBreakItem Adjacency { v = HVListElem (ListPenalty p) }
+    = Just $ PenaltyBreak p
+  toBreakItem _ = Nothing
+
+  naturalLength = naturalWidth
+
+instance Dimensioned BreakableHListElem where
+  naturalWidth (HVListElem (ListBox b)) = naturalWidth b
+  naturalWidth (HVListElem (ListRule r)) = naturalWidth r
+  naturalWidth (HVListElem (ListGlue g)) = dimen g
+  naturalWidth (HVListElem (ListKern k)) = B.kernDimen k
+  naturalWidth (HVListElem (ListPenalty _)) = 0
+  naturalWidth (HVListElem (ListFontDefinition _)) = 0
+  naturalWidth (HVListElem (ListFontSelection _)) = 0
+  naturalWidth (ListCharacter c) = naturalWidth c
+
+  naturalHeight (HVListElem (ListBox b)) = naturalHeight b
+  naturalHeight (HVListElem (ListRule r)) = naturalHeight r
+  naturalHeight (HVListElem (ListGlue _)) = 0
+  naturalHeight (HVListElem (ListKern _)) = 0
+  naturalHeight (HVListElem (ListPenalty _)) = 0
+  naturalHeight (HVListElem (ListFontDefinition _)) = 0
+  naturalHeight (HVListElem (ListFontSelection _)) = 0
+  naturalHeight (ListCharacter c) = naturalHeight c
+
+  naturalDepth (HVListElem (ListBox b)) = naturalDepth b
+  naturalDepth (HVListElem (ListRule r)) = naturalDepth r
+  naturalDepth (HVListElem (ListGlue _)) = 0
+  naturalDepth (HVListElem (ListKern _)) = 0
+  naturalDepth (HVListElem (ListPenalty _)) = 0
+  naturalDepth (HVListElem (ListFontDefinition _)) = 0
+  naturalDepth (HVListElem (ListFontSelection _)) = 0
+  naturalDepth (ListCharacter c) = naturalDepth c
 
 -- Display.
 

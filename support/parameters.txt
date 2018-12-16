@@ -1,168 +1,168 @@
 ## Integers
 
-pretolerance
+pretolerance (PreTolerance)
     : Badness tolerance before hyphenation
 
-tolerance
+tolerance (Tolerance)
     : Badness tolerance after hyphenation
 
-hbadness
+hbadness (HBadness)
     : Badness above which bad hboxes will be shown
 
-vbadness
+vbadness (VBadness)
     : Badness above which bad vboxes will be shown
 
-linepenalty
+linepenalty (LinePenalty)
     : Amount added to badness of every line in a paragraph
 
-hyphenpenalty
+hyphenpenalty (HyphenPenalty)
     : Penalty for line break after discretionary hyphen
 
-exhyphenpenalty
+exhyphenpenalty (ExHyphenPenalty)
     : Penalty for line break after explicit hyphen
 
-binoppenalty
+binoppenalty (BinOpPenalty)
     : Penalty for line break after binary operation
 
-relpenalty
+relpenalty (RelPenalty)
     : Penalty for line break after math relation
 
-clubpenalty
+clubpenalty (ClubPenalty)
     : Penalty for creating a club line at bottom of page
 
-widowpenalty
+widowpenalty (WidowPenalty)
     : Penalty for creating a widow line at top of page
 
-displaywidowpenalty
+displaywidowpenalty (DisplayWidowPenalty)
     : Ditto, before a display
 
-brokenpenalty
+brokenpenalty (BrokenPenalty)
     : Penalty for page break after a hyphenated line
 
-predisplaypenalty
+predisplaypenalty (PreDisplayPenalty)
     : Penalty for page break just before a display
 
-postdisplaypenalty
+postdisplaypenalty (PostDisplayPenalty)
     : Penalty for page break just after a display
 
-interlinepenalty
+interlinepenalty (InterlinePenalty)
     : Additional penalty for page break between lines
 
-floatingpenalty
+floatingpenalty (FloatingPenalty)
     : Penalty for insertions that are split
 
-outputpenalty
+outputpenalty (OutputPenalty)
     : Penalty at the current page break
 
-doublehyphendemerits
+doublehyphendemerits (DoubleHyphenDemerits)
     : Demerits for consecutive broken lines
 
-finalhyphendemerits
+finalhyphendemerits (FinalHyphenDemerits)
     : Demerits for a penultimate broken line
 
-adjdemerits
+adjdemerits (AdjDemerits)
     : Demerits for adjacent incompatible lines
 
-looseness
+looseness (Looseness)
     : Change to the number of lines in a paragraph
 
-pausing
+pausing (Pausing)
     : Positive if pausing after each line is read from a file
 
-holdinginserts
+holdinginserts (HoldingInserts)
     : Positive if insertions remain dormant in output box
 
-tracingonline
+tracingonline (TracingOnline)
     : Positive if showing diagnostic info on the terminal
 
-tracingmacros
+tracingmacros (TracingMacros)
     : Positive if showing macros as they are expanded
 
-tracingstats
+tracingstats (TracingStats)
     : Positive if showing statistics about memory usage
 
-tracingparagraphs
+tracingparagraphs (TracingParagraphs)
     : Positive if showing line-break calculations
 
-tracingpages
+tracingpages (TracingPages)
     : Positive if showing page-break calculations
 
-tracingoutput
+tracingoutput (TracingOutput)
     : Positive if showing boxes that are shipped out
 
-tracinglostchars
+tracinglostchars (TracingLostChars)
     : Positive if showing characters not in the font
 
-tracingcommands
+tracingcommands (TracingCommands)
     : Positive if showing commands before they are executed
 
-tracingrestores
+tracingrestores (TracingRestores)
     : Positive if showing deassignments when groups end
 
-language
+language (Language)
     : The current set of hyphenation rules
 
-uchyph
+uchyph (UCHyph)
     : Positive if hyphenating words beginning with capital letters
 
-lefthyphenmin
+lefthyphenmin (LeftHyphenMin)
     : Smallest fragment at beginning of hyphenated word
 
-righthyphenmin
+righthyphenmin (RightHyphenMin)
     : Smallest fragment at end of hyphenated word
 
-globaldefs
+globaldefs (GlobalDefs)
     : Nonzero if overriding \global specifications
 
-defaulthyphenchar
+defaulthyphenchar (DefaultHyphenChar)
     : \hyphenchar value when a font is loaded
 
-defaultskewchar
+defaultskewchar (DefaultskewChar)
     : \skewchar value when a font is loaded
 
-escapechar
+escapechar (EscapeChar)
     : Escape character in the output of control-sequence tokens
 
-endlinechar
+endlinechar (EndlineChar)
     : Character placed at the right end of an input line
 
-newlinechar
+newlinechar (NewlineChar)
     : Character that starts a new output line
 
-maxdeadcycles
+maxdeadcycles (MaxDeadCycles)
     : Upper bound on \deadcycles
 
-hangafter
+hangafter (HangAfter)
     : Hanging indentation changes after this many lines
 
-fam
+fam (Fam)
     : The current family number
 
-mag
+mag (Mag)
     : Magnification ratio, times 1000
 
-delimiterfactor
+delimiterfactor (DelimiterFactor)
     : Ratio for variable delimiters, times 1000
 
-time
+time (Time)
     : Current time of day in minutes since midnight
 
-day
+day (Day)
     : Current day of the month
 
-month
+month (Month)
     : Current month of the year
 
-year
+year (Year)
     : Current year of our Lord
 
-showboxbreadth
+showboxbreadth (ShowBoxBreadth)
     : Maximum items per level when boxes are shown
 
-showboxdepth
+showboxdepth (ShowBoxDepth)
     : Maximum level when boxes are shown
 
-errorcontextlines
+errorcontextlines (ErrorContextLines)
     : Maximum extra context shown when errors occur
 
 

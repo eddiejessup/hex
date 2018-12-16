@@ -167,9 +167,9 @@ codesToDVIRaw :: [CharCode] -> IO [EncodableInstruction]
 codesToDVIRaw xs = do
   pages <- codesToPages xs
   -- Who cares, it's for debugging
-  let mag = 1000
+  let _mag = 1000
   let instrs = pagesToDVI pages
-  case parseInstructions instrs (unMagnification mag) of
+  case parseInstructions instrs _mag of
     Left err -> ioError $ userError err
     Right encInstrs -> pure $ reverse encInstrs
 

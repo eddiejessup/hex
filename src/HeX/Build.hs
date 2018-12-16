@@ -27,17 +27,16 @@ import           Safe                           ( headMay )
 import qualified Text.Megaparsec               as PS
 
 import           Data.Adjacent                  ( Adjacency(..) )
+import           Data.Path                      ( findFilePath )
 import qualified TFM
 import           TFM                            ( TexFont(..) )
 import qualified TFM.Character                 as TFMC
-
 import           HeX.Dimensioned                ( Dimensioned(..) )
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.BreakList.Line             ( bestRoute
                                                 , setParagraph
                                                 )
-
 import           HeX.BreakList.Page             ( PageBreakJudgment(..)
                                                 , pageBreakJudgment
                                                 , setPage
@@ -147,11 +146,11 @@ handleModeIndep newStream com
     E.AddPenalty n ->
       modAccum [BL.ListPenalty (evaluatePenalty n)]
     E.AddKern ln -> do
-      mag <- gets magnification
-      modAccum [BL.ListKern (evaluateKern mag ln)]
+      _mag <- gets (mag . params)
+      modAccum [BL.ListKern (evaluateKern _mag ln)]
     E.AddGlue g -> do
-      mag <- gets magnification
-      modAccum [BL.ListGlue (evaluateGlue mag g)]
+      _mag <- gets (mag . params)
+      modAccum [BL.ListGlue (evaluateGlue _mag g)]
     -- E.ChangeCase d bt ->
     --   modStream $ applyChangeCaseToStream newStream d bt
     E.Assign E.Assignment {body = E.SelectFont fNr} -> do
@@ -208,20 +207,20 @@ processHCommand oldStream newStream acc com =
             Nothing -> fail "Could not get space glue"
         modAccum $ hGlue : acc
       E.AddRule {width = w, height = h, depth = d} -> do
-        mag <- gets magnification
+        _mag <- gets (mag . params)
         let evalW =
               case w of
                 Nothing ->
                   Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> evaluateLength mag ln
+                Just ln -> evaluateLength _mag ln
             evalH =
               case h of
                 Nothing -> Unit.toScaledPointApprox (10 :: Int) Unit.Point
-                Just ln -> evaluateLength mag ln
+                Just ln -> evaluateLength _mag ln
             evalD =
               case d of
                 Nothing -> 0
-                Just ln -> evaluateLength mag ln
+                Just ln -> evaluateLength _mag ln
             rule = B.Rule {width = evalW, height = evalH, depth = evalD}
         modAccum $ (BL.HVListElem $ BL.ListRule rule) : acc
       E.ModeIndependentCommand mcom -> do
@@ -254,9 +253,9 @@ extractParagraphLineBoxes
   -> BuildMonad ([[B.HBoxElem]], E.ExpandedStream)
 extractParagraphLineBoxes indent stream = do
   (hList, stream') <- extractParagraph indent stream
-  desiredW <- gets desiredWidth
-  lineTol <- gets lineTolerance
-  linePen <- gets linePenalty
+  desiredW <- gets (hSize . params)
+  lineTol <- gets (tolerance . params)
+  linePen <- gets (linePenalty . params)
   let getRoute = bestRoute desiredW lineTol linePen
       elemLists = setParagraph getRoute hList
   pure (elemLists, stream')
@@ -267,7 +266,7 @@ data CurrentPage = CurrentPage { items :: [BL.BreakableVListElem]
 runPageBuilder
   :: Monad m => CurrentPage -> [BL.BreakableVListElem] -> ConfStateT m [B.Page]
 runPageBuilder (CurrentPage cur _) [] = do
-  desiredH <- gets desiredHeight
+  desiredH <- gets (vSize . params)
   pure [setPage desiredH $ reverse cur]
 runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
   -- If the current vlist has no boxes, we discard a discardable item.
@@ -277,7 +276,7 @@ runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
   -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
   -- the cost c of breaking at this point.
   | BL.isDiscardable x = do
-    desiredH <- gets desiredHeight
+    desiredH <- gets (vSize . params)
     case BL.toBreakItem Adjacency { pre = headMay cur, v = x, post = headMay xs } of
       -- If we can't break here, just add it to the list and continue.
       Nothing -> usualContinue
@@ -343,25 +342,25 @@ addVListElem acc e = case e of
     (BL.ListBox b) -> addVListBox b
     _ -> pure $ e : acc
   where
+    addVListBox :: Monad m => B.Box -> ConfStateT m [BL.BreakableVListElem]
     addVListBox b = do
-      prevDepth <- gets $ unPreviousBoxDepth . previousBoxDepth
-      -- TODO:
-      BL.Glue baselineLength blineStretch blineShrink <- gets $ unBaselineGlue . baselineGlue
-      blineLengthMin <- gets $ unBaselineLengthMin . baselineLengthMin
-      minBlineGlue <- gets $ unMinBaselineGlue . minBaselineGlue
-      modify (\conf -> conf { previousBoxDepth = PreviousBoxDepth $ naturalDepth e })
-      pure $ if prevDepth <= -Unit.oneKPt
-        then e : acc
-        else
-          let
-            proposedBaselineLength = baselineLength - prevDepth - naturalHeight b
-          -- Intuition: set the distance between baselines to \baselineskip, but no
-          -- closer than \lineskiplimit [theBaselineLengthMin], in which case
-          -- \lineskip [theMinBaselineGlue] is used.
-            glue = BL.ListGlue $ if proposedBaselineLength >= blineLengthMin
-              then BL.Glue proposedBaselineLength blineStretch blineShrink
-              else minBlineGlue
-          in e : glue : acc
+        _prevDepth <- gets (unPrevDepth . prevDepth . params)
+        BL.Glue blineLength blineStretch blineShrink <- gets (unBaselineSkip . baselineSkip . params)
+        skipLimit <- gets (unLineSkipLimit . lineSkipLimit . params)
+        skip <- gets (unLineSkip . lineSkip . params)
+        modifyParams (\ps -> ps { prevDepth = PrevDepth $ naturalDepth e })
+        pure $ if _prevDepth <= -Unit.oneKPt
+          then e : acc
+          else
+            let
+              proposedBaselineLength = blineLength - _prevDepth - naturalHeight b
+            -- Intuition: set the distance between baselines to \baselineskip, but no
+            -- closer than \lineskiplimit [theBaselineLengthMin], in which case
+            -- \lineskip [theMinBaselineGlue] is used.
+              glue = BL.ListGlue $ if proposedBaselineLength >= skipLimit
+                then BL.Glue proposedBaselineLength blineStretch blineShrink
+                else skip
+            in e : glue : acc
 
 addVListElems
   :: Monad m
@@ -390,7 +389,7 @@ processVCommand oldStream newStream pages curPage acc com =
       -- (Note that we pass "oldStream", not "newStream".)
       -- Paraboxes are returned in reading order.
       (lineBoxes, mStream) <- extractParagraphLineBoxes indent oldStream
-      desiredW <- gets $ unDesiredWidth . desiredWidth
+      desiredW <- gets (unHSize . hSize . params)
       let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
       newAcc <- addVListElems acc $ BL.ListBox . toBox <$> lineBoxes
       continueSamePage newAcc mStream
@@ -408,17 +407,17 @@ processVCommand oldStream newStream pages curPage acc com =
       -- <space token> has no effect in vertical modes.
       E.AddSpace -> continueUnchanged
       E.AddRule {width = w, height = h, depth = d} -> do
-        mag <- gets magnification
+        _mag <- gets (mag . params)
         evalW <- case w of
-          Nothing -> gets $ unDesiredWidth . desiredWidth
-          Just ln -> pure $ evaluateLength mag ln
+          Nothing -> gets (unHSize . hSize . params)
+          Just ln -> pure $ evaluateLength _mag ln
         let evalH = case h of
               -- TODO.
               Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-              Just ln -> evaluateLength mag ln
+              Just ln -> evaluateLength _mag ln
             evalD = case d of
               Nothing -> 0
-              Just ln -> evaluateLength mag ln
+              Just ln -> evaluateLength _mag ln
         let rule = B.Rule {width = evalW, height = evalH, depth = evalD}
         modAccum (BL.ListRule rule : acc)
       E.ModeIndependentCommand mcom -> do
@@ -431,7 +430,6 @@ newCurrentPage = CurrentPage [] Nothing
 extractPages :: E.ExpandedStream -> BuildMonad ([B.Page], E.ExpandedStream)
 extractPages = extractPagesInner [] newCurrentPage []
   where
-
     extractPagesInner
       :: [B.Page]
       -> CurrentPage
