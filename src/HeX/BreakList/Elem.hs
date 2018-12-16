@@ -24,11 +24,14 @@ instance BreakableListElem BreakableHListElem where
   isBox (HVListElem    e) = isBox e
   isBox (ListCharacter _) = True
 
--- TODO: Add math formula conditions.
--- TODO: Discretionary break and Math-off.
-
-  toBreakItem (Adjacency (Just (HVListElem x)) (HVListElem y) (Just (HVListElem z)))
-    = toBreakItem $ Adjacency (Just x) y (Just z)
+  -- TODO: Add math formula conditions.
+  -- TODO: Discretionary break and Math-off.
+  toBreakItem Adjacency { pre = Just x, v = HVListElem (ListGlue g) }
+    = if isDiscardable x then Nothing else Just $ GlueBreak g
+  toBreakItem Adjacency { v = HVListElem (ListKern k), post = Just (HVListElem (ListGlue _)) }
+    = Just $ KernBreak k
+  toBreakItem Adjacency { v = HVListElem (ListPenalty p) }
+    = Just $ PenaltyBreak p
   toBreakItem _ = Nothing
 
   naturalLength = naturalWidth
