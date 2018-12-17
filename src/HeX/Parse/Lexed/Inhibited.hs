@@ -89,7 +89,7 @@ nrExpressions f = foldl' next (Just (0, 0))
     next Nothing _ = Nothing
     next v (f -> EQ) = v
     next (Just (depth, nrExprs)) (f -> GT) = Just (succ depth, nrExprs)
-    next (Just (depth, nrExprs)) (f -> LT)
+    next (Just (depth, nrExprs)) (f -> _) -- (LT)
       | depth < 1 = Nothing
       | depth == 1 = Just (pred depth, succ nrExprs)
       | otherwise = Just (pred depth, nrExprs)

@@ -25,10 +25,14 @@ data MacroPrefix
   | Global
   deriving (Eq)
 
+data MacroAssignment
+  = MacroAssignment { name :: Lex.ControlSequenceLike
+                    , contents :: Inh.MacroContents
+                    , long, outer :: Bool }
+  deriving (Show)
+
 data AssignmentBody
-  = DefineMacro { name :: Lex.ControlSequenceLike
-                , contents :: Inh.MacroContents
-                , long, outer :: Bool }
+  = DefineMacro MacroAssignment
   -- \| ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
   -- \| SetVariable VariableAssignment
   -- \| ModifyVariable VariableModificatxion
@@ -132,8 +136,7 @@ defineMacro = do
   replaceToks <- parseInhibited Inh.parseMacroText
   pure $
     Assignment
-    { body =
-        DefineMacro
+    { body = DefineMacro $ MacroAssignment
         { name = cs
         , contents = Inh.MacroContents preParamToks paramDelims replaceToks
         , long = Long `elem` prefixes

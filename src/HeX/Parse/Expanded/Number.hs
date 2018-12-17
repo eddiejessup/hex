@@ -95,9 +95,9 @@ parseNormalInteger = P.choice
     isBacktick _ = False
 
 parseDecimalIntegerDigit :: SimpExpandParser Int
-parseDecimalIntegerDigit = satisfyThen charToDigit
+parseDecimalIntegerDigit = satisfyThen decCharToInt
  where
-  charToDigit (R.CharCat (Lex.CharCat c Lex.Other)) = case c of
+  decCharToInt (R.CharCat (Lex.CharCat c Lex.Other)) = case c of
     '0' -> Just 0
     '1' -> Just 1
     '2' -> Just 2
@@ -109,16 +109,16 @@ parseDecimalIntegerDigit = satisfyThen charToDigit
     '8' -> Just 8
     '9' -> Just 9
     _   -> Nothing
-  charToDigit _ = Nothing
+  decCharToInt _ = Nothing
 
 parseHexadecimalIntegerDigits :: SimpExpandParser [Int]
 parseHexadecimalIntegerDigits = skipSatisfied isDoubleQuote
-  *> P.some (satisfyThen charToDigit)
+  *> P.some (satisfyThen hexCharToInt)
  where
   isDoubleQuote (R.CharCat (Lex.CharCat '"' Lex.Other)) = True
   isDoubleQuote _ = False
 
-  charToDigit (R.CharCat (Lex.CharCat c Lex.Other)) = case c of
+  hexCharToInt (R.CharCat (Lex.CharCat c Lex.Other)) = case c of
     '0' -> Just 0
     '1' -> Just 1
     '2' -> Just 2
@@ -136,7 +136,7 @@ parseHexadecimalIntegerDigits = skipSatisfied isDoubleQuote
     'E' -> Just 14
     'F' -> Just 15
     _   -> Nothing
-  charToDigit (R.CharCat (Lex.CharCat c Lex.Letter)) = case c of
+  hexCharToInt (R.CharCat (Lex.CharCat c Lex.Letter)) = case c of
     'A' -> Just 10
     'B' -> Just 11
     'C' -> Just 12
@@ -144,16 +144,16 @@ parseHexadecimalIntegerDigits = skipSatisfied isDoubleQuote
     'E' -> Just 14
     'F' -> Just 15
     _   -> Nothing
-  charToDigit _ = Nothing
+  hexCharToInt _ = Nothing
 
 parseOctalIntegerDigits :: SimpExpandParser [Int]
 parseOctalIntegerDigits = skipSatisfied isSingleQuote
-  *> P.some (satisfyThen charToDigit)
+  *> P.some (satisfyThen octCharToInt)
  where
   isSingleQuote (R.CharCat (Lex.CharCat '\'' Lex.Other)) = True
   isSingleQuote _ = False
 
-  charToDigit (R.CharCat (Lex.CharCat c Lex.Other)) = case c of
+  octCharToInt (R.CharCat (Lex.CharCat c Lex.Other)) = case c of
     '0' -> Just 0
     '1' -> Just 1
     '2' -> Just 2
@@ -163,7 +163,7 @@ parseOctalIntegerDigits = skipSatisfied isSingleQuote
     '6' -> Just 6
     '7' -> Just 7
     _   -> Nothing
-  charToDigit _ = Nothing
+  octCharToInt _ = Nothing
 
 -- parseCoercedInteger = P.choice [ parseInternalLengthAsInt
 --                                , parseInternalGlueAsInt

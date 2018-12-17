@@ -16,11 +16,11 @@ data Instruction
          , move :: MoveMode }
   | BeginNewPage
   | MoveRight Int
-  | MoveRightW
-  | MoveRightX
+  -- | MoveRightW
+  -- | MoveRightX
   | MoveDown Int
-  | MoveDownY
-  | MoveDownZ
+  -- | MoveDownY
+  -- | MoveDownZ
   | DefineFont { fontInfo :: TexFont
                , fontPath :: FilePath
                , fontNr :: Int
@@ -28,7 +28,7 @@ data Instruction
   | SelectFont Int
   | PushStack
   | PopStack
-  | DoSpecial String
+  -- | DoSpecial String
   deriving (Show)
 
 data ParseState = ParseState { instrs :: [EncodableInstruction]

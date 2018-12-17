@@ -19,7 +19,8 @@ data Direction
 
 data DesiredLength
   = Natural
-  | Spread Int
+  -- TODO: Implement Spread.
+  -- | Spread Int
   | To Int
   deriving (Show)
 
@@ -101,10 +102,8 @@ instance Dimensioned Box where
   naturalDepth Box {contents = (HBoxContents [])} = 0
   naturalDepth Box {contents = (HBoxContents cs)} =
     maximum $ naturalDepth <$> cs
-  -- TODO:
-  -- NaturalDepth
-  -- TODO.
-  -- Spread
+  -- TODO: Look up and implement specification.
+  naturalDepth Box {contents = (VBoxContents _)} = error "Not implemented: Depth of VBox"
 
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 data HBoxElem

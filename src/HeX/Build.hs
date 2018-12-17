@@ -50,10 +50,6 @@ import qualified HeX.Parse.Resolved            as R
 import qualified HeX.Parse.Helpers             as PH
 import qualified HeX.Unit                      as Unit
 
-csToFontNr :: Lex.ControlSequenceLike -> Int
-csToFontNr (Lex.ControlSequenceProper (Lex.ControlSequence "thefont")) =
-  R.theFontNr
-
 currentFontInfo :: Monad m => MaybeT (ConfReaderT m) TexFont
 currentFontInfo
   -- Maybe font number isn't set.
@@ -66,12 +62,12 @@ currentFontInfo
     HMap.lookup <$> MaybeT (return maybeFontNr) <*> lift (asks fontInfoMap)
   MaybeT $ pure fInfo
 
-defineFont ::
-     (MonadState Config m, MonadIO m)
+defineFont
+  :: (MonadState Config m, MonadIO m)
   => Lex.ControlSequenceLike
   -> Path Rel File
   -> m B.FontDefinition
-defineFont cs fPath = do
+defineFont _ fPath = do
   theFontDirectories <- gets fontDirectories
   maybeFontDef <- liftIO $ runMaybeT $ ioFontDef theFontDirectories
   case maybeFontDef of
@@ -81,7 +77,8 @@ defineFont cs fPath = do
       pure fontDef
     Nothing -> fail "Could not define font"
   where
-    fNr = csToFontNr cs
+    -- TODO: Look up font number from control sequence.
+    fNr = R.theFontNr
     ioFontDef fontDirs = do
       fontPath <- findFilePath fPath fontDirs
       font <- liftIO $ TFM.readTFMFancy fontPath
@@ -118,12 +115,14 @@ spaceGlue = do
       toFlex = BL.finiteFlex . fromIntegral . toSP
   pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
-defineMacro :: E.ExpandedStream -> E.AssignmentBody -> E.ExpandedStream
-defineMacro (E.ExpandedStream (R.ResolvedStream ls csMap)) (E.DefineMacro name macro False False) =
-  E.ExpandedStream (R.ResolvedStream ls csMap')
+defineMacro :: E.ExpandedStream -> E.MacroAssignment -> E.ExpandedStream
+defineMacro (E.ExpandedStream (R.ResolvedStream ls csMap)) (E.MacroAssignment name macro False False)
+  = E.ExpandedStream (R.ResolvedStream ls csMap')
   where
     newMacro = R.SyntaxCommandHead $ R.MacroToken macro
     csMap' = HMap.insert name newMacro csMap
+defineMacro _ _
+  = error "Not implemented: long and outer macros"
 
 runReaderOnState :: MonadState r f => Reader r b -> f b
 runReaderOnState f = runReader f <$> get
