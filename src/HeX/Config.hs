@@ -56,4 +56,4 @@ modifyParams f = modify (\c@Config{params=ps} -> c {params=f ps})
 parIndentBox :: Config -> BL.BreakableHListElem
 parIndentBox conf = BL.HVListElem $ BL.ListBox $
   B.Box { contents = B.HBoxContents []
-        , desiredLength = B.To $ unParIndent $ parIndent $ params conf }
+        , desiredLength = B.To $ unLenParam $ parIndent $ params conf }

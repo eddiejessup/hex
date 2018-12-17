@@ -29,7 +29,7 @@ evaluateUnit (E.PhysicalUnit _ u) = Unit.inScaledPoint u
 evaluateUnit (E.InternalUnit E.Em) = 10
 evaluateUnit (E.InternalUnit E.Ex) = 10
 
-evaluateNormalLength :: Mag -> E.NormalLength -> Int
+evaluateNormalLength :: (IntParamVal Mag) -> E.NormalLength -> Int
 evaluateNormalLength m (E.LengthSemiConstant f u@(E.PhysicalUnit isTrue _)) =
   round $ evalF isTrue * evaluateUnit u
   where
@@ -38,14 +38,14 @@ evaluateNormalLength m (E.LengthSemiConstant f u@(E.PhysicalUnit isTrue _)) =
 evaluateNormalLength _ (E.LengthSemiConstant f u) =
   round $ evaluateFactor f * evaluateUnit u
 
-evaluateULength :: Mag -> E.UnsignedLength -> Int
+evaluateULength :: (IntParamVal Mag) -> E.UnsignedLength -> Int
 evaluateULength m (E.NormalLengthAsULength nLn) = evaluateNormalLength m nLn
 
-evaluateLength :: Mag -> E.Length -> Int
+evaluateLength :: (IntParamVal Mag) -> E.Length -> Int
 evaluateLength m (E.Length True uLn) = evaluateULength m uLn
 evaluateLength m (E.Length False uLn) = -(evaluateULength m uLn)
 
-evaluateFlex :: Mag -> Maybe E.Flex -> BL.GlueFlex
+evaluateFlex :: (IntParamVal Mag) -> Maybe E.Flex -> BL.GlueFlex
 evaluateFlex m (Just (E.FiniteFlex ln)) =
   BL.GlueFlex {factor = fromIntegral $ evaluateLength m ln, order = 0}
 evaluateFlex _ (Just (E.FilFlex (E.FilLength True f ord))) =
@@ -54,7 +54,7 @@ evaluateFlex _ (Just (E.FilFlex (E.FilLength False f ord))) =
   BL.GlueFlex {factor = -(evaluateFactor f), order = ord}
 evaluateFlex _ Nothing = BL.noFlex
 
-evaluateGlue :: Mag -> E.Glue -> BL.Glue
+evaluateGlue :: (IntParamVal Mag) -> E.Glue -> BL.Glue
 evaluateGlue m (E.ExplicitGlue dim str shr) =
   BL.Glue
   { dimen = evaluateLength m dim
@@ -62,7 +62,7 @@ evaluateGlue m (E.ExplicitGlue dim str shr) =
   , shrink = evaluateFlex m shr
   }
 
-evaluateKern :: Mag -> E.Length -> B.Kern
+evaluateKern :: (IntParamVal Mag) -> E.Length -> B.Kern
 evaluateKern m = B.Kern . evaluateLength m
 
 evaluatePenalty :: E.Number -> BL.Penalty

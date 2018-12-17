@@ -263,7 +263,10 @@ data CurrentPage = CurrentPage { items :: [BL.BreakableVListElem]
                                , bestPointAndCost :: Maybe (Int, Int) }
 
 runPageBuilder
-  :: Monad m => CurrentPage -> [BL.BreakableVListElem] -> ConfStateT m [B.Page]
+  :: Monad m
+  => CurrentPage
+  -> [BL.BreakableVListElem]
+  -> ConfStateT m [B.Page]
 runPageBuilder (CurrentPage cur _) [] = do
   desiredH <- gets (vSize . params)
   pure [setPage desiredH $ reverse cur]
@@ -343,11 +346,11 @@ addVListElem acc e = case e of
   where
     addVListBox :: Monad m => B.Box -> ConfStateT m [BL.BreakableVListElem]
     addVListBox b = do
-        _prevDepth <- gets (unPrevDepth . prevDepth . params)
-        BL.Glue blineLength blineStretch blineShrink <- gets (unBaselineSkip . baselineSkip . params)
-        skipLimit <- gets (unLineSkipLimit . lineSkipLimit . params)
-        skip <- gets (unLineSkip . lineSkip . params)
-        modifyParams (\ps -> ps { prevDepth = PrevDepth $ naturalDepth e })
+        _prevDepth <- gets (unLenParam . prevDepth . params)
+        BL.Glue blineLength blineStretch blineShrink <- gets (unGlueParam . baselineSkip . params)
+        skipLimit <- gets (unLenParam . lineSkipLimit . params)
+        skip <- gets (unGlueParam . lineSkip . params)
+        modifyParams (\ps -> ps { prevDepth = LenParamVal $ naturalDepth e })
         pure $ if _prevDepth <= -Unit.oneKPt
           then e : acc
           else
@@ -388,7 +391,7 @@ processVCommand oldStream newStream pages curPage acc com =
       -- (Note that we pass "oldStream", not "newStream".)
       -- Paraboxes are returned in reading order.
       (lineBoxes, mStream) <- extractParagraphLineBoxes indent oldStream
-      desiredW <- gets (unHSize . hSize . params)
+      desiredW <- gets (unLenParam . hSize . params)
       let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
       newAcc <- addVListElems acc $ BL.ListBox . toBox <$> lineBoxes
       continueSamePage newAcc mStream
@@ -408,7 +411,7 @@ processVCommand oldStream newStream pages curPage acc com =
       E.AddRule {width = w, height = h, depth = d} -> do
         _mag <- gets (mag . params)
         evalW <- case w of
-          Nothing -> gets (unHSize . hSize . params)
+          Nothing -> gets (unLenParam . hSize . params)
           Just ln -> pure $ evaluateLength _mag ln
         let evalH = case h of
               -- TODO.

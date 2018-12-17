@@ -18,8 +18,8 @@ data PageBreakJudgment
   | TrackCost Int
   deriving (Show)
 
-pageBreakJudgment :: [BreakableVListElem] -> BreakItem -> VSize -> PageBreakJudgment
-pageBreakJudgment cs breakItem (VSize h) =
+pageBreakJudgment :: [BreakableVListElem] -> BreakItem -> (LenParamVal VSize) -> PageBreakJudgment
+pageBreakJudgment cs breakItem (LenParamVal h) =
   inner penalty splitInsertPenalties _badness
   where
     _badness = badness $ listGlueStatus h cs
@@ -34,7 +34,7 @@ pageBreakJudgment cs breakItem (VSize h) =
       | otherwise = TrackCost $ b + p + q
 
 -- Assumes cs is in reading order.
-setPage :: VSize -> [BreakableVListElem] -> B.Page
-setPage (VSize h) cs =
+setPage :: (LenParamVal VSize) -> [BreakableVListElem] -> B.Page
+setPage (LenParamVal h) cs =
   let _status = listGlueStatus h cs
   in B.Page $ setVList _status cs

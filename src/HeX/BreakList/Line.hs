@@ -54,19 +54,26 @@ instance Eq Route where
 instance Ord Route where
   compare (Route _ distA) (Route _ distB) = compare distA distB
 
-withStatus :: HSize -> InEdge -> WithStatus InEdge
-withStatus (HSize dw) e@(InEdge v _ _)
+withStatus :: (LenParamVal HSize) -> InEdge -> WithStatus InEdge
+withStatus (LenParamVal dw) e@(InEdge v _ _)
   = WithSummary e (listGlueStatus dw $ A.fromAdjacencies v)
 
-lineDemerit :: LinePenalty -> BadnessSize -> BreakItem -> Demerit
-lineDemerit lp b br =
-  let breakDemerit = breakPenalty br ^ (2 :: Int)
-      listDemerit = (unLinePenalty lp + unBadnessSize b) ^ (2 :: Int)
-  in Demerit $ breakDemerit + listDemerit
+lineDemerit :: (IntParamVal LinePenalty) -> BadnessSize -> BreakItem -> Demerit
+lineDemerit (IntParamVal lp) b br =
+  let
+    breakDemerit = breakPenalty br ^ (2 :: Int)
+    listDemerit = (lp + unBadnessSize b) ^ (2 :: Int)
+  in
+    Demerit $ breakDemerit + listDemerit
 
-toOnlyAcceptables :: Tolerance -> LinePenalty -> BreakItem -> [WithStatus InEdge] -> [WithDistance InEdge]
-toOnlyAcceptables (Tolerance tol) lp br ds = do
-    WithSummary y st <- ds
+toOnlyAcceptables
+  :: (IntParamVal Tolerance)
+  -> (IntParamVal LinePenalty)
+  -> BreakItem
+  -> [WithStatus InEdge]
+  -> [WithDistance InEdge]
+toOnlyAcceptables (IntParamVal tol) lp br ds = do
+  WithSummary y st <- ds
     case badness st of
       InfiniteBadness -> empty
       FiniteBadness b -> do
@@ -103,7 +110,13 @@ finaliseInEdge x (InEdge cs n discard) = InEdge (x:cs) n discard
 --   and will never become acceptable. We can remove such edges from
 --   consideration, because we know that once a line is not promising, it will
 --   never become acceptable.
-appendEntry :: HSize -> Tolerance -> LinePenalty -> ([InEdge], [Route], [Entry]) -> Entry -> ([InEdge], [Route], [Entry])
+appendEntry
+  :: (LenParamVal HSize)
+  -> (IntParamVal Tolerance)
+  -> (IntParamVal LinePenalty)
+  -> ([InEdge], [Route], [Entry])
+  -> Entry
+  -> ([InEdge], [Route], [Entry])
 appendEntry dw tol lp (prevInEdges, rs, chunk) x@(toBreakItem -> Just br) =
   let
     -- Extend the accumulating edges with the normal-items 'chunk' we have
@@ -165,7 +178,7 @@ shortestRoute es rs = minimum (bestSubroute <$> es)
       in
         Route (WithSummary ev st:sevs) (ed + sd)
 
-bestRoute :: HSize -> Tolerance -> LinePenalty -> [BreakableHListElem] -> [Line]
+bestRoute :: (LenParamVal HSize) -> (IntParamVal Tolerance) -> (IntParamVal LinePenalty) -> [BreakableHListElem] -> [Line]
 bestRoute dw tol lp xs =
   let
     initialState = ([InEdge [] Root (IsDiscarding False)], [], [])
