@@ -9,13 +9,15 @@ import           Path                           ( File
                                                 , parseRelFile
                                                 )
 import qualified Text.Megaparsec               as P
+import           Text.Megaparsec               ((<|>))
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
 import qualified HeX.Parse.Lexed.Inhibited     as Inh
-import qualified HeX.Parse.Resolved.Token      as R
+import qualified HeX.Parse.Resolved            as R
 import           HeX.Parse.Expanded.Common
 import           HeX.Parse.Expanded.Stream
+import           HeX.Parse.Expanded.Number
 
 -- AST.
 
@@ -34,7 +36,7 @@ data MacroAssignment
 data AssignmentBody
   = DefineMacro MacroAssignment
   -- \| ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
-  -- \| SetVariable VariableAssignment
+  | SetVariable VariableAssignment
   -- \| ModifyVariable VariableModificatxion
   -- \| AssignCode { codeType :: CodeType, codeIndex, value :: Int }
   -- \| Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
@@ -55,6 +57,16 @@ data AssignmentBody
   -- \| SetSpecialVariable
   deriving (Show)
 
+data VariableAssignment
+  = IntegerVariableAssignment IntegerVariable Number
+  deriving (Show)
+
+data IntegerVariable
+  = IntegerParameter R.IntegerParameter
+  -- \| CountDefToken
+  -- \| CountRegister
+  deriving (Show)
+
 data Assignment = Assignment
   { body :: AssignmentBody
   , global :: Bool
@@ -63,65 +75,30 @@ data Assignment = Assignment
 type AssignmentParser = SimpExpandParser Assignment
 
 parseAssignment :: AssignmentParser
-parseAssignment =
-  P.choice
-    [ tokenForFont
-    , macroToFont
-    , defineMacro ]
+parseAssignment = parseDefineMacro <|> parseNonMacroAssignment
 
-tokenForFont :: AssignmentParser
-tokenForFont = satisfyThen tokToCom
+parseNonMacroAssignment :: AssignmentParser
+parseNonMacroAssignment = do
+  _global <- parseGlobal
+  _body <- parseNonMacroAssignmentBody
+  pure $ Assignment _body _global
   where
-    tokToCom (R.TokenForFont n) = Just $ Assignment {body = SelectFont n, global = False}
-    tokToCom _ = Nothing
-
--- \font <control-sequence> <equals> <file-name> <at-clause>
-macroToFont :: AssignmentParser
-macroToFont = do
-  skipSatisfiedEquals R.MacroToFont
-  cs <- parseInhibited Inh.parseCSName
-  skipOptionalEquals
-  fontPath <- parseFileName
-  pure $ Assignment {body = DefineFont cs fontPath, global = False}
-    -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-  where
-    parseFileName :: SimpExpandParser (Path Rel File)
-    parseFileName = do
-      skipOptionalSpaces
-      fileName <- P.some $ satisfyThen tokToChar
-      skipSatisfied isSpace
-      case parseRelFile (fileName ++ ".tfm") of
-        Just p -> pure p
-        Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
-    tokToChar (R.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) = Just c
-    -- 'Other' Characters for decimal digits are OK.
-    tokToChar (R.CharCat Lex.CharCat {cat = Lex.Other, char = c}) =
-      case c of
-        '0' -> Just c
-        '1' -> Just c
-        '2' -> Just c
-        '3' -> Just c
-        '4' -> Just c
-        '5' -> Just c
-        '6' -> Just c
-        '7' -> Just c
-        '8' -> Just c
-        '9' -> Just c
-      -- Not in the spec, but let's say "/" and "." are OK.
-        '/' -> Just c
-        '.' -> Just c
-        _ -> Nothing
-    tokToChar _ = Nothing
+    -- TODO: Parse globals.
+    parseGlobal = pure True
+    parseNonMacroAssignmentBody
+      = P.choice [ parseVariableAssignment
+                 , parseTokenForFont
+                 , parseMacroToFont ]
 
 skipOptionalEquals :: NullSimpParser ExpandedStream
 skipOptionalEquals = do
   skipOptionalSpaces
   skipOneOptionalSatisfied isEquals
 
--- ParseMacro.
+-- Parse Macro.
 
-defineMacro :: AssignmentParser
-defineMacro = do
+parseDefineMacro :: AssignmentParser
+parseDefineMacro = do
   -- Macro prefixes.
   prefixes <- P.many $ satisfyThen tokToPrefix
   -- \def-like thing.
@@ -154,3 +131,66 @@ defineMacro = do
     tokToDef R.DefineMacro {global = _global, expand = _expand} =
       Just (_global, _expand)
     tokToDef _ = Nothing
+
+parseTokenForFont :: SimpExpandParser AssignmentBody
+parseTokenForFont = satisfyThen tokToCom
+  where
+    tokToCom (R.TokenForFont n) = Just $ SelectFont n
+    tokToCom _ = Nothing
+
+-- \font <control-sequence> <equals> <file-name> <at-clause>
+parseMacroToFont :: SimpExpandParser AssignmentBody
+parseMacroToFont = do
+  skipSatisfiedEquals R.MacroToFont
+  cs <- parseInhibited Inh.parseCSName
+  skipOptionalEquals
+  DefineFont cs <$> parseFileName
+    -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
+  where
+    parseFileName :: SimpExpandParser (Path Rel File)
+    parseFileName = do
+      skipOptionalSpaces
+      fileName <- P.some $ satisfyThen tokToChar
+      skipSatisfied isSpace
+      case parseRelFile (fileName ++ ".tfm") of
+        Just p -> pure p
+        Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
+    tokToChar (R.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) = Just c
+    -- 'Other' Characters for decimal digits are OK.
+    tokToChar (R.CharCat Lex.CharCat {cat = Lex.Other, char = c}) =
+      case c of
+        '0' -> Just c
+        '1' -> Just c
+        '2' -> Just c
+        '3' -> Just c
+        '4' -> Just c
+        '5' -> Just c
+        '6' -> Just c
+        '7' -> Just c
+        '8' -> Just c
+        '9' -> Just c
+      -- Not in the spec, but let's say "/" and "." are OK.
+        '/' -> Just c
+        '.' -> Just c
+        _ -> Nothing
+    tokToChar _ = Nothing
+
+-- Variable assignment
+
+parseVariableAssignment :: SimpExpandParser AssignmentBody
+parseVariableAssignment = SetVariable <$> P.choice [parseIntegerVariableAssignment]
+
+parseIntegerVariableAssignment :: SimpExpandParser VariableAssignment
+parseIntegerVariableAssignment = do
+  v <- parseIntegerVariable
+  skipOptionalEquals
+  IntegerVariableAssignment v <$> parseNumber
+
+parseIntegerVariable :: SimpExpandParser IntegerVariable
+parseIntegerVariable = P.choice [parseIntegerParameter]
+  where
+    parseIntegerParameter =
+      IntegerParameter <$> satisfyThen tokToIntParam
+      where
+        tokToIntParam (R.IntegerParameter p) = Just p
+        tokToIntParam _ = Nothing

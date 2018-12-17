@@ -152,13 +152,18 @@ handleModeIndep newStream com
       modAccum [BL.ListGlue (evaluateGlue _mag g)]
     -- E.ChangeCase d bt ->
     --   modStream $ applyChangeCaseToStream newStream d bt
-    E.Assign E.Assignment {body = E.SelectFont fNr} -> do
-      fontSel <- BL.ListFontSelection <$> selectFont fNr
-      modAccum [fontSel]
-    E.Assign E.Assignment {body = E.DefineFont cs fPath} -> do
-      fontDef <- BL.ListFontDefinition <$> defineFont cs fPath
-      modAccum [fontDef]
-    E.Assign E.Assignment {body = m@E.DefineMacro {}} -> modStream $ defineMacro newStream m
+    E.Assign E.Assignment {global=_, body=_body} -> case _body of
+      E.DefineMacro m ->
+        modStream $ defineMacro newStream m
+      E.SetVariable (E.IntegerVariableAssignment (E.IntegerParameter p) n) ->
+        let en = evaluateNumber n
+        in undefined
+      E.SelectFont fNr -> do
+        fontSel <- BL.ListFontSelection <$> selectFont fNr
+        modAccum [fontSel]
+      E.DefineFont cs fPath -> do
+        fontDef <- BL.ListFontDefinition <$> defineFont cs fPath
+        modAccum [fontDef]
 
 processHCommand
   :: E.ExpandedStream

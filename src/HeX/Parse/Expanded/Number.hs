@@ -16,13 +16,11 @@ import           HeX.Parse.Expanded.Common
 import           HeX.Parse.Expanded.Stream
 
 -- AST.
-data Number =
-  Number Bool
-         UnsignedNumber
+data Number = Number Bool UnsignedNumber
   deriving (Show)
 
-data UnsignedNumber =
-  NormalIntegerAsUNumber NormalInteger
+data UnsignedNumber
+  = NormalIntegerAsUNumber NormalInteger
   -- \| CoercedInteger CoercedInteger
   deriving (Show)
 

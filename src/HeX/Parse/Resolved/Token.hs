@@ -2,6 +2,7 @@ module HeX.Parse.Resolved.Token where
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Lexed
+import           HeX.Parse.Resolved.Parameter
 
 data HDirection
   = Leftward
@@ -138,31 +139,31 @@ data PrimitiveToken
   -- -- > > Modifying how to parse the macro.
   -- -- > Setting variable values.
   -- -- > > Setting an integer value.
-  -- -- \|      IntegerParameter IntegerParameter -- example: \tolerance
+  | IntegerParameter IntegerParameter -- example: \tolerance
   --        -- a control sequence representing the contents of an integer
   --        -- register, such as defined through \countdef.
   -- \|      TokenForInteger
   -- \|      LookupInteger -- \count
-  -- -- > > Setting a distance (also known as a 'dimen') value.
-  -- -- \|      DistanceParameter DistanceParameter -- example: \hsize
+  -- -- > > Setting a length (also known as a 'dimen') value.
+  | LengthParameter LengthParameter -- example: \hsize
   --        -- a control sequence representing the contents of a distance
   --        -- register, such as defined through \dimendef.
   -- \|      TokenForDistance
   -- \|      LookupDistance -- \dimen
   -- -- > > Setting a glue (also known as a 'skip') value.
-  -- -- \|      GlueParameter GlueParameter -- example: \lineskip
+  | GlueParameter GlueParameter -- example: \lineskip
   --        -- a control sequence representing the contents of a glue
   --        -- register, such as defined through \skipdef.
   -- \|      TokenForGlue
   -- \|      LookupGlue -- \skip
   -- -- > > Setting a math-glue (also known as a 'muskip' or 'muglue') value.
-  -- -- \|      MathGlueParameter MathGlueParameter -- example: \thinmuskip
+  | MathGlueParameter MathGlueParameter -- example: \thinmuskip
   --        -- a control sequence representing the contents of a math-glue
   --        -- register, such as defined through \muskipdef.
   -- \|      TokenForMathGlue
   -- \|      LookupMathGlue -- \muskip
   -- -- > > Setting a token-list value.
-  -- -- \|      TokenListParameter TokenListParameter -- example: \everypar
+  | TokenListParameter TokenListParameter -- example: \everypar
   --        -- a control sequence representing the contents of a token-list
   --        -- register, such as defined through \toksdef.
   -- \|      TokenForTokenList
@@ -224,8 +225,8 @@ data PrimitiveToken
   -- \| SwitchToNonStopMode -- \nonstopmode
   -- \| SwitchToBatchMode -- \batchmode
   -- > Setting special values.
-  -- \| SpecialInteger SpecialInteger -- \example: \spacefactor
-  -- \| SpecialDistance SpecialDistance -- \example: \pagestretch
+  | SpecialInteger SpecialInteger -- \example: \spacefactor
+  | SpecialLength SpecialLength -- \example: \pagestretch
   -- Conditions.
   -- \| CompareIntegers -- \ifnum
   -- \| CompareDistances -- \ifdim

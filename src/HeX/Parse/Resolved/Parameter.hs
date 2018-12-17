@@ -1,4 +1,4 @@
-module HeX.Parse.Expanded.Parameter where
+module HeX.Parse.Resolved.Parameter where
 
 data IntegerParameter
   = PreTolerance  -- Badness tolerance before hyphenation
@@ -56,7 +56,7 @@ data IntegerParameter
   | ShowBoxBreadth  -- Maximum items per level when boxes are shown
   | ShowBoxDepth  -- Maximum level when boxes are shown
   | ErrorContextLines  -- Maximum extra context shown when errors occur
-  deriving (Show)
+  deriving (Show, Eq)
 
 data LengthParameter
   = HFuzz -- Maximum overrun before overfull hbox messages occur
@@ -80,7 +80,7 @@ data LengthParameter
   | HangIndent -- Amount of hanging indentation
   | HOffset -- Horizontal offset in \shipout
   | VOffset -- Vertical offset in \shipout
-  deriving (Show)
+  deriving (Show, Eq)
 
 data GlueParameter
   = BaselineSkip -- Desired glue between baselines
@@ -98,13 +98,13 @@ data GlueParameter
   | SpaceSkip -- Glue between words, if nonzero
   | XSpaceSkip -- Glue between sentences, if nonzero
   | ParFillSkip -- Additional \rightskip at end of paragraphs
-  deriving (Show)
+  deriving (Show, Eq)
 
 data MathGlueParameter
   = ThinMuSkip -- Thin space in math formulas
   | MedMuSkip -- Medium space in math formulas
   | ThickMuSkip -- Thick space in math formulas
-  deriving (Show)
+  deriving (Show, Eq)
 
 data TokenListParameter
   = Output -- The user's output routine
@@ -116,16 +116,16 @@ data TokenListParameter
   | EveryJob -- Tokens to insert when the job begins
   | EveryCR -- Tokens to insert after every \cr or nonredundant \crcr
   | ErrHelp -- Tokens that supplement an \errmessage
-  deriving (Show)
+  deriving (Show, Eq)
 
-data SpecialIntegerParameter
+data SpecialInteger
   = SpaceFactor
   | PrevGraf
   | DeadCycles
   | InsertPenalties
-  deriving (Show)
+  deriving (Show, Eq)
 
-data SpecialLengthParameter
+data SpecialLength
   = PrevDepth
   | PageGoal
   | PageTotal
@@ -135,4 +135,4 @@ data SpecialLengthParameter
   | PageFilllStretch
   | PageShrink
   | PageDepth
-  deriving (Show)
+  deriving (Show, Eq)
