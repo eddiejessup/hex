@@ -29,6 +29,7 @@ dependencies:
 - safe
 - transformers
 - extra
+- either
 
 library:
   source-dirs: src

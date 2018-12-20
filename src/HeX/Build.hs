@@ -1,5 +1,4 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module HeX.Build where
@@ -7,30 +6,32 @@ module HeX.Build where
 import           Control.Monad                  ( foldM )
 import           Control.Monad.IO.Class         ( MonadIO )
 import           Control.Monad.State.Lazy       ( MonadState
-                                                , get
                                                 , gets
-                                                , lift
                                                 , liftIO
                                                 , modify
                                                 )
 import           Control.Monad.Trans.Maybe      ( MaybeT(..)
                                                 , runMaybeT
                                                 )
-import           Control.Monad.Except           ( ExceptT, liftEither )
-import           Control.Monad.Trans.Reader     ( Reader
-                                                , asks
-                                                , runReader
+import           Control.Monad.Except           ( ExceptT
+                                                , liftEither
+                                                , MonadError
+                                                , throwError
+                                                , withExceptT
                                                 )
 import qualified Data.HashMap.Strict           as HMap
+import           Data.Either.Combinators        ( mapLeft )
 import           Path
 import           Safe                           ( headMay )
 import qualified Text.Megaparsec               as PS
 
 import           Data.Adjacent                  ( Adjacency(..) )
 import           Data.Path                      ( findFilePath )
+
 import qualified TFM
 import           TFM                            ( TexFont(..) )
 import qualified TFM.Character                 as TFMC
+
 import           HeX.Dimensioned                ( Dimensioned(..) )
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
@@ -50,17 +51,19 @@ import qualified HeX.Parse.Resolved            as R
 import qualified HeX.Parse.Helpers             as PH
 import qualified HeX.Unit                      as Unit
 
-currentFontInfo :: Monad m => MaybeT (ConfReaderT m) TexFont
+liftMaybe :: MonadError e m => e -> Maybe a -> m a
+liftMaybe e Nothing = throwError e
+liftMaybe _ (Just a) = pure a
+
+currentFontInfo :: (MonadState Config m, MonadError String m) => m TexFont
 currentFontInfo
-  -- Maybe font number isn't set.
  = do
-  maybeFontNr <- lift $ asks currentFontNr
+  -- Maybe font number isn't set.
+  fNr <- gets currentFontNr >>= liftMaybe "Font number isn't set"
   -- Or maybe there's no font where there should be.
   -- TODO: I think I can make this case impossible, maybe by storing the
   -- current font info directly instead of a lookup.
-  fInfo <-
-    HMap.lookup <$> MaybeT (return maybeFontNr) <*> lift (asks fontInfoMap)
-  MaybeT $ pure fInfo
+  gets fontInfoMap >>= (liftMaybe "No such font number" . (HMap.lookup fNr))
 
 defineFont
   :: (MonadState Config m, MonadIO m)
@@ -84,7 +87,7 @@ defineFont _ fPath = do
       font <- liftIO $ TFM.readTFMFancy fontPath
       nonExtName <- Path.setFileExtension "" fPath
       let fontName = Path.toFilePath $ Path.filename nonExtName
-      return
+      pure
         B.FontDefinition
         { fontNr = fNr
         , fontPath = fontPath
@@ -93,24 +96,23 @@ defineFont _ fPath = do
         , scaleFactorRatio = 1.0
         }
 
-selectFont :: Monad m => Int -> ConfStateT m B.FontSelection
+selectFont :: MonadState Config m => Int -> m B.FontSelection
 selectFont n = do
   modify (\conf -> conf {currentFontNr = Just n})
   pure B.FontSelection {fontNr = n}
 
-characterBox :: Monad m => CharCode -> MaybeT (ConfReaderT m) B.Character
+characterBox :: (MonadState Config m, MonadError String m) => CharCode -> m B.Character
 characterBox char = do
   font <- currentFontInfo
   let toSP = TFM.designScaleSP font
   TFMC.Character {width = w, height = h, depth = d} <-
-    MaybeT (return $ HMap.lookup char $ characters font)
-  return
+    liftMaybe "No such character" $ (HMap.lookup char $ characters font)
+  pure
     B.Character {char = char, width = toSP w, height = toSP h, depth = toSP d}
 
-spaceGlue :: Monad m => MaybeT (ConfReaderT m) BL.Glue
+spaceGlue :: (MonadState Config m, MonadError String m) => m BL.Glue
 spaceGlue = do
-  font@TexFont {spacing = d, spaceStretch = str, spaceShrink = shr} <-
-    currentFontInfo
+  font@TexFont {spacing = d, spaceStretch = str, spaceShrink = shr} <- currentFontInfo
   let toSP = TFM.designScaleSP font
       toFlex = BL.finiteFlex . fromIntegral . toSP
   pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
@@ -124,15 +126,11 @@ defineMacro (E.ExpandedStream (R.ResolvedStream ls csMap)) (E.MacroAssignment na
 defineMacro _ _
   = error "Not implemented: long and outer macros"
 
-runReaderOnState :: MonadState r f => Reader r b -> f b
-runReaderOnState f = runReader f <$> get
-
-type BuildMonad = ConfStateT (ExceptT (PH.ParseError E.ExpandedStream) IO)
-
 handleModeIndep
-  :: E.ExpandedStream
+  :: (MonadState Config m, MonadIO m)
+  => E.ExpandedStream
   -> E.ModeIndependentCommand
-  -> BuildMonad ([BL.BreakableVListElem], E.ExpandedStream)
+  -> ExceptT String m ([BL.BreakableVListElem], E.ExpandedStream)
 handleModeIndep newStream com
   =
   let
@@ -155,9 +153,9 @@ handleModeIndep newStream com
     E.Assign E.Assignment {global=_, body=_body} -> case _body of
       E.DefineMacro m ->
         modStream $ defineMacro newStream m
-      E.SetVariable (E.IntegerVariableAssignment (E.IntegerParameter p) n) ->
-        let en = evaluateNumber n
-        in undefined
+      E.SetVariable (E.IntegerVariableAssignment (E.IntegerParameter p) n) -> do
+        setConfIntParam p (fromIntegral $ evaluateNumber n)
+        continueUnchanged
       E.SelectFont fNr -> do
         fontSel <- BL.ListFontSelection <$> selectFont fNr
         modAccum [fontSel]
@@ -166,11 +164,12 @@ handleModeIndep newStream com
         modAccum [fontDef]
 
 processHCommand
-  :: E.ExpandedStream
+  :: (MonadState Config m, MonadIO m)
+  => E.ExpandedStream
   -> E.ExpandedStream
   -> [BL.BreakableHListElem]
   -> E.HModeCommand
-  -> BuildMonad ([BL.BreakableHListElem], E.ExpandedStream, Bool)
+  -> ExceptT String m ([BL.BreakableHListElem], E.ExpandedStream, Bool)
 processHCommand oldStream newStream acc com =
   let
     modAccum newAcc = pure (newAcc, newStream, True)
@@ -186,10 +185,7 @@ processHCommand oldStream newStream acc com =
       let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
       modStream $ E.insertLexTokenE oldStream parToken
     E.AddCharacter {char = c} -> do
-      charBox <- runReaderOnState (runMaybeT (characterBox c))
-      hCharBox <- case charBox of
-        Just char -> pure $ BL.ListCharacter char
-        Nothing -> fail "Could not get character info"
+      hCharBox <- BL.ListCharacter <$> characterBox c
       modAccum $ hCharBox : acc
     E.HAllModesCommand aCom -> case aCom of
       -- \indent: An empty box of width \parindent is appended to the current
@@ -204,11 +200,7 @@ processHCommand oldStream newStream acc com =
       -- \par: end the current paragraph.
       E.EndParagraph -> pure (acc, newStream, False)
       E.AddSpace -> do
-        glue <- runReaderOnState (runMaybeT spaceGlue)
-        hGlue <-
-          case glue of
-            Just sg -> pure $ BL.HVListElem $ BL.ListGlue sg
-            Nothing -> fail "Could not get space glue"
+        hGlue <- (BL.HVListElem . BL.ListGlue) <$> spaceGlue
         modAccum $ hGlue : acc
       E.AddRule {width = w, height = h, depth = d} -> do
         _mag <- gets (mag . params)
@@ -231,30 +223,38 @@ processHCommand oldStream newStream acc com =
         (extraAcc, mStream) <- handleModeIndep newStream mcom
         pure ((BL.HVListElem <$> extraAcc) ++ acc, mStream, True)
 
+data BuildError
+  = ParseError (PH.ParseError E.ExpandedStream)
+  | ConfigError String
+  deriving Show
+
 extractParagraph
-  :: Bool
+  :: (MonadState Config m, MonadIO m)
+  => Bool
   -> E.ExpandedStream
-  -> BuildMonad ([BL.BreakableHListElem], E.ExpandedStream)
+  -> ExceptT BuildError m ([BL.BreakableHListElem], E.ExpandedStream)
 extractParagraph indent stream = do
   indentBox <- gets parIndentBox
   extractParagraphInner [indentBox | indent] stream
   where
     -- We build a paragraph list in reverse order.
     extractParagraphInner
-      :: [BL.BreakableHListElem]
+      :: (MonadState Config m, MonadIO m)
+      => [BL.BreakableHListElem]
       -> E.ExpandedStream
-      -> BuildMonad ([BL.BreakableHListElem], E.ExpandedStream)
+      -> ExceptT BuildError m ([BL.BreakableHListElem], E.ExpandedStream)
     extractParagraphInner acc oldStream = do
-      (PS.State {stateInput = newStream}, com) <- liftEither $ E.extractHModeCommand oldStream
-      (procAcc, procStream, continue) <- processHCommand oldStream newStream acc com
+      (PS.State {stateInput = newStream}, com) <- liftEither $ ParseError `mapLeft` E.extractHModeCommand oldStream
+      (procAcc, procStream, continue) <- withExceptT ConfigError $ processHCommand oldStream newStream acc com
       if continue
         then extractParagraphInner procAcc procStream
         else pure (procAcc, procStream)
 
 extractParagraphLineBoxes
-  :: Bool
+  :: (MonadState Config m, MonadIO m)
+  => Bool
   -> E.ExpandedStream
-  -> BuildMonad ([[B.HBoxElem]], E.ExpandedStream)
+  -> ExceptT BuildError m ([[B.HBoxElem]], E.ExpandedStream)
 extractParagraphLineBoxes indent stream = do
   (hList, stream') <- extractParagraph indent stream
   desiredW <- gets (hSize . params)
@@ -268,10 +268,10 @@ data CurrentPage = CurrentPage { items :: [BL.BreakableVListElem]
                                , bestPointAndCost :: Maybe (Int, Int) }
 
 runPageBuilder
-  :: Monad m
+  :: MonadState Config m
   => CurrentPage
   -> [BL.BreakableVListElem]
-  -> ConfStateT m [B.Page]
+  -> m [B.Page]
 runPageBuilder (CurrentPage cur _) [] = do
   desiredH <- gets (vSize . params)
   pure [setPage desiredH $ reverse cur]
@@ -341,21 +341,21 @@ runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
 --    \lineskip
 -- Then set \prevdepth to the depth of the new box.
 addVListElem
-  :: Monad m
+  :: MonadState Config m
   => [BL.BreakableVListElem]
   -> BL.BreakableVListElem
-  -> ConfStateT m [BL.BreakableVListElem]
+  -> m [BL.BreakableVListElem]
 addVListElem acc e = case e of
     (BL.ListBox b) -> addVListBox b
     _ -> pure $ e : acc
   where
-    addVListBox :: Monad m => B.Box -> ConfStateT m [BL.BreakableVListElem]
+    addVListBox :: MonadState Config m => B.Box -> m [BL.BreakableVListElem]
     addVListBox b = do
         _prevDepth <- gets (unLenParam . prevDepth . params)
         BL.Glue blineLength blineStretch blineShrink <- gets (unGlueParam . baselineSkip . params)
         skipLimit <- gets (unLenParam . lineSkipLimit . params)
         skip <- gets (unGlueParam . lineSkip . params)
-        modifyParams (\ps -> ps { prevDepth = LenParamVal $ naturalDepth e })
+        setConfSpecialLen R.PrevDepth $ naturalDepth e
         pure $ if _prevDepth <= -Unit.oneKPt
           then e : acc
           else
@@ -370,20 +370,21 @@ addVListElem acc e = case e of
             in e : glue : acc
 
 addVListElems
-  :: Monad m
+  :: MonadState Config m
   => [BL.BreakableVListElem]
   -> [BL.BreakableVListElem]
-  -> ConfStateT m [BL.BreakableVListElem]
+  -> m [BL.BreakableVListElem]
 addVListElems = foldM addVListElem
 
 processVCommand
-  :: E.ExpandedStream
+  :: (MonadState Config m, MonadIO m)
+  => E.ExpandedStream
   -> E.ExpandedStream
   -> [B.Page]
   -> CurrentPage
   -> [BL.BreakableVListElem]
   -> E.VModeCommand
-  -> BuildMonad ([B.Page], CurrentPage, [BL.BreakableVListElem], E.ExpandedStream, Bool)
+  -> ExceptT BuildError m ([B.Page], CurrentPage, [BL.BreakableVListElem], E.ExpandedStream, Bool)
 processVCommand oldStream newStream pages curPage acc com =
   let
     continueSamePage newAcc mStream  = pure (pages, curPage, newAcc, mStream, True)
@@ -428,23 +429,27 @@ processVCommand oldStream newStream pages curPage acc com =
         let rule = B.Rule {width = evalW, height = evalH, depth = evalD}
         modAccum (BL.ListRule rule : acc)
       E.ModeIndependentCommand mcom -> do
-        (extraAcc, mStream) <- handleModeIndep newStream mcom
+        (extraAcc, mStream) <- withExceptT ConfigError $ handleModeIndep newStream mcom
         continueSamePage (extraAcc ++ acc) mStream
 
 newCurrentPage :: CurrentPage
 newCurrentPage = CurrentPage [] Nothing
 
-extractPages :: E.ExpandedStream -> BuildMonad ([B.Page], E.ExpandedStream)
+extractPages
+  :: (MonadState Config m, MonadIO m)
+  => E.ExpandedStream
+  -> ExceptT BuildError m ([B.Page], E.ExpandedStream)
 extractPages = extractPagesInner [] newCurrentPage []
   where
     extractPagesInner
-      :: [B.Page]
+      :: (MonadState Config m, MonadIO m)
+      => [B.Page]
       -> CurrentPage
       -> [BL.BreakableVListElem]
       -> E.ExpandedStream
-      -> BuildMonad ([B.Page], E.ExpandedStream)
+      -> ExceptT BuildError m ([B.Page], E.ExpandedStream)
     extractPagesInner pages curPage acc oldStream = do
-      (PS.State {stateInput = newStream}, com) <- liftEither $ E.extractVModeCommand oldStream
+      (PS.State {stateInput = newStream}, com) <- liftEither $ ParseError `mapLeft` E.extractVModeCommand oldStream
       (procPages, procCurPage, procAcc, procStream, continue) <- processVCommand oldStream newStream pages curPage acc com
       if continue
         then extractPagesInner procPages procCurPage procAcc procStream

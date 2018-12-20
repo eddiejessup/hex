@@ -74,12 +74,12 @@ toOnlyAcceptables
   -> [WithDistance InEdge]
 toOnlyAcceptables (IntParamVal tol) lp br ds = do
   WithSummary y st <- ds
-    case badness st of
-      InfiniteBadness -> empty
-      FiniteBadness b -> do
-        guard $ breakPenalty br < UN.tenK && b <= tol
-        let _demerit = lineDemerit lp (BadnessSize b) br
-        pure $ WithSummary y (st, _demerit)
+  case badness st of
+    InfiniteBadness -> empty
+    FiniteBadness b -> do
+      guard $ breakPenalty br < UN.tenK && b <= tol
+      let _demerit = lineDemerit lp (BadnessSize b) br
+      pure $ WithSummary y (st, _demerit)
 
 toOnlyPromisings :: [WithStatus a] -> [a]
 toOnlyPromisings ds = [y | (WithSummary y d) <- ds, isPromising d]

@@ -1,11 +1,22 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module HeX.Run where
 
 import           Prelude                 hiding ( writeFile )
 
-import           Control.Monad.Trans.State.Lazy
+import           Control.Monad.IO.Class         ( MonadIO )
+import           Control.Monad.State.Lazy       ( MonadState
+                                                , get
+                                                , gets
+                                                , lift
+                                                , liftIO
+                                                , modify
+                                                , evalStateT
+                                                , StateT
+                                                )
 import           Control.Monad.Trans.Except     (runExceptT)
+import           Control.Monad.Except           ( ExceptT, liftEither, MonadError, throwError, runExceptT, withExceptT )
 import           Data.ByteString.Lazy           ( ByteString )
 import           Data.List                      ( intercalate )
 import qualified Text.Megaparsec               as P
@@ -112,14 +123,17 @@ runCommand xs = chopCommand' $ newExpandStream xs defaultCSMap
 
 -- Generic.
 
-codesToSth :: [CharCode] -> (ExpandedStream -> BuildMonad (a, ExpandedStream)) -> IO a
+eitherToIO :: Show a => Either a b -> IO b
+eitherToIO (Left err) = fail $ show err
+eitherToIO (Right v) = pure v
+
+codesToSth
+  :: [CharCode]
+  -> (ExpandedStream -> ExceptT BuildError (StateT Config IO) (a, ExpandedStream))
+  -> IO a
 codesToSth xs f = do
   let stream = newExpandStream xs defaultCSMap
-  conf <- newConfig
-  let eSth = evalStateT (f stream) conf
-  runExceptT eSth >>= \case
-    Right (sth, _) -> pure sth
-    Left err -> ioError $ userError $ show err
+  newConfig >>= evalStateT (runExceptT (fst <$> f stream)) >>= eitherToIO
 
 -- Paragraph list.
 

@@ -4,23 +4,21 @@ module HeX.Config.Parameters where
 
 import           HeX.BreakList                  ( Glue(..), noFlex )
 import qualified HeX.Unit                      as Unit
+import           HeX.Parse.Resolved
 
--- type IntParamVal = Int
-type LengthParameterValue = Int
--- type MathGlueParameterValue = MathGlue
-type GlueParameterValue = Glue
--- type TokenListParameterValue = [Token]
+type IntVal = Int
+type LenVal = Int
 
-newtype IntParamVal a = IntParamVal {unIntParam :: Int}
+newtype IntParamVal a = IntParamVal {unIntParam :: IntVal}
   deriving (Eq, Enum, Ord, Show, Num, Real, Integral)
 
-newtype LenParamVal a = LenParamVal {unLenParam :: Int}
+newtype LenParamVal a = LenParamVal {unLenParam :: LenVal}
   deriving (Eq, Enum, Ord, Show, Num, Real, Integral)
 
 newtype GlueParamVal a = GlueParamVal {unGlueParam :: Glue}
   deriving (Show)
 
--- newtype MathGlueParamVal a = MathGlueParamVal {unGlueParam :: Int}
+-- newtype MathGlueParamVal a = MathGlueParamVal {unGlueParam :: MathGluw}
 --   deriving (Show)
 
 -- newtype TokenListParamVal a = TokenListParamVal {unTokenListParam :: [Token]}
@@ -414,3 +412,128 @@ usableParamConfig
                    , baselineSkip = GlueParamVal $ Glue (Unit.toScaledPointApprox (12 :: Int) Unit.Point) noFlex noFlex
                    , lineSkip = GlueParamVal $ Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) noFlex noFlex
                    }
+
+setIntParam :: IntegerParameter -> IntVal -> ParamConfig -> ParamConfig
+setIntParam p v c = let vp = IntParamVal v in case p of
+  PreTolerance -> c{preTolerance=vp}
+  Tolerance -> c{tolerance=vp}
+  HBadness -> c{hBadness=vp}
+  VBadness -> c{vBadness=vp}
+  LinePenalty -> c{linePenalty=vp}
+  HyphenPenalty -> c{hyphenPenalty=vp}
+  ExHyphenPenalty -> c{exHyphenPenalty=vp}
+  BinOpPenalty -> c{binOpPenalty=vp}
+  RelPenalty -> c{relPenalty=vp}
+  ClubPenalty -> c{clubPenalty=vp}
+  WidowPenalty -> c{widowPenalty=vp}
+  DisplayWidowPenalty -> c{displayWidowPenalty=vp}
+  BrokenPenalty -> c{brokenPenalty=vp}
+  PreDisplayPenalty -> c{preDisplayPenalty=vp}
+  PostDisplayPenalty -> c{postDisplayPenalty=vp}
+  InterlinePenalty -> c{interlinePenalty=vp}
+  FloatingPenalty -> c{floatingPenalty=vp}
+  OutputPenalty -> c{outputPenalty=vp}
+  DoubleHyphenDemerits -> c{doubleHyphenDemerits=vp}
+  FinalHyphenDemerits -> c{finalHyphenDemerits=vp}
+  AdjDemerits -> c{adjDemerits=vp}
+  Looseness -> c{looseness=vp}
+  Pausing -> c{pausing=vp}
+  HoldingInserts -> c{holdingInserts=vp}
+  TracingOnline -> c{tracingOnline=vp}
+  TracingMacros -> c{tracingMacros=vp}
+  TracingStats -> c{tracingStats=vp}
+  TracingParagraphs -> c{tracingParagraphs=vp}
+  TracingPages -> c{tracingPages=vp}
+  TracingOutput -> c{tracingOutput=vp}
+  TracingLostChars -> c{tracingLostChars=vp}
+  TracingCommands -> c{tracingCommands=vp}
+  TracingRestores -> c{tracingRestores=vp}
+  Language -> c{language=vp}
+  UCHyph -> c{uCHyph=vp}
+  LeftHyphenMin -> c{leftHyphenMin=vp}
+  RightHyphenMin -> c{rightHyphenMin=vp}
+  GlobalDefs -> c{globalDefs=vp}
+  DefaultHyphenChar -> c{defaultHyphenChar=vp}
+  DefaultSkewChar -> c{defaultSkewChar=vp}
+  EscapeChar -> c{escapeChar=vp}
+  EndLineChar -> c{endLineChar=vp}
+  NewLineChar -> c{newLineChar=vp}
+  MaxDeadCycles -> c{maxDeadCycles=vp}
+  HangAfter -> c{hangAfter=vp}
+  Fam -> c{fam=vp}
+  Mag -> c{mag=vp}
+  DelimiterFactor -> c{delimiterFactor=vp}
+  Time -> c{time=vp}
+  Day -> c{day=vp}
+  Month -> c{month=vp}
+  Year -> c{year=vp}
+  ShowBoxBreadth -> c{showBoxBreadth=vp}
+  ShowBoxDepth -> c{showBoxDepth=vp}
+  ErrorContextLines -> c{errorContextLines=vp}
+
+setLenParam :: LengthParameter -> IntVal -> ParamConfig -> ParamConfig
+setLenParam p v c = let vp = LenParamVal v in case p of
+  HFuzz -> c{hFuzz=vp}
+  VFuzz -> c{vFuzz=vp}
+  OverfullRule -> c{overfullRule=vp}
+  EmergencyStretch -> c{emergencyStretch=vp}
+  HSize -> c{hSize=vp}
+  VSize -> c{vSize=vp}
+  MaxDepth -> c{maxDepth=vp}
+  SplitMaxDepth -> c{splitMaxDepth=vp}
+  BoxMaxDepth -> c{boxMaxDepth=vp}
+  LineSkipLimit -> c{lineSkipLimit=vp}
+  DelimiterShortfall -> c{delimiterShortfall=vp}
+  NullDelimiterSpace -> c{nullDelimiterSpace=vp}
+  ScriptSpace -> c{scriptSpace=vp}
+  MathSurround -> c{mathSurround=vp}
+  PreDisplaySize -> c{preDisplaySize=vp}
+  DisplayWidth -> c{displayWidth=vp}
+  DisplayIndent -> c{displayIndent=vp}
+  ParIndent -> c{parIndent=vp}
+  HangIndent -> c{hangIndent=vp}
+  HOffset -> c{hOffset=vp}
+  VOffset -> c{vOffset=vp}
+
+setGlueParam :: GlueParameter -> Glue -> ParamConfig -> ParamConfig
+setGlueParam p v c = let vp = GlueParamVal v in case p of
+  BaselineSkip -> c{baselineSkip=vp}
+  LineSkip -> c{lineSkip=vp}
+  ParSkip -> c{parSkip=vp}
+  AboveDisplaySkip -> c{aboveDisplaySkip=vp}
+  AboveDisplayShortSkip -> c{aboveDisplayShortSkip=vp}
+  BelowDisplaySkip -> c{belowDisplaySkip=vp}
+  BelowDisplayShortSkip -> c{belowDisplayShortSkip=vp}
+  LeftSkip -> c{leftSkip=vp}
+  RightSkip -> c{rightSkip=vp}
+  TopSkip -> c{topSkip=vp}
+  SplitTopSkip -> c{splitTopSkip=vp}
+  TabSkip -> c{tabSkip=vp}
+  SpaceSkip -> c{spaceSkip=vp}
+  XSpaceSkip -> c{xSpaceSkip=vp}
+  ParFillSkip -> c{parFillSkip=vp}
+
+-- setMathGlueParam :: MathGlueParameter -> MathGlue -> ParamConfig -> ParamConfig
+-- setMathGlueParam p v c = let vp = MathGlueParamVal v in case p of
+
+-- setTokenListParam :: TokenListParameter -> [Token] -> ParamConfig -> ParamConfig
+-- setTokenListParam p v c = let vp = TokenListParamVal v in case p of
+
+setSpecialInt :: SpecialInteger -> IntVal -> ParamConfig -> ParamConfig
+setSpecialInt p v c = let vp = IntParamVal v in case p of
+  SpaceFactor -> c{spaceFactor=vp}
+  PrevGraf -> c{prevGraf=vp}
+  DeadCycles -> c{deadCycles=vp}
+  InsertPenalties -> c{insertPenalties=vp}
+
+setSpecialLen :: SpecialLength -> LenVal -> ParamConfig -> ParamConfig
+setSpecialLen p v c = let vp = LenParamVal v in case p of
+  PrevDepth -> c{prevDepth=vp}
+  PageGoal -> c{pageGoal=vp}
+  PageTotal -> c{pageTotal=vp}
+  PageStretch -> c{pageStretch=vp}
+  PageFilStretch -> c{pageFilStretch=vp}
+  PageFillStretch -> c{pageFillStretch=vp}
+  PageFilllStretch -> c{pageFilllStretch=vp}
+  PageShrink -> c{pageShrink=vp}
+  PageDepth -> c{pageDepth=vp}
