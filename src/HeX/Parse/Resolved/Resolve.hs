@@ -11,12 +11,12 @@ theFontNr = 1
 
 type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
 
-resolveToken :: CSMap -> Lex.Token -> Maybe ResolvedToken
+resolveToken :: CSMap -> Lex.Token -> ResolvedToken
 resolveToken _csMap (Lex.ControlSequenceToken cs)
-  = HMap.lookup (Lex.ControlSequenceProper cs) _csMap
+  = HMap.lookupDefault (PrimitiveToken ResolutionError) (Lex.ControlSequenceProper cs) _csMap
 -- TODO: Active characters.
 resolveToken _ (Lex.CharCatToken cc)
-  = pure $ PrimitiveToken $ CharCat cc
+  = PrimitiveToken $ CharCat cc
 
 _cs :: String -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper . Lex.ControlSequence

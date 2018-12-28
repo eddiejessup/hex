@@ -53,12 +53,10 @@ instance P.Stream ResolvedStream where
   chunkEmpty Proxy = null
 
   -- take1_ :: s -> Maybe (Token s, s)
-  take1_ (ResolvedStream s _csMap)
-    -- Get the token and updated sub-stream.
-   = do
+  take1_ (ResolvedStream s _csMap) = do
+    -- Get the input token and updated sub-stream.
     (lexTok, s') <- P.take1_ s
-    resTok <- resolveToken _csMap lexTok
-    pure (resTok, ResolvedStream s' _csMap)
+    pure (resolveToken _csMap lexTok, ResolvedStream s' _csMap)
 
   takeN_ = undefined
 

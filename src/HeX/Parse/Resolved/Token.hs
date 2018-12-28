@@ -240,6 +240,8 @@ data PrimitiveToken
   -- \| EndIf -- \fi
   -- \| Or -- \or
   | CharCat Lex.CharCat
+
+  | ResolutionError
   deriving (Show, Eq)
 
 instance Ord PrimitiveToken where

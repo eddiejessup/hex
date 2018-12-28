@@ -84,12 +84,13 @@ parseNormalInteger = P.choice
                                                                           ]
     skipOneOptionalSpace
     pure $ digitsToInteger base digits
+
   parseCharacter = do
     skipSatisfied isBacktick
     parseInhibited parseCharLike
-   where
-    isBacktick (R.CharCat (Lex.CharCat '`' Lex.Other)) = True
-    isBacktick _ = False
+
+  isBacktick (R.CharCat (Lex.CharCat '`' Lex.Other)) = True
+  isBacktick _ = False
 
 parseDecimalIntegerDigit :: SimpExpandParser Int
 parseDecimalIntegerDigit = satisfyThen decCharToInt

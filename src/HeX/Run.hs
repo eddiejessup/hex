@@ -109,16 +109,21 @@ chopCommand' estream =
       print com
       chopCommand' estream'
     Left (P.ParseErrorBundle ((P.TrivialError _ (Just P.EndOfInput) _) :| []) _) -> pure ()
-    Left errs -> error $ show errs
+    Left errs -> ioError $ userError $ show errs
 
 runCommand :: [CharCode] -> IO ()
 runCommand xs = chopCommand' $ newExpandStream xs defaultCSMap
 
 -- Generic.
 
-eitherToIO :: Show a => Either a b -> IO b
-eitherToIO (Left err) = fail $ show err
-eitherToIO (Right v) = pure v
+strEitherToIO :: Either String v -> IO v
+strEitherToIO (Left err) = ioError $ userError $ err
+strEitherToIO (Right v) = pure v
+
+buildEitherToIO :: Either BuildError b -> IO b
+buildEitherToIO (Left (ParseError errBundle)) = ioError $ userError $ P.showErrorComponent errBundle
+buildEitherToIO (Left (ConfigError s)) = ioError $ userError $ "Bad semantics: " ++ s
+buildEitherToIO (Right v) = pure v
 
 codesToSth
   :: [CharCode]
@@ -126,7 +131,7 @@ codesToSth
   -> IO a
 codesToSth xs f = do
   let stream = newExpandStream xs defaultCSMap
-  newConfig >>= evalStateT (runExceptT (fst <$> f stream)) >>= eitherToIO
+  newConfig >>= evalStateT (runExceptT (fst <$> f stream)) >>= buildEitherToIO
 
 -- Paragraph list.
 
@@ -176,9 +181,8 @@ codesToDVIRaw xs = do
   -- Who cares, it's for debugging
   let _mag = 1000
   let instrs = pagesToDVI pages
-  case parseInstructions instrs _mag of
-    Left err -> ioError $ userError err
-    Right encInstrs -> pure $ reverse encInstrs
+  encInstrs <- strEitherToIO $ parseInstructions instrs _mag
+  pure $ reverse encInstrs
 
 runDVIRaw :: [CharCode] -> IO ()
 runDVIRaw xs = codesToDVIRaw xs >>= printList

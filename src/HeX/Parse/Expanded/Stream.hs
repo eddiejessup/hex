@@ -1,5 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module HeX.Parse.Expanded.Stream where
 
@@ -9,6 +10,9 @@ import           Data.Char                      ( toLower
 import           Data.Proxy
 import qualified Data.Map.Strict               as Map
 import           Data.Map.Strict                ( (!?) )
+import qualified Data.Set                      as Set
+import qualified Data.List.NonEmpty            as NE
+import qualified Data.Foldable                 as Fold
 import qualified Text.Megaparsec               as P
 
 import           HeX.Categorise                 ( CharCode )
@@ -28,8 +32,6 @@ type SimpExpandParser = SimpParser ExpandedStream
 
 newExpandStream :: [CharCode] -> R.CSMap -> ExpandedStream
 newExpandStream cs = ExpandedStream . newResolvedStream cs
-
-type PrimitiveTokens = [PrimitiveToken]
 
 -- Set the character code of each character token to its
 -- \uccode or \lccode value, if that value is non-zero.
@@ -94,13 +96,12 @@ parseGeneralText = do
   -- TODO: Maybe other things can act as left braces.
   skipSatisfied isExplicitLeftBrace
   parseInhibited $ parseBalancedText Discard
- where
-  isFillerItem R.Relax = True
-  isFillerItem t       = isSpace t
 
 parseCSNameArgs :: SimpExpandParser [CharCode]
-parseCSNameArgs =
-  parseManyChars <* skipSatisfiedEquals (R.SyntaxCommandArg R.EndCSName)
+parseCSNameArgs = do
+  chars <- parseManyChars
+  skipSatisfiedEquals (R.SyntaxCommandArg R.EndCSName)
+  pure chars
 
 renderMacroText :: [MacroTextToken] -> Map.Map Digit Inh.MacroArgument -> [Lex.Token]
 renderMacroText [] _ = []
@@ -125,7 +126,7 @@ instance P.Stream ExpandedStream where
   type Token ExpandedStream = PrimitiveToken
 
   -- 'Tokens' is synonymous with 'chunk' containing 'token's.
-  type Tokens ExpandedStream = PrimitiveTokens
+  type Tokens ExpandedStream = [PrimitiveToken]
 
   -- These basically clarify that, for us, a 'tokens' is a list of type
   -- 'token'.
@@ -193,3 +194,22 @@ insertLexTokenE (ExpandedStream rs) t = ExpandedStream (insertLexTokenR rs t)
 insertLexTokensE :: ExpandedStream -> [Lex.Token] -> ExpandedStream
 insertLexTokensE (ExpandedStream rs) ts =
   ExpandedStream (insertLexTokensR rs ts)
+
+instance Eq ExpandedStream where
+  _ == _ = True
+
+instance Ord (P.ParseErrorBundle ExpandedStream ()) where
+  compare _ _ = EQ
+
+instance P.ShowErrorComponent (P.ParseErrorBundle ExpandedStream ()) where
+  showErrorComponent (P.ParseErrorBundle errs posState) =
+    Fold.concat $ NE.intersperse "\n\n" $ P.showErrorComponent <$> errs
+
+instance Ord (P.ParseError ExpandedStream ()) where
+  compare _ _ = EQ
+
+instance P.ShowErrorComponent (P.ParseError ExpandedStream ()) where
+  showErrorComponent (P.TrivialError offset (Just (P.Tokens unexpecteds)) expecteds) =
+    "Error at " ++ show offset ++ ".\n"
+    ++ "Found unexpected tokens: " ++ show (NE.toList unexpecteds) ++ ".\n"
+    ++ "Expected one of: " ++ show (Set.toList expecteds)
