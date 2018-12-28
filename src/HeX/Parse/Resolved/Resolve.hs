@@ -3,7 +3,6 @@ module HeX.Parse.Resolved.Resolve where
 import qualified Data.HashMap.Strict           as HMap
 
 import qualified HeX.Lex                       as Lex
-
 import           HeX.Parse.Resolved.Token
 import           HeX.Parse.Resolved.Parameter
 
@@ -11,6 +10,13 @@ theFontNr :: Int
 theFontNr = 1
 
 type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
+
+resolveToken :: CSMap -> Lex.Token -> Maybe ResolvedToken
+resolveToken _csMap (Lex.ControlSequenceToken cs)
+  = HMap.lookup (Lex.ControlSequenceProper cs) _csMap
+-- TODO: Active characters.
+resolveToken _ (Lex.CharCatToken cc)
+  = pure $ PrimitiveToken $ CharCat cc
 
 _cs :: String -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper . Lex.ControlSequence

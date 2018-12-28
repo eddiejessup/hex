@@ -12,28 +12,38 @@ import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
 
-type LexTokens = [Lex.Token]
-
 data LexStream = LexStream
   { codes :: [Cat.CharCode]
-  , lexTokens :: LexTokens
+  , lexTokens :: [Lex.Token]
   , lexState :: Lex.LexState
-  , ccMap :: Cat.CharCatMap
-  }
+  , ccMap :: Cat.CharCatMap }
+  deriving Show
+
+newLexStream :: [Cat.CharCode] -> LexStream
+newLexStream cs = LexStream { codes = cs
+                            , lexTokens = []
+                            , lexState = Lex.LineBegin
+                            , ccMap = Cat.usableCharCatMap }
+
+insertLexToken :: LexStream -> Lex.Token -> LexStream
+insertLexToken s t = s {lexTokens = t : lexTokens s}
+
+insertLexTokens :: LexStream -> [Lex.Token] -> LexStream
+-- TODO: This use of reverse is pure sloth; fix later.
+insertLexTokens s ts = foldl' insertLexToken s $ reverse ts
 
 showSrc :: String -> String
 showSrc s = replace "\n" "\\n" (take 30 s)
 
-instance Show LexStream where
-  show LexStream {codes = cs, lexTokens = ts, lexState = ls} =
-    show ls ++
-    "; to-lex: " ++ show ts ++ "; \"" ++ showSrc cs ++ "\""
+showStream :: LexStream -> String
+showStream LexStream { codes = cs, lexTokens = ts, lexState = ls }
+  = show ls ++ "; to-lex: " ++ show ts ++ "; \"" ++ showSrc cs ++ "\""
 
 instance P.Stream LexStream where
   type Token LexStream = Lex.Token
 
   -- 'Tokens' is synonymous with 'chunk' containing 'token's.
-  type Tokens LexStream = LexTokens
+  type Tokens LexStream = [Lex.Token]
 
   -- These basically clarify that, for us, a 'tokens' is a list of type
   -- 'token'.
@@ -57,16 +67,17 @@ instance P.Stream LexStream where
   chunkEmpty Proxy = null
 
   -- take1_ :: s -> Maybe (Token s, s)
+  -- If we've no input, signal that we are done.
   take1_ (LexStream [] _ _ _) = Nothing
-  -- If the lex token buffer is empty.
+  -- If there is a lex token in the buffer, return that.
+  take1_ stream@(LexStream _ (lt:lts) _ _) =
+    pure (lt, stream {lexTokens = lts})
+  -- If the lex token buffer is empty, extract a token and return it.
   take1_ stream@(LexStream cs [] _lexState _ccMap) = do
     (lt, _lexState', cs') <- Lex.extractToken getCC _lexState cs
     pure (lt, stream {codes = cs', lexState = _lexState'})
     where
       getCC = Cat.extractCharCat (Cat.catLookup _ccMap)
-  -- If there is a lex token in the buffer.
-  take1_ stream@(LexStream _ (lt:lts) _ _) =
-    pure (lt, stream {lexTokens = lts})
 
   takeN_ = undefined
 
@@ -77,19 +88,3 @@ instance P.Stream LexStream where
   reachOffset _ _freshState = (freshSourcePos, "", _freshState)
 
 type SimpLexParser = SimpParser LexStream
-
-newLexStream :: [Cat.CharCode] -> LexStream
-newLexStream cs =
-  LexStream
-  { codes = cs
-  , lexTokens = []
-  , lexState = Lex.LineBegin
-  , ccMap = Cat.usableCharCatMap
-  }
-
-insertLexToken :: LexStream -> Lex.Token -> LexStream
-insertLexToken s t = s {lexTokens = t : lexTokens s}
-
-insertLexTokens :: LexStream -> [Lex.Token] -> LexStream
--- TODO: This use of reverse is pure sloth; fix later.
-insertLexTokens s ts = foldl' insertLexToken s $ reverse ts

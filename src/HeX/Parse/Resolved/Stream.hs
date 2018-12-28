@@ -2,8 +2,6 @@
 
 module HeX.Parse.Resolved.Stream where
 
-import qualified Data.HashMap.Strict           as HMap
-import           Data.Maybe
 import           Data.Proxy
 import qualified Text.Megaparsec               as P
 
@@ -14,32 +12,24 @@ import           HeX.Parse.Lexed.Stream
 import           HeX.Parse.Resolved.Token
 import           HeX.Parse.Resolved.Resolve
 
-data ResolvedStream =
-  ResolvedStream LexStream
-                 CSMap
+data ResolvedStream = ResolvedStream LexStream CSMap
   deriving (Show)
 
 newResolvedStream :: [CharCode] -> CSMap -> ResolvedStream
 newResolvedStream = ResolvedStream . newLexStream
 
-type ResolvedTokens = [ResolvedToken]
+insertLexTokenR :: ResolvedStream -> Lex.Token -> ResolvedStream
+insertLexTokenR s t = insertLexTokensR s [t]
 
-resolveToken :: CSMap -> Lex.Token -> ResolvedToken
-resolveToken _csMap (Lex.ControlSequenceToken cs)
-  = 
-  let
-    val = HMap.lookup (Lex.ControlSequenceProper cs) _csMap
-    err = error ("no such control sequence found: " ++ show cs)
-  in fromMaybe err val
--- TODO: Active characters.
-resolveToken _ (Lex.CharCatToken cc)
-  = PrimitiveToken $ CharCat cc
+insertLexTokensR :: ResolvedStream -> [Lex.Token] -> ResolvedStream
+insertLexTokensR (ResolvedStream _lexState csMap) lexToks
+  = ResolvedStream (insertLexTokens _lexState lexToks) csMap
 
 instance P.Stream ResolvedStream where
   type Token ResolvedStream = ResolvedToken
 
   -- 'Tokens' is synonymous with 'chunk' containing 'token's.
-  type Tokens ResolvedStream = ResolvedTokens
+  type Tokens ResolvedStream = [ResolvedToken]
 
   -- These basically clarify that, for us, a 'tokens' is a list of type
   -- 'token'.
@@ -66,8 +56,9 @@ instance P.Stream ResolvedStream where
   take1_ (ResolvedStream s _csMap)
     -- Get the token and updated sub-stream.
    = do
-    (lt, s') <- P.take1_ s
-    pure (resolveToken _csMap lt, ResolvedStream s' _csMap)
+    (lexTok, s') <- P.take1_ s
+    resTok <- resolveToken _csMap lexTok
+    pure (resTok, ResolvedStream s' _csMap)
 
   takeN_ = undefined
 
@@ -78,11 +69,3 @@ instance P.Stream ResolvedStream where
   reachOffset _ _freshState = (freshSourcePos, "", _freshState)
 
 type SimpResolveParser = P.Parsec () ResolvedStream
-
-insertLexTokenR :: ResolvedStream -> Lex.Token -> ResolvedStream
-insertLexTokenR (ResolvedStream ls csMap) t =
-  ResolvedStream (insertLexToken ls t) csMap
-
-insertLexTokensR :: ResolvedStream -> [Lex.Token] -> ResolvedStream
-insertLexTokensR (ResolvedStream ls csMap) ts =
-  ResolvedStream (insertLexTokens ls ts) csMap
