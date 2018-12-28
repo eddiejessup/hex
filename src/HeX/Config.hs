@@ -7,7 +7,6 @@ module HeX.Config
     , newConfig
     , ConfReaderT, ConfStateT
     , parIndentBox
-    , fontInfoMap
     , modifyParams
     , setConfIntParam
     , setConfLenParam

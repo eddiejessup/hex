@@ -9,6 +9,7 @@ import qualified Text.Megaparsec               as P
 
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
+import           HeX.Parse.Helpers
 import           HeX.Parse.Lexed.Stream
 import           HeX.Parse.Resolved.Token
 import           HeX.Parse.Resolved.Resolve
@@ -36,27 +37,31 @@ resolveToken _ (Lex.CharCatToken cc)
 
 instance P.Stream ResolvedStream where
   type Token ResolvedStream = ResolvedToken
+
   -- 'Tokens' is synonymous with 'chunk' containing 'token's.
   type Tokens ResolvedStream = ResolvedTokens
+
   -- These basically clarify that, for us, a 'tokens' is a list of type
   -- 'token'.
   -- tokenToChunk :: Proxy s -> Token s -> Tokens s
   -- To make a 'token' into a 'tokens', wrap it in a list.
   tokenToChunk Proxy = pure
+
   -- tokensToChunk :: Proxy s -> [Token s] -> Tokens s
   -- A list of type 'token' is equivalent to a 'tokens', and vice versa.
   tokensToChunk Proxy = id
+
   -- chunkToTokens :: Proxy s -> Tokens s -> [Token s]
   chunkToTokens Proxy = id
+
   -- chunkLength :: Proxy s -> Tokens s -> Int
   -- The length of a chunk is the number of elements in it (it's a list).
   chunkLength Proxy = length
+
   -- chunkEmpty :: Proxy s -> Tokens s -> Bool
   -- A chunk is empty if it has no elements.
   chunkEmpty Proxy = null
-  -- Stub implementation: leave position unchanged.
-  advance1 Proxy _ pos _ = pos
-  advanceN Proxy _ pos _ = pos
+
   -- take1_ :: s -> Maybe (Token s, s)
   take1_ (ResolvedStream s _csMap)
     -- Get the token and updated sub-stream.
@@ -65,7 +70,12 @@ instance P.Stream ResolvedStream where
     pure (resolveToken _csMap lt, ResolvedStream s' _csMap)
 
   takeN_ = undefined
+
   takeWhile_ = undefined
+
+  showTokens Proxy = show
+
+  reachOffset _ _freshState = (freshSourcePos, "", _freshState)
 
 type SimpResolveParser = P.Parsec () ResolvedStream
 

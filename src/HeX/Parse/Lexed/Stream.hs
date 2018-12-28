@@ -31,27 +31,31 @@ instance Show LexStream where
 
 instance P.Stream LexStream where
   type Token LexStream = Lex.Token
+
   -- 'Tokens' is synonymous with 'chunk' containing 'token's.
   type Tokens LexStream = LexTokens
+
   -- These basically clarify that, for us, a 'tokens' is a list of type
   -- 'token'.
   -- tokenToChunk :: Proxy s -> Token s -> Tokens s
   -- To make a 'token' into a 'tokens', wrap it in a list.
   tokenToChunk Proxy = pure
+
   -- tokensToChunk :: Proxy s -> [Token s] -> Tokens s
   -- A list of type 'token' is equivalent to a 'tokens', and vice versa.
   tokensToChunk Proxy = id
+
   -- chunkToTokens :: Proxy s -> Tokens s -> [Token s]
   chunkToTokens Proxy = id
+
   -- chunkLength :: Proxy s -> Tokens s -> Int
   -- The length of a chunk is the number of elements in it (it's a list).
   chunkLength Proxy = length
+
   -- chunkEmpty :: Proxy s -> Tokens s -> Bool
   -- A chunk is empty if it has no elements.
   chunkEmpty Proxy = null
-  -- Stub implementation: leave position unchanged.
-  advance1 Proxy _ pos _ = pos
-  advanceN Proxy _ pos _ = pos
+
   -- take1_ :: s -> Maybe (Token s, s)
   take1_ (LexStream [] _ _ _) = Nothing
   -- If the lex token buffer is empty.
@@ -65,7 +69,12 @@ instance P.Stream LexStream where
     pure (lt, stream {lexTokens = lts})
 
   takeN_ = undefined
+
   takeWhile_ = undefined
+
+  showTokens Proxy = show
+
+  reachOffset _ _freshState = (freshSourcePos, "", _freshState)
 
 type SimpLexParser = SimpParser LexStream
 

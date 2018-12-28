@@ -148,8 +148,6 @@ handleModeIndep newStream com
     E.AddGlue g -> do
       _mag <- gets (mag . params)
       modAccum [BL.ListGlue (evaluateGlue _mag g)]
-    -- E.ChangeCase d bt ->
-    --   modStream $ applyChangeCaseToStream newStream d bt
     E.Assign E.Assignment {global=_, body=_body} -> case _body of
       E.DefineMacro m ->
         modStream $ defineMacro newStream m
@@ -232,7 +230,7 @@ processHCommand oldStream newStream acc com =
         pure ((BL.HVListElem <$> extraAcc) ++ acc, mStream, True)
 
 data BuildError
-  = ParseError (PH.ParseError E.ExpandedStream)
+  = ParseError (PH.ParseErrorBundle E.ExpandedStream)
   | ConfigError String
   deriving Show
 

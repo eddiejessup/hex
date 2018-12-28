@@ -11,6 +11,7 @@ import           Control.Monad.State.Lazy       ( evalStateT
 import           Control.Monad.Except           ( ExceptT, runExceptT )
 import           Data.ByteString.Lazy           ( ByteString )
 import           Data.List                      ( intercalate )
+import           Data.List.NonEmpty             ( NonEmpty(..) )
 import qualified Text.Megaparsec               as P
 
 import           DVI.Document                   ( parseInstructions )
@@ -107,8 +108,8 @@ chopCommand' estream =
     Right (P.State {P.stateInput = estream'}, com) -> do
       print com
       chopCommand' estream'
-    Left (P.TrivialError _ (Just P.EndOfInput) _) -> pure ()
-    Left err -> error $ show err
+    Left (P.ParseErrorBundle ((P.TrivialError _ (Just P.EndOfInput) _) :| []) _) -> pure ()
+    Left errs -> error $ show errs
 
 runCommand :: [CharCode] -> IO ()
 runCommand xs = chopCommand' $ newExpandStream xs defaultCSMap

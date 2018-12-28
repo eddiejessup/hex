@@ -133,7 +133,7 @@ parseMacroArgs MacroContents {preParamTokens=pre, parameters=params} = do
     parseUndelimitedArgs = do
       -- Skip blank tokens (assumed to mean spaces).
       skipManySatisfied (isCategory Lex.Space)
-      getToken >>= \case
+      P.anySingle >>= \case
         t@(Lex.CharCatToken Lex.CharCat {cat = Lex.BeginGroup}) -> do
           (BalancedText ts) <- parseBalancedText Include
           pure (t:ts)
@@ -147,7 +147,7 @@ parseMacroArgs MacroContents {preParamTokens=pre, parameters=params} = do
     parseDelimitedArgs ts delims = do
       -- Parse tokens until we see the delimiter tokens, then add what we grab
       -- to our accumulating argument.
-      arg <- (ts ++) <$> P.manyTill getToken (skipSatisfiedChunk delims)
+      arg <- (ts ++) <$> P.manyTill P.anySingle (skipSatisfiedChunk delims)
       if hasValidGrouping tokToChange arg
         -- If the argument has valid grouping, then we are done.
         then pure arg
@@ -187,7 +187,7 @@ tokToChange t
 parseBalancedText :: TerminusPolicy -> SimpLexParser BalancedText
 parseBalancedText policy = BalancedText <$> parseNestedExpr 1 parseNext policy
   where
-    parseNext = getToken >>= (\x -> pure (x, tokToChange x))
+    parseNext = P.anySingle >>= (\x -> pure (x, tokToChange x))
 
 -- Part of case 7, macro replacement text.
 
@@ -260,7 +260,7 @@ parseMacroText :: SimpLexParser MacroText
 parseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
   where
     parseNext :: SimpLexParser (MacroTextToken, Ordering)
-    parseNext = getToken >>= \case
+    parseNext = P.anySingle >>= \case
       -- If we see a '#', parse the parameter number and return a token
       -- representing the call.
       (Lex.CharCatToken Lex.CharCat {cat = Lex.Parameter}) -> do

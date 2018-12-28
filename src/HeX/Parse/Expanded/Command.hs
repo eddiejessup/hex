@@ -97,8 +97,7 @@ data HModeCommand
 
 -- Entry-points.
 
-type ExtractResult c
-  = Either (ParseError ExpandedStream) (P.State ExpandedStream, c)
+type ExtractResult c = Either (ParseErrorBundle ExpandedStream) (P.State ExpandedStream, c)
 
 extractResult :: SimpExpandParser c -> ExpandedStream -> ExtractResult c
 extractResult p stream = do
