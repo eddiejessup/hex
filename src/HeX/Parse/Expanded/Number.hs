@@ -26,9 +26,8 @@ data UnsignedNumber
 
 -- Think: 'un-coerced integer'.
 data NormalInteger
-  -- = InternalInteger InternalInteger
-      =
-  IntegerConstant Integer
+  = IntegerConstant Integer
+  -- | InternalInteger InternalInteger
   deriving (Show)-- = InternalLengthAsInt InternalLength
   -- \| InternalGlueAsInt InternalGlue
 

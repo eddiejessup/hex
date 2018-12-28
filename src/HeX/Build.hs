@@ -153,8 +153,16 @@ handleModeIndep newStream com
     E.Assign E.Assignment {global=_, body=_body} -> case _body of
       E.DefineMacro m ->
         modStream $ defineMacro newStream m
-      E.SetVariable (E.IntegerVariableAssignment (E.IntegerParameter p) n) -> do
-        setConfIntParam p (fromIntegral $ evaluateNumber n)
+      E.SetVariable (E.IntegerVariableAssignment (E.IntegerVariable v) n) -> do
+        let en = (fromIntegral $ evaluateNumber n)
+        case v of
+          (E.ParamVar p) -> setConfIntParam p en
+        continueUnchanged
+      E.SetVariable (E.LengthVariableAssignment (E.LengthVariable v) d) -> do
+        _mag <- gets (mag . params)
+        let ed = (fromIntegral $ evaluateLength _mag d)
+        case v of
+          (E.ParamVar p) -> setConfLenParam p ed
         continueUnchanged
       E.SelectFont fNr -> do
         fontSel <- BL.ListFontSelection <$> selectFont fNr

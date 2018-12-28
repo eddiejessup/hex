@@ -68,6 +68,27 @@ data SyntaxCommandArg
   = EndCSName
   deriving (Show, Eq)
 
+data DefTokenType
+  = DefInt
+  | DefLen
+  | DefGlue
+  | DefMathGlue
+  | DefTokenList
+  -- A control sequence representing a character, such as defined through
+  -- \chardef.
+  | DefChar
+  | DefMathChar
+  | DefFont
+  deriving (Show, Eq)
+
+data RegisterType
+  = RegInt -- \count
+  | RegLen -- \dimen
+  | RegGlue -- \skip
+  | RegMathGlue -- \mskip
+  | RegTokenList -- \toks
+  deriving (Show, Eq)
+
 data PrimitiveToken
   = SyntaxCommandArg SyntaxCommandArg
   -- Starters of commands.
@@ -111,7 +132,6 @@ data PrimitiveToken
   -- Starters of Horizontal-Mode-specific commands.
   -- \| ControlSpace -- \␣ (a control symbol named ' ')
   -- \| AddCharacterCode -- \char
-  -- \| TokenForCharacter -- a control sequence representing a character, such as defined through \chardef.
   -- \| AddAccentedCharacter -- \accent
   -- \| AddItalicCorrection -- \/
   -- \| AddDiscretionaryText -- \discretionary
@@ -135,39 +155,18 @@ data PrimitiveToken
   | Long -- \long
   | Outer -- \outer
   --     \def, \gdef, \edef (expanded-def), \xdef (global-expanded-def).
-  | DefineMacro { global, expand :: Bool }
   -- -- > > Modifying how to parse the macro.
+  | DefineMacro { global, expand :: Bool }
   -- -- > Setting variable values.
-  -- -- > > Setting an integer value.
-  | IntegerParameter IntegerParameter -- example: \tolerance
-  --        -- a control sequence representing the contents of an integer
-  --        -- register, such as defined through \countdef.
-  -- \|      TokenForInteger
-  -- \|      LookupInteger -- \count
-  -- -- > > Setting a length (also known as a 'dimen') value.
-  | LengthParameter LengthParameter -- example: \hsize
-  --        -- a control sequence representing the contents of a distance
-  --        -- register, such as defined through \dimendef.
-  -- \|      TokenForDistance
-  -- \|      LookupDistance -- \dimen
-  -- -- > > Setting a glue (also known as a 'skip') value.
-  | GlueParameter GlueParameter -- example: \lineskip
-  --        -- a control sequence representing the contents of a glue
-  --        -- register, such as defined through \skipdef.
-  -- \|      TokenForGlue
-  -- \|      LookupGlue -- \skip
-  -- -- > > Setting a math-glue (also known as a 'muskip' or 'muglue') value.
-  | MathGlueParameter MathGlueParameter -- example: \thinmuskip
-  --        -- a control sequence representing the contents of a math-glue
-  --        -- register, such as defined through \muskipdef.
-  -- \|      TokenForMathGlue
-  -- \|      LookupMathGlue -- \muskip
-  -- -- > > Setting a token-list value.
-  | TokenListParameter TokenListParameter -- example: \everypar
-  --        -- a control sequence representing the contents of a token-list
-  --        -- register, such as defined through \toksdef.
-  -- \|      TokenForTokenList
-  -- \|      LookupTokenList -- \toks
+  | IntParamVar IntegerParameter
+  | LenParamVar LengthParameter
+  | GlueParamVar GlueParameter
+  | MathGlueParamVar MathGlueParameter
+  | TokenListParamVar TokenListParameter
+  | SpecialInteger SpecialInteger -- \example: \spacefactor
+  | SpecialLength SpecialLength -- \example: \pagestretch
+  | TokenVariable DefTokenType String
+  | RegisterVariable RegisterType
   -- > Modifying variable values with arithmetic.
   -- \| Advance -- \advance
   -- \| Multiply -- \multiply
@@ -224,9 +223,6 @@ data PrimitiveToken
   -- \| SwitchToScrollMode -- \scrollmode
   -- \| SwitchToNonStopMode -- \nonstopmode
   -- \| SwitchToBatchMode -- \batchmode
-  -- > Setting special values.
-  | SpecialInteger SpecialInteger -- \example: \spacefactor
-  | SpecialLength SpecialLength -- \example: \pagestretch
   -- Conditions.
   -- \| CompareIntegers -- \ifnum
   -- \| CompareDistances -- \ifdim

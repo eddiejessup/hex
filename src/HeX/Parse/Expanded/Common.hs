@@ -80,3 +80,8 @@ parseManyChars = P.many $ satisfyThen tokToChar
   where
     tokToChar (R.CharCat Lex.CharCat {char = c}) = Just c
     tokToChar _ = Nothing
+
+skipOptionalEquals :: (P.Stream s, P.Token s ~ PrimitiveToken) => NullSimpParser s
+skipOptionalEquals = do
+  skipOptionalSpaces
+  skipOneOptionalSatisfied isEquals

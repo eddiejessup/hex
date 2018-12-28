@@ -5,6 +5,7 @@ module HeX.Parse.Expanded
     , module HeX.Parse.Expanded.Length
     , module HeX.Parse.Expanded.Glue
     , module HeX.Parse.Expanded.Assignment
+    , module HeX.Parse.Expanded.VarAssignment
     , module HeX.Parse.Expanded.Stream
     )
 where
@@ -15,4 +16,5 @@ import           HeX.Parse.Expanded.Number
 import           HeX.Parse.Expanded.Length
 import           HeX.Parse.Expanded.Glue
 import           HeX.Parse.Expanded.Assignment
+import           HeX.Parse.Expanded.VarAssignment
 import           HeX.Parse.Expanded.Stream

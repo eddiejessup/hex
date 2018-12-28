@@ -1,4 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Expanded.Assignment where
 
@@ -17,7 +18,7 @@ import qualified HeX.Parse.Lexed.Inhibited     as Inh
 import qualified HeX.Parse.Resolved            as R
 import           HeX.Parse.Expanded.Common
 import           HeX.Parse.Expanded.Stream
-import           HeX.Parse.Expanded.Number
+import           HeX.Parse.Expanded.VarAssignment
 
 -- AST.
 
@@ -57,16 +58,6 @@ data AssignmentBody
   -- \| SetSpecialVariable
   deriving (Show)
 
-data VariableAssignment
-  = IntegerVariableAssignment IntegerVariable Number
-  deriving (Show)
-
-data IntegerVariable
-  = IntegerParameter R.IntegerParameter
-  -- \| CountDefToken
-  -- \| CountRegister
-  deriving (Show)
-
 data Assignment = Assignment
   { body :: AssignmentBody
   , global :: Bool
@@ -86,14 +77,9 @@ parseNonMacroAssignment = do
     -- TODO: Parse globals.
     parseGlobal = pure True
     parseNonMacroAssignmentBody
-      = P.choice [ parseVariableAssignment
+      = P.choice [ SetVariable <$> parseVariableAssignment
                  , parseTokenForFont
                  , parseMacroToFont ]
-
-skipOptionalEquals :: NullSimpParser ExpandedStream
-skipOptionalEquals = do
-  skipOptionalSpaces
-  skipOneOptionalSatisfied isEquals
 
 -- Parse Macro.
 
@@ -174,23 +160,3 @@ parseMacroToFont = do
         '.' -> Just c
         _ -> Nothing
     tokToChar _ = Nothing
-
--- Variable assignment
-
-parseVariableAssignment :: SimpExpandParser AssignmentBody
-parseVariableAssignment = SetVariable <$> P.choice [parseIntegerVariableAssignment]
-
-parseIntegerVariableAssignment :: SimpExpandParser VariableAssignment
-parseIntegerVariableAssignment = do
-  v <- parseIntegerVariable
-  skipOptionalEquals
-  IntegerVariableAssignment v <$> parseNumber
-
-parseIntegerVariable :: SimpExpandParser IntegerVariable
-parseIntegerVariable = P.choice [parseIntegerParameter]
-  where
-    parseIntegerParameter =
-      IntegerParameter <$> satisfyThen tokToIntParam
-      where
-        tokToIntParam (R.IntegerParameter p) = Just p
-        tokToIntParam _ = Nothing

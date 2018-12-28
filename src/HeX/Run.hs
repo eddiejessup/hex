@@ -5,18 +5,10 @@ module HeX.Run where
 
 import           Prelude                 hiding ( writeFile )
 
-import           Control.Monad.IO.Class         ( MonadIO )
-import           Control.Monad.State.Lazy       ( MonadState
-                                                , get
-                                                , gets
-                                                , lift
-                                                , liftIO
-                                                , modify
-                                                , evalStateT
+import           Control.Monad.State.Lazy       ( evalStateT
                                                 , StateT
                                                 )
-import           Control.Monad.Trans.Except     (runExceptT)
-import           Control.Monad.Except           ( ExceptT, liftEither, MonadError, throwError, runExceptT, withExceptT )
+import           Control.Monad.Except           ( ExceptT, runExceptT )
 import           Data.ByteString.Lazy           ( ByteString )
 import           Data.List                      ( intercalate )
 import qualified Text.Megaparsec               as P
