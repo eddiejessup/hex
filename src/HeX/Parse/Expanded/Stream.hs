@@ -13,7 +13,9 @@ import           Data.Map.Strict                ( (!?) )
 import qualified Data.Set                      as Set
 import qualified Data.List.NonEmpty            as NE
 import qualified Data.Foldable                 as Fold
+import           Data.Functor.Identity          ( runIdentity )
 import qualified Text.Megaparsec               as P
+import           Text.Megaparsec.Internal       ( Result(..), Reply(..), runParsecT )
 
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
@@ -49,46 +51,45 @@ changeCase _ t = t
 -- Constraining only the stream token type won't work easily either, because
 -- the functions currently depend on the ExpandedStream type per se.
 
-copyPosState :: P.PosState s -> s' -> P.PosState s'
-copyPosState posState tgtStream
-  =
-    let
-      P.PosState { pstateInput = _
-                 , pstateOffset = offset
-                 , pstateSourcePos = sourcePos
-                 , pstateTabWidth = tabWidth
-                 , pstateLinePrefix = linePrefix } = posState
-    in
-      P.PosState { pstateInput = tgtStream
-                 , pstateOffset = offset
-                 , pstateSourcePos = sourcePos
-                 , pstateTabWidth = tabWidth
-                 , pstateLinePrefix = linePrefix }
+runParserT'
+  :: SimpParser s a
+  -> s
+  -> (P.State s, Either (ParseError s) a)
+runParserT' p stream =
+  let (Reply s' _ result) = runIdentity $ runParsecT p (freshState stream)
+  in case result of
+    OK    x -> (s', Right x)
+    Error e -> (s', Left e)
 
-copyState :: P.State s -> s' -> P.State s'
-copyState state tgtStream
+lexFailure :: ParseError LexStream -> SimpExpandParser a
+lexFailure (P.TrivialError _ unex ex)
   =
     let
-      P.State { stateInput = _
-              , stateOffset = offset
-              , statePosState = posState } = state
+      liftedUnex = liftUnex <$> unex
+      liftedEx = Set.map (InhibitedParsingError <$>) ex
     in
-      P.State { stateInput = tgtStream
-              , stateOffset = offset
-              , statePosState = copyPosState posState tgtStream }
+      P.failure liftedUnex liftedEx
+  where
+    liftUnex (P.Tokens toks)
+      = P.Tokens $ InhibitedParsingError <$> toks
+    liftUnex P.EndOfInput
+      = P.EndOfInput
+    liftUnex (P.Label lab)
+      = P.Label lab
 
 parseInhibited :: SimpLexParser a -> SimpExpandParser a
 parseInhibited p = do
   P.State { stateInput = ExpandedStream (R.ResolvedStream lexStream csMap)
           , stateOffset = _
           , statePosState = _ } <- P.getParserState
-  case easyRunParser p lexStream of
-    (_, Left s) -> error $ "ohnoes: " ++ show s
-    (newLexState, Right v) -> do
-      let newLexStream = P.stateInput newLexState
-      let newExpStream = ExpandedStream $ R.ResolvedStream newLexStream csMap
-      P.setParserState $ copyState newLexState newExpStream
-      pure v
+  let
+    (newLexState, eithV) = runParserT' p lexStream
+    newLexStream = P.stateInput newLexState
+    newExpStream = ExpandedStream $ R.ResolvedStream newLexStream csMap
+  P.setParserState $ copyState newLexState newExpStream
+  case eithV of
+    Left lexErr -> lexFailure lexErr
+    Right v -> pure v
 
 parseGeneralText :: SimpExpandParser BalancedText
 parseGeneralText = do
@@ -198,17 +199,17 @@ insertLexTokensE (ExpandedStream rs) ts =
 instance Eq ExpandedStream where
   _ == _ = True
 
-instance Ord (P.ParseErrorBundle ExpandedStream ()) where
+instance Ord (ParseErrorBundle ExpandedStream) where
   compare _ _ = EQ
 
-instance P.ShowErrorComponent (P.ParseErrorBundle ExpandedStream ()) where
+instance P.ShowErrorComponent (ParseErrorBundle ExpandedStream) where
   showErrorComponent (P.ParseErrorBundle errs posState) =
     Fold.concat $ NE.intersperse "\n\n" $ P.showErrorComponent <$> errs
 
-instance Ord (P.ParseError ExpandedStream ()) where
+instance Ord (ParseError ExpandedStream) where
   compare _ _ = EQ
 
-instance P.ShowErrorComponent (P.ParseError ExpandedStream ()) where
+instance P.ShowErrorComponent (ParseError ExpandedStream) where
   showErrorComponent (P.TrivialError offset (Just (P.Tokens unexpecteds)) expecteds) =
     "Error at " ++ show offset ++ ".\n"
     ++ "Found unexpected tokens: " ++ show (NE.toList unexpecteds) ++ ".\n"

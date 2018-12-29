@@ -8,9 +8,12 @@ import qualified Data.Set                      as Set
 import qualified Text.Megaparsec               as P
 
 -- Helpers.
-type SimpParser s = P.Parsec () s
+type ErrorComp = ()
 
-type ParseErrorBundle s = P.ParseErrorBundle s ()
+type SimpParser s = P.Parsec ErrorComp s
+
+type ParseError s = P.ParseError s ErrorComp
+type ParseErrorBundle s = P.ParseErrorBundle s ErrorComp
 
 type MatchToken s = P.Token s -> Bool
 
@@ -71,3 +74,30 @@ skipSatisfiedChunk [] = pure ()
 skipSatisfiedChunk (x:xs) = do
   skipSatisfiedEquals x
   skipSatisfiedChunk xs
+
+copyState :: P.State s -> s' -> P.State s'
+copyState state tgtStream
+  =
+    let
+      P.State { stateInput = _
+              , stateOffset = offset
+              , statePosState = posState } = state
+    in
+      P.State { stateInput = tgtStream
+              , stateOffset = offset
+              , statePosState = copyPosState posState }
+  where
+    copyPosState posState
+      =
+        let
+          P.PosState { pstateInput = _
+                     , pstateOffset = offset
+                     , pstateSourcePos = sourcePos
+                     , pstateTabWidth = tabWidth
+                     , pstateLinePrefix = linePrefix } = posState
+        in
+          P.PosState { pstateInput = tgtStream
+                     , pstateOffset = offset
+                     , pstateSourcePos = sourcePos
+                     , pstateTabWidth = tabWidth
+                     , pstateLinePrefix = linePrefix }

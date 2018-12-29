@@ -242,6 +242,7 @@ data PrimitiveToken
   | CharCat Lex.CharCat
 
   | ResolutionError
+  | InhibitedParsingError Lex.Token
   deriving (Show, Eq)
 
 instance Ord PrimitiveToken where
