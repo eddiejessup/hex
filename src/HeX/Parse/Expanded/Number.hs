@@ -8,7 +8,6 @@ import qualified Text.Megaparsec               as P
 
 import qualified HeX.Lex                       as Lex
 
-import           HeX.Parse.Lexed
 import           HeX.Parse.Helpers
 import qualified HeX.Parse.Resolved            as R
 
@@ -57,8 +56,8 @@ parseSigns = getSign . mconcat <$> parseOptionalSigns
  where
   parseOptionalSigns =
     skipOptionalSpaces *> P.sepEndBy (satisfyThen signToPos) skipOptionalSpaces
-  signToPos (R.CharCat (Lex.CharCat '+' Lex.Other)) = Just $ Sign True
-  signToPos (R.CharCat (Lex.CharCat '-' Lex.Other)) = Just $ Sign False
+  signToPos (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '+' Lex.Other))) = Just $ Sign True
+  signToPos (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '-' Lex.Other))) = Just $ Sign False
   signToPos _ = Nothing
 
 parseNumber :: SimpExpandParser Number
@@ -87,15 +86,15 @@ parseNormalInteger = P.choice
 
   parseCharacter = do
     skipSatisfied isBacktick
-    parseInhibited parseCharLike
+    parseCharLike
 
-  isBacktick (R.CharCat (Lex.CharCat '`' Lex.Other)) = True
+  isBacktick (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '`' Lex.Other))) = True
   isBacktick _ = False
 
 parseDecimalIntegerDigit :: SimpExpandParser Int
 parseDecimalIntegerDigit = satisfyThen decCharToInt
  where
-  decCharToInt (R.CharCat (Lex.CharCat c Lex.Other)) = case c of
+  decCharToInt (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
     '0' -> Just 0
     '1' -> Just 1
     '2' -> Just 2
@@ -113,10 +112,10 @@ parseHexadecimalIntegerDigits :: SimpExpandParser [Int]
 parseHexadecimalIntegerDigits = skipSatisfied isDoubleQuote
   *> P.some (satisfyThen hexCharToInt)
  where
-  isDoubleQuote (R.CharCat (Lex.CharCat '"' Lex.Other)) = True
+  isDoubleQuote (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '"' Lex.Other))) = True
   isDoubleQuote _ = False
 
-  hexCharToInt (R.CharCat (Lex.CharCat c Lex.Other)) = case c of
+  hexCharToInt (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
     '0' -> Just 0
     '1' -> Just 1
     '2' -> Just 2
@@ -134,7 +133,7 @@ parseHexadecimalIntegerDigits = skipSatisfied isDoubleQuote
     'E' -> Just 14
     'F' -> Just 15
     _   -> Nothing
-  hexCharToInt (R.CharCat (Lex.CharCat c Lex.Letter)) = case c of
+  hexCharToInt (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) = case c of
     'A' -> Just 10
     'B' -> Just 11
     'C' -> Just 12
@@ -148,10 +147,10 @@ parseOctalIntegerDigits :: SimpExpandParser [Int]
 parseOctalIntegerDigits = skipSatisfied isSingleQuote
   *> P.some (satisfyThen octCharToInt)
  where
-  isSingleQuote (R.CharCat (Lex.CharCat '\'' Lex.Other)) = True
+  isSingleQuote (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '\'' Lex.Other))) = True
   isSingleQuote _ = False
 
-  octCharToInt (R.CharCat (Lex.CharCat c Lex.Other)) = case c of
+  octCharToInt (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
     '0' -> Just 0
     '1' -> Just 1
     '2' -> Just 2
@@ -181,6 +180,6 @@ parseRationalConstant = do
   pure $ fromIntegral wholeNr + fraction
  where
   decDigitsToInteger = digitsToInteger 10
-  isDotOrComma (R.CharCat (Lex.CharCat ',' Lex.Other)) = True
-  isDotOrComma (R.CharCat (Lex.CharCat '.' Lex.Other)) = True
+  isDotOrComma (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat ',' Lex.Other))) = True
+  isDotOrComma (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '.' Lex.Other))) = True
   isDotOrComma _ = False

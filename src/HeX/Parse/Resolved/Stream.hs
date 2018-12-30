@@ -12,18 +12,25 @@ import           HeX.Parse.Lexed.Stream
 import           HeX.Parse.Resolved.Token
 import           HeX.Parse.Resolved.Resolve
 
-data ResolvedStream = ResolvedStream LexStream CSMap
+data ResolvedStream = ResolvedStream { lexStream :: LexStream
+                                     , csMap :: CSMap
+                                     , expansionMode :: ExpansionMode }
   deriving (Show)
 
+type SimpResolveParser = SimpParser ResolvedStream
+
 newResolvedStream :: [CharCode] -> CSMap -> ResolvedStream
-newResolvedStream = ResolvedStream . newLexStream
+newResolvedStream cs _csMap = ResolvedStream (newLexStream cs) _csMap Expanding
 
 insertLexTokenR :: ResolvedStream -> Lex.Token -> ResolvedStream
 insertLexTokenR s t = insertLexTokensR s [t]
 
 insertLexTokensR :: ResolvedStream -> [Lex.Token] -> ResolvedStream
-insertLexTokensR (ResolvedStream _lexState csMap) lexToks
-  = ResolvedStream (insertLexTokens _lexState lexToks) csMap
+insertLexTokensR (ResolvedStream _lexState _csMap expMode) lexToks
+  = ResolvedStream (insertLexTokens _lexState lexToks) _csMap expMode
+
+setResStreamExpansion :: ExpansionMode -> ResolvedStream -> ResolvedStream
+setResStreamExpansion m s = s{expansionMode=m}
 
 instance P.Stream ResolvedStream where
   type Token ResolvedStream = ResolvedToken
@@ -53,10 +60,10 @@ instance P.Stream ResolvedStream where
   chunkEmpty Proxy = null
 
   -- take1_ :: s -> Maybe (Token s, s)
-  take1_ (ResolvedStream s _csMap) = do
+  take1_ (ResolvedStream s _csMap expMode) = do
     -- Get the input token and updated sub-stream.
     (lexTok, s') <- P.take1_ s
-    pure (resolveToken _csMap lexTok, ResolvedStream s' _csMap)
+    pure (resolveToken _csMap expMode lexTok, ResolvedStream s' _csMap expMode)
 
   takeN_ = undefined
 
@@ -65,5 +72,3 @@ instance P.Stream ResolvedStream where
   showTokens Proxy = show
 
   reachOffset _ _freshState = (freshSourcePos, "", _freshState)
-
-type SimpResolveParser = P.Parsec () ResolvedStream

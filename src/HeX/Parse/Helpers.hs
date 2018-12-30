@@ -50,6 +50,9 @@ manySatisfied testTok = P.many $ P.satisfy testTok
 satisfyThen :: P.Stream s => (P.Token s -> Maybe a) -> SimpParser s a
 satisfyThen f = P.token f Set.empty
 
+manySatisfiedThen :: P.Stream s => (P.Token s -> Maybe a) -> SimpParser s [a]
+manySatisfiedThen f = P.many $ satisfyThen f
+
 -- Skipping.
 
 skipSatisfied :: P.Stream s => MatchToken s -> NullSimpParser s

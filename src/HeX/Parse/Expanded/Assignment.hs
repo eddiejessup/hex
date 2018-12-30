@@ -14,7 +14,6 @@ import           Text.Megaparsec               ((<|>))
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
-import qualified HeX.Parse.Lexed.Inhibited     as Inh
 import qualified HeX.Parse.Resolved            as R
 import           HeX.Parse.Expanded.Common
 import           HeX.Parse.Expanded.Stream
@@ -30,7 +29,7 @@ data MacroPrefix
 
 data MacroAssignment
   = MacroAssignment { name :: Lex.ControlSequenceLike
-                    , contents :: Inh.MacroContents
+                    , contents :: R.MacroContents
                     , long, outer :: Bool }
   deriving (Show)
 
@@ -90,18 +89,18 @@ parseDefineMacro = do
   -- \def-like thing.
   (defGlobal, defExpand) <- satisfyThen tokToDef
   -- Macro's name.
-  cs <- parseInhibited Inh.parseCSName
+  cs <- parseCSName
   -- Parameter text.
-  (preParamToks, paramDelims) <- parseInhibited Inh.parseParamText
+  (preParamToks, paramDelims) <- parseParamText
   -- TODO: Support expanded-def.
   when defExpand $ error "expanded-def not implemented"
   -- Replacement text.
-  replaceToks <- parseInhibited Inh.parseMacroText
+  replaceToks <- parseMacroText
   pure $
     Assignment
     { body = DefineMacro $ MacroAssignment
         { name = cs
-        , contents = Inh.MacroContents preParamToks paramDelims replaceToks
+        , contents = R.MacroContents preParamToks paramDelims replaceToks
         , long = Long `elem` prefixes
         , outer = Outer `elem` prefixes
         }
@@ -128,7 +127,7 @@ parseTokenForFont = satisfyThen tokToCom
 parseMacroToFont :: SimpExpandParser AssignmentBody
 parseMacroToFont = do
   skipSatisfiedEquals R.MacroToFont
-  cs <- parseInhibited Inh.parseCSName
+  cs <- parseCSName
   skipOptionalEquals
   DefineFont cs <$> parseFileName
     -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
@@ -141,9 +140,9 @@ parseMacroToFont = do
       case parseRelFile (fileName ++ ".tfm") of
         Just p -> pure p
         Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
-    tokToChar (R.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) = Just c
+    tokToChar (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) = Just c
     -- 'Other' Characters for decimal digits are OK.
-    tokToChar (R.CharCat Lex.CharCat {cat = Lex.Other, char = c}) =
+    tokToChar (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
       case c of
         '0' -> Just c
         '1' -> Just c

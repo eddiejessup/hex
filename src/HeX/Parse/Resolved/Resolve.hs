@@ -9,14 +9,19 @@ import           HeX.Parse.Resolved.Parameter
 theFontNr :: Int
 theFontNr = 1
 
+data ExpansionMode = Expanding | NotExpanding
+  deriving (Show)
+
 type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
 
-resolveToken :: CSMap -> Lex.Token -> ResolvedToken
-resolveToken _csMap (Lex.ControlSequenceToken cs)
+resolveToken :: CSMap -> ExpansionMode -> Lex.Token -> ResolvedToken
+resolveToken _csMap Expanding (Lex.ControlSequenceToken cs)
   = HMap.lookupDefault (PrimitiveToken ResolutionError) (Lex.ControlSequenceProper cs) _csMap
+resolveToken _csMap NotExpanding t@(Lex.ControlSequenceToken _)
+  = PrimitiveToken $ UnexpandedToken t
 -- TODO: Active characters.
-resolveToken _ (Lex.CharCatToken cc)
-  = PrimitiveToken $ CharCat cc
+resolveToken _ _ t@(Lex.CharCatToken _)
+  = PrimitiveToken $ UnexpandedToken t
 
 _cs :: String -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper . Lex.ControlSequence

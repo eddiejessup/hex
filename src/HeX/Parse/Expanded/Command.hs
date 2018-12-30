@@ -234,9 +234,10 @@ addCharacter = do
   c <- satisfyThen charToCode
   pure AddCharacter {method = ExplicitChar, char = c}
   where
-    charToCode (R.CharCat Lex.CharCat {cat = Lex.Letter, char = c}) =
-      Just c
-    charToCode (R.CharCat Lex.CharCat {cat = Lex.Other, char = c}) = Just c
+    charToCode (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Letter)))
+      = Just c
+    charToCode (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other)))
+      = Just c
     charToCode _ = Nothing
 
 -- VMode.
@@ -255,8 +256,8 @@ enterHMode = skipSatisfied startsHMode $> EnterHMode
   where
     startsHMode (R.ModedCommand R.Horizontal _) = True
     startsHMode x
-      | isLetter x = True
-      | isOther x = True
+      | primTokHasCategory Lex.Letter x = True
+      | primTokHasCategory Lex.Other x = True
       | otherwise = False
     -- TODO:
     -- - \char

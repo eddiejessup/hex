@@ -13,27 +13,53 @@ import           Data.Map.Strict                ( (!?) )
 import qualified Data.Set                      as Set
 import qualified Data.List.NonEmpty            as NE
 import qualified Data.Foldable                 as Fold
-import           Data.Functor.Identity          ( runIdentity )
 import qualified Text.Megaparsec               as P
-import           Text.Megaparsec.Internal       ( Result(..), Reply(..), runParsecT )
 
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
-import           HeX.Parse.Lexed
-import qualified HeX.Parse.Lexed.Inhibited     as Inh
 import           HeX.Parse.Resolved             ( PrimitiveToken )
-import           HeX.Parse.Resolved            as R
+import           HeX.Parse.Resolved
 import           HeX.Parse.Expanded.Common
+import           HeX.Parse.Expanded.Inhibited
 
-newtype ExpandedStream =
-  ExpandedStream R.ResolvedStream
+data ExpandedStream = ExpandedStream ResolvedStream
   deriving (Show)
 
 type SimpExpandParser = SimpParser ExpandedStream
+type NullSimpExpandParser = SimpExpandParser ()
 
-newExpandStream :: [CharCode] -> R.CSMap -> ExpandedStream
-newExpandStream cs = ExpandedStream . newResolvedStream cs
+newExpandStream :: [CharCode] -> CSMap -> ExpandedStream
+newExpandStream cs _csMap = ExpandedStream (newResolvedStream cs _csMap)
+
+insertLexTokenE :: ExpandedStream -> Lex.Token -> ExpandedStream
+insertLexTokenE (ExpandedStream rs) t = ExpandedStream (insertLexTokenR rs t)
+
+insertLexTokensE :: ExpandedStream -> [Lex.Token] -> ExpandedStream
+insertLexTokensE (ExpandedStream rs) ts =
+  ExpandedStream (insertLexTokensR rs ts)
+
+-- Inhibition.
+
+setExpansion :: ExpansionMode -> NullSimpExpandParser
+setExpansion m = P.updateParserState $ setStateExpansion
+  where
+    setStreamExpansion (ExpandedStream rs)
+      = ExpandedStream (setResStreamExpansion m rs)
+
+    setStateExpansion est@P.State{stateInput=es}
+      = est{P.stateInput=setStreamExpansion es}
+
+inhibitExpansion, enableExpansion :: NullSimpExpandParser
+inhibitExpansion = setExpansion NotExpanding
+enableExpansion = setExpansion Expanding
+
+parseInhibited :: SimpExpandParser a -> SimpExpandParser a
+parseInhibited p = do
+  inhibitExpansion
+  v <- p
+  enableExpansion
+  pure v
 
 -- Set the character code of each character token to its
 -- \uccode or \lccode value, if that value is non-zero.
@@ -42,69 +68,49 @@ changeCase :: VDirection -> Lex.Token -> Lex.Token
 changeCase dir (Lex.CharCatToken (Lex.CharCat char cat)) =
   Lex.CharCatToken $ Lex.CharCat (switch dir char) cat
  where
-  switch R.Upward   = toUpper
-  switch R.Downward = toLower
+  switch Upward   = toUpper
+  switch Downward = toLower
 changeCase _ t = t
 
--- Things I can't easily parse outside this module, because of the recursive
--- parsing in ExpandedStream.
--- Constraining only the stream token type won't work easily either, because
--- the functions currently depend on the ExpandedStream type per se.
+-- Interface.
 
-runParserT'
-  :: SimpParser s a
-  -> s
-  -> (P.State s, Either (ParseError s) a)
-runParserT' p stream =
-  let (Reply s' _ result) = runIdentity $ runParsecT p (freshState stream)
-  in case result of
-    OK    x -> (s', Right x)
-    Error e -> (s', Left e)
+parseBalancedText :: TerminusPolicy -> SimpExpandParser BalancedText
+parseBalancedText = parseInhibited . unsafeParseBalancedText
 
-lexFailure :: ParseError LexStream -> SimpExpandParser a
-lexFailure (P.TrivialError _ unex ex)
-  =
-    let
-      liftedUnex = liftUnex <$> unex
-      liftedEx = Set.map (InhibitedParsingError <$>) ex
-    in
-      P.failure liftedUnex liftedEx
-  where
-    liftUnex (P.Tokens toks)
-      = P.Tokens $ InhibitedParsingError <$> toks
-    liftUnex P.EndOfInput
-      = P.EndOfInput
-    liftUnex (P.Label lab)
-      = P.Label lab
+parseMacroArgs :: MacroContents -> SimpExpandParser (Map.Map Digit MacroArgument)
+parseMacroArgs = parseInhibited . unsafeParseMacroArgs
 
-parseInhibited :: SimpLexParser a -> SimpExpandParser a
-parseInhibited p = do
-  P.State { stateInput = ExpandedStream (R.ResolvedStream lexStream csMap)
-          , stateOffset = _
-          , statePosState = _ } <- P.getParserState
-  let
-    (newLexState, eithV) = runParserT' p lexStream
-    newLexStream = P.stateInput newLexState
-    newExpStream = ExpandedStream $ R.ResolvedStream newLexStream csMap
-  P.setParserState $ copyState newLexState newExpStream
-  case eithV of
-    Left lexErr -> lexFailure lexErr
-    Right v -> pure v
+parseCharLike :: SimpExpandParser Integer
+parseCharLike = parseInhibited unsafeParseCharLike
+
+parseCSName :: SimpExpandParser Lex.ControlSequenceLike
+parseCSName = parseInhibited unsafeParseCSName
+
+parseParamText :: SimpExpandParser ([Lex.Token], MacroParameters)
+parseParamText = parseInhibited unsafeParseParamText
+
+parseMacroText :: SimpExpandParser MacroText
+parseMacroText = parseInhibited unsafeParseMacroText
+
+
+
+
+-- TODO: Move these parsers outside the module.
 
 parseGeneralText :: SimpExpandParser BalancedText
 parseGeneralText = do
   skipManySatisfied isFillerItem
   -- TODO: Maybe other things can act as left braces.
-  skipSatisfied isExplicitLeftBrace
-  parseInhibited $ parseBalancedText Discard
+  skipSatisfied $ primTokHasCategory Lex.BeginGroup
+  parseBalancedText Discard
 
 parseCSNameArgs :: SimpExpandParser [CharCode]
 parseCSNameArgs = do
   chars <- parseManyChars
-  skipSatisfiedEquals (R.SyntaxCommandArg R.EndCSName)
+  skipSatisfiedEquals (SyntaxCommandArg EndCSName)
   pure chars
 
-renderMacroText :: [MacroTextToken] -> Map.Map Digit Inh.MacroArgument -> [Lex.Token]
+renderMacroText :: [MacroTextToken] -> Map.Map Digit MacroArgument -> [Lex.Token]
 renderMacroText [] _ = []
 renderMacroText (t:ts) args = render t
   where
@@ -117,11 +123,15 @@ renderMacroText (t:ts) args = render t
 
     rest = renderMacroText ts args
 
+
+
 sinfulRunParser :: SimpParser s a -> s -> (P.State s, a)
 sinfulRunParser p stream =
   case easyRunParser p stream of
     (_, Left _) -> error "Error while parsing command"
     (state, Right a) -> (state, a)
+
+
 
 instance P.Stream ExpandedStream where
   type Token ExpandedStream = PrimitiveToken
@@ -169,7 +179,7 @@ instance P.Stream ExpandedStream where
           in (P.take1_ . insertLexTokensE es'') $ changeCase direction <$> caseToks
         (MacroToken m@MacroContents {replacementTokens=(MacroText replaceToks)}) ->
           let
-            (P.State es'' _ _, args) = sinfulRunParser (parseInhibited $ parseMacroArgs m) es'
+            (P.State es'' _ _, args) = sinfulRunParser (parseMacroArgs m) es'
             renderedToks = renderMacroText replaceToks args
           in
             (P.take1_ . insertLexTokensE es'') renderedToks
@@ -189,13 +199,6 @@ instance P.Stream ExpandedStream where
 
   reachOffset _ _freshState = (freshSourcePos, "", _freshState)
 
-insertLexTokenE :: ExpandedStream -> Lex.Token -> ExpandedStream
-insertLexTokenE (ExpandedStream rs) t = ExpandedStream (insertLexTokenR rs t)
-
-insertLexTokensE :: ExpandedStream -> [Lex.Token] -> ExpandedStream
-insertLexTokensE (ExpandedStream rs) ts =
-  ExpandedStream (insertLexTokensR rs ts)
-
 instance Eq ExpandedStream where
   _ == _ = True
 
@@ -213,4 +216,14 @@ instance P.ShowErrorComponent (ParseError ExpandedStream) where
   showErrorComponent (P.TrivialError offset (Just (P.Tokens unexpecteds)) expecteds) =
     "Error at " ++ show offset ++ ".\n"
     ++ "Found unexpected tokens: " ++ show (NE.toList unexpecteds) ++ ".\n"
+    ++ "Expected one of: " ++ show (Set.toList expecteds)
+
+  showErrorComponent (P.TrivialError offset Nothing expecteds) =
+    "Error at " ++ show offset ++ ".\n"
+    ++ "Found no unexpected tokens.\n"
+    ++ "Expected one of: " ++ show (Set.toList expecteds)
+
+  showErrorComponent (P.TrivialError offset (Just P.EndOfInput) expecteds) =
+    "Error at " ++ show offset ++ ".\n"
+    ++ "Found end of input.\n"
     ++ "Expected one of: " ++ show (Set.toList expecteds)

@@ -30,6 +30,7 @@ import           HeX.Lex                        ( extractToken
 import           HeX.Config
 import           HeX.Parse.Resolved             ( defaultCSMap
                                                 , resolveToken
+                                                , ExpansionMode(..)
                                                 )
 import           HeX.Parse.Expanded
 
@@ -80,7 +81,7 @@ chopResolved' ls xs =
     extractAndPrintResolved =
       case extractToken (extractCharCat usableCharToCat) ls xs of
         Just (tok, lexState', s') -> do
-          print $ resolveToken defaultCSMap tok
+          print $ resolveToken defaultCSMap Expanding tok
           pure $ Just (lexState', s')
         Nothing -> pure Nothing
 

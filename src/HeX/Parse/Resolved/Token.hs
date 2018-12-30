@@ -1,7 +1,8 @@
 module HeX.Parse.Resolved.Token where
 
+import qualified Data.Map.Strict               as Map
+
 import qualified HeX.Lex                       as Lex
-import           HeX.Parse.Lexed
 import           HeX.Parse.Resolved.Parameter
 
 data HDirection
@@ -87,6 +88,66 @@ data RegisterType
   | RegGlue -- \skip
   | RegMathGlue -- \mskip
   | RegTokenList -- \toks
+  deriving (Show, Eq)
+
+data Digit
+  = One
+  | Two
+  | Three
+  | Four
+  | Five
+  | Six
+  | Seven
+  | Eight
+  | Nine
+  deriving (Eq, Ord, Bounded, Enum, Show)
+
+digitToChar :: Digit -> Char
+digitToChar One   = '1'
+digitToChar Two   = '2'
+digitToChar Three = '3'
+digitToChar Four  = '4'
+digitToChar Five  = '5'
+digitToChar Six   = '6'
+digitToChar Seven = '7'
+digitToChar Eight = '8'
+digitToChar Nine  = '9'
+
+charToDigit :: Char -> Maybe Digit
+charToDigit '1' = Just One
+charToDigit '2' = Just Two
+charToDigit '3' = Just Three
+charToDigit '4' = Just Four
+charToDigit '5' = Just Five
+charToDigit '6' = Just Six
+charToDigit '7' = Just Seven
+charToDigit '8' = Just Eight
+charToDigit '9' = Just Nine
+charToDigit _   = Nothing
+
+-- We use a map to restrict our parameter keys' domain to [1..9].
+type MacroParameters = Map.Map Digit [Lex.Token]
+
+-- A token in a macro template.
+-- TODO: Technically, we could narrow the domain of a MacroTextLexToken,
+-- because we should know that we won't have a 'Parameter'-category token.
+data MacroTextToken
+  -- A 'normal' token.
+  = MacroTextLexToken Lex.Token
+  -- A token to be substituted by a macro argument.
+  | MacroTextParamToken Digit
+  deriving (Eq, Show)
+
+-- A macro template.
+newtype MacroText = MacroText [MacroTextToken]
+  deriving (Show, Eq)
+
+data MacroContents
+  = MacroContents {
+      -- Tokens to expect before the first argument.
+      preParamTokens :: [Lex.Token]
+      , parameters :: MacroParameters
+      , replacementTokens :: MacroText }
   deriving (Show, Eq)
 
 data PrimitiveToken
@@ -239,10 +300,12 @@ data PrimitiveToken
   -- \| Else -- \else
   -- \| EndIf -- \fi
   -- \| Or -- \or
-  | CharCat Lex.CharCat
 
   | ResolutionError
   | InhibitedParsingError Lex.Token
+  | SubParserError String
+
+  | UnexpandedToken Lex.Token
   deriving (Show, Eq)
 
 instance Ord PrimitiveToken where
