@@ -3,34 +3,42 @@
 module HeX.Parse.Resolved.Stream where
 
 import           Data.Proxy
+import           Data.Foldable                  ( foldl' )
 import qualified Text.Megaparsec               as P
 
-import           HeX.Categorise                 ( CharCode )
+import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
-import           HeX.Parse.Lexed.Stream
 import           HeX.Parse.Resolved.Token
 import           HeX.Parse.Resolved.Resolve
 
-data ResolvedStream = ResolvedStream { lexStream :: LexStream
+data ResolvedStream = ResolvedStream { codes :: [Cat.CharCode]
+                                     , lexTokens :: [Lex.Token]
+                                     , lexState :: Lex.LexState
+                                     , ccMap :: Cat.CharCatMap
                                      , csMap :: CSMap
                                      , expansionMode :: ExpansionMode }
   deriving (Show)
 
 type SimpResolveParser = SimpParser ResolvedStream
 
-newResolvedStream :: [CharCode] -> CSMap -> ResolvedStream
-newResolvedStream cs _csMap = ResolvedStream (newLexStream cs) _csMap Expanding
+newResolvedStream :: [Cat.CharCode] -> CSMap -> ResolvedStream
+newResolvedStream cs _csMap = ResolvedStream { codes = cs
+                                             , lexTokens = []
+                                             , lexState = Lex.LineBegin
+                                             , ccMap = Cat.usableCharCatMap
+                                             , csMap = _csMap
+                                             , expansionMode = Expanding }
 
 insertLexTokenR :: ResolvedStream -> Lex.Token -> ResolvedStream
-insertLexTokenR s t = insertLexTokensR s [t]
+insertLexTokenR s t = s {lexTokens = t : lexTokens s}
 
+-- TODO: This use of reverse is pure sloth; fix later.
 insertLexTokensR :: ResolvedStream -> [Lex.Token] -> ResolvedStream
-insertLexTokensR (ResolvedStream _lexState _csMap expMode) lexToks
-  = ResolvedStream (insertLexTokens _lexState lexToks) _csMap expMode
+insertLexTokensR s ts = foldl' insertLexTokenR s $ reverse ts
 
 setResStreamExpansion :: ExpansionMode -> ResolvedStream -> ResolvedStream
-setResStreamExpansion m s = s{expansionMode=m}
+setResStreamExpansion m s = s { expansionMode = m }
 
 instance P.Stream ResolvedStream where
   type Token ResolvedStream = ResolvedToken
@@ -60,10 +68,20 @@ instance P.Stream ResolvedStream where
   chunkEmpty Proxy = null
 
   -- take1_ :: s -> Maybe (Token s, s)
-  take1_ (ResolvedStream s _csMap expMode) = do
-    -- Get the input token and updated sub-stream.
-    (lexTok, s') <- P.take1_ s
-    pure (resolveToken _csMap expMode lexTok, ResolvedStream s' _csMap expMode)
+  -- If we've no input, signal that we are done.
+  take1_ ResolvedStream { codes = [] } = Nothing
+  take1_ stream@(ResolvedStream cs lexBuff _lexState _ccMap _csMap expMode) =
+    case lexBuff of
+      -- If there is a lex token in the buffer, return that.
+      (lt:lts) ->
+        pure (res lt, stream { lexTokens = lts })
+      -- If the lex token buffer is empty, extract a token and return it.
+      [] -> do
+        (lt, _lexState', cs') <- Lex.extractToken getCC _lexState cs
+        pure (res lt, stream { codes = cs', lexState = _lexState' })
+    where
+      getCC = Cat.extractCharCat (Cat.catLookup _ccMap)
+      res lexTok = resolveToken _csMap expMode lexTok
 
   takeN_ = undefined
 

@@ -118,8 +118,8 @@ spaceGlue = do
   pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
 defineMacro :: E.ExpandedStream -> E.MacroAssignment -> E.ExpandedStream
-defineMacro (E.ExpandedStream (R.ResolvedStream ls csMap expMode)) (E.MacroAssignment name macro False False)
-  = E.ExpandedStream (R.ResolvedStream ls csMap' expMode)
+defineMacro (E.ExpandedStream rs@(R.ResolvedStream { csMap = csMap })) (E.MacroAssignment name macro False False)
+  = E.ExpandedStream rs { R.csMap = csMap' }
   where
     newMacro = R.SyntaxCommandHead $ R.MacroToken macro
     csMap' = HMap.insert name newMacro csMap
