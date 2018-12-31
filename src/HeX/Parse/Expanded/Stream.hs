@@ -15,40 +15,46 @@ import qualified Data.List.NonEmpty            as NE
 import qualified Data.Foldable                 as Fold
 import qualified Text.Megaparsec               as P
 
-import           HeX.Categorise                 ( CharCode )
+import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
-import           HeX.Parse.Resolved             ( PrimitiveToken )
 import           HeX.Parse.Resolved
 import           HeX.Parse.Expanded.Common
 import           HeX.Parse.Expanded.Inhibited
 
-data ExpandedStream = ExpandedStream ResolvedStream
+data ExpandedStream = ExpandedStream { codes :: [Cat.CharCode]
+                                     , lexTokens :: [Lex.Token]
+                                     , lexState :: Lex.LexState
+                                     , ccMap :: Cat.CharCatMap
+                                     , csMap :: CSMap
+                                     , expansionMode :: ExpansionMode }
   deriving (Show)
 
 type SimpExpandParser = SimpParser ExpandedStream
 type NullSimpExpandParser = SimpExpandParser ()
 
-newExpandStream :: [CharCode] -> CSMap -> ExpandedStream
-newExpandStream cs _csMap = ExpandedStream (newResolvedStream cs _csMap)
+newExpandStream :: [Cat.CharCode] -> CSMap -> ExpandedStream
+newExpandStream cs _csMap = ExpandedStream { codes = cs
+                                         , lexTokens = []
+                                         , lexState = Lex.LineBegin
+                                         , ccMap = Cat.usableCharCatMap
+                                         , csMap = _csMap
+                                         , expansionMode = Expanding }
+
+-- TODO: This use of reverse is pure sloth; fix later.
+insertLexTokensE :: ExpandedStream -> [Lex.Token] -> ExpandedStream
+insertLexTokensE s ts = Fold.foldl' insertLexTokenE s $ reverse ts
 
 insertLexTokenE :: ExpandedStream -> Lex.Token -> ExpandedStream
-insertLexTokenE (ExpandedStream rs) t = ExpandedStream (insertLexTokenR rs t)
-
-insertLexTokensE :: ExpandedStream -> [Lex.Token] -> ExpandedStream
-insertLexTokensE (ExpandedStream rs) ts =
-  ExpandedStream (insertLexTokensR rs ts)
+insertLexTokenE s t = s {lexTokens = t : lexTokens s}
 
 -- Inhibition.
 
 setExpansion :: ExpansionMode -> NullSimpExpandParser
 setExpansion m = P.updateParserState $ setStateExpansion
   where
-    setStreamExpansion (ExpandedStream rs)
-      = ExpandedStream (setResStreamExpansion m rs)
-
     setStateExpansion est@P.State{stateInput=es}
-      = est{P.stateInput=setStreamExpansion es}
+      = est{P.stateInput=es { expansionMode = m }}
 
 inhibitExpansion, enableExpansion :: NullSimpExpandParser
 inhibitExpansion = setExpansion NotExpanding
@@ -104,7 +110,7 @@ parseGeneralText = do
   skipSatisfied $ primTokHasCategory Lex.BeginGroup
   parseBalancedText Discard
 
-parseCSNameArgs :: SimpExpandParser [CharCode]
+parseCSNameArgs :: SimpExpandParser [Cat.CharCode]
 parseCSNameArgs = do
   chars <- parseManyChars
   skipSatisfiedEquals (SyntaxCommandArg EndCSName)
@@ -161,12 +167,21 @@ instance P.Stream ExpandedStream where
   chunkEmpty Proxy = null
 
   -- take1_ :: s -> Maybe (Token s, s)
-  take1_ (ExpandedStream rs)
-    -- Get the next resolved token.
-   = do
-    (rt, rs') <- P.take1_ rs
-    let es' = ExpandedStream rs'
-    case rt of
+  -- If we've no input, signal that we are done.
+  take1_ ExpandedStream { codes = [] } = Nothing
+  take1_ stream@(ExpandedStream cs lexBuff _lexState _ccMap _csMap expMode) = do
+    -- Get the next lex token, and update our stream.
+    (lt, es') <- case lexBuff of
+      -- If there is a lex token in the buffer, use that.
+      (lt:lts) ->
+        pure (lt, stream { lexTokens = lts })
+      -- If the lex token buffer is empty, extract a token and use it.
+      [] -> do
+        let getCC = Cat.extractCharCat (Cat.catLookup _ccMap)
+        (lt, _lexState', cs') <- Lex.extractToken getCC _lexState cs
+        pure (lt, stream { codes = cs', lexState = _lexState' })
+    -- Resolve the lex token, and inspect the result.
+    case resolveToken _csMap expMode lt of
       -- If it's a primitive token, provide that.
       PrimitiveToken pt -> pure (pt, es')
       -- If it indicates the start of a syntax command.
