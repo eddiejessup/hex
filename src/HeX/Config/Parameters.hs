@@ -4,7 +4,7 @@ module HeX.Config.Parameters where
 
 import           HeX.BreakList                  ( Glue(..), noFlex )
 import qualified HeX.Unit                      as Unit
-import           HeX.Parse.Resolved
+import           HeX.Parse.Token
 
 type IntVal = Int
 type LenVal = Int

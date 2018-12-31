@@ -1,6 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module HeX.Parse.Expanded.Command where
+module HeX.Parse.Command where
 
 import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
@@ -11,14 +11,14 @@ import           HeX.Categorise                 ( CharCode )
 
 import           HeX.Parse.Helpers
 
-import qualified HeX.Parse.Resolved.Token      as R
+import qualified HeX.Parse.Token               as T
 
-import           HeX.Parse.Expanded.Common
-import           HeX.Parse.Expanded.Glue
-import           HeX.Parse.Expanded.Length
-import           HeX.Parse.Expanded.Number
-import           HeX.Parse.Expanded.Stream
-import           HeX.Parse.Expanded.Assignment
+import           HeX.Parse.Common
+import           HeX.Parse.Glue
+import           HeX.Parse.Length
+import           HeX.Parse.Number
+import           HeX.Parse.Stream
+import           HeX.Parse.Assignment
 
 -- AST.
 
@@ -115,7 +115,7 @@ extractVModeCommand = extractResult parseVModeCommand
 
 -- All-mode Commands.
 
-parseAllModeCommand :: R.Axis -> SimpExpandParser AllModesCommand
+parseAllModeCommand :: T.Axis -> SimpExpandParser AllModesCommand
 parseAllModeCommand mode =
   P.choice
     [ addSpace
@@ -124,7 +124,7 @@ parseAllModeCommand mode =
     , endParagraph
     , ModeIndependentCommand <$> parseModeIndependentCommand mode ]
 
-parseModeIndependentCommand :: R.Axis -> SimpExpandParser ModeIndependentCommand
+parseModeIndependentCommand :: T.Axis -> SimpExpandParser ModeIndependentCommand
 parseModeIndependentCommand mode =
   P.choice
     [ relax
@@ -135,40 +135,40 @@ parseModeIndependentCommand mode =
     , Assign <$> parseAssignment ]
 
 checkModeAndToken
-  :: R.Axis
-  -> (R.ModedCommandPrimitiveToken -> Bool)
-  -> R.PrimitiveToken
+  :: T.Axis
+  -> (T.ModedCommandPrimitiveToken -> Bool)
+  -> T.PrimitiveToken
   -> Bool
-checkModeAndToken m1 chk (R.ModedCommand m2 tok) = (m1 == m2) && chk tok
+checkModeAndToken m1 chk (T.ModedCommand m2 tok) = (m1 == m2) && chk tok
 checkModeAndToken _  _   _                       = False
 
 -- \relax.
 relax :: SimpExpandParser ModeIndependentCommand
-relax = skipSatisfiedEquals R.Relax $> Relax
+relax = skipSatisfiedEquals T.RelaxTok $> Relax
 
 -- \ignorespaces.
 ignorespaces :: SimpExpandParser ModeIndependentCommand
 ignorespaces = do
-  skipSatisfiedEquals R.IgnoreSpaces
+  skipSatisfiedEquals T.IgnoreSpacesTok
   skipOptionalSpaces
   pure IgnoreSpaces
 
 -- \penalty 100.
 addPenalty :: SimpExpandParser ModeIndependentCommand
 addPenalty = do
-  skipSatisfiedEquals R.AddPenalty
+  skipSatisfiedEquals T.AddPenaltyTok
   AddPenalty <$> parseNumber
 
 -- \kern 100.
 addKern :: SimpExpandParser ModeIndependentCommand
 addKern = do
-  skipSatisfiedEquals R.AddKern
+  skipSatisfiedEquals T.AddKernTok
   AddKern <$> parseLength
 
 -- \hskip 10pt and such.
-addSpecifiedGlue :: R.Axis -> SimpExpandParser ModeIndependentCommand
+addSpecifiedGlue :: T.Axis -> SimpExpandParser ModeIndependentCommand
 addSpecifiedGlue mode = do
-  skipSatisfied $ checkModeAndToken mode (== R.AddSpecifiedGlue)
+  skipSatisfied $ checkModeAndToken mode (== T.AddSpecifiedGlueTok)
   AddGlue <$> parseGlue
 
 -- ' '.
@@ -176,9 +176,9 @@ addSpace :: SimpExpandParser AllModesCommand
 addSpace = skipSatisfied isSpace $> AddSpace
 
 -- \hrule and such.
-addRule :: R.Axis -> SimpExpandParser AllModesCommand
+addRule :: T.Axis -> SimpExpandParser AllModesCommand
 addRule mode = do
-  skipSatisfied $ checkModeAndToken mode (== R.AddRule)
+  skipSatisfied $ checkModeAndToken mode (== T.AddRuleTok)
   let cmd = AddRule {width = Nothing, height = Nothing, depth = Nothing}
   parseRuleSpecification cmd
   where
@@ -207,25 +207,25 @@ addRule mode = do
 startParagraph :: SimpExpandParser AllModesCommand
 startParagraph = satisfyThen parToCom
   where
-    parToCom (R.StartParagraph _indent) =
+    parToCom (T.StartParagraphTok _indent) =
       Just StartParagraph {indent = _indent}
     parToCom _ = Nothing
 
 endParagraph :: SimpExpandParser AllModesCommand
-endParagraph = const EndParagraph <$> skipSatisfiedEquals R.EndParagraph
+endParagraph = const EndParagraph <$> skipSatisfiedEquals T.EndParagraphTok
 
 -- HMode.
 
 parseHModeCommand :: SimpExpandParser HModeCommand
 parseHModeCommand =
   P.choice [leaveHMode, addCharacter] <|>
-  (HAllModesCommand <$> parseAllModeCommand R.Horizontal)
+  (HAllModesCommand <$> parseAllModeCommand T.Horizontal)
 
 leaveHMode :: SimpExpandParser HModeCommand
 leaveHMode = skipSatisfied endsHMode $> LeaveHMode
   where
-    endsHMode R.End = True
-    endsHMode (R.ModedCommand R.Vertical _) = True
+    endsHMode T.EndTok = True
+    endsHMode (T.ModedCommand T.Vertical _) = True
     -- endsHMode Dump = True
     endsHMode _ = False
 
@@ -234,9 +234,9 @@ addCharacter = do
   c <- satisfyThen charToCode
   pure AddCharacter {method = ExplicitChar, char = c}
   where
-    charToCode (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Letter)))
+    charToCode (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter)))
       = Just c
-    charToCode (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other)))
+    charToCode (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)))
       = Just c
     charToCode _ = Nothing
 
@@ -245,16 +245,16 @@ addCharacter = do
 parseVModeCommand :: SimpExpandParser VModeCommand
 parseVModeCommand =
   P.choice [enterHMode, end] <|>
-  (VAllModesCommand <$> parseAllModeCommand R.Vertical)
+  (VAllModesCommand <$> parseAllModeCommand T.Vertical)
 
 -- \end.
 end :: SimpExpandParser VModeCommand
-end = skipSatisfiedEquals R.End $> End
+end = skipSatisfiedEquals T.EndTok $> End
 
 enterHMode :: SimpExpandParser VModeCommand
 enterHMode = skipSatisfied startsHMode $> EnterHMode
   where
-    startsHMode (R.ModedCommand R.Horizontal _) = True
+    startsHMode (T.ModedCommand T.Horizontal _) = True
     startsHMode x
       | primTokHasCategory Lex.Letter x = True
       | primTokHasCategory Lex.Other x = True

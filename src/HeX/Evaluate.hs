@@ -3,7 +3,7 @@
 module HeX.Evaluate where
 
 import           HeX.Config
-import qualified HeX.Parse.Expanded            as E
+import qualified HeX.Parse                     as E
 import qualified HeX.Unit                      as Unit
 import qualified HeX.BreakList                 as BL
 import qualified HeX.Box                       as B

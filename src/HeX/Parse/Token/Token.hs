@@ -1,9 +1,9 @@
-module HeX.Parse.Resolved.Token where
+module HeX.Parse.Token.Token where
 
 import qualified Data.Map.Strict               as Map
 
 import qualified HeX.Lex                       as Lex
-import           HeX.Parse.Resolved.Parameter
+import           HeX.Parse.Token.Parameter
 
 data HDirection
   = Leftward
@@ -57,16 +57,16 @@ data BoxRegisterAttribute
   deriving (Show, Eq)
 
 data ModedCommandPrimitiveToken
-  = AddSpecifiedGlue -- \vskip, \hskip
-  | AddPresetGlue PresetGlueType -- \{v,h}{fil,fill,filneg,ss}
+  = AddSpecifiedGlueTok -- \vskip, \hskip
+  | AddPresetGlueTok PresetGlueType -- \{v,h}{fil,fill,filneg,ss}
   -- \| AddAlignedMaterial -- \halign, \valign
   -- \| AddShiftedBox Direction -- \moveleft, \moveright, \raise, \lower
   -- \| AddUnwrappedFetchedBox { pop :: Bool } -- \un{v,h}{box,copy}
-  | AddRule -- \hrule, \vrule
+  | AddRuleTok -- \hrule, \vrule
   deriving (Show, Eq)
 
 data SyntaxCommandArg
-  = EndCSName
+  = EndCSNameTok
   deriving (Show, Eq)
 
 data DefTokenType
@@ -153,7 +153,7 @@ data MacroContents
 data PrimitiveToken
   = SyntaxCommandArg SyntaxCommandArg
   -- Starters of commands.
-  | Relax -- \relax
+  | RelaxTok -- \relax
   -- \| RightBrace -- }
   -- \| BeginGroup -- \begingroup
   -- \| EndGroup -- \endgroup
@@ -162,7 +162,7 @@ data PrimitiveToken
   -- \| ShowLists -- \showlists
   -- \| ShowInternalQuantity -- \showthe
   -- \| ShipOut -- \shipout
-  | IgnoreSpaces -- \ignorespaces
+  | IgnoreSpacesTok -- \ignorespaces
   -- \| SetAfterAssignmentToken -- \afterassignment
   -- \| AddToAfterGroupTokens -- \aftergroup
   -- \| Message MessageStream -- \message, \errmessage
@@ -173,22 +173,22 @@ data PrimitiveToken
   -- \| CloseOutput -- \closeout
   -- \| Write -- \write
   -- \| AddWhatsit -- \special
-  | AddPenalty -- \penalty
-  | AddKern -- \kern
+  | AddPenaltyTok -- \penalty
+  | AddKernTok -- \kern
   -- \| RemoveLastPenalty -- \unpenalty
   -- \| RemoveLastKern -- \unkern
   -- \| RemoveLastGlue -- \unskip
   -- \| AddMark -- \mark
   -- \| AddInsertion -- \insert
   -- \| AddLeaders LeadersType
-  | StartParagraph { indent :: Bool } -- \indent, \noindent
-  | EndParagraph -- \par
+  | StartParagraphTok { indent :: Bool } -- \indent, \noindent
+  | EndParagraphTok -- \par
   -- \| LeftBrace -- {
   -- Starters of mode-specific commands with almost mode-independent grammar.
   | ModedCommand Axis
                  ModedCommandPrimitiveToken
   -- Starters of Vertical-Mode-specific commands.
-  | End -- \end
+  | EndTok -- \end
   -- \| Dump -- \dump
   -- Starters of Horizontal-Mode-specific commands.
   -- \| ControlSpace -- \␣ (a control symbol named ' ')
@@ -210,24 +210,24 @@ data PrimitiveToken
   -- \| AddFetchedBox { pop :: Bool } -- \box, \copy
   -- -- Involved in assignments.
   -- -- > > Modifying how to apply assignments.
-  | Global -- \global
+  | GlobalTok -- \global
   -- -- > Defining macros.
   -- -- > > Modifying how to parse the macro.
-  | Long -- \long
-  | Outer -- \outer
+  | LongTok -- \long
+  | OuterTok -- \outer
   --     \def, \gdef, \edef (expanded-def), \xdef (global-expanded-def).
   -- -- > > Modifying how to parse the macro.
-  | DefineMacro { global, expand :: Bool }
+  | DefineMacroTok { global, expand :: Bool }
   -- -- > Setting variable values.
-  | IntParamVar IntegerParameter
-  | LenParamVar LengthParameter
-  | GlueParamVar GlueParameter
-  | MathGlueParamVar MathGlueParameter
-  | TokenListParamVar TokenListParameter
-  | SpecialInteger SpecialInteger -- \example: \spacefactor
-  | SpecialLength SpecialLength -- \example: \pagestretch
-  | TokenVariable DefTokenType String
-  | RegisterVariable RegisterType
+  | IntParamVarTok IntegerParameter
+  | LenParamVarTok LengthParameter
+  | GlueParamVarTok GlueParameter
+  | MathGlueParamVarTok MathGlueParameter
+  | TokenListParamVarTok TokenListParameter
+  | SpecialIntegerTok SpecialInteger -- \example: \spacefactor
+  | SpecialLengthTok SpecialLength -- \example: \pagestretch
+  | TokenVariableTok DefTokenType String
+  | RegisterVariableTok RegisterType
   -- > Modifying variable values with arithmetic.
   -- \| Advance -- \advance
   -- \| Multiply -- \multiply
@@ -266,7 +266,7 @@ data PrimitiveToken
   -- > Setting the contents of a box register.
   -- \| SetBoxRegister -- \setbox
   -- > Defining macros resolving to a font.
-  | MacroToFont -- \font
+  | FontTok -- \font
   -- Involved in global assignments.
   -- > Setting properties of a font.
   -- \| SetFontDimension -- \fontdimen
@@ -305,16 +305,16 @@ data PrimitiveToken
   | InhibitedParsingError Lex.Token
   | SubParserError String
 
-  | UnexpandedToken Lex.Token
+  | UnexpandedTok Lex.Token
   deriving (Show, Eq)
 
 instance Ord PrimitiveToken where
   compare _ _ = EQ
 
 data SyntaxCommandHead
-  = ChangeCaseToken VDirection -- \uppercase, \lowercase
-  | CSName
-  | MacroToken MacroContents
+  = ChangeCaseTok VDirection -- \uppercase, \lowercase
+  | CSNameTok
+  | MacroTok MacroContents
   deriving (Show, Eq)
 
 data ResolvedToken

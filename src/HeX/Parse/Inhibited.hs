@@ -3,7 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module HeX.Parse.Expanded.Inhibited where
+module HeX.Parse.Inhibited where
 
 import           Control.Monad                  ( guard )
 import           Safe                           ( lastMay
@@ -19,8 +19,8 @@ import           Data.Maybe                     ( fromMaybe )
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
-import           HeX.Parse.Resolved.Token
-import           HeX.Parse.Expanded.Common
+import           HeX.Parse.Token
+import           HeX.Parse.Common
 
 -- Cases where expansion is inhibited:
 -- 1.  While deleting tokens during error recovery
@@ -143,7 +143,7 @@ unsafeParseCSName = handleLex tokToCSLike
 parseParamDelims :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s [Lex.Token]
 parseParamDelims = manySatisfiedThen (\t -> tokToDelimTok t)
   where
-    tokToDelimTok (UnexpandedToken lt)
+    tokToDelimTok (UnexpandedTok lt)
       | lexTokHasCategory Lex.Parameter lt = Nothing
       | lexTokHasCategory Lex.BeginGroup lt = Nothing
       | otherwise = Just lt

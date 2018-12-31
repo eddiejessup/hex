@@ -1,18 +1,16 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TupleSections #-}
 
-module HeX.Parse.Expanded.Number where
+module HeX.Parse.Number where
 
 import           Data.Ratio                     ( (%) )
 import qualified Text.Megaparsec               as P
 
 import qualified HeX.Lex                       as Lex
-
 import           HeX.Parse.Helpers
-import qualified HeX.Parse.Resolved            as R
-
-import           HeX.Parse.Expanded.Common
-import           HeX.Parse.Expanded.Stream
+import qualified HeX.Parse.Token               as T
+import           HeX.Parse.Common
+import           HeX.Parse.Stream
 
 -- AST.
 data Number = Number Bool UnsignedNumber
@@ -56,8 +54,8 @@ parseSigns = getSign . mconcat <$> parseOptionalSigns
  where
   parseOptionalSigns =
     skipOptionalSpaces *> P.sepEndBy (satisfyThen signToPos) skipOptionalSpaces
-  signToPos (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '+' Lex.Other))) = Just $ Sign True
-  signToPos (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '-' Lex.Other))) = Just $ Sign False
+  signToPos (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '+' Lex.Other))) = Just $ Sign True
+  signToPos (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '-' Lex.Other))) = Just $ Sign False
   signToPos _ = Nothing
 
 parseNumber :: SimpExpandParser Number
@@ -88,13 +86,13 @@ parseNormalInteger = P.choice
     skipSatisfied isBacktick
     parseCharLike
 
-  isBacktick (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '`' Lex.Other))) = True
+  isBacktick (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '`' Lex.Other))) = True
   isBacktick _ = False
 
 parseDecimalIntegerDigit :: SimpExpandParser Int
 parseDecimalIntegerDigit = satisfyThen decCharToInt
  where
-  decCharToInt (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
+  decCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
     '0' -> Just 0
     '1' -> Just 1
     '2' -> Just 2
@@ -112,10 +110,10 @@ parseHexadecimalIntegerDigits :: SimpExpandParser [Int]
 parseHexadecimalIntegerDigits = skipSatisfied isDoubleQuote
   *> P.some (satisfyThen hexCharToInt)
  where
-  isDoubleQuote (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '"' Lex.Other))) = True
+  isDoubleQuote (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '"' Lex.Other))) = True
   isDoubleQuote _ = False
 
-  hexCharToInt (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
+  hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
     '0' -> Just 0
     '1' -> Just 1
     '2' -> Just 2
@@ -133,7 +131,7 @@ parseHexadecimalIntegerDigits = skipSatisfied isDoubleQuote
     'E' -> Just 14
     'F' -> Just 15
     _   -> Nothing
-  hexCharToInt (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) = case c of
+  hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) = case c of
     'A' -> Just 10
     'B' -> Just 11
     'C' -> Just 12
@@ -147,10 +145,10 @@ parseOctalIntegerDigits :: SimpExpandParser [Int]
 parseOctalIntegerDigits = skipSatisfied isSingleQuote
   *> P.some (satisfyThen octCharToInt)
  where
-  isSingleQuote (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '\'' Lex.Other))) = True
+  isSingleQuote (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '\'' Lex.Other))) = True
   isSingleQuote _ = False
 
-  octCharToInt (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
+  octCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
     '0' -> Just 0
     '1' -> Just 1
     '2' -> Just 2
@@ -180,6 +178,6 @@ parseRationalConstant = do
   pure $ fromIntegral wholeNr + fraction
  where
   decDigitsToInteger = digitsToInteger 10
-  isDotOrComma (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat ',' Lex.Other))) = True
-  isDotOrComma (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat '.' Lex.Other))) = True
+  isDotOrComma (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat ',' Lex.Other))) = True
+  isDotOrComma (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '.' Lex.Other))) = True
   isDotOrComma _ = False

@@ -2,7 +2,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module HeX.Parse.Expanded.Stream where
+module HeX.Parse.Stream where
 
 import           Data.Char                      ( toLower
                                                 , toUpper
@@ -18,9 +18,10 @@ import qualified Text.Megaparsec               as P
 import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
-import           HeX.Parse.Resolved
-import           HeX.Parse.Expanded.Common
-import           HeX.Parse.Expanded.Inhibited
+import           HeX.Parse.Token
+import           HeX.Parse.Common
+import           HeX.Parse.Inhibited
+import           HeX.Parse.Resolve
 
 data ExpandedStream = ExpandedStream { codes :: [Cat.CharCode]
                                      , lexTokens :: [Lex.Token]
@@ -67,17 +68,6 @@ parseInhibited p = do
   enableExpansion
   pure v
 
--- Set the character code of each character token to its
--- \uccode or \lccode value, if that value is non-zero.
--- Don't change the category code.
-changeCase :: VDirection -> Lex.Token -> Lex.Token
-changeCase dir (Lex.CharCatToken (Lex.CharCat char cat)) =
-  Lex.CharCatToken $ Lex.CharCat (switch dir char) cat
- where
-  switch Upward   = toUpper
-  switch Downward = toLower
-changeCase _ t = t
-
 -- Interface.
 
 parseBalancedText :: TerminusPolicy -> SimpExpandParser BalancedText
@@ -101,6 +91,8 @@ parseMacroText = parseInhibited unsafeParseMacroText
 
 
 
+-- Expanding syntax commands.
+
 -- TODO: Move these parsers outside the module.
 
 parseGeneralText :: SimpExpandParser BalancedText
@@ -113,21 +105,8 @@ parseGeneralText = do
 parseCSNameArgs :: SimpExpandParser [Cat.CharCode]
 parseCSNameArgs = do
   chars <- parseManyChars
-  skipSatisfiedEquals (SyntaxCommandArg EndCSName)
+  skipSatisfiedEquals (SyntaxCommandArg EndCSNameTok)
   pure chars
-
-renderMacroText :: [MacroTextToken] -> Map.Map Digit MacroArgument -> [Lex.Token]
-renderMacroText [] _ = []
-renderMacroText (t:ts) args = render t
-  where
-    render (MacroTextLexToken x) =
-      x:rest
-    render (MacroTextParamToken dig) =
-      case args !? dig of
-        Nothing -> error "No such parameter"
-        Just (MacroArgument arg) -> arg ++ rest
-
-    rest = renderMacroText ts args
 
 expandCSName
   :: ()
@@ -143,16 +122,38 @@ expandMacro
   -> Map.Map Digit MacroArgument
   -> [Lex.Token]
 expandMacro MacroContents {replacementTokens=(MacroText replaceToks)} args
-  = renderMacroText replaceToks args
+  = renderMacroText replaceToks
+  where
+    renderMacroText [] = []
+    renderMacroText (t:ts) = render t
+      where
+        render (MacroTextLexToken x) =
+          x:rest
+        render (MacroTextParamToken dig) =
+          case args !? dig of
+            Nothing -> error "No such parameter"
+            Just (MacroArgument arg) -> arg ++ rest
 
--- Change the case of the parsed tokens, insert the result into
--- the remaining stream, then try again to get a primitive token.
+        rest = renderMacroText ts
+
+-- Change the case of the parsed tokens.
 expandChangeCase
   :: VDirection
   -> BalancedText
   -> [Lex.Token]
 expandChangeCase direction (BalancedText caseToks)
   = changeCase direction <$> caseToks
+  where
+    -- Set the character code of each character token to its
+    -- \uccode or \lccode value, if that value is non-zero.
+    -- Don't change the category code.
+    changeCase dir (Lex.CharCatToken (Lex.CharCat char cat)) =
+      Lex.CharCatToken $ Lex.CharCat (switch dir char) cat
+    changeCase _ t = t
+
+    switch Upward   = toUpper
+    switch Downward = toLower
+
 
 runSyntaxCommand
   :: a
@@ -221,11 +222,11 @@ instance P.Stream ExpandedStream where
       -- If it indicates the start of a syntax command.
       -- Parse the remainder of the syntax command.
       SyntaxCommandHead c -> case c of
-        (ChangeCaseToken direction) ->
+        (ChangeCaseTok direction) ->
           runSyntaxCommand direction parseGeneralText es' expandChangeCase
-        (MacroToken m) ->
+        (MacroTok m) ->
           runSyntaxCommand m (parseMacroArgs m) es' expandMacro
-        CSName ->
+        CSNameTok ->
           runSyntaxCommand () parseCSNameArgs es' expandCSName
 
   takeN_ = undefined

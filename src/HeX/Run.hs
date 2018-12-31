@@ -28,11 +28,13 @@ import           HeX.Lex                        ( extractToken
                                                 , LexState(..)
                                                 )
 import           HeX.Config
-import           HeX.Parse.Resolved             ( defaultCSMap
+import           HeX.Parse                      ( defaultCSMap
                                                 , resolveToken
                                                 , ExpansionMode(..)
+                                                , ExpandedStream
+                                                , newExpandStream
+                                                , extractHModeCommand
                                                 )
-import           HeX.Parse.Expanded
 
 -- Cat
 

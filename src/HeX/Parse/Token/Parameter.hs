@@ -1,4 +1,4 @@
-module HeX.Parse.Resolved.Parameter where
+module HeX.Parse.Token.Parameter where
 
 data IntegerParameter
   = PreTolerance  -- Badness tolerance before hyphenation

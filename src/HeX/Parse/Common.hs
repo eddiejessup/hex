@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module HeX.Parse.Expanded.Common where
+module HeX.Parse.Common where
 
 import           Data.Char                      ( toLower
                                                 , toUpper
@@ -14,8 +14,8 @@ import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 
 import           HeX.Parse.Helpers
-import           HeX.Parse.Resolved             ( PrimitiveToken )
-import qualified HeX.Parse.Resolved            as R
+import           HeX.Parse.Token                ( PrimitiveToken )
+import qualified HeX.Parse.Token               as T
 
 -- Helpers.
 
@@ -27,7 +27,7 @@ lexTokHasCategory a (Lex.CharCatToken cc) = ccHasCategory a cc
 lexTokHasCategory _ _ = False
 
 primTokHasCategory :: Lex.LexCatCode -> PrimitiveToken -> Bool
-primTokHasCategory a (R.UnexpandedToken lt) = lexTokHasCategory a lt
+primTokHasCategory a (T.UnexpandedTok lt) = lexTokHasCategory a lt
 primTokHasCategory _ _ = False
 
 -- <space token> = character token of category [space], or a control sequence
@@ -38,30 +38,30 @@ isSpace = primTokHasCategory Lex.Space
 -- Match particular tokens.
 
 isTokenForFont :: PrimitiveToken -> Bool
-isTokenForFont (R.TokenForFont _) = True
+isTokenForFont (T.TokenForFont _) = True
 isTokenForFont _ = False
 
 isFillerItem :: PrimitiveToken -> Bool
-isFillerItem R.Relax = True
+isFillerItem T.RelaxTok = True
 isFillerItem t       = isSpace t
 
 isEquals :: PrimitiveToken -> Bool
-isEquals (R.UnexpandedToken (Lex.CharCatToken Lex.CharCat {cat = Lex.Other, char = '='})) = True
+isEquals (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat {cat = Lex.Other, char = '='})) = True
 isEquals _ = False
 
 matchNonActiveCharacterUncased :: Char -> PrimitiveToken -> Bool
-matchNonActiveCharacterUncased a (R.UnexpandedToken (Lex.CharCatToken Lex.CharCat {char = c, cat=cat})) =
+matchNonActiveCharacterUncased a (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat {char = c, cat=cat})) =
   (cat /= Lex.Active) && (c `elem` [toUpper a, toLower a])
 matchNonActiveCharacterUncased _ _ = False
 
 tokToChar :: PrimitiveToken -> Maybe CharCode
-tokToChar (R.UnexpandedToken (Lex.CharCatToken Lex.CharCat {char = c})) = Just c
+tokToChar (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat {char = c})) = Just c
 tokToChar _ = Nothing
 
 -- Lexed.
 
 tokToLex :: PrimitiveToken -> Maybe Lex.Token
-tokToLex (R.UnexpandedToken t) = Just t
+tokToLex (T.UnexpandedTok t) = Just t
 tokToLex _ = Nothing
 
 handleLex
@@ -76,13 +76,13 @@ anySingleLex
 anySingleLex = satisfyThen tokToLex
 
 skipSatisfiedEqualsLex :: (P.Stream s, P.Token s ~ PrimitiveToken) => Lex.Token -> NullSimpParser s
-skipSatisfiedEqualsLex lt = skipSatisfiedEquals (R.UnexpandedToken lt)
+skipSatisfiedEqualsLex lt = skipSatisfiedEquals (T.UnexpandedTok lt)
 
 skipSatisfiedLexChunk :: (P.Stream s, P.Token s ~ PrimitiveToken) => [Lex.Token] -> NullSimpParser s
-skipSatisfiedLexChunk ts = skipSatisfiedChunk (R.UnexpandedToken <$> ts)
+skipSatisfiedLexChunk ts = skipSatisfiedChunk (T.UnexpandedTok <$> ts)
 
 liftLexPred :: (Lex.Token -> Bool) -> PrimitiveToken -> Bool
-liftLexPred f (R.UnexpandedToken lt) = f lt
+liftLexPred f (T.UnexpandedTok lt) = f lt
 liftLexPred _ _ = False
 
 -- Parsers.

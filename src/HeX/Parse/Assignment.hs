@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module HeX.Parse.Expanded.Assignment where
+module HeX.Parse.Assignment where
 
 import           Control.Monad                  ( when )
 import           Path                           ( File
@@ -14,10 +14,10 @@ import           Text.Megaparsec               ((<|>))
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
-import qualified HeX.Parse.Resolved            as R
-import           HeX.Parse.Expanded.Common
-import           HeX.Parse.Expanded.Stream
-import           HeX.Parse.Expanded.VarAssignment
+import qualified HeX.Parse.Token               as T
+import           HeX.Parse.Common
+import           HeX.Parse.Stream
+import           HeX.Parse.VarAssignment
 
 -- AST.
 
@@ -29,7 +29,7 @@ data MacroPrefix
 
 data MacroAssignment
   = MacroAssignment { name :: Lex.ControlSequenceLike
-                    , contents :: R.MacroContents
+                    , contents :: T.MacroContents
                     , long, outer :: Bool }
   deriving (Show)
 
@@ -100,7 +100,7 @@ parseDefineMacro = do
     Assignment
     { body = DefineMacro $ MacroAssignment
         { name = cs
-        , contents = R.MacroContents preParamToks paramDelims replaceToks
+        , contents = T.MacroContents preParamToks paramDelims replaceToks
         , long = Long `elem` prefixes
         , outer = Outer `elem` prefixes
         }
@@ -108,25 +108,25 @@ parseDefineMacro = do
     }
   where
     -- TODO: Can avoid this manual mapping by putting it in the token.
-    tokToPrefix R.Global = Just Global
-    tokToPrefix R.Outer = Just Outer
-    tokToPrefix R.Long = Just Long
+    tokToPrefix T.GlobalTok = Just Global
+    tokToPrefix T.OuterTok = Just Outer
+    tokToPrefix T.LongTok = Just Long
     tokToPrefix _ = Nothing
 
-    tokToDef R.DefineMacro {global = _global, expand = _expand} =
+    tokToDef T.DefineMacroTok {global = _global, expand = _expand} =
       Just (_global, _expand)
     tokToDef _ = Nothing
 
 parseTokenForFont :: SimpExpandParser AssignmentBody
 parseTokenForFont = satisfyThen tokToCom
   where
-    tokToCom (R.TokenForFont n) = Just $ SelectFont n
+    tokToCom (T.TokenForFont n) = Just $ SelectFont n
     tokToCom _ = Nothing
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
 parseMacroToFont :: SimpExpandParser AssignmentBody
 parseMacroToFont = do
-  skipSatisfiedEquals R.MacroToFont
+  skipSatisfiedEquals T.FontTok
   cs <- parseCSName
   skipOptionalEquals
   DefineFont cs <$> parseFileName
@@ -140,9 +140,9 @@ parseMacroToFont = do
       case parseRelFile (fileName ++ ".tfm") of
         Just p -> pure p
         Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
-    tokToChar (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) = Just c
+    tokToChar (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) = Just c
     -- 'Other' Characters for decimal digits are OK.
-    tokToChar (R.UnexpandedToken (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
+    tokToChar (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
       case c of
         '0' -> Just c
         '1' -> Just c

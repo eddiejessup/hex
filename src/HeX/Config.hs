@@ -30,7 +30,7 @@ import           TFM                            ( TexFont )
 import qualified Data.Path                       as Pth
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
-import           HeX.Parse.Resolved
+import           HeX.Parse.Token
 import           HeX.Config.Parameters
 
 type FontInfoMap = HMap.HashMap Int TexFont
