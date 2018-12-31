@@ -22,8 +22,6 @@ import           HeX.Parse.Helpers
 import           HeX.Parse.Resolved.Token
 import           HeX.Parse.Expanded.Common
 
-import Debug.Trace
-
 -- Cases where expansion is inhibited:
 -- 1.  While deleting tokens during error recovery
 -- 2.  While skipping tokens because conditional text is being ignored
@@ -143,7 +141,7 @@ unsafeParseCSName = handleLex tokToCSLike
 -- Case 6, macro parameter text.
 
 parseParamDelims :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s [Lex.Token]
-parseParamDelims = manySatisfiedThen (\t -> traceShow t $ tokToDelimTok t)
+parseParamDelims = manySatisfiedThen (\t -> tokToDelimTok t)
   where
     tokToDelimTok (UnexpandedToken lt)
       | lexTokHasCategory Lex.Parameter lt = Nothing

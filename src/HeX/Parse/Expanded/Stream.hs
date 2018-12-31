@@ -42,11 +42,11 @@ newExpandStream cs _csMap = ExpandedStream { codes = cs
                                          , expansionMode = Expanding }
 
 -- TODO: This use of reverse is pure sloth; fix later.
-insertLexTokensE :: ExpandedStream -> [Lex.Token] -> ExpandedStream
-insertLexTokensE s ts = Fold.foldl' insertLexTokenE s $ reverse ts
+insertLexTokens :: ExpandedStream -> [Lex.Token] -> ExpandedStream
+insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
 
-insertLexTokenE :: ExpandedStream -> Lex.Token -> ExpandedStream
-insertLexTokenE s t = s {lexTokens = t : lexTokens s}
+insertLexToken :: ExpandedStream -> Lex.Token -> ExpandedStream
+insertLexToken s t = s {lexTokens = t : lexTokens s}
 
 -- Inhibition.
 
@@ -129,13 +129,47 @@ renderMacroText (t:ts) args = render t
 
     rest = renderMacroText ts args
 
+expandCSName
+  :: ()
+  -> String
+  -> [Lex.Token]
+expandCSName _ charToks
+  -- TODO: if control sequence doesn't exist, define one that holds
+  -- '\relax'.
+  = [Lex.ControlSequenceToken $ Lex.ControlSequence charToks]
 
+expandMacro
+  :: MacroContents
+  -> Map.Map Digit MacroArgument
+  -> [Lex.Token]
+expandMacro MacroContents {replacementTokens=(MacroText replaceToks)} args
+  = renderMacroText replaceToks args
 
-sinfulRunParser :: SimpParser s a -> s -> (P.State s, a)
-sinfulRunParser p stream =
-  case easyRunParser p stream of
-    (_, Left _) -> error "Error while parsing command"
-    (state, Right a) -> (state, a)
+-- Change the case of the parsed tokens, insert the result into
+-- the remaining stream, then try again to get a primitive token.
+expandChangeCase
+  :: VDirection
+  -> BalancedText
+  -> [Lex.Token]
+expandChangeCase direction (BalancedText caseToks)
+  = changeCase direction <$> caseToks
+
+runSyntaxCommand
+  :: a
+  -> SimpExpandParser b
+  -> ExpandedStream
+  -> (a -> b -> [Lex.Token])
+  -> Maybe (PrimitiveToken, ExpandedStream)
+runSyntaxCommand com parser inputStream f =
+  case easyRunParser parser inputStream of
+    (P.State resultStream _ _, Left err) ->
+      pure (SubParserError $ show err, resultStream)
+    (P.State resultStream _ _, Right a) ->
+      -- Expand the command, using the command and the result of the parse,
+      -- insert the result into the remaining stream, then try again to get a
+      -- primitive token.
+      (P.take1_ . insertLexTokens resultStream) $ f com a
+
 
 
 
@@ -188,23 +222,11 @@ instance P.Stream ExpandedStream where
       -- Parse the remainder of the syntax command.
       SyntaxCommandHead c -> case c of
         (ChangeCaseToken direction) ->
-          let (P.State es'' _ _, BalancedText caseToks) = sinfulRunParser parseGeneralText es'
-          -- Perform take1_ on the stream after parsing, with the new
-          -- tokens inserted.
-          in (P.take1_ . insertLexTokensE es'') $ changeCase direction <$> caseToks
-        (MacroToken m@MacroContents {replacementTokens=(MacroText replaceToks)}) ->
-          let
-            (P.State es'' _ _, args) = sinfulRunParser (parseMacroArgs m) es'
-            renderedToks = renderMacroText replaceToks args
-          in
-            (P.take1_ . insertLexTokensE es'') renderedToks
+          runSyntaxCommand direction parseGeneralText es' expandChangeCase
+        (MacroToken m) ->
+          runSyntaxCommand m (parseMacroArgs m) es' expandMacro
         CSName ->
-          let
-            (P.State es'' _ _, charToks) = sinfulRunParser parseCSNameArgs es'
-              -- TODO: if control sequence doesn't exist, define one that holds
-              -- '\relax'.
-          in
-            (P.take1_ . insertLexTokenE es'' . Lex.ControlSequenceToken . Lex.ControlSequence) charToks
+          runSyntaxCommand () parseCSNameArgs es' expandCSName
 
   takeN_ = undefined
 

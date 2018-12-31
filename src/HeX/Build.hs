@@ -189,7 +189,7 @@ processHCommand oldStream newStream acc com =
       -- primitive.
       -- (Note that we pass oldStream, not newStream.)
       let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
-      modStream $ E.insertLexTokenE oldStream parToken
+      modStream $ E.insertLexToken oldStream parToken
     E.AddCharacter {char = c} -> do
       hCharBox <- BL.ListCharacter <$> characterBox c
       modAccum $ hCharBox : acc
