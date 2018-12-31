@@ -85,15 +85,6 @@ chopBreak get test cs = revFirst $ inner [] get cs
         then (acc, cs')
         else inner (next : acc) getNext rest
 
-
-isLetter :: Cat.CatCode -> Bool
-isLetter Cat.Letter = True
-isLetter _          = False
-
-isEndOfLine :: Cat.CatCode -> Bool
-isEndOfLine Cat.EndOfLine = True
-isEndOfLine _             = False
-
 extractToken
   :: ([CharCode] -> Maybe (Cat.CharCat, [CharCode]))
   -> LexState
@@ -105,76 +96,69 @@ extractToken getCC state cs = do
   extractTokenRest cc1 rest
  where
   extractTokenRest (Cat.CharCat n cat1) rest
-    |
     -- Control sequence: Grab it.
-      Cat.Escape <- cat1 = do
+    | Cat.Escape <- cat1 = do
       (cc2@(Cat.CharCat _ cat2), rest') <- getCC rest
-      let (controlCCs, rest2) = if isLetter cat2
+      let (controlCCs, rest2) = if cat2 == Cat.Letter
             then
               let (cwNameCCsRest, rest'') =
-                    chopBreak getCC (not . isLetter . Cat.cat) rest'
+                    chopBreak getCC ((/= Cat.Letter) . Cat.cat) rest'
               in  (cc2 : cwNameCCsRest, rest'')
             else ([cc2], rest')
           nextState = case cat2 of
             Cat.Space  -> SkippingBlanks
             Cat.Letter -> SkippingBlanks
             _          -> LineMiddle
-      return
+      pure
         ( ControlSequenceToken $ ControlSequence $ fmap Cat.char controlCCs
         , nextState
         , rest2
         )
-    |
     -- Comment: Ignore rest' of line and switch to line-begin.
-      Cat.Comment <- cat1 = extractToken getCC LineBegin
-    $ chopDropWhile getCC (not . isEndOfLine . Cat.cat) rest
-    |
+    | Cat.Comment <- cat1
+      = extractToken getCC LineBegin $ chopDropWhile getCC ((/= Cat.EndOfLine) . Cat.cat) rest
     -- Space at the start of a line: Ignore.
-      LineBegin <- state, Cat.Space <- cat1 = extractToken getCC state rest
-    |
+    | LineBegin <- state, Cat.Space <- cat1
+      = extractToken getCC state rest
     -- Empty line: Make a paragraph.
-      LineBegin <- state, Cat.EndOfLine <- cat1 = Just
-      (ControlSequenceToken $ ControlSequence "par", LineBegin, rest)
-    |
+    | LineBegin <- state, Cat.EndOfLine <- cat1
+      = pure (ControlSequenceToken $ ControlSequence "par", LineBegin, rest)
     -- Simple tokeniser cases.
-      Cat.BeginGroup <- cat1 = Just
-      (CharCatToken $ CharCat n BeginGroup, LineMiddle, rest)
-    | Cat.EndGroup <- cat1 = Just
-      (CharCatToken $ CharCat n EndGroup, LineMiddle, rest)
-    | Cat.MathShift <- cat1 = Just
-      (CharCatToken $ CharCat n MathShift, LineMiddle, rest)
-    | Cat.AlignTab <- cat1 = Just
-      (CharCatToken $ CharCat n AlignTab, LineMiddle, rest)
-    | Cat.Parameter <- cat1 = Just
-      (CharCatToken $ CharCat n Parameter, LineMiddle, rest)
-    | Cat.Superscript <- cat1 = Just
-      (CharCatToken $ CharCat n Superscript, LineMiddle, rest)
-    | Cat.Subscript <- cat1 = Just
-      (CharCatToken $ CharCat n Subscript, LineMiddle, rest)
-    | Cat.Letter <- cat1 = Just
-      (CharCatToken $ CharCat n Letter, LineMiddle, rest)
-    | Cat.Other <- cat1 = Just
-      (CharCatToken $ CharCat n Other, LineMiddle, rest)
-    | Cat.Active <- cat1 = Just
-      (CharCatToken $ CharCat n Active, LineMiddle, rest)
-    |
+    | Cat.BeginGroup <- cat1
+      = pure (CharCatToken $ CharCat n BeginGroup, LineMiddle, rest)
+    | Cat.EndGroup <- cat1
+      = pure (CharCatToken $ CharCat n EndGroup, LineMiddle, rest)
+    | Cat.MathShift <- cat1
+      = pure (CharCatToken $ CharCat n MathShift, LineMiddle, rest)
+    | Cat.AlignTab <- cat1
+      = pure (CharCatToken $ CharCat n AlignTab, LineMiddle, rest)
+    | Cat.Parameter <- cat1
+      = pure (CharCatToken $ CharCat n Parameter, LineMiddle, rest)
+    | Cat.Superscript <- cat1
+      = pure (CharCatToken $ CharCat n Superscript, LineMiddle, rest)
+    | Cat.Subscript <- cat1
+      = pure (CharCatToken $ CharCat n Subscript, LineMiddle, rest)
+    | Cat.Letter <- cat1
+      = pure (CharCatToken $ CharCat n Letter, LineMiddle, rest)
+    | Cat.Other <- cat1
+      = pure (CharCatToken $ CharCat n Other, LineMiddle, rest)
+    | Cat.Active <- cat1
+      = pure (CharCatToken $ CharCat n Active, LineMiddle, rest)
     -- Space, or end of line, while skipping blanks: Ignore.
-      SkippingBlanks <- state, Cat.Space <- cat1 = extractToken getCC state rest
-    | SkippingBlanks <- state, Cat.EndOfLine <- cat1 = extractToken getCC
-                                                                    state
-                                                                    rest
-    |
+    | SkippingBlanks <- state, Cat.Space <- cat1
+      = extractToken getCC state rest
+    | SkippingBlanks <- state, Cat.EndOfLine <- cat1
+      = extractToken getCC  state rest
     -- Space in middle of line: Make a space token and start skipping blanks.
-      LineMiddle <- state, Cat.Space <- cat1 = Just
-      (spaceTok, SkippingBlanks, rest)
-    |
+    | LineMiddle <- state, Cat.Space <- cat1
+      = pure (spaceTok, SkippingBlanks, rest)
     -- End of line in middle of line: Make a space token and go to line begin.
-      LineMiddle <- state, Cat.EndOfLine <- cat1 = Just
-      (spaceTok, LineBegin, rest)
-    |
+    | LineMiddle <- state, Cat.EndOfLine <- cat1
+      = pure (spaceTok, LineBegin, rest)
     -- Ignored: Ignore.
-      Cat.Ignored <- cat1 = extractToken getCC state rest
-    |
+    | Cat.Ignored <- cat1
+      = extractToken getCC state rest
     -- Invalid: Print error message and ignore.
     -- TODO: TeXbook says to print an error message in this case.
-      Cat.Invalid <- cat1 = extractToken getCC state rest
+    | Cat.Invalid <- cat1
+      = extractToken getCC state rest
