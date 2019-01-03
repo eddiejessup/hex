@@ -12,9 +12,7 @@ import           HeX.Parse.Stream
 
 -- AST.
 data Glue =
-  ExplicitGlue Length
-               (Maybe Flex)
-               (Maybe Flex)
+  ExplicitGlue Length (Maybe Flex) (Maybe Flex)
   -- \| InternalGlue Bool InternalGlue
   deriving (Show)
 
@@ -23,10 +21,7 @@ data Flex
   | FilFlex FilLength
   deriving (Show)
 
-data FilLength =
-  FilLength Bool
-            Factor
-            Int
+data FilLength = FilLength Bool Factor Int
   deriving (Show)
 
 -- Parse.

@@ -3,67 +3,67 @@
 module HeX.Evaluate where
 
 import           HeX.Config
-import qualified HeX.Parse                     as E
+import qualified HeX.Parse                     as HP
 import qualified HeX.Unit                      as Unit
 import qualified HeX.BreakList                 as BL
 import qualified HeX.Box                       as B
 
-evaluateNormalInteger :: E.NormalInteger -> Integer
-evaluateNormalInteger (E.IntegerConstant n) = n
+evaluateNormalInteger :: HP.NormalInteger -> Integer
+evaluateNormalInteger (HP.IntegerConstant n) = n
 
-evaluateUnsignedNumber :: E.UnsignedNumber -> Integer
-evaluateUnsignedNumber (E.NormalIntegerAsUNumber n) = evaluateNormalInteger n
+evaluateUnsignedNumber :: HP.UnsignedNumber -> Integer
+evaluateUnsignedNumber (HP.NormalIntegerAsUNumber n) = evaluateNormalInteger n
 
-evaluateNumber :: E.Number -> Integer
-evaluateNumber (E.Number True u) = evaluateUnsignedNumber u
-evaluateNumber (E.Number False u) = -(evaluateUnsignedNumber u)
+evaluateNumber :: HP.Number -> Integer
+evaluateNumber (HP.Number True u) = evaluateUnsignedNumber u
+evaluateNumber (HP.Number False u) = -(evaluateUnsignedNumber u)
 
-evaluateFactor :: E.Factor -> Rational
-evaluateFactor (E.NormalIntegerFactor n) =
+evaluateFactor :: HP.Factor -> Rational
+evaluateFactor (HP.NormalIntegerFactor n) =
   fromIntegral $ evaluateNormalInteger n
-evaluateFactor (E.RationalConstant r) = r
+evaluateFactor (HP.RationalConstant r) = r
 
-evaluateUnit :: E.Unit -> Rational
-evaluateUnit (E.PhysicalUnit _ u) = Unit.inScaledPoint u
+evaluateUnit :: HP.Unit -> Rational
+evaluateUnit (HP.PhysicalUnit _ u) = Unit.inScaledPoint u
 -- TODO:
-evaluateUnit (E.InternalUnit E.Em) = 10
-evaluateUnit (E.InternalUnit E.Ex) = 10
+evaluateUnit (HP.InternalUnit HP.Em) = 10
+evaluateUnit (HP.InternalUnit HP.Ex) = 10
 
-evaluateNormalLength :: (IntParamVal Mag) -> E.NormalLength -> Int
-evaluateNormalLength m (E.LengthSemiConstant f u@(E.PhysicalUnit isTrue _)) =
+evaluateNormalLength :: (IntParamVal Mag) -> HP.NormalLength -> Int
+evaluateNormalLength m (HP.LengthSemiConstant f u@(HP.PhysicalUnit isTrue _)) =
   round $ evalF isTrue * evaluateUnit u
   where
     evalF False = evaluateFactor f
     evalF True = evalF False * 1000 / fromIntegral m
-evaluateNormalLength _ (E.LengthSemiConstant f u) =
+evaluateNormalLength _ (HP.LengthSemiConstant f u) =
   round $ evaluateFactor f * evaluateUnit u
 
-evaluateULength :: (IntParamVal Mag) -> E.UnsignedLength -> Int
-evaluateULength m (E.NormalLengthAsULength nLn) = evaluateNormalLength m nLn
+evaluateULength :: (IntParamVal Mag) -> HP.UnsignedLength -> Int
+evaluateULength m (HP.NormalLengthAsULength nLn) = evaluateNormalLength m nLn
 
-evaluateLength :: (IntParamVal Mag) -> E.Length -> Int
-evaluateLength m (E.Length True uLn) = evaluateULength m uLn
-evaluateLength m (E.Length False uLn) = -(evaluateULength m uLn)
+evaluateLength :: (IntParamVal Mag) -> HP.Length -> Int
+evaluateLength m (HP.Length True uLn) = evaluateULength m uLn
+evaluateLength m (HP.Length False uLn) = -(evaluateULength m uLn)
 
-evaluateFlex :: (IntParamVal Mag) -> Maybe E.Flex -> BL.GlueFlex
-evaluateFlex m (Just (E.FiniteFlex ln)) =
+evaluateFlex :: (IntParamVal Mag) -> Maybe HP.Flex -> BL.GlueFlex
+evaluateFlex m (Just (HP.FiniteFlex ln)) =
   BL.GlueFlex {factor = fromIntegral $ evaluateLength m ln, order = 0}
-evaluateFlex _ (Just (E.FilFlex (E.FilLength True f ord))) =
+evaluateFlex _ (Just (HP.FilFlex (HP.FilLength True f ord))) =
   BL.GlueFlex {factor = evaluateFactor f, order = ord}
-evaluateFlex _ (Just (E.FilFlex (E.FilLength False f ord))) =
+evaluateFlex _ (Just (HP.FilFlex (HP.FilLength False f ord))) =
   BL.GlueFlex {factor = -(evaluateFactor f), order = ord}
 evaluateFlex _ Nothing = BL.noFlex
 
-evaluateGlue :: (IntParamVal Mag) -> E.Glue -> BL.Glue
-evaluateGlue m (E.ExplicitGlue dim str shr) =
+evaluateGlue :: (IntParamVal Mag) -> HP.Glue -> BL.Glue
+evaluateGlue m (HP.ExplicitGlue dim str shr) =
   BL.Glue
   { dimen = evaluateLength m dim
   , stretch = evaluateFlex m str
   , shrink = evaluateFlex m shr
   }
 
-evaluateKern :: (IntParamVal Mag) -> E.Length -> B.Kern
+evaluateKern :: (IntParamVal Mag) -> HP.Length -> B.Kern
 evaluateKern m = B.Kern . evaluateLength m
 
-evaluatePenalty :: E.Number -> BL.Penalty
+evaluatePenalty :: HP.Number -> BL.Penalty
 evaluatePenalty = BL.Penalty . fromIntegral . evaluateNumber

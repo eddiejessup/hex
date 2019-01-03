@@ -7,7 +7,6 @@ import           Data.Functor                   ( ($>) )
 import qualified Data.Set                      as Set
 import qualified Text.Megaparsec               as P
 
--- Helpers.
 type ErrorComp = ()
 
 type SimpParser s = P.Parsec ErrorComp s
