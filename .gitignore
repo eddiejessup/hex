@@ -5,5 +5,4 @@
 *.ps
 *.log
 *.tfm
-support/
 hex.cabal
