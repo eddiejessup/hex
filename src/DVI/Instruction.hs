@@ -9,36 +9,38 @@ import           DVI.Encode
 
 pickOp :: (Operation, Operation, Operation, Operation) -> IntArgVal -> Operation
 pickOp (o1, o2, _, o4) v = case v of
-  (S1 _) -> o1
-  (U1 _) -> o1
-  (S2 _) -> o2
-  (U2 _) -> o2
-  (S4 _) -> o4
-  (U4 _) -> o4
+    (S1 _) -> o1
+    (U1 _) -> o1
+    (S2 _) -> o2
+    (U2 _) -> o2
+    (S4 _) -> o4
+    (U4 _) -> o4
 
 getVariByteOpAndArg
-  :: (Operation, Operation, Operation, Operation)
-  -> SignableInt
-  -> Either String (Operation, ArgVal)
-getVariByteOpAndArg ops sI = do
-  iArgVal <- intArgValFromSignableInt sI
-  pure (pickOp ops iArgVal, IntArgVal iArgVal)
+    :: (Operation, Operation, Operation, Operation)
+    -> SignableInt
+    -> Either String (Operation, ArgVal)
+getVariByteOpAndArg ops sI =
+    do
+    iArgVal <- intArgValFromSignableInt sI
+    pure (pickOp ops iArgVal, IntArgVal iArgVal)
 
 getVariByteInstruction
-  :: (Operation, Operation, Operation, Operation)
-  -> SignableInt
-  -> Either String EncodableInstruction
-getVariByteInstruction ops sI = do
-  (op, arg) <- getVariByteOpAndArg ops sI
-  pure $ EncodableInstruction op [arg]
+    :: (Operation, Operation, Operation, Operation)
+    -> SignableInt
+    -> Either String EncodableInstruction
+getVariByteInstruction ops sI =
+    do
+    (op, arg) <- getVariByteOpAndArg ops sI
+    pure $ EncodableInstruction op [arg]
 
 getSelectFontNrInstruction :: Int -> Either String EncodableInstruction
 getSelectFontNrInstruction fNr
-  | fNr < 64 =
-    pure $ EncodableInstruction (toEnum $ fNr + fromEnum SelectFontNr0) []
-  | otherwise = do
-    sI <- toUnsignedInt fNr
-    getVariByteInstruction (Select1ByteFontNr, Select2ByteFontNr, Select3ByteFontNr, Select4ByteFontNr) sI
+    | fNr < 64 =
+        pure $ EncodableInstruction (toEnum $ fNr + fromEnum SelectFontNr0) []
+    | otherwise = do
+        sI <- toUnsignedInt fNr
+        getVariByteInstruction (Select1ByteFontNr, Select2ByteFontNr, Select3ByteFontNr, Select4ByteFontNr) sI
 
 getSimpleEncInstruction :: Operation -> EncodableInstruction
 getSimpleEncInstruction _op = EncodableInstruction _op []
