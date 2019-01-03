@@ -39,14 +39,7 @@ Add a space after each comma in tuple or list literals. For example, prefer `('a
 
 #### Data Declarations
 
-Align data type definitions' data constructors. Format like,
-
-```haskell
-data Tree a = Branch !a !(Tree a) !(Tree a)
-            | Leaf
-```
-
-or, for long names,
+Align data type definitions' data constructors like,
 
 ```haskell
 data HttpException
