@@ -1,23 +1,21 @@
 module Data.Adjacent where
 
-data Adjacency a = Adjacency
+data Adj a = Adj
     { pre :: !(Maybe a)
-    , v :: !a
+    , val :: !a
     , post :: !(Maybe a)
     } deriving (Show)
 
-toAdjacents :: [a] -> [Adjacency a]
+toAdjacents :: [a] -> [Adj a]
 toAdjacents = go Nothing
   where
-    go _ [] =
-       []
-    go _pre [_v] =
-       [Adjacency _pre _v Nothing]
-    go _pre (_v : xs@(_post : _)) =
-       Adjacency _pre _v (Just _post) : go (Just _v) xs
+    go _pre xs = case xs of
+        []   -> []
+        [_v] -> [Adj _pre _v Nothing]
+        (_v : ys@(_post : _)) -> (Adj _pre _v (Just _post)) : go (Just _v) ys
 
-fromAdjacency :: Adjacency a -> a
-fromAdjacency = v
+fromAdjacency :: Adj a -> a
+fromAdjacency = val
 
-fromAdjacencies :: [Adjacency a] -> [a]
+fromAdjacencies :: [Adj a] -> [a]
 fromAdjacencies = fmap fromAdjacency

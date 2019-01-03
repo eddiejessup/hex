@@ -1,114 +1,180 @@
+{-# LANGUAGE DuplicateRecordFields #-}
+
 module DVI.Document where
 
 import           Control.Monad
+import           Data.Char                      ( ord )
 import           Safe                           ( lastDef )
 
+import           Data.Concept
+
 import           TFM
+import HeX.Dimensioned                          ( Dimensioned(..) )
 
 import           DVI.Encode
 import           DVI.Instruction
 
+data Rule = Rule
+    { width :: !Int
+    , height :: !Int
+    , depth :: !Int
+    } deriving (Show)
+
+instance Dimensioned Rule where
+    naturalWidth Rule { width = w } = w
+    naturalHeight Rule { height = h } = h
+    naturalDepth Rule { depth = d } = d
+
+data Character = Character
+    { char :: !Char
+    , width :: !Int
+    , height :: !Int
+    , depth :: !Int
+    } deriving (Show)
+
+instance Dimensioned Character where
+    naturalWidth Character { width = w } = w
+    naturalHeight Character { height = h } = h
+    naturalDepth Character { depth = d } = d
+
+data FontDefinition = FontDefinition
+    { fontInfo :: !TexFont
+    , fontPath :: !String
+    , fontName :: !String
+    , fontNr :: !Int
+    , scaleFactorRatio :: !Rational
+    } deriving (Show)
+
+newtype FontSelection = FontSelection
+    { fontNr :: Int
+    } deriving (Show)
+
 -- Encode abstract instructions.
 data Instruction
-  = Character !Int !MoveMode
-  | Rule { height :: !Int
-         , width :: !Int
-         , move :: !MoveMode }
-  | BeginNewPage
-  | MoveRight !Int
-  -- | MoveRightW
-  -- | MoveRightX
-  | MoveDown !Int
-  -- | MoveDownY
-  -- | MoveDownZ
-  | DefineFont { fontInfo :: !TexFont
-               , fontPath :: !FilePath
-               , fontNr :: !Int
-               , scaleFactorRatio :: !Rational }
-  | SelectFont !Int
-  | PushStack
-  | PopStack
-  -- | DoSpecial !String
-  deriving (Show)
+    = AddCharacter !Character
+    | AddRule !Rule
+    | BeginNewPage
+    | Move Axis !Int
+    | DefineFont !FontDefinition
+    | SelectFont !FontSelection
+    | PushStack
+    | PopStack
+    -- | DoSpecial !String
+    deriving (Show)
 
-data ParseState = ParseState { instrs :: ![EncodableInstruction]
-                             , curFontNr :: !(Maybe Int)
-                             , beginPagePointers :: ![Int]
-                             , stackDepth :: !Int
-                             , maxStackDepth :: !Int }
+data ParseState = ParseState
+    { instrs :: ![EncodableInstruction]
+    , curFontNr :: !(Maybe Int)
+    , beginPagePointers :: ![Int]
+    , stackDepth :: !Int
+    , maxStackDepth :: !Int
+    }
 
 initialParseState :: Int -> ParseState
-initialParseState mag = ParseState { instrs=[getPreambleInstr mag]
-                                   , curFontNr=Nothing
-                                   , beginPagePointers=[]
-                                   , stackDepth=0
-                                   , maxStackDepth=0
+initialParseState mag = ParseState { instrs = [getPreambleInstr mag]
+                                   , curFontNr = Nothing
+                                   , beginPagePointers = []
+                                   , stackDepth = 0
+                                   , maxStackDepth = 0
                                    }
 
 addInstruction :: ParseState -> EncodableInstruction -> ParseState
-addInstruction s@ParseState{instrs=_instrs} i = s{instrs=i:_instrs}
-
-addInstruction' :: ParseState -> EncodableInstruction -> Either String ParseState
-addInstruction' s i = pure $ addInstruction s i
+addInstruction s@ParseState { instrs = _instrs } i = s { instrs = i : _instrs }
 
 parseMundaneInstruction :: ParseState -> Instruction -> Either String ParseState
-parseMundaneInstruction st@ParseState{instrs=_instrs} (SelectFont fNr') = do
-  instr <- getSelectFontNrInstruction fNr'
-  pure st{instrs=instr:_instrs, curFontNr=Just fNr'}
-parseMundaneInstruction st@ParseState{instrs=_instrs} (Character _charNr _move) =
-  getCharacterInstruction _charNr _move >>= addInstruction' st
-parseMundaneInstruction st@ParseState{instrs=_instrs} (Rule h w _move) =
-  addInstruction' st $ getRuleInstruction _move h w
-parseMundaneInstruction st@ParseState{instrs=_instrs} (MoveRight dist) =
-  getMoveInstruction Horizontal dist >>= addInstruction' st
-parseMundaneInstruction st@ParseState{instrs=_instrs} (MoveDown dist) =
-  getMoveInstruction Vertical dist >>= addInstruction' st
-parseMundaneInstruction st@ParseState{instrs=_instrs, beginPagePointers=points, curFontNr=fNr} BeginNewPage = do
-  let beginPageInstr = getBeginPageInstruction $ lastDef (-1) points
-      instrsEnded = case points of
-        [] -> _instrs
-        _ -> endPageInstruction : _instrs
-  instrs' <- case fNr of
-    Just nr -> do
-      fInstr <- getSelectFontNrInstruction nr
-      pure $ fInstr : beginPageInstr : instrsEnded
-    Nothing -> pure $ beginPageInstr : instrsEnded
-  pure st{instrs=instrs', beginPagePointers=encLength instrsEnded : points}
-parseMundaneInstruction st@ParseState{instrs=_instrs} DefineFont{fontInfo=info, fontPath=path, fontNr=defFontNr, scaleFactorRatio=scaleRatio} =
-  let _checksum = checksum info
-      designSize = round $ designSizeSP info
-      scaleFactor = designScaleSP info scaleRatio
-  in getDefineFontInstruction defFontNr path scaleFactor designSize _checksum >>= addInstruction' st
-parseMundaneInstruction st@ParseState{instrs=_instrs, stackDepth=sDpth, maxStackDepth=mSDpth} PushStack =
-  pure st{instrs=pushInstruction:_instrs, stackDepth=succ sDpth, maxStackDepth=max mSDpth (succ sDpth)}
-parseMundaneInstruction st@ParseState{instrs=_instrs, stackDepth=sDpth} PopStack =
-  pure st{instrs=popInstruction:_instrs, stackDepth=pred sDpth}
+parseMundaneInstruction st i = case i of
+    SelectFont (FontSelection n) ->
+        do
+        st' <- addInstruction st <$> getSelectFontNrInstruction n
+        pure st' { curFontNr = Just n }
+    AddCharacter Character { char = c } ->
+        addInstruction st <$> getCharacterInstruction (ord c) Set
+    AddRule Rule { width = w, height = h, depth = d } ->
+        pure $ addInstruction st $ getRuleInstruction Set (h + d) w
+    Move ax dist ->
+        addInstruction st <$> getMoveInstruction ax dist
+    BeginNewPage ->
+        do
+        let
+            points = beginPagePointers st
+            -- Get the instructions to finish off the current page.
+            -- If there are no begin-page pointers, we are on the first page,
+            -- so don't add an end-page instruction.
+            instrsEnded = case points of
+                [] -> instrs st
+                _ -> endPageInstruction : instrs st
+            beginPageInstr = getBeginPageInstruction $ lastDef (-1) points
+            instrsBegun = beginPageInstr : instrsEnded
+        -- If a font is selected, add an instruction to select it again on the
+        -- new page.
+        instrsDone <- case curFontNr st of
+            Just nr ->
+                do
+                fInstr <- getSelectFontNrInstruction nr
+                pure $ fInstr : instrsBegun
+            Nothing ->
+                pure $ instrsBegun
+        -- Update the instructions, and add a pointer for the new begin-page
+        -- instruction.
+        pure st { instrs = instrsDone
+                , beginPagePointers = encLength instrsEnded : points
+                }
+    (DefineFont fontDef) ->
+        let
+            FontDefinition { fontInfo = info
+                           , fontPath = path
+                           , fontNr = n
+                           , scaleFactorRatio = scaleRatio
+                           } = fontDef
+            cs = checksum info
+            ds = round $ designSizeSP info
+            sf = designScaleSP info scaleRatio
+        in
+            addInstruction st <$> getDefineFontInstruction n path sf ds cs
+    PushStack ->
+        let
+            st' = addInstruction st pushInstruction
+            newDepth = succ $ stackDepth st'
+        in
+            pure st' { stackDepth = newDepth
+                     , maxStackDepth = max (maxStackDepth st') newDepth
+                     }
+    PopStack ->
+        let
+            st' = addInstruction st popInstruction
+        in
+            pure st' { stackDepth = pred $ stackDepth st' }
 
 parseMundaneInstructions :: Int -> [Instruction] -> Either String ParseState
-parseMundaneInstructions = foldM parseMundaneInstruction . initialParseState
+parseMundaneInstructions mag _instrs =
+    do
+    st <- foldM parseMundaneInstruction (initialParseState mag) _instrs
+    pure $ addInstruction st endPageInstruction
 
 parseInstructions :: [Instruction] -> Int -> Either String [EncodableInstruction]
-parseInstructions _instrs magnification = do
-  ParseState{instrs=mundaneInstrs, beginPagePointers=_beginPagePointers, maxStackDepth=_maxStackDepth} <- parseMundaneInstructions magnification _instrs
-  let (maxPageHeightPlusDepth, maxPageWidth) = (1, 1)
-      postambleInstr =
-        getPostambleInstr
-          _beginPagePointers
-          magnification
-          maxPageHeightPlusDepth
-          maxPageWidth
-          _maxStackDepth
-      finishedInstrs = endPageInstruction : mundaneInstrs
-      postamblePointer = encLength finishedInstrs
-      postPostambleInstr = getPostPostambleInstr postamblePointer
-      fontDefinitions = filter isDefineFontInstr mundaneInstrs
-  pure $
-    postPostambleInstr : fontDefinitions ++ postambleInstr : finishedInstrs
+parseInstructions _instrs magnification =
+    do
+    ParseState { instrs = mundaneInstrs
+               , beginPagePointers = _beginPagePointers
+               , maxStackDepth = _maxStackDepth
+               } <- parseMundaneInstructions magnification _instrs
+    let
+        (maxPageHeightPlusDepth, maxPageWidth) = (1, 1)
+        postambleInstr = getPostambleInstr
+            _beginPagePointers
+            magnification
+            maxPageHeightPlusDepth
+            maxPageWidth
+            _maxStackDepth
+        postamblePointer = encLength mundaneInstrs
+        postPostambleInstr = getPostPostambleInstr postamblePointer
+        fontDefinitions = filter isDefineFontInstr mundaneInstrs
+    pure $ postPostambleInstr : fontDefinitions ++ postambleInstr : mundaneInstrs
   where
     isDefineFontInstr (EncodableInstruction op _) =
-      case op of
-        Define1ByteFontNr -> True
-        Define2ByteFontNr -> True
-        Define3ByteFontNr -> True
-        Define4ByteFontNr -> True
-        _ -> False
+        case op of
+            Define1ByteFontNr -> True
+            Define2ByteFontNr -> True
+            Define3ByteFontNr -> True
+            Define4ByteFontNr -> True
+            _ -> False

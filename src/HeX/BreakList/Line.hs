@@ -25,7 +25,7 @@ data Line = Line
   }
   deriving Show
 
-type Entry = A.Adjacency BreakableHListElem
+type Entry = A.Adj BreakableHListElem
 newtype Demerit = Demerit Int
   deriving (Show, Eq, Ord, Num)
 
@@ -97,7 +97,7 @@ inEdgeConcat xs e = foldr inEdgeCons e xs
 
 finaliseInEdge :: Entry -> InEdge -> InEdge
 -- If the break-point is at glue, then the line doesn't include that glue.
-finaliseInEdge A.Adjacency { v = HVListElem (ListGlue _) } e = e
+finaliseInEdge A.Adj { val = HVListElem (ListGlue _) } e = e
 -- If the break is at some other type of break, the line includes it.
 finaliseInEdge x (InEdge cs n discard) = InEdge (x:cs) n discard
 

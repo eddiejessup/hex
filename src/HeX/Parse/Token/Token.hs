@@ -2,32 +2,15 @@ module HeX.Parse.Token.Token where
 
 import qualified Data.Map.Strict               as Map
 
+import           Data.Concept
+
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Token.Parameter
 
-data HDirection
-  = Leftward
-  | Rightward
-  deriving (Show, Eq)
-
-data VDirection
-  = Upward
-  | Downward
-  deriving (Show, Eq)
-
-data Direction
-  = Forward
-  | Backward
-  deriving (Show, Eq)
 
 data MessageStream
   = Out
   | Err
-  deriving (Show, Eq)
-
-data Axis
-  = Horizontal
-  | Vertical
   deriving (Show, Eq)
 
 data PresetGlueType

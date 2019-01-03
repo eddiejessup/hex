@@ -3,13 +3,9 @@ module DVI.Instruction where
 import           Safe                           ( lastDef )
 import           System.FilePath                ( splitFileName )
 
+import           Data.Concept
 import           Data.Byte
 import           DVI.Encode
-
-data MoveMode = Put | Set
-  deriving Show
-data Direction = Horizontal | Vertical
-  deriving Show
 
 pickOp :: (Operation, Operation, Operation, Operation) -> IntArgVal -> Operation
 pickOp (o1, o2, _, o4) v = case v of
@@ -59,8 +55,13 @@ getBeginPageInstruction lastBeginPoint =
       args = boringArgs ++ [lastBeginPointArg]
   in EncodableInstruction BeginPage args
 
-getDefineFontInstruction ::
-     Int -> FilePath -> Int -> Int -> Int -> Either String EncodableInstruction
+getDefineFontInstruction
+  :: Int
+  -> FilePath
+  -> Int
+  -> Int
+  -> Int
+  -> Either String EncodableInstruction
 getDefineFontInstruction fNr fPath scaleFactor designSize fontChecksum = do
   sI <- toUnsignedInt fNr
   (_op, fontNrArgVal) <- getVariByteOpAndArg (Define1ByteFontNr, Define2ByteFontNr, Define3ByteFontNr, Define4ByteFontNr) sI
@@ -78,11 +79,6 @@ getDefineFontInstruction fNr fPath scaleFactor designSize fontChecksum = do
         , (IntArgVal . U1 . fromIntegral . length) fileName -- file_name_length
         , StringArgVal fPath -- font_path
         ]
-  if fPath == (dirPath ++ fileName)
-    then pure ()
-    else fail $
-         "Split path badly: " ++
-         fPath ++ " not equal to (" ++ dirPath ++ ", " ++ fileName ++ ")"
   pure $ EncodableInstruction _op args
 
 getCharacterInstruction :: Int -> MoveMode -> Either String EncodableInstruction
@@ -101,7 +97,7 @@ getRuleInstruction mode h w =
         Set -> SetRule
   in EncodableInstruction op $ fmap (IntArgVal . U4 . fromIntegral) [w, h]
 
-getMoveInstruction :: Direction -> Int -> Either String EncodableInstruction
+getMoveInstruction :: Axis -> Int -> Either String EncodableInstruction
 getMoveInstruction d dist =
   toSignedInt dist >>= getVariByteInstruction (ops d)
   where

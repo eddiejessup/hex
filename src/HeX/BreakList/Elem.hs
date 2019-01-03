@@ -32,11 +32,11 @@ instance BreakableListElem BreakableVListElem where
   isBox (ListRule _) = True
   isBox _ = False
 
-  toBreakItem Adjacency { pre = Just x, v = ListGlue g }
+  toBreakItem Adj { pre = Just x, val = ListGlue g }
     = if isDiscardable x then Nothing else Just $ GlueBreak g
-  toBreakItem Adjacency { v = ListKern k, post = Just (ListGlue _) }
+  toBreakItem Adj { val = ListKern k, post = Just (ListGlue _) }
     = Just $ KernBreak k
-  toBreakItem Adjacency { v = ListPenalty p }
+  toBreakItem Adj { val = ListPenalty p }
     = Just $ PenaltyBreak p
   toBreakItem _ = Nothing
 
@@ -88,11 +88,11 @@ instance BreakableListElem BreakableHListElem where
 
   -- TODO: Add math formula conditions.
   -- TODO: Discretionary break and Math-off.
-  toBreakItem Adjacency { pre = Just x, v = HVListElem (ListGlue g) }
+  toBreakItem Adj { pre = Just x, val = HVListElem (ListGlue g) }
     = if isDiscardable x then Nothing else Just $ GlueBreak g
-  toBreakItem Adjacency { v = HVListElem (ListKern k), post = Just (HVListElem (ListGlue _)) }
+  toBreakItem Adj { val = HVListElem (ListKern k), post = Just (HVListElem (ListGlue _)) }
     = Just $ KernBreak k
-  toBreakItem Adjacency { v = HVListElem (ListPenalty p) }
+  toBreakItem Adj { val = HVListElem (ListPenalty p) }
     = Just $ PenaltyBreak p
   toBreakItem _ = Nothing
 

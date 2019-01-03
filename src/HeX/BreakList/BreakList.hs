@@ -32,7 +32,7 @@ class BreakableListElem a where
 
   isBox :: a -> Bool
 
-  toBreakItem :: A.Adjacency a -> Maybe BreakItem
+  toBreakItem :: A.Adj a -> Maybe BreakItem
 
   naturalLength :: a -> Int
 

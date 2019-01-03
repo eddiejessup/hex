@@ -6,6 +6,8 @@ import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
 import           Data.Functor                   ( ($>) )
 
+import           Data.Concept
+
 import qualified HeX.Lex                       as Lex
 import           HeX.Categorise                 ( CharCode )
 
@@ -115,7 +117,7 @@ extractVModeCommand = extractResult parseVModeCommand
 
 -- All-mode Commands.
 
-parseAllModeCommand :: T.Axis -> SimpExpandParser AllModesCommand
+parseAllModeCommand :: Axis -> SimpExpandParser AllModesCommand
 parseAllModeCommand mode =
   P.choice
     [ addSpace
@@ -124,7 +126,7 @@ parseAllModeCommand mode =
     , endParagraph
     , ModeIndependentCommand <$> parseModeIndependentCommand mode ]
 
-parseModeIndependentCommand :: T.Axis -> SimpExpandParser ModeIndependentCommand
+parseModeIndependentCommand :: Axis -> SimpExpandParser ModeIndependentCommand
 parseModeIndependentCommand mode =
   P.choice
     [ relax
@@ -135,7 +137,7 @@ parseModeIndependentCommand mode =
     , Assign <$> parseAssignment ]
 
 checkModeAndToken
-  :: T.Axis
+  :: Axis
   -> (T.ModedCommandPrimitiveToken -> Bool)
   -> T.PrimitiveToken
   -> Bool
@@ -166,7 +168,7 @@ addKern = do
   AddKern <$> parseLength
 
 -- \hskip 10pt and such.
-addSpecifiedGlue :: T.Axis -> SimpExpandParser ModeIndependentCommand
+addSpecifiedGlue :: Axis -> SimpExpandParser ModeIndependentCommand
 addSpecifiedGlue mode = do
   skipSatisfied $ checkModeAndToken mode (== T.AddSpecifiedGlueTok)
   AddGlue <$> parseGlue
@@ -176,7 +178,7 @@ addSpace :: SimpExpandParser AllModesCommand
 addSpace = skipSatisfied isSpace $> AddSpace
 
 -- \hrule and such.
-addRule :: T.Axis -> SimpExpandParser AllModesCommand
+addRule :: Axis -> SimpExpandParser AllModesCommand
 addRule mode = do
   skipSatisfied $ checkModeAndToken mode (== T.AddRuleTok)
   let cmd = AddRule {width = Nothing, height = Nothing, depth = Nothing}
@@ -219,13 +221,13 @@ endParagraph = const EndParagraph <$> skipSatisfiedEquals T.EndParagraphTok
 parseHModeCommand :: SimpExpandParser HModeCommand
 parseHModeCommand =
   P.choice [leaveHMode, addCharacter] <|>
-  (HAllModesCommand <$> parseAllModeCommand T.Horizontal)
+  (HAllModesCommand <$> parseAllModeCommand Horizontal)
 
 leaveHMode :: SimpExpandParser HModeCommand
 leaveHMode = skipSatisfied endsHMode $> LeaveHMode
   where
     endsHMode T.EndTok = True
-    endsHMode (T.ModedCommand T.Vertical _) = True
+    endsHMode (T.ModedCommand Vertical _) = True
     -- endsHMode Dump = True
     endsHMode _ = False
 
@@ -245,7 +247,7 @@ addCharacter = do
 parseVModeCommand :: SimpExpandParser VModeCommand
 parseVModeCommand =
   P.choice [enterHMode, end] <|>
-  (VAllModesCommand <$> parseAllModeCommand T.Vertical)
+  (VAllModesCommand <$> parseAllModeCommand Vertical)
 
 -- \end.
 end :: SimpExpandParser VModeCommand
@@ -254,7 +256,7 @@ end = skipSatisfiedEquals T.EndTok $> End
 enterHMode :: SimpExpandParser VModeCommand
 enterHMode = skipSatisfied startsHMode $> EnterHMode
   where
-    startsHMode (T.ModedCommand T.Horizontal _) = True
+    startsHMode (T.ModedCommand Horizontal _) = True
     startsHMode x
       | primTokHasCategory Lex.Letter x = True
       | primTokHasCategory Lex.Other x = True

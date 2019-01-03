@@ -25,7 +25,7 @@ import           Path
 import           Safe                           ( headMay )
 import qualified Text.Megaparsec               as PS
 
-import           Data.Adjacent                  ( Adjacency(..) )
+import           Data.Adjacent                  ( Adj(..) )
 import           Data.Path                      ( findFilePath )
 
 import qualified TFM
@@ -88,7 +88,8 @@ defineFont _ fPath = do
       pure
         B.FontDefinition
         { fontNr = fNr
-        , fontPath = fontPath
+        -- TODO: Improve mapping of name and path.
+        , fontPath = fontName
         , fontName = fontName
         , fontInfo = font
         , scaleFactorRatio = 1.0
@@ -288,7 +289,7 @@ runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
   -- the cost c of breaking at this point.
   | BL.isDiscardable x = do
     desiredH <- gets (vSize . params)
-    case BL.toBreakItem Adjacency { pre = headMay cur, v = x, post = headMay xs } of
+    case BL.toBreakItem Adj { pre = headMay cur, val = x, post = headMay xs } of
       -- If we can't break here, just add it to the list and continue.
       Nothing -> usualContinue
       Just brk -> case (pageBreakJudgment cur brk desiredH, _bestPointAndCost) of

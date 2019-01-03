@@ -1,21 +1,22 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module HeX.Box where
+module HeX.Box 
+  ( FontDefinition(..)
+  , FontSelection(..)
+  , Rule(..)
+  , Character(..)
+  , module HeX.Box
+  )
+where
 
-import           Path                           ( Abs
-                                                , File
-                                                , Path
+import           DVI.Document                   ( FontDefinition(..)
+                                                , FontSelection(..)
+                                                , Rule(..)
+                                                , Character(..)
                                                 )
-
-import           TFM                            ( TexFont )
 
 import qualified HeX.Unit                      as Unit
 import HeX.Dimensioned                          ( Dimensioned(..) )
-
-data Direction
-  = Horizontal
-  | Vertical
-  deriving (Show)
 
 data DesiredLength
   = Natural
@@ -24,50 +25,9 @@ data DesiredLength
   | To Int
   deriving (Show)
 
-data Rule = Rule
-  { width :: Int
-  , height :: Int
-  , depth :: Int
-  } deriving (Show)
-
-instance Dimensioned Rule where
-  naturalWidth Rule {width = w} = w
-  naturalHeight Rule {height = h} = h
-  naturalDepth Rule {depth = d} = d
-
 newtype Kern = Kern
   { kernDimen :: Int
   } deriving (Show)
-
-data FontDefinition = FontDefinition
-  { fontNr :: Int
-  , fontPath :: Path Abs File
-  , fontName :: String
-  , scaleFactorRatio :: Rational
-  , fontInfo :: TexFont
-  }
-
-instance Show FontDefinition where
-  show FontDefinition {fontName = name} = "FontDefinition {" ++ name ++ "}"
-
-newtype FontSelection = FontSelection
-  { fontNr :: Int
-  } deriving (Show)
-
-data Character = Character
-  { char :: Char
-  , width :: Int
-  , height :: Int
-  , depth :: Int
-  }
-
-instance Show Character where
-  show c = "'" ++ [char c] ++ "'"
-
-instance Dimensioned Character where
-  naturalWidth Character {width = w} = w
-  naturalHeight Character {height = h} = h
-  naturalDepth Character {depth = d} = d
 
 newtype SetGlue = SetGlue
   { glueDimen :: Int

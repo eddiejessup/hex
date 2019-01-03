@@ -15,6 +15,8 @@ import qualified Data.List.NonEmpty            as NE
 import qualified Data.Foldable                 as Fold
 import qualified Text.Megaparsec               as P
 
+import           Data.Concept
+
 import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers

@@ -1,8 +1,8 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Data.Byte where
 
-data Signedness
-    = Signed
-    | Unsigned
+data Signedness = Signed | Unsigned
 
 data SignableInt = SignableInt !Signedness !Int
 
@@ -29,13 +29,13 @@ bytesNeededUnsigned n =
     1 + floor ((logBase 256.0 $ fromIntegral $ abs n) :: Double)
 
 bytesNeeded :: SignableInt -> Int
-bytesNeeded (SignableInt Unsigned 0) = 1
-bytesNeeded (SignableInt Unsigned n) = bytesNeededUnsigned n
-bytesNeeded (SignableInt Signed   0) = 1
-bytesNeeded (SignableInt Signed n) =
-    let
-        nrBytesUnsigned = bytesNeededUnsigned n
-        needExtraByte =
-            not $ isSignedNrExpressibleInNBits (8 * nrBytesUnsigned) n
-    in
-        nrBytesUnsigned + if needExtraByte then 1 else 0
+bytesNeeded = \case
+    SignableInt _ 0 -> 1
+    SignableInt Unsigned n -> bytesNeededUnsigned n
+    SignableInt Signed n ->
+        let
+            nrBytesUnsigned = bytesNeededUnsigned n
+        in
+            if isSignedNrExpressibleInNBits (8 * nrBytesUnsigned) n
+                then nrBytesUnsigned
+                else nrBytesUnsigned + 1
