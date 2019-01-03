@@ -6,7 +6,6 @@ import           Data.Concept
 
 import qualified DVI.Document                  as D
 
-import           HeX.Dimensioned              ( Dimensioned(..) )
 import           HeX.Box
 
 boxContentsToDVI :: BoxContents -> [D.Instruction]

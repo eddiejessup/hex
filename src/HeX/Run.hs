@@ -14,10 +14,9 @@ import           Data.List                      ( intercalate )
 import           Data.List.NonEmpty             ( NonEmpty(..) )
 import qualified Text.Megaparsec               as P
 
+import           DVI.Instruction                ( EncodableInstruction )
 import           DVI.Document                   ( parseInstructions )
-import           DVI.Encode                     ( encode
-                                                , EncodableInstruction
-                                                )
+import           DVI.Encode                     ( encode )
 
 import           HeX.BreakList
 import           HeX.Box

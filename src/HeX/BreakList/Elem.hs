@@ -1,9 +1,9 @@
 module HeX.BreakList.Elem where
 
 import           Data.Adjacent
+import           Data.Concept
 
 import qualified HeX.Box                       as B
-import           HeX.Dimensioned                ( Dimensioned(..) )
 import           HeX.BreakList.Glue
 import           HeX.BreakList.BreakList        ( BreakableListElem(..), Penalty, BreakItem(..) )
 

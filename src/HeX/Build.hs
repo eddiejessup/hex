@@ -27,12 +27,12 @@ import qualified Text.Megaparsec               as PS
 
 import           Data.Adjacent                  ( Adj(..) )
 import           Data.Path                      ( findFilePath )
+import           Data.Concept
 
 import qualified TFM
 import           TFM                            ( TexFont(..) )
 import qualified TFM.Character                 as TFMC
 
-import           HeX.Dimensioned                ( Dimensioned(..) )
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.BreakList.Line             ( bestRoute

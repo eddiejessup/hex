@@ -22,3 +22,6 @@ data Axis
 
 data MoveMode = Put | Set
   deriving Show
+
+class Dimensioned a where
+  naturalWidth, naturalHeight, naturalDepth :: a -> Int

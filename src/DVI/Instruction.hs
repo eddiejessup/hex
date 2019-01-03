@@ -1,49 +1,101 @@
 module DVI.Instruction where
 
+import qualified Data.Binary                   as B
+import qualified Data.ByteString.Lazy          as BLS
+import           Data.Char                      ( ord )
+import qualified Data.Int                      as I
+import qualified Data.Word                     as W
 import           Safe                           ( lastDef )
 import           System.FilePath                ( splitFileName )
 
 import           Data.Concept
 import           Data.Byte
-import           DVI.Encode
 
-pickOp :: (Operation, Operation, Operation, Operation) -> IntArgVal -> Operation
-pickOp (o1, o2, _, o4) v = case v of
-    (S1 _) -> o1
-    (U1 _) -> o1
-    (S2 _) -> o2
-    (U2 _) -> o2
-    (S4 _) -> o4
-    (U4 _) -> o4
+import           DVI.Encode
+import           DVI.Operation
+
+data ArgVal
+    = IntArgVal IntArgVal
+    | StringArgVal String
+    deriving (Show)
+
+instance Encodable ArgVal where
+    encode (IntArgVal    v) = encode v
+    encode (StringArgVal v) = BLS.pack $ fmap (fromIntegral . ord) v
+
+data IntArgVal
+    = U1 W.Word8
+    | U2 W.Word16
+    | U4 W.Word32
+    | S1 I.Int8
+    | S2 I.Int16
+    | S4 I.Int32
+    deriving (Show)
+
+intArgValFromSignableInt :: SignableInt -> Either String IntArgVal
+intArgValFromSignableInt n@(SignableInt s i) = case (s, bytesNeeded n) of
+    (Signed  , 1) -> pure $ S1 $ fromIntegral i
+    (Signed  , 2) -> pure $ S2 $ fromIntegral i
+    (Signed  , 3) -> pure $ S4 $ fromIntegral i
+    (Signed  , 4) -> pure $ S4 $ fromIntegral i
+    (Unsigned, 1) -> pure $ U1 $ fromIntegral i
+    (Unsigned, 2) -> pure $ U2 $ fromIntegral i
+    (Unsigned, 3) -> pure $ U4 $ fromIntegral i
+    (Unsigned, 4) -> pure $ U4 $ fromIntegral i
+    (_       , b) -> fail $ "Cannot handle " ++ show b ++ " bytes"
+
+instance Encodable IntArgVal where
+    encode (U1 v) = B.encode v
+    encode (U2 v) = B.encode v
+    encode (U4 v) = B.encode v
+    encode (S1 v) = B.encode v
+    encode (S2 v) = B.encode v
+    encode (S4 v) = B.encode v
+
+data EncodableInstruction = EncodableInstruction Operation [ArgVal]
+    deriving (Show)
+
+instance Encodable EncodableInstruction where
+    encode (EncodableInstruction op args) = encode op `BLS.append` encode args
+
+opByteLength :: IntArgVal -> ByteLength
+opByteLength v = case v of
+    (S1 _) -> OneByte
+    (U1 _) -> OneByte
+    (S2 _) -> TwoByte
+    (U2 _) -> TwoByte
+    (S4 _) -> FourByte
+    (U4 _) -> FourByte
 
 getVariByteOpAndArg
-    :: (Operation, Operation, Operation, Operation)
+    :: (ByteLength -> Operation)
     -> SignableInt
     -> Either String (Operation, ArgVal)
-getVariByteOpAndArg ops sI =
+getVariByteOpAndArg f sI =
     do
     iArgVal <- intArgValFromSignableInt sI
-    pure (pickOp ops iArgVal, IntArgVal iArgVal)
+    pure (f $ opByteLength iArgVal, IntArgVal iArgVal)
 
 getVariByteInstruction
-    :: (Operation, Operation, Operation, Operation)
+    :: (ByteLength -> Operation)
     -> SignableInt
     -> Either String EncodableInstruction
-getVariByteInstruction ops sI =
+getVariByteInstruction f sI =
     do
-    (op, arg) <- getVariByteOpAndArg ops sI
+    (op, arg) <- getVariByteOpAndArg f sI
     pure $ EncodableInstruction op [arg]
+
+getSimpleEncInstruction :: Operation -> EncodableInstruction
+getSimpleEncInstruction _op = EncodableInstruction _op []
 
 getSelectFontNrInstruction :: Int -> Either String EncodableInstruction
 getSelectFontNrInstruction fNr
     | fNr < 64 =
-        pure $ EncodableInstruction (toEnum $ fNr + fromEnum SelectFontNr0) []
-    | otherwise = do
-        sI <- toUnsignedInt fNr
-        getVariByteInstruction (Select1ByteFontNr, Select2ByteFontNr, Select3ByteFontNr, Select4ByteFontNr) sI
-
-getSimpleEncInstruction :: Operation -> EncodableInstruction
-getSimpleEncInstruction _op = EncodableInstruction _op []
+        pure $ getSimpleEncInstruction $ SelectFontNr $ FastSelectFontOp $ fromIntegral fNr
+    | otherwise =
+        do
+        arg <- toUnsignedInt fNr
+        getVariByteInstruction (\b -> SelectFontNr $ ArgSelectFontOp b) arg
 
 endPageInstruction, pushInstruction, popInstruction :: EncodableInstruction
 endPageInstruction = getSimpleEncInstruction EndPage
@@ -52,10 +104,12 @@ popInstruction = getSimpleEncInstruction Pop
 
 getBeginPageInstruction :: Int -> EncodableInstruction
 getBeginPageInstruction lastBeginPoint =
-  let boringArgs = fmap (IntArgVal . S4 . fromIntegral) ([0 .. 9] :: [Int])
-      lastBeginPointArg = (IntArgVal . S4 . fromIntegral) lastBeginPoint
-      args = boringArgs ++ [lastBeginPointArg]
-  in EncodableInstruction BeginPage args
+    let
+        boringArgs = fmap (IntArgVal . S4 . fromIntegral) ([0 .. 9] :: [Int])
+        lastBeginPointArg = (IntArgVal . S4 . fromIntegral) lastBeginPoint
+        args = boringArgs ++ [lastBeginPointArg]
+    in
+        EncodableInstruction BeginPage args
 
 getDefineFontInstruction
   :: Int
@@ -64,47 +118,44 @@ getDefineFontInstruction
   -> Int
   -> Int
   -> Either String EncodableInstruction
-getDefineFontInstruction fNr fPath scaleFactor designSize fontChecksum = do
-  sI <- toUnsignedInt fNr
-  (_op, fontNrArgVal) <- getVariByteOpAndArg (Define1ByteFontNr, Define2ByteFontNr, Define3ByteFontNr, Define4ByteFontNr) sI
-  let (dirPathRaw, fileName) = splitFileName fPath
-      dirPath =
-        if dirPathRaw == "./"
-          then ""
-          else dirPathRaw
-      args =
-        [ fontNrArgVal -- font_nr
-        , (IntArgVal . U4 . fromIntegral) fontChecksum -- checksum
-        , (IntArgVal . S4 . fromIntegral) scaleFactor -- scale_factor
-        , (IntArgVal . S4 . fromIntegral) designSize -- design_size
-        , (IntArgVal . U1 . fromIntegral . length) dirPath -- dir_path_length
-        , (IntArgVal . U1 . fromIntegral . length) fileName -- file_name_length
-        , StringArgVal fPath -- font_path
-        ]
-  pure $ EncodableInstruction _op args
+getDefineFontInstruction fNr fPath scaleFactor designSize fontChecksum =
+    do
+    sI <- toUnsignedInt fNr
+    (_op, fontNrArgVal) <- getVariByteOpAndArg DefineFontNr sI
+    let (dirPathRaw, fileName) = splitFileName fPath
+        dirPath = if dirPathRaw == "./"
+            then ""
+            else dirPathRaw
+        args =
+            [ fontNrArgVal  -- font_nr
+            , (IntArgVal . U4 . fromIntegral) fontChecksum  -- checksum
+            , (IntArgVal . S4 . fromIntegral) scaleFactor  -- scale_factor
+            , (IntArgVal . S4 . fromIntegral) designSize  -- design_size
+            , (IntArgVal . U1 . fromIntegral . length) dirPath  -- dir_path_length
+            , (IntArgVal . U1 . fromIntegral . length) fileName  -- file_name_length
+            , StringArgVal fPath  -- font_path
+            ]
+    pure $ EncodableInstruction _op args
 
 getCharacterInstruction :: Int -> MoveMode -> Either String EncodableInstruction
-getCharacterInstruction code Set
-  | code < 128 = pure $ EncodableInstruction (toEnum $ code + fromEnum SetChar0) []
-getCharacterInstruction code mode
-  = toUnsignedInt code >>= getVariByteInstruction (ops mode) 
-  where
-    ops Set = (Set1ByteChar, Set2ByteChar, Set3ByteChar, Set4ByteChar)
-    ops Put = (Put1ByteChar, Put2ByteChar,  Put3ByteChar, Put4ByteChar)
+getCharacterInstruction code mode =
+    case mode of
+        Set | code < 128 ->
+            pure $ getSimpleEncInstruction $ AddChar $ FastCharOp $ fromIntegral code
+        _ ->
+            do
+            arg <- toUnsignedInt code
+            getVariByteInstruction (\b -> AddChar $ ArgCharOp mode b) arg
 
 getRuleInstruction :: MoveMode -> Int -> Int -> EncodableInstruction
 getRuleInstruction mode h w =
-  let op = case mode of
-        Put -> PutRule
-        Set -> SetRule
-  in EncodableInstruction op $ fmap (IntArgVal . U4 . fromIntegral) [w, h]
+  EncodableInstruction (AddRule mode) $ fmap (IntArgVal . U4 . fromIntegral) [h, w]
 
 getMoveInstruction :: Axis -> Int -> Either String EncodableInstruction
-getMoveInstruction d dist =
-  toSignedInt dist >>= getVariByteInstruction (ops d)
-  where
-    ops Vertical = (Down1Byte, Down2Byte, Down3Byte, Down4Byte)
-    ops Horizontal = (Right1Byte, Right2Byte, Right3Byte, Right4Byte)
+getMoveInstruction ax dist =
+    do
+    arg <- toSignedInt dist
+    getVariByteInstruction (\b -> Move ax $ ArgMoveOp b) arg
 
 dviFormatArg, numeratorArg, denominatorArg :: ArgVal
 dviFormatArg = IntArgVal $ U1 2
@@ -121,23 +172,23 @@ ambleArgs mag = [numeratorArg, denominatorArg, magnificationArg mag]
 
 getPreambleInstr :: Int -> EncodableInstruction
 getPreambleInstr mag =
-  EncodableInstruction Preamble $
-  [dviFormatArg] ++ ambleArgs mag ++ [IntArgVal $ U1 0, StringArgVal ""]
+    EncodableInstruction Preamble $
+        [dviFormatArg] ++ ambleArgs mag ++ [IntArgVal $ U1 0, StringArgVal ""]
 
 getPostambleInstr :: [Int] -> Int -> Int -> Int -> Int -> EncodableInstruction
 getPostambleInstr beginPagePointers mag maxPageHeightPlusDepth maxPageWidth maxStackDepth =
-  EncodableInstruction Postamble $
-  [lastPointerArg] ++
-  ambleArgs mag ++
-  [ (IntArgVal . S4 . fromIntegral) maxPageHeightPlusDepth
-  , (IntArgVal . S4 . fromIntegral) maxPageWidth
-  , (IntArgVal . U2 . fromIntegral) maxStackDepth
-  , (IntArgVal . U2 . fromIntegral . length) beginPagePointers
-  ]
+    EncodableInstruction Postamble $
+        [lastPointerArg] ++
+        ambleArgs mag ++
+        [ (IntArgVal . S4 . fromIntegral) maxPageHeightPlusDepth
+        , (IntArgVal . S4 . fromIntegral) maxPageWidth
+        , (IntArgVal . U2 . fromIntegral) maxStackDepth
+        , (IntArgVal . U2 . fromIntegral . length) beginPagePointers
+        ]
   where
     lastPointerArg = (IntArgVal . S4 . fromIntegral) $ lastDef (-1) beginPagePointers
 
 getPostPostambleInstr :: Int -> EncodableInstruction
 getPostPostambleInstr postamblePointer =
-  EncodableInstruction PostPostamble $
-  [(IntArgVal . S4 . fromIntegral) postamblePointer, dviFormatArg] ++ replicate 4 (IntArgVal $ U1 223)
+    EncodableInstruction PostPostamble $
+        [(IntArgVal . S4 . fromIntegral) postamblePointer, dviFormatArg] ++ replicate 4 (IntArgVal $ U1 223)

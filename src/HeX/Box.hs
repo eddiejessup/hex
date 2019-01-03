@@ -9,6 +9,8 @@ module HeX.Box
   )
 where
 
+import           Data.Concept
+
 import           DVI.Document                   ( FontDefinition(..)
                                                 , FontSelection(..)
                                                 , Rule(..)
@@ -16,7 +18,6 @@ import           DVI.Document                   ( FontDefinition(..)
                                                 )
 
 import qualified HeX.Unit                      as Unit
-import HeX.Dimensioned                          ( Dimensioned(..) )
 
 data DesiredLength
   = Natural

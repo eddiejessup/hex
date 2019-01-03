@@ -9,9 +9,9 @@ import           Safe                           ( lastDef )
 import           Data.Concept
 
 import           TFM
-import HeX.Dimensioned                          ( Dimensioned(..) )
 
-import           DVI.Encode
+import           DVI.Operation                  ( Operation(DefineFontNr) )
+import           DVI.Encode                     ( encLength )
 import           DVI.Instruction
 
 data Rule = Rule
@@ -49,7 +49,6 @@ newtype FontSelection = FontSelection
     { fontNr :: Int
     } deriving (Show)
 
--- Encode abstract instructions.
 data Instruction
     = AddCharacter !Character
     | AddRule !Rule
@@ -171,10 +170,6 @@ parseInstructions _instrs magnification =
         fontDefinitions = filter isDefineFontInstr mundaneInstrs
     pure $ postPostambleInstr : fontDefinitions ++ postambleInstr : mundaneInstrs
   where
-    isDefineFontInstr (EncodableInstruction op _) =
-        case op of
-            Define1ByteFontNr -> True
-            Define2ByteFontNr -> True
-            Define3ByteFontNr -> True
-            Define4ByteFontNr -> True
-            _ -> False
+    isDefineFontInstr i = case i of
+        EncodableInstruction (DefineFontNr _) _ -> True
+        _ -> False
