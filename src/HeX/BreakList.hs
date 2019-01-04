@@ -1,5 +1,5 @@
 module HeX.BreakList
-    (module HeX.BreakList.BreakList
+    ( module HeX.BreakList.BreakList
     , module HeX.BreakList.Judge
     , module HeX.BreakList.Elem
     , module HeX.BreakList.Set

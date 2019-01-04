@@ -61,40 +61,6 @@ instance Dimensioned Box where
         Box (VBoxContents _) _  -> error "Not implemented: Depth of VBox"
         Box (HBoxContents cs) _ -> maximumDef 0 $ naturalDepth <$> cs
 
--- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
-data HBoxElem
-    = HVBoxElem VBoxElem
-    | BoxCharacter Character
-    deriving (Show)
-
-instance Dimensioned HBoxElem where
-    naturalWidth e = case e of
-        BoxCharacter b                  -> naturalWidth b
-        HVBoxElem (BoxChild b)          -> naturalWidth b
-        HVBoxElem (BoxRule b)           -> naturalWidth b
-        HVBoxElem (BoxGlue g)           -> glueDimen g
-        HVBoxElem (BoxKern k)           -> kernDimen k
-        HVBoxElem (BoxFontDefinition _) -> 0
-        HVBoxElem (BoxFontSelection _)  -> 0
-
-    naturalHeight e = case e of
-        BoxCharacter b                  -> naturalHeight b
-        HVBoxElem (BoxChild b)          -> naturalHeight b
-        HVBoxElem (BoxRule b)           -> naturalHeight b
-        HVBoxElem (BoxGlue _)           -> 0
-        HVBoxElem (BoxKern _)           -> 0
-        HVBoxElem (BoxFontDefinition _) -> 0
-        HVBoxElem (BoxFontSelection _)  -> 0
-
-    naturalDepth e = case e of
-        BoxCharacter b                  -> naturalDepth b
-        HVBoxElem (BoxChild b)          -> naturalDepth b
-        HVBoxElem (BoxRule b)           -> naturalDepth b
-        HVBoxElem (BoxGlue _)           -> 0
-        HVBoxElem (BoxKern _)           -> 0
-        HVBoxElem (BoxFontDefinition _) -> 0
-        HVBoxElem (BoxFontSelection _)  -> 0
-
 data VBoxElem
     = BoxChild Box
     | BoxRule Rule
@@ -128,6 +94,40 @@ instance Dimensioned VBoxElem where
         BoxKern _           -> 0
         BoxFontDefinition _ -> 0
         BoxFontSelection _  -> 0
+
+-- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
+data HBoxElem
+    = HVBoxElem VBoxElem
+    | BoxCharacter Character
+    deriving (Show)
+
+instance Dimensioned HBoxElem where
+    naturalWidth e = case e of
+        BoxCharacter b                  -> naturalWidth b
+        HVBoxElem (BoxChild b)          -> naturalWidth b
+        HVBoxElem (BoxRule b)           -> naturalWidth b
+        HVBoxElem (BoxGlue g)           -> glueDimen g
+        HVBoxElem (BoxKern k)           -> kernDimen k
+        HVBoxElem (BoxFontDefinition _) -> 0
+        HVBoxElem (BoxFontSelection _)  -> 0
+
+    naturalHeight e = case e of
+        BoxCharacter b                  -> naturalHeight b
+        HVBoxElem (BoxChild b)          -> naturalHeight b
+        HVBoxElem (BoxRule b)           -> naturalHeight b
+        HVBoxElem (BoxGlue _)           -> 0
+        HVBoxElem (BoxKern _)           -> 0
+        HVBoxElem (BoxFontDefinition _) -> 0
+        HVBoxElem (BoxFontSelection _)  -> 0
+
+    naturalDepth e = case e of
+        BoxCharacter b                  -> naturalDepth b
+        HVBoxElem (BoxChild b)          -> naturalDepth b
+        HVBoxElem (BoxRule b)           -> naturalDepth b
+        HVBoxElem (BoxGlue _)           -> 0
+        HVBoxElem (BoxKern _)           -> 0
+        HVBoxElem (BoxFontDefinition _) -> 0
+        HVBoxElem (BoxFontSelection _)  -> 0
 
 newtype Page = Page [VBoxElem]
     deriving (Show)

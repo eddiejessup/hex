@@ -4,7 +4,9 @@ module HeX.BreakList.Judge where
 
 import qualified HeX.Unit                      as UN
 import           HeX.BreakList.Glue
-import           HeX.BreakList.BreakList           ( BreakableListElem(..) )
+import           HeX.BreakList.BreakList           ( BreakableListElem(..)
+                                                   , totalGlue
+                                                   , naturalListLength )
 
 data Fixable
   = Fixable { ratio :: Rational
