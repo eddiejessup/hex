@@ -6,7 +6,7 @@ import qualified HeX.Unit                      as UN
 import           HeX.BreakList.Glue
 import           HeX.BreakList.BreakList           ( BreakableListElem(..)
                                                    , totalGlue
-                                                   , naturalListLength )
+                                                   , naturalListSpan )
 
 data Fixable
   = Fixable { ratio :: Rational
@@ -58,7 +58,7 @@ glueStatus excessLength (Glue _ _stretch _shrink)
 
 listGlueStatus :: BreakableListElem a => Int -> [a] -> GlueStatus
 listGlueStatus desiredLength cs =
-  glueStatus (naturalListLength cs - desiredLength) (totalGlue cs)
+  glueStatus (naturalListSpan cs - desiredLength) (totalGlue cs)
 
 -- TODO: Use types to ensure number is within bounds, such as <= tenK.
 data Badness

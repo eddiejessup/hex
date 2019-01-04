@@ -8,8 +8,9 @@ import qualified Data.Word                     as W
 import           Safe                           ( lastDef )
 import           System.FilePath                ( splitFileName )
 
-import           Data.Concept
 import           Data.Byte
+
+import           HeX.Concept
 
 import           DVI.Encode
 import           DVI.Operation

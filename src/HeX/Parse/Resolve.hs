@@ -2,8 +2,7 @@ module HeX.Parse.Resolve where
 
 import qualified Data.HashMap.Strict           as HMap
 
-import           Data.Concept
-
+import           HeX.Concept
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Token
 

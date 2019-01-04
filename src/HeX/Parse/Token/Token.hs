@@ -2,8 +2,7 @@ module HeX.Parse.Token.Token where
 
 import qualified Data.Map.Strict               as Map
 
-import           Data.Concept
-
+import           HeX.Concept
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Token.Parameter
 

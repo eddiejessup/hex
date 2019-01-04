@@ -3,7 +3,7 @@ module DVI.Operation where
 import qualified Data.Binary                   as B
 import qualified Data.Word                     as W
 
-import           Data.Concept
+import           HeX.Concept
 
 import           DVI.Encode
 

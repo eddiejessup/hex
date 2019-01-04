@@ -6,15 +6,12 @@ import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
 import           Data.Functor                   ( ($>) )
 
-import           Data.Concept
-
+import           HeX.Concept
 import qualified HeX.Lex                       as Lex
 import           HeX.Categorise                 ( CharCode )
 
 import           HeX.Parse.Helpers
-
 import qualified HeX.Parse.Token               as T
-
 import           HeX.Parse.Common
 import           HeX.Parse.Glue
 import           HeX.Parse.Length

@@ -91,6 +91,8 @@ setConfSpecialLen :: MonadState Config m => SpecialLength -> LenVal -> m ()
 setConfSpecialLen = liftSetParam setSpecialLen
 
 parIndentBox :: Config -> BL.BreakableHListElem
-parIndentBox conf = BL.HVListElem $ BL.ListBox $
-  B.Box { contents = B.HBoxContents []
-        , desiredLength = B.To $ unLenParam $ parIndent $ params conf }
+parIndentBox conf =
+  BL.HVListElem $ BL.VListBaseElem $ B.ElemBox $
+    B.Box { contents = B.HBoxContents []
+          , desiredLength = B.To . unLenParam . parIndent . params $ conf
+          }

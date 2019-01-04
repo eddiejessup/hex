@@ -27,12 +27,12 @@ import qualified Text.Megaparsec               as PS
 
 import           Data.Adjacent                  ( Adj(..) )
 import           Data.Path                      ( findFilePath )
-import           Data.Concept
 
 import qualified TFM
 import           TFM                            ( TexFont(..) )
 import qualified TFM.Character                 as TFMC
 
+import           HeX.Concept
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.BreakList.Line             ( bestRoute
@@ -140,10 +140,10 @@ handleModeIndep newStream com
     HP.Relax -> continueUnchanged
     HP.IgnoreSpaces -> continueUnchanged
     HP.AddPenalty n ->
-      modAccum [BL.ListPenalty (evaluatePenalty n)]
+      modAccum [BL.ListPenalty $ evaluatePenalty n]
     HP.AddKern ln -> do
       _mag <- gets (mag . params)
-      modAccum [BL.ListKern (evaluateKern _mag ln)]
+      modAccum [BL.VListBaseElem $ B.ElemKern $ evaluateKern _mag ln]
     HP.AddGlue g -> do
       _mag <- gets (mag . params)
       modAccum [BL.ListGlue (evaluateGlue _mag g)]
@@ -162,10 +162,10 @@ handleModeIndep newStream com
           (HP.ParamVar p) -> setConfLenParam p ed
         continueUnchanged
       HP.SelectFont fNr -> do
-        fontSel <- BL.ListFontSelection <$> selectFont fNr
+        fontSel <- BL.VListBaseElem . B.ElemFontSelection <$> selectFont fNr
         modAccum [fontSel]
       HP.DefineFont cs fPath -> do
-        fontDef <- BL.ListFontDefinition <$> defineFont cs fPath
+        fontDef <- BL.VListBaseElem . B.ElemFontDefinition <$> defineFont cs fPath
         modAccum [fontDef]
 
 processHCommand
@@ -190,7 +190,7 @@ processHCommand oldStream newStream acc com =
       let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
       modStream $ HP.insertLexToken oldStream parToken
     HP.AddCharacter {char = c} -> do
-      hCharBox <- BL.ListCharacter <$> characterBox c
+      hCharBox <- BL.HListHBaseElem . B.ElemCharacter <$> characterBox c
       modAccum $ hCharBox : acc
     HP.HAllModesCommand aCom -> case aCom of
       -- \indent: An empty box of width \parindent is appended to the current
@@ -223,7 +223,7 @@ processHCommand oldStream newStream acc com =
                 Nothing -> 0
                 Just ln -> evaluateLength _mag ln
             rule = B.Rule {width = evalW, height = evalH, depth = evalD}
-        modAccum $ (BL.HVListElem $ BL.ListRule rule) : acc
+        modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
       HP.ModeIndependentCommand mcom -> do
         (extraAcc, mStream) <- handleModeIndep newStream mcom
         pure ((BL.HVListElem <$> extraAcc) ++ acc, mStream, True)
@@ -351,7 +351,7 @@ addVListElem
   -> BL.BreakableVListElem
   -> m [BL.BreakableVListElem]
 addVListElem acc e = case e of
-    (BL.ListBox b) -> addVListBox b
+    (BL.VListBaseElem (B.ElemBox b)) -> addVListBox b
     _ -> pure $ e : acc
   where
     addVListBox :: MonadState Config m => B.Box -> m [BL.BreakableVListElem]
@@ -404,7 +404,7 @@ processVCommand oldStream newStream pages curPage acc com =
       (lineBoxes, mStream) <- extractParagraphLineBoxes indent oldStream
       desiredW <- gets (unLenParam . hSize . params)
       let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
-      newAcc <- addVListElems acc $ BL.ListBox . toBox <$> lineBoxes
+      newAcc <- addVListElems acc $ BL.VListBaseElem . B.ElemBox . toBox <$> lineBoxes
       continueSamePage newAcc mStream
   in case com of
     -- End recursion.
@@ -432,7 +432,7 @@ processVCommand oldStream newStream pages curPage acc com =
               Nothing -> 0
               Just ln -> evaluateLength _mag ln
         let rule = B.Rule {width = evalW, height = evalH, depth = evalD}
-        modAccum (BL.ListRule rule : acc)
+        modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
       HP.ModeIndependentCommand mcom -> do
         (extraAcc, mStream) <- withExceptT ConfigError $ handleModeIndep newStream mcom
         continueSamePage (extraAcc ++ acc) mStream

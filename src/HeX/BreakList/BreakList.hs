@@ -23,8 +23,8 @@ breakPenalty NoBreak       = 0
 
 newtype Penalty = Penalty Int
 
-instance Show Penalty where
-    show (Penalty p) = "|p" ++ show p ++ "|"
+showPenalty :: Penalty -> String
+showPenalty (Penalty p) = "|p" ++ show p ++ "|"
 
 class BreakableListElem a where
     toGlue :: a -> Maybe Glue
@@ -35,10 +35,10 @@ class BreakableListElem a where
 
     toBreakItem :: A.Adj a -> Maybe BreakItem
 
-    naturalLength :: a -> Int
+    naturalSpan :: a -> Int
 
-naturalListLength :: BreakableListElem a => [a] -> Int
-naturalListLength = sum . fmap naturalLength
+naturalListSpan :: BreakableListElem a => [a] -> Int
+naturalListSpan = sum . fmap naturalSpan
 
 glues :: BreakableListElem a => [a] -> [Glue]
 glues = mapMaybe toGlue

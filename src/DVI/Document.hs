@@ -1,4 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module DVI.Document where
 
@@ -6,7 +7,7 @@ import           Control.Monad
 import           Data.Char                      ( ord )
 import           Safe                           ( lastDef )
 
-import           Data.Concept
+import           HeX.Concept
 
 import           TFM
 
@@ -21,9 +22,10 @@ data Rule = Rule
     } deriving (Show)
 
 instance Dimensioned Rule where
-    naturalWidth Rule { width = w } = w
-    naturalHeight Rule { height = h } = h
-    naturalDepth Rule { depth = d } = d
+    naturalLength dim Rule { .. } = case dim of
+        Width -> width
+        Height -> height
+        Depth -> depth
 
 data Character = Character
     { char :: !Char
@@ -33,9 +35,10 @@ data Character = Character
     } deriving (Show)
 
 instance Dimensioned Character where
-    naturalWidth Character { width = w } = w
-    naturalHeight Character { height = h } = h
-    naturalDepth Character { depth = d } = d
+    naturalLength dim Character { .. } = case dim of
+        Width -> width
+        Height -> height
+        Depth -> depth
 
 data FontDefinition = FontDefinition
     { fontInfo :: !TexFont
