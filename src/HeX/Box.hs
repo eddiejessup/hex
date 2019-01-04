@@ -9,6 +9,7 @@ module HeX.Box
   )
 where
 
+import           Safe.Foldable                  ( maximumDef )
 import           Data.Concept
 
 import           DVI.Document                   ( FontDefinition(..)
@@ -20,113 +21,113 @@ import           DVI.Document                   ( FontDefinition(..)
 import qualified HeX.Unit                      as Unit
 
 data DesiredLength
-  = Natural
-  -- TODO: Implement Spread.
-  -- | Spread Int
-  | To Int
-  deriving (Show)
+    = Natural
+    -- TODO: Implement Spread.
+    -- | Spread Int
+    | To Int
+    deriving (Show)
 
-newtype Kern = Kern
-  { kernDimen :: Int
-  } deriving (Show)
+newtype Kern = Kern { kernDimen :: Int }
+    deriving (Show)
 
-newtype SetGlue = SetGlue
-  { glueDimen :: Int
-  }
+newtype SetGlue = SetGlue { glueDimen :: Int }
 
 instance Show SetGlue where
-  show (SetGlue d) = "[" ++ Unit.showSP d ++ "]"
+    show g = "[" ++ Unit.showSP (glueDimen g) ++ "]"
 
 data BoxContents
-  = HBoxContents [HBoxElem]
-  | VBoxContents [VBoxElem]
-  deriving (Show)
+    = HBoxContents [HBoxElem]
+    | VBoxContents [VBoxElem]
+    deriving (Show)
 
 data Box = Box
-  { contents :: BoxContents
-  , desiredLength :: DesiredLength
-  } deriving (Show)
+    { contents :: BoxContents
+    , desiredLength :: DesiredLength
+    } deriving (Show)
 
 instance Dimensioned Box where
-  naturalWidth Box {contents = (HBoxContents cs), desiredLength = Natural} =
-    sum $ fmap naturalWidth cs
-  naturalWidth Box {contents = (HBoxContents _), desiredLength = To to} = to
-  naturalWidth Box {contents = (VBoxContents [])} = 0
-  naturalWidth Box {contents = (VBoxContents cs)} =
-    maximum $ fmap naturalWidth cs
-  naturalHeight Box {contents = (HBoxContents [])} = 0
-  naturalHeight Box {contents = (HBoxContents cs)} =
-    maximum $ naturalHeight <$> cs
-  naturalHeight Box {contents = (VBoxContents cs), desiredLength = Natural} =
-    sum $ fmap naturalHeight cs
-  naturalHeight Box {contents = (VBoxContents _), desiredLength = To to} = to
-  naturalDepth Box {contents = (HBoxContents [])} = 0
-  naturalDepth Box {contents = (HBoxContents cs)} =
-    maximum $ naturalDepth <$> cs
-  -- TODO: Look up and implement specification.
-  naturalDepth Box {contents = (VBoxContents _)} = error "Not implemented: Depth of VBox"
+    naturalWidth b = case b of
+        Box (HBoxContents _) (To to)  -> to
+        Box (HBoxContents cs) Natural -> sum $ naturalWidth <$> cs
+        Box (VBoxContents cs) _       -> maximumDef 0 $ naturalWidth <$> cs
+
+    naturalHeight b = case b of
+        Box (VBoxContents _) (To to)  -> to
+        Box (VBoxContents cs) Natural -> sum $ naturalHeight <$> cs
+        Box (HBoxContents cs) _       -> maximumDef 0 $ naturalHeight <$> cs
+
+    naturalDepth b = case b of
+        -- TODO: Look up and implement specification.
+        Box (VBoxContents _) _  -> error "Not implemented: Depth of VBox"
+        Box (HBoxContents cs) _ -> maximumDef 0 $ naturalDepth <$> cs
 
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 data HBoxElem
-  = HVBoxElem VBoxElem
-  | BoxCharacter Character
-  deriving (Show)
+    = HVBoxElem VBoxElem
+    | BoxCharacter Character
+    deriving (Show)
 
 instance Dimensioned HBoxElem where
-  naturalWidth (HVBoxElem (BoxChild b)) = naturalWidth b
-  naturalWidth (HVBoxElem (BoxRule r)) = naturalWidth r
-  naturalWidth (HVBoxElem (BoxGlue g)) = glueDimen g
-  naturalWidth (HVBoxElem (BoxKern k)) = kernDimen k
-  naturalWidth (HVBoxElem (BoxFontDefinition _)) = 0
-  naturalWidth (HVBoxElem (BoxFontSelection _)) = 0
-  naturalWidth (BoxCharacter c) = naturalWidth c
+    naturalWidth e = case e of
+        BoxCharacter b                  -> naturalWidth b
+        HVBoxElem (BoxChild b)          -> naturalWidth b
+        HVBoxElem (BoxRule b)           -> naturalWidth b
+        HVBoxElem (BoxGlue g)           -> glueDimen g
+        HVBoxElem (BoxKern k)           -> kernDimen k
+        HVBoxElem (BoxFontDefinition _) -> 0
+        HVBoxElem (BoxFontSelection _)  -> 0
 
-  naturalHeight (HVBoxElem (BoxChild b)) = naturalHeight b
-  naturalHeight (HVBoxElem (BoxRule r)) = naturalHeight r
-  naturalHeight (HVBoxElem (BoxGlue _)) = 0
-  naturalHeight (HVBoxElem (BoxKern _)) = 0
-  naturalHeight (HVBoxElem (BoxFontDefinition _)) = 0
-  naturalHeight (HVBoxElem (BoxFontSelection _)) = 0
-  naturalHeight (BoxCharacter c) = naturalHeight c
+    naturalHeight e = case e of
+        BoxCharacter b                  -> naturalHeight b
+        HVBoxElem (BoxChild b)          -> naturalHeight b
+        HVBoxElem (BoxRule b)           -> naturalHeight b
+        HVBoxElem (BoxGlue _)           -> 0
+        HVBoxElem (BoxKern _)           -> 0
+        HVBoxElem (BoxFontDefinition _) -> 0
+        HVBoxElem (BoxFontSelection _)  -> 0
 
-  naturalDepth (HVBoxElem (BoxChild b)) = naturalDepth b
-  naturalDepth (HVBoxElem (BoxRule r)) = naturalDepth r
-  naturalDepth (HVBoxElem (BoxGlue _)) = 0
-  naturalDepth (HVBoxElem (BoxKern _)) = 0
-  naturalDepth (HVBoxElem (BoxFontDefinition _)) = 0
-  naturalDepth (HVBoxElem (BoxFontSelection _)) = 0
-  naturalDepth (BoxCharacter c) = naturalDepth c
+    naturalDepth e = case e of
+        BoxCharacter b                  -> naturalDepth b
+        HVBoxElem (BoxChild b)          -> naturalDepth b
+        HVBoxElem (BoxRule b)           -> naturalDepth b
+        HVBoxElem (BoxGlue _)           -> 0
+        HVBoxElem (BoxKern _)           -> 0
+        HVBoxElem (BoxFontDefinition _) -> 0
+        HVBoxElem (BoxFontSelection _)  -> 0
 
 data VBoxElem
-  = BoxChild Box
-  | BoxRule Rule
-  | BoxGlue SetGlue
-  | BoxKern Kern
-  | BoxFontDefinition FontDefinition
-  | BoxFontSelection FontSelection
-  deriving (Show)
+    = BoxChild Box
+    | BoxRule Rule
+    | BoxGlue SetGlue
+    | BoxKern Kern
+    | BoxFontDefinition FontDefinition
+    | BoxFontSelection FontSelection
+    deriving (Show)
 
 instance Dimensioned VBoxElem where
-  naturalWidth (BoxChild b) = naturalWidth b
-  naturalWidth (BoxRule r) = naturalWidth r
-  naturalWidth (BoxGlue _) = 0
-  naturalWidth (BoxKern _) = 0
-  naturalWidth (BoxFontDefinition _) = 0
-  naturalWidth (BoxFontSelection _) = 0
+    naturalWidth e = case e of
+        BoxChild b          -> naturalWidth b
+        BoxRule r           -> naturalWidth r
+        BoxGlue _           -> 0
+        BoxKern _           -> 0
+        BoxFontDefinition _ -> 0
+        BoxFontSelection _  -> 0
 
-  naturalHeight (BoxChild b) = naturalHeight b
-  naturalHeight (BoxRule r) = naturalHeight r
-  naturalHeight (BoxGlue g) = glueDimen g
-  naturalHeight (BoxKern k) = kernDimen k
-  naturalHeight (BoxFontDefinition _) = 0
-  naturalHeight (BoxFontSelection _) = 0
+    naturalHeight e = case e of
+        BoxChild b          -> naturalHeight b
+        BoxRule r           -> naturalHeight r
+        BoxGlue g           -> glueDimen g
+        BoxKern k           -> kernDimen k
+        BoxFontDefinition _ -> 0
+        BoxFontSelection _  -> 0
 
-  naturalDepth (BoxChild b) = naturalDepth b
-  naturalDepth (BoxRule r) = naturalDepth r
-  naturalDepth (BoxGlue _) = 0
-  naturalDepth (BoxKern _) = 0
-  naturalDepth (BoxFontDefinition _) = 0
-  naturalDepth (BoxFontSelection _) = 0
+    naturalDepth e = case e of
+        BoxChild b          -> naturalDepth b
+        BoxRule r           -> naturalDepth r
+        BoxGlue _           -> 0
+        BoxKern _           -> 0
+        BoxFontDefinition _ -> 0
+        BoxFontSelection _  -> 0
 
 newtype Page = Page [VBoxElem]
-  deriving (Show)
+    deriving (Show)
