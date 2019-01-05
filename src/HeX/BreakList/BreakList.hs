@@ -2,6 +2,8 @@ module HeX.BreakList.BreakList where
 
 import           Data.Maybe                    ( mapMaybe )
 
+import           HeXPrelude
+
 import qualified Data.Adjacent                 as A
 
 import qualified HeX.Box                       as B
@@ -22,9 +24,10 @@ breakPenalty (KernBreak _) = 0
 breakPenalty NoBreak       = 0
 
 newtype Penalty = Penalty Int
+    deriving (Show)
 
-showPenalty :: Penalty -> String
-showPenalty (Penalty p) = "|p" ++ show p ++ "|"
+instance Readable Penalty where
+    describe (Penalty p) = "|p" ++ show p ++ "|"
 
 class BreakableListElem a where
     toGlue :: a -> Maybe Glue

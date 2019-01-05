@@ -1,5 +1,7 @@
 module HeX.Categorise where
 
+import HeXPrelude
+
 import qualified Data.HashMap.Strict           as HMap
 
 data CatCode
@@ -26,10 +28,10 @@ type CharCode = Char
 data CharCat = CharCat
   { char :: CharCode
   , cat :: CatCode
-  }
+  } deriving (Show)
 
-instance Show CharCat where
-  show (CharCat c ct) = show ct ++ " '" ++ [c] ++ "'"
+instance Readable CharCat where
+  describe (CharCat c ct) = show ct ++ " '" ++ [c] ++ "'"
 
 type CharCatMap = HMap.HashMap CharCode CatCode
 

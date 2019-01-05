@@ -12,6 +12,7 @@ where
 
 import           Safe.Foldable                  ( maximumDef )
 
+import           HeXPrelude
 import           HeX.Concept
 import qualified HeX.Unit                      as Unit
 
@@ -32,9 +33,10 @@ newtype Kern = Kern { kernDimen :: Int }
     deriving (Show)
 
 newtype SetGlue = SetGlue { glueDimen :: Int }
+    deriving (Show)
 
-showGlue :: SetGlue -> String
-showGlue SetGlue {..} = "[" ++ Unit.showSP glueDimen ++ "]"
+instance Readable SetGlue where
+    describe SetGlue {..} = "[" ++ Unit.showSP glueDimen ++ "]"
 
 data BoxContents
     = HBoxContents [HBoxElem]

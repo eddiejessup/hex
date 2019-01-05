@@ -2,6 +2,8 @@
 
 module HeX.BreakList.Judge where
 
+import           HeXPrelude
+
 import qualified HeX.Unit                      as UN
 import           HeX.BreakList.Glue
 import           HeX.BreakList.BreakList           ( BreakableListElem(..)
@@ -12,14 +14,17 @@ data Fixable
   = Fixable { ratio :: Rational
             , order :: Int }
   | Unfixable
+  deriving (Show)
 
-instance Show Fixable where
-  show Fixable {ratio = r, order = 0} =
+instance Readable Fixable where
+  describe Fixable {ratio = r, order = 0} =
     "Fixable, finite scale: " ++ UN.showFrac r
-  show Fixable {ratio = r, order = 1} = "Fixable, fil ratio: " ++ UN.showSP r
-  show Fixable {ratio = r, order = n} =
+  describe Fixable {ratio = r, order = 1} =
+    "Fixable, fil ratio: " ++ UN.showSP r
+  describe Fixable {ratio = r, order = n} =
     "Fixable, fil order " ++ show n ++ " ratio: " ++ UN.showSP r
-  show Unfixable = "Unfixable"
+  describe Unfixable =
+    "Unfixable"
 
 data LengthJudgment
   = Full
