@@ -35,9 +35,7 @@ import qualified TFM.Character                 as TFMC
 import           HeX.Concept
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
-import           HeX.BreakList.Line             ( bestRoute
-                                                , setParagraph
-                                                )
+import           HeX.BreakList.Line             ( setParagraph )
 import           HeX.BreakList.Page             ( PageBreakJudgment(..)
                                                 , pageBreakJudgment
                                                 , setPage
@@ -265,9 +263,7 @@ extractParagraphLineBoxes indent stream = do
   desiredW <- gets (hSize . params)
   lineTol <- gets (tolerance . params)
   linePen <- gets (linePenalty . params)
-  let getRoute = bestRoute desiredW lineTol linePen
-      elemLists = setParagraph getRoute hList
-  pure (elemLists, stream')
+  pure (setParagraph desiredW lineTol linePen hList, stream')
 
 data CurrentPage = CurrentPage { items :: [BL.BreakableVListElem]
                                , bestPointAndCost :: Maybe (Int, Int) }
