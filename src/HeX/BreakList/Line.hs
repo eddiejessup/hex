@@ -84,7 +84,7 @@ toOnlyAcceptables (IntParamVal tol) lp br ds = do
 toOnlyPromisings :: [WithStatus a] -> [a]
 toOnlyPromisings ds = [y | (WithSummary y d) <- ds, isPromising d]
   where
-    isPromising (NaturallyBad Full Unfixable) = False
+    isPromising (FixablyBad Overfull _) = False
     isPromising _ = True
 
 inEdgeCons :: Entry -> InEdge -> InEdge

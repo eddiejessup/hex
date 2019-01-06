@@ -372,7 +372,8 @@ addVListElem acc e = case e of
               glue = BL.ListGlue $ if proposedBaselineLength >= skipLimit
                 then BL.Glue proposedBaselineLength blineStretch blineShrink
                 else skip
-            in e : glue : acc
+            in
+              e : glue : acc
 
 addVListElems
   :: MonadState Config m

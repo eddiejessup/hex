@@ -20,11 +20,13 @@ data PageBreakJudgment
 
 pageBreakJudgment :: [BreakableVListElem] -> BreakItem -> (LenParamVal VSize) -> PageBreakJudgment
 pageBreakJudgment cs breakItem (LenParamVal h) =
-  inner penalty splitInsertPenalties _badness
-  where
+  let
     _badness = badness $ listGlueStatus h cs
     penalty = breakPenalty breakItem
     splitInsertPenalties = 0
+  in
+    inner penalty splitInsertPenalties _badness
+  where
     inner _ _ InfiniteBadness = BreakPageAtBest
     inner p q (FiniteBadness b)
       | p >= UN.tenK = DoNotBreak
