@@ -187,19 +187,19 @@ processHCommand oldStream newStream acc com =
       -- (Note that we pass oldStream, not newStream.)
       let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
       modStream $ HP.insertLexToken oldStream parToken
-    HP.AddCharacter {char = c} -> do
+    HP.AddCharacter _ c -> do
       hCharBox <- BL.HListHBaseElem . B.ElemCharacter <$> characterBox c
       modAccum $ hCharBox : acc
     HP.HAllModesCommand aCom -> case aCom of
       -- \indent: An empty box of width \parindent is appended to the current
       -- list, and the space factor is set to 1000.
       -- TODO: Space factor.
-      HP.StartParagraph indent ->
-        if indent
-          then do
-            indentBox <- gets parIndentBox
-            modAccum (indentBox : acc)
-          else continueUnchanged
+      HP.StartParagraph HP.DoNotIndent ->
+        continueUnchanged
+      HP.StartParagraph HP.Indent ->
+        do
+        indentBox <- gets parIndentBox
+        modAccum (indentBox : acc)
       -- \par: end the current paragraph.
       HP.EndParagraph -> pure (acc, newStream, False)
       HP.AddSpace -> do
@@ -233,12 +233,12 @@ data BuildError
 
 extractParagraph
   :: (MonadState Config m, MonadIO m)
-  => Bool
+  => HP.IndentFlag
   -> HP.ExpandedStream
   -> ExceptT BuildError m ([BL.BreakableHListElem], HP.ExpandedStream)
-extractParagraph indent stream = do
+extractParagraph indentFlag stream = do
   indentBox <- gets parIndentBox
-  extractParagraphInner [indentBox | indent] stream
+  extractParagraphInner [indentBox | indentFlag == HP.Indent] stream
   where
     -- We build a paragraph list in reverse order.
     extractParagraphInner
@@ -255,11 +255,11 @@ extractParagraph indent stream = do
 
 extractParagraphLineBoxes
   :: (MonadState Config m, MonadIO m)
-  => Bool
+  => HP.IndentFlag
   -> HP.ExpandedStream
   -> ExceptT BuildError m ([[B.HBoxElem]], HP.ExpandedStream)
-extractParagraphLineBoxes indent stream = do
-  (hList, stream') <- extractParagraph indent stream
+extractParagraphLineBoxes indentFlag stream = do
+  (hList, stream') <- extractParagraph indentFlag stream
   desiredW <- gets (hSize . params)
   lineTol <- gets (tolerance . params)
   linePen <- gets (linePenalty . params)
@@ -393,12 +393,12 @@ processVCommand oldStream newStream pages curPage acc com =
     modAccum newAcc = continueSamePage newAcc newStream
     continueUnchanged = continueSamePage acc newStream
 
-    addParagraphToPage indent = do
+    addParagraphToPage indentFlag = do
       -- If the command shifts to horizontal mode, run '\indent', and re-read the
       -- stream as if the commands just seen hadn't been read.
       -- (Note that we pass "oldStream", not "newStream".)
       -- Paraboxes are returned in reading order.
-      (lineBoxes, mStream) <- extractParagraphLineBoxes indent oldStream
+      (lineBoxes, mStream) <- extractParagraphLineBoxes indentFlag oldStream
       desiredW <- gets (unLenParam . hSize . params)
       let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
       newAcc <- addVListElems acc $ BL.VListBaseElem . B.ElemBox . toBox <$> lineBoxes
@@ -409,9 +409,9 @@ processVCommand oldStream newStream pages curPage acc com =
       lastPages <- runPageBuilder curPage (reverse acc)
       let pagesFinal = pages ++ lastPages
       pure (pagesFinal, curPage, acc, newStream, False)
-    HP.EnterHMode -> addParagraphToPage True
+    HP.EnterHMode -> addParagraphToPage HP.Indent
     HP.VAllModesCommand aCom -> case aCom of
-      HP.StartParagraph indent -> addParagraphToPage indent
+      HP.StartParagraph indentFlag -> addParagraphToPage indentFlag
       -- \par does nothing in vertical mode.
       HP.EndParagraph -> continueUnchanged
       -- <space token> has no effect in vertical modes.

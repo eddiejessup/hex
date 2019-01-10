@@ -245,7 +245,7 @@ instance Ord (ParseErrorBundle ExpandedStream) where
   compare _ _ = EQ
 
 instance P.ShowErrorComponent (ParseErrorBundle ExpandedStream) where
-  showErrorComponent (P.ParseErrorBundle errs posState) =
+  showErrorComponent (P.ParseErrorBundle errs _) =
     Fold.concat $ NE.intersperse "\n\n" $ P.showErrorComponent <$> errs
 
 instance Ord (ParseError ExpandedStream) where

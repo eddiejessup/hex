@@ -69,7 +69,7 @@ data AllModesCommand
   -- \| AddFetchedBox { register :: Int, unwrap, pop :: Bool } -- \box, \copy, \un{v,h}{box,copy}
   | AddRule { width, height, depth :: Maybe Length }
   -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
-  | StartParagraph { indent :: Bool }
+  | StartParagraph T.IndentFlag
   | EndParagraph
   | ModeIndependentCommand ModeIndependentCommand
   deriving (Show)
@@ -87,8 +87,7 @@ data HModeCommand
   -- \| EnterMathMode
   -- \| AddAdjustment VModeMaterial
   -- \| AddControlSpace
-  | AddCharacter { method :: CharSource
-                 , char :: CharCode }
+  | AddCharacter CharSource CharCode
   -- \| AddAccentedCharacter { accentCode :: Int, targetCode :: Maybe Int, assignments :: [Assignment]}
   -- \| AddItalicCorrection
   -- \| AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
@@ -207,8 +206,9 @@ startParagraph :: SimpExpandParser AllModesCommand
 startParagraph = satisfyThen parToCom
   where
     parToCom (T.StartParagraphTok _indent) =
-      Just StartParagraph {indent = _indent}
-    parToCom _ = Nothing
+      Just $ StartParagraph _indent
+    parToCom _ =
+      Nothing
 
 endParagraph :: SimpExpandParser AllModesCommand
 endParagraph = const EndParagraph <$> skipSatisfiedEquals T.EndParagraphTok
@@ -231,13 +231,14 @@ leaveHMode = skipSatisfied endsHMode $> LeaveHMode
 addCharacter :: SimpExpandParser HModeCommand
 addCharacter = do
   c <- satisfyThen charToCode
-  pure AddCharacter {method = ExplicitChar, char = c}
+  pure (AddCharacter ExplicitChar c)
   where
-    charToCode (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter)))
-      = Just c
-    charToCode (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)))
-      = Just c
-    charToCode _ = Nothing
+    charToCode (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) =
+      Just c
+    charToCode (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
+      Just c
+    charToCode _ =
+      Nothing
 
 -- VMode.
 

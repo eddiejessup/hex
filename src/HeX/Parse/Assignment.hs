@@ -21,12 +21,6 @@ import           HeX.Parse.VarAssignment
 
 -- AST.
 
-data MacroPrefix
-  = Long
-  | Outer
-  | Global
-  deriving (Eq)
-
 data MacroAssignment
   = MacroAssignment { name :: Lex.ControlSequenceLike
                     , contents :: T.MacroContents
@@ -69,9 +63,9 @@ parseAssignment = parseDefineMacro <|> parseNonMacroAssignment
 
 parseNonMacroAssignment :: AssignmentParser
 parseNonMacroAssignment = do
-  _global <- parseGlobal
+  global <- parseGlobal
   _body <- parseNonMacroAssignmentBody
-  pure $ Assignment _body _global
+  pure $ Assignment _body global
   where
     -- TODO: Parse globals.
     parseGlobal = pure True
@@ -101,21 +95,19 @@ parseDefineMacro = do
     { body = DefineMacro $ MacroAssignment
         { name = cs
         , contents = T.MacroContents preParamToks paramDelims replaceToks
-        , long = Long `elem` prefixes
-        , outer = Outer `elem` prefixes
+        , long = T.LongTok `elem` prefixes
+        , outer = T.OuterTok `elem` prefixes
         }
-    , global = defGlobal || Global `elem` prefixes
+    , global = defGlobal || T.GlobalTok `elem` prefixes
     }
   where
-    -- TODO: Can avoid this manual mapping by putting it in the token.
-    tokToPrefix T.GlobalTok = Just Global
-    tokToPrefix T.OuterTok = Just Outer
-    tokToPrefix T.LongTok = Just Long
+    tokToPrefix (T.AssignPrefixTok t) = Just t
     tokToPrefix _ = Nothing
 
-    tokToDef T.DefineMacroTok {global = _global, expand = _expand} =
-      Just (_global, _expand)
-    tokToDef _ = Nothing
+    tokToDef (T.DefineMacroTok global expand) =
+      Just (global == T.Global, expand == T.ExpandDef)
+    tokToDef _ =
+      Nothing
 
 parseTokenForFont :: SimpExpandParser AssignmentBody
 parseTokenForFont = satisfyThen tokToCom

@@ -32,6 +32,7 @@ import           HeX.Parse                      ( defaultCSMap
                                                 , ExpandedStream
                                                 , newExpandStream
                                                 , extractHModeCommand
+                                                , IndentFlag(..)
                                                 )
 
 -- Cat
@@ -138,7 +139,7 @@ codesToSth xs f = do
 
 codesToParaList :: [CharCode] -> IO [BreakableHListElem]
 codesToParaList xs =
-  reverse <$> codesToSth xs (extractParagraph True)
+  reverse <$> codesToSth xs (extractParagraph Indent)
 
 runPara :: [CharCode] -> IO ()
 runPara xs =
@@ -148,7 +149,7 @@ runPara xs =
 
 codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
 codesToParaBoxes xs =
-  reverse <$> codesToSth xs (extractParagraphLineBoxes True)
+  reverse <$> codesToSth xs (extractParagraphLineBoxes Indent)
 
 runSetPara :: [CharCode] -> IO ()
 runSetPara xs =
