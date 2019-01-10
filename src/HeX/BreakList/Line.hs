@@ -104,16 +104,16 @@ finaliseInEdge A.Adj { val = HVListElem (ListGlue _) } e = e
 finaliseInEdge x (InEdge cs n discard) = InEdge (x:cs) n discard
 
 data BreakingState = BreakingState
-    { accEdges :: !([InEdge])
+    { accEdges        :: !([InEdge])
     , nodeToBestRoute :: !([Route])
-    , chunk :: !([ElemAdj])
+    , chunk           :: !([ElemAdj])
     }
 
 initialBreakingState :: BreakingState
 initialBreakingState = BreakingState
-    { accEdges = [InEdge [] Root (IsDiscarding False)]
+    { accEdges        = [InEdge [] Root (IsDiscarding False)]
     , nodeToBestRoute = []
-    , chunk = []
+    , chunk           = []
     }
 
 -- Notation:
