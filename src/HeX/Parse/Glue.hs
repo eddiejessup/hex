@@ -11,43 +11,40 @@ import           HeX.Parse.Number
 import           HeX.Parse.Stream
 
 -- AST.
-data Glue =
-  ExplicitGlue Length (Maybe Flex) (Maybe Flex)
-  -- \| InternalGlue Bool InternalGlue
-  deriving (Show)
+
+data Glue
+    = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
+    -- \| InternalGlue Bool InternalGlue
+    deriving (Show)
 
 data Flex
-  = FiniteFlex Length
-  | FilFlex FilLength
-  deriving (Show)
+    = FiniteFlex Length
+    | FilFlex FilLength
+    deriving (Show)
 
 data FilLength = FilLength Bool Factor Int
-  deriving (Show)
+    deriving (Show)
 
 -- Parse.
 parseGlue :: SimpExpandParser Glue
-parseGlue =
-  P.choice
-    [ parseExplicitGlue
- -- , parseInternalGlue
-    ]
+parseGlue = P.choice [ parseExplicitGlue
+                     -- , parseInternalGlue
+                     ]
   where
     parseExplicitGlue =
       ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> parseFlex "minus"
 
 parseFlex :: String -> SimpExpandParser (Maybe Flex)
-parseFlex s =
-  P.choice
-    [Just <$> P.try parsePresentFlex, const Nothing <$> skipOptionalSpaces]
+parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
+                       , const Nothing <$> skipOptionalSpaces
+                       ]
   where
-    parsePresentFlex =
-      skipKeyword s *>
-      P.choice
-        [FilFlex <$> P.try parseFilLength, FiniteFlex <$> P.try parseLength]
+    parsePresentFlex = skipKeyword s *> P.choice [ FilFlex <$> P.try parseFilLength
+                                                 , FiniteFlex <$> P.try parseLength
+                                                 ]
 
 parseFilLength :: SimpExpandParser FilLength
-parseFilLength = do
-  let parseSomeLs =
-        P.some (skipSatisfied $ matchNonActiveCharacterUncased 'l')
-      parseOrder = skipKeyword "fi" *> (length <$> parseSomeLs)
-  FilLength <$> parseSigns <*> parseFactor <*> parseOrder
+parseFilLength =
+    let parseSomeLs = P.some $ skipSatisfied $ matchNonActiveCharacterUncased 'l'
+        parseOrder = skipKeyword "fi" *> (length <$> parseSomeLs)
+    in FilLength <$> parseSigns <*> parseFactor <*> parseOrder

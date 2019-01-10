@@ -112,8 +112,7 @@ parseDefineMacro =
     tokToDef _ = Nothing
 
 parseTokenForFont :: SimpExpandParser AssignmentBody
-parseTokenForFont =
-    satisfyThen tokToCom
+parseTokenForFont = satisfyThen tokToCom
   where
     tokToCom (T.TokenForFont n) = Just $ SelectFont n
     tokToCom _ = Nothing

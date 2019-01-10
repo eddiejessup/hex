@@ -24,11 +24,11 @@ ccHasCategory a Lex.CharCat{cat = b} = a == b
 
 lexTokHasCategory :: Lex.LexCatCode -> Lex.Token -> Bool
 lexTokHasCategory a (Lex.CharCatToken cc) = ccHasCategory a cc
-lexTokHasCategory _ _ = False
+lexTokHasCategory _ _                     = False
 
 primTokHasCategory :: Lex.LexCatCode -> PrimitiveToken -> Bool
 primTokHasCategory a (T.UnexpandedTok lt) = lexTokHasCategory a lt
-primTokHasCategory _ _ = False
+primTokHasCategory _ _                    = False
 
 -- <space token> = character token of category [space], or a control sequence
 -- or active character \let equal to such.
@@ -39,20 +39,21 @@ isSpace = primTokHasCategory Lex.Space
 
 isTokenForFont :: PrimitiveToken -> Bool
 isTokenForFont (T.TokenForFont _) = True
-isTokenForFont _ = False
+isTokenForFont _                  = False
 
 isFillerItem :: PrimitiveToken -> Bool
 isFillerItem T.RelaxTok = True
-isFillerItem t       = isSpace t
+isFillerItem t          = isSpace t
 
 isEquals :: PrimitiveToken -> Bool
-isEquals (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat {cat = Lex.Other, char = '='})) = True
+isEquals (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat{cat = Lex.Other, char = '='})) = True
 isEquals _ = False
 
 matchNonActiveCharacterUncased :: Char -> PrimitiveToken -> Bool
-matchNonActiveCharacterUncased a (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat {char = c, cat=cat})) =
-  (cat /= Lex.Active) && (c `elem` [toUpper a, toLower a])
-matchNonActiveCharacterUncased _ _ = False
+matchNonActiveCharacterUncased a (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat{char = c, cat=cat})) =
+    (cat /= Lex.Active) && (c `elem` [toUpper a, toLower a])
+matchNonActiveCharacterUncased _ _ =
+    False
 
 tokToChar :: PrimitiveToken -> Maybe CharCode
 tokToChar (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat {char = c})) = Just c
@@ -62,17 +63,17 @@ tokToChar _ = Nothing
 
 tokToLex :: PrimitiveToken -> Maybe Lex.Token
 tokToLex (T.UnexpandedTok t) = Just t
-tokToLex _ = Nothing
+tokToLex _                   = Nothing
 
 handleLex
-  :: (P.Stream s, P.Token s ~ PrimitiveToken)
-  => (Lex.Token -> Maybe a)
-  -> SimpParser s a
-handleLex f = satisfyThen (\x -> tokToLex x >>= f)
+    :: (P.Stream s, P.Token s ~ PrimitiveToken)
+    => (Lex.Token -> Maybe a)
+    -> SimpParser s a
+handleLex f = satisfyThen $ \x -> tokToLex x >>= f
 
 anySingleLex
-  :: (P.Stream s, P.Token s ~ PrimitiveToken)
-  => SimpParser s Lex.Token
+    :: (P.Stream s, P.Token s ~ PrimitiveToken)
+    => SimpParser s Lex.Token
 anySingleLex = satisfyThen tokToLex
 
 skipSatisfiedEqualsLex :: (P.Stream s, P.Token s ~ PrimitiveToken) => Lex.Token -> NullSimpParser s
@@ -101,8 +102,8 @@ skipOptionalEquals = do
 
 skipKeyword :: (P.Stream s, P.Token s ~ PrimitiveToken) => String -> NullSimpParser s
 skipKeyword s =
-  skipOptionalSpaces *>
-  mapM_ (skipSatisfied . matchNonActiveCharacterUncased) s
+    skipOptionalSpaces *>
+    mapM_ (skipSatisfied . matchNonActiveCharacterUncased) s
 
 parseOptionalKeyword :: (P.Stream s, P.Token s ~ PrimitiveToken) => String -> SimpParser s Bool
 parseOptionalKeyword s = isJust <$> P.optional (P.try $ skipKeyword s)

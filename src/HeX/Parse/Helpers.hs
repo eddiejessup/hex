@@ -22,22 +22,26 @@ freshSourcePos :: P.SourcePos
 freshSourcePos = P.initialPos "elmo_source"
 
 freshPosState :: s -> P.PosState s
-freshPosState stream = P.PosState { pstateInput = stream
-                                  , pstateOffset = 0
-                                  , pstateSourcePos = freshSourcePos
-                                  , pstateTabWidth = P.mkPos 4
-                                  , pstateLinePrefix = ">!> " }
+freshPosState stream = P.PosState
+    { pstateInput = stream
+    , pstateOffset = 0
+    , pstateSourcePos = freshSourcePos
+    , pstateTabWidth = P.mkPos 4
+    , pstateLinePrefix = ">!> "
+    }
 
 freshState :: s -> P.State s
-freshState stream = P.State { stateInput = stream
-                            , stateOffset = 0
-                            , statePosState = freshPosState stream }
+freshState stream = P.State
+    { stateInput = stream
+    , stateOffset = 0
+    , statePosState = freshPosState stream
+    }
 
 easyRunParser :: SimpParser s a -> s -> (P.State s, Either (ParseErrorBundle s) a)
 easyRunParser p s = P.runParser' p (freshState s)
 
 boolToMaybe :: Bool -> a -> Maybe a
-boolToMaybe True x = Just x
+boolToMaybe True x  = Just x
 boolToMaybe False _ = Nothing
 
 predToMaybe :: (a -> Bool) -> a -> Maybe a
@@ -57,7 +61,7 @@ manySatisfiedThen f = P.many $ satisfyThen f
 skipSatisfied :: P.Stream s => MatchToken s -> NullSimpParser s
 skipSatisfied f = satisfyThen testTok
   where
-    testTok x = if f x then Just () else Nothing
+      testTok x = if f x then Just () else Nothing
 
 skipSatisfiedEquals :: P.Stream s => P.Token s -> NullSimpParser s
 skipSatisfiedEquals t = skipSatisfied (== t)
@@ -72,34 +76,30 @@ skipManySatisfied :: P.Stream s => MatchToken s -> NullSimpParser s
 skipManySatisfied = P.skipMany . skipSatisfied
 
 skipSatisfiedChunk :: P.Stream s => [P.Token s] -> NullSimpParser s
-skipSatisfiedChunk [] = pure ()
-skipSatisfiedChunk (x:xs) = do
-  skipSatisfiedEquals x
-  skipSatisfiedChunk xs
+skipSatisfiedChunk []     = pure ()
+skipSatisfiedChunk (x:xs) = skipSatisfiedEquals x >> skipSatisfiedChunk xs
 
 copyState :: P.State s -> s' -> P.State s'
-copyState state tgtStream
-  =
-    let
-      P.State { stateInput = _
-              , stateOffset = offset
-              , statePosState = posState } = state
-    in
-      P.State { stateInput = tgtStream
-              , stateOffset = offset
-              , statePosState = copyPosState posState }
+copyState state tgtStream =
+    let P.State { stateInput = _
+                , stateOffset = offset
+                , statePosState = posState
+                } = state
+    in  P.State { stateInput = tgtStream
+                , stateOffset = offset
+                , statePosState = copyPosState posState
+                }
   where
-    copyPosState posState
-      =
-        let
-          P.PosState { pstateInput = _
-                     , pstateOffset = offset
-                     , pstateSourcePos = sourcePos
-                     , pstateTabWidth = tabWidth
-                     , pstateLinePrefix = linePrefix } = posState
-        in
-          P.PosState { pstateInput = tgtStream
-                     , pstateOffset = offset
-                     , pstateSourcePos = sourcePos
-                     , pstateTabWidth = tabWidth
-                     , pstateLinePrefix = linePrefix }
+    copyPosState posState =
+        let P.PosState { pstateInput = _
+                       , pstateOffset = offset
+                       , pstateSourcePos = sourcePos
+                       , pstateTabWidth = tabWidth
+                       , pstateLinePrefix = linePrefix
+                       } = posState
+        in  P.PosState { pstateInput = tgtStream
+                       , pstateOffset = offset
+                       , pstateSourcePos = sourcePos
+                       , pstateTabWidth = tabWidth
+                       , pstateLinePrefix = linePrefix
+                       }

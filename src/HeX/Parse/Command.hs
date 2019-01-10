@@ -249,7 +249,7 @@ addCharacter :: SimpExpandParser HModeCommand
 addCharacter =
     do
     c <- satisfyThen charToCode
-    pure (AddCharacter ExplicitChar c)
+    pure $ AddCharacter ExplicitChar c
   where
     charToCode (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) =
       Just c
@@ -270,8 +270,7 @@ end :: SimpExpandParser VModeCommand
 end = skipSatisfiedEquals T.EndTok $> End
 
 enterHMode :: SimpExpandParser VModeCommand
-enterHMode =
-    skipSatisfied startsHMode $> EnterHMode
+enterHMode = skipSatisfied startsHMode $> EnterHMode
   where
     startsHMode (T.ModedCommand Horizontal _) = True
     startsHMode x
