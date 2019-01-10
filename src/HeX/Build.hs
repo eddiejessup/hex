@@ -1,5 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module HeX.Build where
 
@@ -205,22 +206,18 @@ processHCommand oldStream newStream acc com =
       HP.AddSpace -> do
         hGlue <- (BL.HVListElem . BL.ListGlue) <$> spaceGlue
         modAccum $ hGlue : acc
-      HP.AddRule {width = w, height = h, depth = d} -> do
+      HP.AddRule HP.Rule{..} -> do
         _mag <- gets (mag . params)
-        let evalW =
-              case w of
-                Nothing ->
-                  Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> evaluateLength _mag ln
-            evalH =
-              case h of
-                Nothing -> Unit.toScaledPointApprox (10 :: Int) Unit.Point
-                Just ln -> evaluateLength _mag ln
-            evalD =
-              case d of
-                Nothing -> 0
-                Just ln -> evaluateLength _mag ln
-            rule = B.Rule {width = evalW, height = evalH, depth = evalD}
+        let evalW = case width of
+              Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+              Just ln -> evaluateLength _mag ln
+            evalH = case height of
+              Nothing -> Unit.toScaledPointApprox (10 :: Int) Unit.Point
+              Just ln -> evaluateLength _mag ln
+            evalD = case depth of
+              Nothing -> 0
+              Just ln -> evaluateLength _mag ln
+            rule = B.Rule { width = evalW, height = evalH, depth = evalD }
         modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
       HP.ModeIndependentCommand mcom -> do
         (extraAcc, mStream) <- handleModeIndep newStream mcom
@@ -416,19 +413,19 @@ processVCommand oldStream newStream pages curPage acc com =
       HP.EndParagraph -> continueUnchanged
       -- <space token> has no effect in vertical modes.
       HP.AddSpace -> continueUnchanged
-      HP.AddRule {width = w, height = h, depth = d} -> do
+      HP.AddRule HP.Rule{..} -> do
         _mag <- gets (mag . params)
-        evalW <- case w of
+        evalW <- case width of
           Nothing -> gets (unLenParam . hSize . params)
           Just ln -> pure $ evaluateLength _mag ln
-        let evalH = case h of
+        let evalH = case height of
               -- TODO.
               Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
               Just ln -> evaluateLength _mag ln
-            evalD = case d of
+            evalD = case depth of
               Nothing -> 0
               Just ln -> evaluateLength _mag ln
-        let rule = B.Rule {width = evalW, height = evalH, depth = evalD}
+            rule = B.Rule { width = evalW, height = evalH, depth = evalD }
         modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
       HP.ModeIndependentCommand mcom -> do
         (extraAcc, mStream) <- withExceptT ConfigError $ handleModeIndep newStream mcom
