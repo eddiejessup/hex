@@ -30,11 +30,11 @@ evaluateUnit (HP.InternalUnit HP.Em) = 10
 evaluateUnit (HP.InternalUnit HP.Ex) = 10
 
 evaluateNormalLength :: (IntParamVal Mag) -> HP.NormalLength -> Int
-evaluateNormalLength m (HP.LengthSemiConstant f u@(HP.PhysicalUnit isTrue _)) =
-  round $ evalF isTrue * evaluateUnit u
+evaluateNormalLength m (HP.LengthSemiConstant f u@(HP.PhysicalUnit uFrame _)) =
+  round $ evalF uFrame * evaluateUnit u
   where
-    evalF False = evaluateFactor f
-    evalF True = evalF False * 1000 / fromIntegral m
+    evalF HP.TrueFrame = evaluateFactor f
+    evalF HP.MagnifiedFrame = evalF HP.TrueFrame * 1000 / fromIntegral m
 evaluateNormalLength _ (HP.LengthSemiConstant f u) =
   round $ evaluateFactor f * evaluateUnit u
 

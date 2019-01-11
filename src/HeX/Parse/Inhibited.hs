@@ -15,7 +15,6 @@ import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
 import           Data.Functor                   ( ($>) )
 import qualified Data.Map.Strict               as Map
-import           Data.Foldable                  ( foldl' )
 import           Data.Maybe                     ( fromMaybe )
 
 import qualified HeX.Lex                       as Lex
