@@ -52,27 +52,28 @@ pointInScaledPoint :: Integer
 pointInScaledPoint = 2 ^ (16 :: Int)
 
 data PhysicalUnit
-  = Point -- 'pt'
-  | Pica -- 'pc'
-  | Inch -- 'in'
-  | BigPoint -- 'bp'
-  | Centimetre -- 'cm'
-  | Millimetre -- 'mm'
-  | Didot -- 'dd'
-  | Cicero -- 'cc'
-  | ScaledPoint -- 'sp'
-  deriving (Show)
+    = Point -- 'pt'
+    | Pica -- 'pc'
+    | Inch -- 'in'
+    | BigPoint -- 'bp'
+    | Centimetre -- 'cm'
+    | Millimetre -- 'mm'
+    | Didot -- 'dd'
+    | Cicero -- 'cc'
+    | ScaledPoint -- 'sp'
+    deriving (Show)
 
 inScaledPoint :: PhysicalUnit -> Rational
-inScaledPoint Point = fromIntegral pointInScaledPoint
-inScaledPoint Pica = fromIntegral $ picaInPoint * pointInScaledPoint
-inScaledPoint Inch = inchInPoint * inScaledPoint Point
-inScaledPoint BigPoint = inchInPoint * inScaledPoint Point / fromIntegral inchInBigPoint
-inScaledPoint Centimetre = 10 * inScaledPoint Millimetre
-inScaledPoint Millimetre = inScaledPoint Inch / inchInMM
-inScaledPoint Didot = didotInPoint * inScaledPoint Point
-inScaledPoint Cicero = 12 * inScaledPoint Didot
-inScaledPoint ScaledPoint = 1
+inScaledPoint u = case u of
+    Point       -> fromIntegral pointInScaledPoint
+    Pica        -> fromIntegral $ picaInPoint * pointInScaledPoint
+    Inch        -> inchInPoint * inScaledPoint Point
+    BigPoint    -> inchInPoint * inScaledPoint Point / fromIntegral inchInBigPoint
+    Centimetre  -> 10 * inScaledPoint Millimetre
+    Millimetre  -> inScaledPoint Inch / inchInMM
+    Didot       -> didotInPoint * inScaledPoint Point
+    Cicero      -> 12 * inScaledPoint Didot
+    ScaledPoint -> 1
 
 scaledPointIn :: PhysicalUnit -> Rational
 scaledPointIn = recip . inScaledPoint

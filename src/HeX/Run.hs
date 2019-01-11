@@ -39,34 +39,37 @@ import           HeX.Parse                      ( defaultCSMap
 
 mChop' :: ([a] -> IO (Maybe [a])) -> [a] -> IO ()
 mChop' f xs =
-  f xs >>= \case
-    Nothing -> pure ()
-    Just xs'' -> mChop' f xs''
+    f xs >>= \case
+        Nothing -> pure ()
+        Just xs'' -> mChop' f xs''
 
 runCat :: [CharCode] -> IO ()
 runCat = mChop' (extractAndPrint usableCharToCat)
   where
-    extractAndPrint f s =
-      case extractCharCat f s of
-        Just (cc, s') -> do
-          print cc
-          pure $ Just s'
-        Nothing -> pure Nothing
+    extractAndPrint f s = case extractCharCat f s of
+        Just (cc, s') ->
+            do
+            print cc
+            pure $ Just s'
+        Nothing ->
+            pure Nothing
 
 -- Lex.
 
 chopLex' :: LexState -> [CharCode] -> IO ()
 chopLex' ls xs =
-  extractAndPrintLex >>= \case
-    Nothing -> pure ()
-    Just (ls', xs') -> chopLex' ls' xs'
+    extractAndPrintLex >>= \case
+        Nothing         -> pure ()
+        Just (ls', xs') -> chopLex' ls' xs'
   where
     extractAndPrintLex =
-      case extractToken (extractCharCat usableCharToCat) ls xs of
-        Just (tok, ls', s') -> do
-          print tok
-          pure $ Just (ls', s')
-        Nothing -> pure Nothing
+        case extractToken (extractCharCat usableCharToCat) ls xs of
+            Just (tok, ls', s') ->
+                do
+                print tok
+                pure $ Just (ls', s')
+            Nothing ->
+                pure Nothing
 
 runLex :: [CharCode] -> IO ()
 runLex = chopLex' LineBegin
@@ -75,16 +78,18 @@ runLex = chopLex' LineBegin
 
 chopResolved' :: LexState -> [CharCode] -> IO ()
 chopResolved' ls xs =
-  extractAndPrintResolved >>= \case
-    Nothing -> pure ()
-    Just (ls', xs') -> chopResolved' ls' xs'
+    extractAndPrintResolved >>= \case
+        Nothing -> pure ()
+        Just (ls', xs') -> chopResolved' ls' xs'
   where
-    extractAndPrintResolved =
-      case extractToken (extractCharCat usableCharToCat) ls xs of
-        Just (tok, lexState', s') -> do
-          print $ resolveToken defaultCSMap Expanding tok
-          pure $ Just (lexState', s')
-        Nothing -> pure Nothing
+      extractAndPrintResolved =
+            case extractToken (extractCharCat usableCharToCat) ls xs of
+                Just (tok, lexState', s') ->
+                    do
+                    print $ resolveToken defaultCSMap Expanding tok
+                    pure $ Just (lexState', s')
+                Nothing ->
+                    pure Nothing
 
 runResolved :: [CharCode] -> IO ()
 runResolved = chopResolved' LineBegin
@@ -93,11 +98,13 @@ runResolved = chopResolved' LineBegin
 
 chopExpand' :: ExpandedStream -> IO ()
 chopExpand' estream =
-  case P.take1_ estream of
-    Just (tok, estream') -> do
-      print tok
-      chopExpand' estream'
-    Nothing -> pure ()
+    case P.take1_ estream of
+        Just (tok, estream') ->
+            do
+            print tok
+            chopExpand' estream'
+        Nothing ->
+            pure ()
 
 runExpand :: [CharCode] -> IO ()
 runExpand xs = chopExpand' $ newExpandStream xs defaultCSMap
@@ -106,12 +113,15 @@ runExpand xs = chopExpand' $ newExpandStream xs defaultCSMap
 
 chopCommand' :: ExpandedStream -> IO ()
 chopCommand' estream =
-  case extractHModeCommand estream of
-    Right (P.State {P.stateInput = estream'}, com) -> do
-      print com
-      chopCommand' estream'
-    Left (P.ParseErrorBundle ((P.TrivialError _ (Just P.EndOfInput) _) :| []) _) -> pure ()
-    Left errs -> ioError $ userError $ show errs
+    case extractHModeCommand estream of
+        Right (P.State {P.stateInput = estream'}, com) ->
+            do
+            print com
+            chopCommand' estream'
+        Left (P.ParseErrorBundle ((P.TrivialError _ (Just P.EndOfInput) _) :| []) _) ->
+            pure ()
+        Left errs ->
+            ioError $ userError $ show errs
 
 runCommand :: [CharCode] -> IO ()
 runCommand xs = chopCommand' $ newExpandStream xs defaultCSMap
@@ -120,40 +130,41 @@ runCommand xs = chopCommand' $ newExpandStream xs defaultCSMap
 
 strEitherToIO :: Either String v -> IO v
 strEitherToIO (Left err) = ioError $ userError $ err
-strEitherToIO (Right v) = pure v
+strEitherToIO (Right v)  = pure v
 
 buildEitherToIO :: Either BuildError b -> IO b
 buildEitherToIO (Left (ParseError errBundle)) = ioError $ userError $ P.showErrorComponent errBundle
-buildEitherToIO (Left (ConfigError s)) = ioError $ userError $ "Bad semantics: " ++ s
-buildEitherToIO (Right v) = pure v
+buildEitherToIO (Left (ConfigError s))        = ioError $ userError $ "Bad semantics: " ++ s
+buildEitherToIO (Right v)                     = pure v
 
 codesToSth
-  :: [CharCode]
-  -> (ExpandedStream -> ExceptT BuildError (StateT Config IO) (a, ExpandedStream))
-  -> IO a
-codesToSth xs f = do
-  let stream = newExpandStream xs defaultCSMap
-  newConfig >>= evalStateT (runExceptT (fst <$> f stream)) >>= buildEitherToIO
+    :: [CharCode]
+    -> (ExpandedStream -> ExceptT BuildError (StateT Config IO) (a, ExpandedStream))
+    -> IO a
+codesToSth xs f =
+    do
+    let stream = newExpandStream xs defaultCSMap
+    newConfig >>= evalStateT (runExceptT (fst <$> f stream)) >>= buildEitherToIO
 
 -- Paragraph list.
 
 codesToParaList :: [CharCode] -> IO [BreakableHListElem]
 codesToParaList xs =
-  reverse <$> codesToSth xs (extractParagraph Indent)
+    reverse <$> codesToSth xs (extractParagraph Indent)
 
 runPara :: [CharCode] -> IO ()
 runPara xs =
-  codesToParaList xs >>= putStrLn . intercalate "\n" . fmap show
+    codesToParaList xs >>= putStrLn . intercalate "\n" . fmap show
 
 -- Paragraph boxes.
 
 codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
 codesToParaBoxes xs =
-  reverse <$> codesToSth xs (extractParagraphLineBoxes Indent)
+    reverse <$> codesToSth xs (extractParagraphLineBoxes Indent)
 
 runSetPara :: [CharCode] -> IO ()
 runSetPara xs =
-  codesToParaBoxes xs >>= putStrLn . intercalate "\n\n" . fmap showLine
+    codesToParaBoxes xs >>= putStrLn . intercalate "\n\n" . fmap showLine
   where
     showLine = intercalate "\n" . fmap show
 
