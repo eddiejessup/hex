@@ -23,7 +23,8 @@ designScaleSP :: TexFont -> Rational -> Int
 designScaleSP f x = round $ designSizeSP f * x
 
 readTFM :: FilePath -> IO TexFont
-readTFM path = do
+readTFM path =
+    do
     contents <- readFile path
     pure $ runGet newTFM contents
 

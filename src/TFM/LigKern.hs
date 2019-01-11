@@ -70,58 +70,69 @@ import           TFM.Common
 kernOp :: Int
 kernOp = 128
 
-data LigKernOp
-  = LigatureOp { ligatureChar :: Int
-               , charsToPassOver :: Int
-               , deleteCurrentChar :: Bool
-               , deleteNextChar :: Bool }
-  | KernOp { size :: Rational }
-  deriving (Show)
+data LigatureOp = LigatureOp
+    { ligatureChar
+    , charsToPassOver :: Int
+    , deleteCurrentChar
+    , deleteNextChar :: Bool
+    } deriving (Show)
+
+data KernOp = KernOp Rational
+    deriving (Show)
 
 data LigKernInstr = LigKernInstr
-  { stop :: Bool
-  , nextChar :: Int
-  , operation :: LigKernOp
-  } deriving (Show)
+    { stop :: Bool
+    , nextChar :: Int
+    , operation :: Either LigatureOp KernOp
+    } deriving (Show)
 
 readInstrSet :: [[Int]] -> Int -> (Int, Int, Int, Int)
 readInstrSet sets i =
-  let [w, x, y, z] = sets !! i
-  in (w, x, y, z)
+    let [w, x, y, z] = sets !! i
+    in  (w, x, y, z)
 
-getLigKernOperation :: (Int -> LigKernOp) -> Int -> Int -> LigKernOp
-getLigKernOperation readKern op remain =
-  if op >= kernOp
-    then readKern $ 256 * (op - kernOp) + remain
-    else LigatureOp
-         { ligatureChar = remain
-         , charsToPassOver = op `shift` 2
-         , deleteCurrentChar = (op .&. 0x02) == 0
-         , deleteNextChar = (op .&. 0x01) == 0
-         }
+getLigKernOperation :: (Int -> KernOp) -> Int -> Int -> Either LigatureOp KernOp
+getLigKernOperation readKern op remain
+    | op >= kernOp = Right $ readKern $ 256 * (op - kernOp) + remain
+    | otherwise = Left LigatureOp
+        { ligatureChar      = remain
+        , charsToPassOver   = op `shift` 2
+        , deleteCurrentChar = (op .&. 0x02) == 0
+        , deleteNextChar    = (op .&. 0x01) == 0
+        }
 
-analyzeLigKernInstr ::
-     (Int -> LigKernOp) -> Int -> Int -> Int -> Int -> LigKernInstr
+analyzeLigKernInstr
+    :: (Int -> KernOp)
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> LigKernInstr
 analyzeLigKernInstr readKern skip next op remain =
-  let _operation = getLigKernOperation readKern op remain
-  in LigKernInstr {stop = skip >= 128, nextChar = next, operation = _operation}
+    let _operation = getLigKernOperation readKern op remain
+    in  LigKernInstr
+            { stop = skip >= 128
+            , nextChar = next
+            , operation = _operation
+            }
 
-getKern :: ByteString -> (Int -> LigKernOp)
-getKern kStr iWords = KernOp {size = runGetAt getFixWord kStr iWords}
+getKern :: ByteString -> (Int -> KernOp)
+getKern kStr iWords = KernOp $ runGetAt getFixWord kStr iWords
 
 readLigKerns :: ByteString -> ByteString -> [LigKernInstr]
 readLigKerns ligKernStr kernStr
-  | firstSkipByte == 255 =
-    error "Sorry, right boundary characters are not supported"
-  | firstSkipByte > 128 = error "Sorry, large LigKern arrays are not supported"
-  | lastSkipByte == 255 =
-    error "Sorry, left boundary characters are not supported"
-  | otherwise =
-    let kernGetter = getKern kernStr
-    in fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
+    | firstSkipByte == 255 =
+        error "Sorry, right boundary characters are not supported"
+    | firstSkipByte > 128 =
+        error "Sorry, large LigKern arrays are not supported"
+    | lastSkipByte == 255 =
+        error "Sorry, left boundary characters are not supported"
+    | otherwise =
+        let kernGetter = getKern kernStr
+        in  fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
   where
     ligKernTblLengthWords = length ligKernStr `div` 4
     readSet = readInstrSet $ (chunksOf 4 . fmap fromIntegral) (unpack ligKernStr)
-    sets = fmap readSet [0 .. ligKernTblLengthWords - 1]
+    sets = readSet <$> [0 .. ligKernTblLengthWords - 1]
     (firstSkipByte, _, _, _) = head sets
     (lastSkipByte, _, _, _) = last sets

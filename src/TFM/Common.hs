@@ -21,14 +21,10 @@ getFixWord :: Get Rational
 getFixWord = (* fixWordScale) . fromIntegral <$> getWord32be
 
 -- Read integers encoded as big-endian byte sequences.
-getWord32beInt :: Get Int
-getWord32beInt = fromIntegral <$> getWord32be
-
-getWord16beInt :: Get Int
-getWord16beInt = fromIntegral <$> getWord16be
-
-getWord8Int :: Get Int
+getWord8Int, getWord16beInt, getWord32beInt :: Get Int
 getWord8Int = fromIntegral <$> getWord8
+getWord16beInt = fromIntegral <$> getWord16be
+getWord32beInt = fromIntegral <$> getWord32be
 
 -- Read a string that's encoded as an integer, followed by that number of
 -- characters.
@@ -36,12 +32,13 @@ getBCPL :: Get ByteString
 getBCPL = getWord8Int >>= getByteString
 
 get4Word8Ints :: Get (Int, Int, Int, Int)
-get4Word8Ints = do
-  b1 <- getWord8Int
-  b2 <- getWord8Int
-  b3 <- getWord8Int
-  b4 <- getWord8Int
-  pure (b1, b2, b3, b4)
+get4Word8Ints =
+    do
+    b1 <- getWord8Int
+    b2 <- getWord8Int
+    b3 <- getWord8Int
+    b4 <- getWord8Int
+    pure (b1, b2, b3, b4)
 
 runGetStrict :: Get a -> ByteString -> a
 runGetStrict a s = runGet a $ BSL.fromStrict s

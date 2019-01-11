@@ -34,94 +34,97 @@ import           Data.HashMap.Lazy
 import           TFM.Common
 
 data Character = Character
-  { code :: Char
-  , width :: Rational
-  , height :: Rational
-  , depth :: Rational
-  , italicCorrection :: Rational
-  , special :: Maybe CharacterSpecial
-  } deriving (Show)
+    { code                 :: Char
+    , width, height, depth :: Rational
+    , italicCorrection     :: Rational
+    , special              :: Maybe CharacterSpecial
+    } deriving (Show)
+
+data ExtensibleRecipe = ExtensibleRecipe
+    { top, middle, bottom :: Int
+    , repeater            :: Int
+    } deriving (Show)
 
 data CharacterSpecial
-  = ExtensibleRecipe { top :: Int
-                     , middle :: Int
-                     , bottom :: Int
-                     , repeater :: Int }
-  | LigKernIndex Int
-  | NextLargerChar Int
-  deriving (Show)
+    = ExtensibleRecipeSpecial ExtensibleRecipe
+    | LigKernIndex Int
+    | NextLargerChar Int
+    deriving (Show)
 
 data Tag
-  = Plain
-  | LigKern
-  | Chain
-  | Extensible
-  deriving (Enum, Ord, Eq, Show)
+    = Plain
+    | LigKern
+    | Chain
+    | Extensible
+    deriving (Enum, Ord, Eq, Show)
 
-readCharInfo ::
-     Int
-  -> ByteString
-  -> ByteString
-  -> ByteString
-  -> ByteString
-  -> ByteString
-  -> ByteString
-  -> Int
-  -> Character
+readCharInfo
+    :: Int
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> Int
+    -> Character
 readCharInfo _smallestCharCode charInfoStr extStr wStr hStr dStr iStr _code =
-  let charIdx = _code - _smallestCharCode
-      (widthIdx, heightDepthByte, italicTagByte, remainder) =
-        runGetAt get4Word8Ints charInfoStr charIdx
-      heightIdx = heightDepthByte `shiftR` 4
-      depthIdx = heightDepthByte .&. 0xF
-      italicIdx = italicTagByte `shiftR` 6
-      tag = italicTagByte .&. 0x3
-      -- Get a dimension from some dimension table, at some index
-      getDim str i
-        | i == 0 = 0
-        | otherwise = runGetAt getFixWord str i
-      _width = getDim wStr widthIdx
-      _height = getDim hStr heightIdx
-      _depth = getDim dStr depthIdx
-      _italicCorrection = getDim iStr italicIdx
-      -- If the character is special, get its particular extra attributes.
-      _special =
-        case toEnum tag of
-          Plain -> Nothing
-          LigKern -> Just $ LigKernIndex remainder
-          Chain -> Just $ NextLargerChar remainder
-          Extensible ->
-            let (_top, _middle, _bottom, _repeater) =
-                  runGetAt get4Word8Ints extStr remainder
-            in Just
-                 ExtensibleRecipe
-                 { top = _top
-                 , middle = _middle
-                 , bottom = _bottom
-                 , repeater = _repeater
-                 }
-  in Character
-     { code = toEnum _code
-     , width = _width
-     , height = _height
-     , depth = _depth
-     , italicCorrection = _italicCorrection
-     , special = _special
-     }
+    let charIdx = _code - _smallestCharCode
+        (widthIdx, heightDepthByte, italicTagByte, remainder) =
+            runGetAt get4Word8Ints charInfoStr charIdx
 
-readCharInfos ::
-     Int
-  -> Int
-  -> ByteString
-  -> ByteString
-  -> ByteString
-  -> ByteString
-  -> ByteString
-  -> ByteString
-  -> HashMap Char Character
+        heightIdx = heightDepthByte `shiftR` 4
+        depthIdx = heightDepthByte .&. 0xF
+        italicIdx = italicTagByte `shiftR` 6
+
+        tag = italicTagByte .&. 0x3
+
+        -- Get a dimension from some dimension table, at some index
+        getDim str i
+          | i == 0 = 0
+          | otherwise = runGetAt getFixWord str i
+
+        _width  = getDim wStr widthIdx
+        _height = getDim hStr heightIdx
+        _depth  = getDim dStr depthIdx
+
+        _italicCorrection = getDim iStr italicIdx
+        -- If the character is special, get its particular extra attributes.
+        _special =
+            case toEnum tag of
+                Plain      -> Nothing
+                LigKern    -> Just $ LigKernIndex remainder
+                Chain      -> Just $ NextLargerChar remainder
+                Extensible ->
+                    let (_top, _middle, _bottom, _repeater) =
+                          runGetAt get4Word8Ints extStr remainder
+                    in Just $ ExtensibleRecipeSpecial ExtensibleRecipe
+                        { top = _top
+                        , middle = _middle
+                        , bottom = _bottom
+                        , repeater = _repeater
+                        }
+    in  Character
+            { code             = toEnum _code
+            , width            = _width
+            , height           = _height
+            , depth            = _depth
+            , italicCorrection = _italicCorrection
+            , special          = _special
+            }
+
+readCharInfos
+    :: Int
+    -> Int
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> HashMap Char Character
 readCharInfos _smallestCharCode _largestCharCode cInfoStr extStr wStr hStr dStr iStr =
-  let charList =
-        fmap
-          (readCharInfo _smallestCharCode cInfoStr extStr wStr hStr dStr iStr)
-          [_smallestCharCode .. _largestCharCode]
-  in fromList $ (\c@Character {code = i} -> (i, c)) <$> charList
+    let charList = fmap
+            (readCharInfo _smallestCharCode cInfoStr extStr wStr hStr dStr iStr)
+            [_smallestCharCode .. _largestCharCode]
+    in  fromList $ (\c@Character {code = i} -> (i, c)) <$> charList
