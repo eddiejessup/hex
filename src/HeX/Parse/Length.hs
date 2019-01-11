@@ -16,7 +16,7 @@ data PhysicalUnitFrame
     | TrueFrame
     deriving (Show)
 
-data Length = Length Bool UnsignedLength
+data Length = Length Sign UnsignedLength
     deriving (Show)
 
 data UnsignedLength

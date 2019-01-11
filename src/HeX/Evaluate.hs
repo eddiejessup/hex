@@ -15,52 +15,59 @@ evaluateUnsignedNumber :: HP.UnsignedNumber -> Integer
 evaluateUnsignedNumber (HP.NormalIntegerAsUNumber n) = evaluateNormalInteger n
 
 evaluateNumber :: HP.Number -> Integer
-evaluateNumber (HP.Number True u) = evaluateUnsignedNumber u
-evaluateNumber (HP.Number False u) = -(evaluateUnsignedNumber u)
+evaluateNumber (HP.Number (HP.Sign isPos) u)
+    | isPos = size
+    | otherwise = -(size)
+  where
+    size = evaluateUnsignedNumber u
 
 evaluateFactor :: HP.Factor -> Rational
 evaluateFactor (HP.NormalIntegerFactor n) =
-  fromIntegral $ evaluateNormalInteger n
+    fromIntegral $ evaluateNormalInteger n
 evaluateFactor (HP.RationalConstant r) = r
 
 evaluateUnit :: HP.Unit -> Rational
-evaluateUnit (HP.PhysicalUnit _ u) = Unit.inScaledPoint u
+evaluateUnit (HP.PhysicalUnit _ u)   = Unit.inScaledPoint u
 -- TODO:
 evaluateUnit (HP.InternalUnit HP.Em) = 10
 evaluateUnit (HP.InternalUnit HP.Ex) = 10
 
 evaluateNormalLength :: (IntParamVal Mag) -> HP.NormalLength -> Int
 evaluateNormalLength m (HP.LengthSemiConstant f u@(HP.PhysicalUnit uFrame _)) =
-  round $ evalF uFrame * evaluateUnit u
+    round $ evalF uFrame * evaluateUnit u
   where
     evalF HP.TrueFrame = evaluateFactor f
     evalF HP.MagnifiedFrame = evalF HP.TrueFrame * 1000 / fromIntegral m
 evaluateNormalLength _ (HP.LengthSemiConstant f u) =
-  round $ evaluateFactor f * evaluateUnit u
+    round $ evaluateFactor f * evaluateUnit u
 
 evaluateULength :: (IntParamVal Mag) -> HP.UnsignedLength -> Int
 evaluateULength m (HP.NormalLengthAsULength nLn) = evaluateNormalLength m nLn
 
 evaluateLength :: (IntParamVal Mag) -> HP.Length -> Int
-evaluateLength m (HP.Length True uLn) = evaluateULength m uLn
-evaluateLength m (HP.Length False uLn) = -(evaluateULength m uLn)
+evaluateLength m (HP.Length (HP.Sign isPos) uLn) 
+    | isPos = size
+    | otherwise = -(size)
+  where
+    size = evaluateULength m uLn
 
 evaluateFlex :: (IntParamVal Mag) -> Maybe HP.Flex -> BL.GlueFlex
 evaluateFlex m (Just (HP.FiniteFlex ln)) =
-  BL.GlueFlex {factor = fromIntegral $ evaluateLength m ln, order = 0}
-evaluateFlex _ (Just (HP.FilFlex (HP.FilLength True f ord))) =
-  BL.GlueFlex {factor = evaluateFactor f, order = ord}
-evaluateFlex _ (Just (HP.FilFlex (HP.FilLength False f ord))) =
-  BL.GlueFlex {factor = -(evaluateFactor f), order = ord}
-evaluateFlex _ Nothing = BL.noFlex
+    BL.GlueFlex{factor = fromIntegral $ evaluateLength m ln, order = 0}
+evaluateFlex _ (Just (HP.FilFlex (HP.FilLength (HP.Sign isPos) f ord)))
+    | isPos     = BL.GlueFlex{factor = size,    order = ord}
+    | otherwise = BL.GlueFlex{factor = -(size), order = ord}
+  where
+    size = evaluateFactor f
+evaluateFlex _ Nothing =
+    BL.noFlex
 
 evaluateGlue :: (IntParamVal Mag) -> HP.Glue -> BL.Glue
-evaluateGlue m (HP.ExplicitGlue dim str shr) =
-  BL.Glue
-  { dimen = evaluateLength m dim
-  , stretch = evaluateFlex m str
-  , shrink = evaluateFlex m shr
-  }
+evaluateGlue m (HP.ExplicitGlue dim str shr) = BL.Glue
+    { dimen   = evaluateLength m dim
+    , stretch = evaluateFlex   m str
+    , shrink  = evaluateFlex   m shr
+    }
 
 evaluateKern :: (IntParamVal Mag) -> HP.Length -> B.Kern
 evaluateKern m = B.Kern . evaluateLength m

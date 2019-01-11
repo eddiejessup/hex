@@ -15,7 +15,7 @@ import           HeX.Parse.Stream
 
 -- AST.
 
-data Number = Number Bool UnsignedNumber
+data Number = Number Sign UnsignedNumber
     deriving (Show)
 
 data UnsignedNumber
@@ -53,8 +53,8 @@ instance Semigroup Sign where
 instance Monoid Sign where
     mempty = Sign True
 
-parseSigns :: SimpExpandParser Bool
-parseSigns = getSign . mconcat <$> parseOptionalSigns
+parseSigns :: SimpExpandParser Sign
+parseSigns = mconcat <$> parseOptionalSigns
   where
     parseOptionalSigns =
         skipOptionalSpaces *> P.sepEndBy (satisfyThen signToPos) skipOptionalSpaces

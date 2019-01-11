@@ -22,7 +22,7 @@ data Flex
     | FilFlex FilLength
     deriving (Show)
 
-data FilLength = FilLength Bool Factor Int
+data FilLength = FilLength Sign Factor Int
     deriving (Show)
 
 -- Parse.
