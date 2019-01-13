@@ -8,6 +8,7 @@ import           Data.Char                      ( ord )
 import           Safe                           ( lastDef )
 
 import           HeX.Concept
+import           HeX.Type
 
 import           TFM
 
@@ -16,35 +17,35 @@ import           DVI.Encode                     ( encLength )
 import           DVI.Instruction
 
 data Rule = Rule
-    { width :: !Int
-    , height :: !Int
-    , depth :: !Int
+    { width
+    , height
+    , depth  :: !LenVal
     } deriving (Show)
 
 instance Dimensioned Rule where
-    naturalLength dim Rule { .. } = case dim of
-        Width -> width
+    naturalLength dim Rule{..} = case dim of
+        Width  -> width
         Height -> height
-        Depth -> depth
+        Depth  -> depth
 
 data Character = Character
-    { char :: !Char
-    , width :: !Int
-    , height :: !Int
-    , depth :: !Int
+    { char  :: !Char
+    , width
+    , height
+    , depth :: !LenVal
     } deriving (Show)
 
 instance Dimensioned Character where
-    naturalLength dim Character { .. } = case dim of
-        Width -> width
+    naturalLength dim Character{..} = case dim of
+        Width  -> width
         Height -> height
-        Depth -> depth
+        Depth  -> depth
 
 data FontDefinition = FontDefinition
-    { fontInfo :: !TexFont
-    , fontPath :: !String
-    , fontName :: !String
-    , fontNr :: !Int
+    { fontInfo         :: !TexFont
+    , fontPath         :: !String
+    , fontName         :: !String
+    , fontNr           :: !Int
     , scaleFactorRatio :: !Rational
     } deriving (Show)
 
@@ -65,11 +66,11 @@ data Instruction
     deriving (Show)
 
 data ParseState = ParseState
-    { instrs :: ![EncodableInstruction]
-    , curFontNr :: !(Maybe Int)
+    { instrs            :: ![EncodableInstruction]
+    , curFontNr         :: !(Maybe Int)
     , beginPagePointers :: ![Int]
-    , stackDepth :: !Int
-    , maxStackDepth :: !Int
+    , stackDepth        :: !Int
+    , maxStackDepth     :: !Int
     }
 
 initialParseState :: Int -> ParseState

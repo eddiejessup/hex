@@ -13,6 +13,7 @@ where
 import           Safe.Foldable                  ( maximumDef )
 
 import           HeXPrelude
+import           HeX.Type
 import           HeX.Concept
 import qualified HeX.Unit                      as Unit
 
@@ -26,13 +27,13 @@ data DesiredLength
     = Natural
     -- TODO: Implement Spread.
     -- | Spread Int
-    | To Int
+    | To LenVal
     deriving (Show)
 
-newtype Kern = Kern { kernDimen :: Int }
+newtype Kern = Kern { kernDimen :: LenVal }
     deriving (Show)
 
-newtype SetGlue = SetGlue { glueDimen :: Int }
+newtype SetGlue = SetGlue { glueDimen :: LenVal }
     deriving (Show)
 
 instance Readable SetGlue where

@@ -11,12 +11,14 @@ import           HeX.Parse.Common
 import           HeX.Parse.Stream
 import           HeX.Parse.Number
 import           HeX.Parse.Length
+import           HeX.Parse.Glue
 
 -- AST.
 
 data VariableAssignment
-    = IntegerVariableAssignment IntegerVariable Number
-    | LengthVariableAssignment LengthVariable Length
+    = IntegerVariableAssignment (QuantVariable T.IntegerParameter) Number
+    | LengthVariableAssignment (QuantVariable T.LengthParameter) Length
+    | GlueVariableAssignment (QuantVariable T.GlueParameter) Glue
     deriving (Show)
 
 data QuantVariable a
@@ -25,15 +27,11 @@ data QuantVariable a
     | RegisterVar Number
     deriving (Show)
 
-data IntegerVariable = IntegerVariable (QuantVariable T.IntegerParameter)
-    deriving (Show)
-data LengthVariable = LengthVariable (QuantVariable T.LengthParameter)
-    deriving (Show)
-
 parseVariableAssignment :: SimpExpandParser VariableAssignment
 parseVariableAssignment =
     P.choice [ parseQuantityAssignment parseIntegerVariable parseNumber IntegerVariableAssignment
              , parseQuantityAssignment parseLengthVariable parseLength LengthVariableAssignment
+             , parseQuantityAssignment parseGlueVariable parseGlue GlueVariableAssignment
              ]
   where
     parseQuantityAssignment varParser valParser f =
@@ -50,9 +48,9 @@ parseQuantityVariable getParam getTok regHead =
              , RegisterVar <$> (skipSatisfiedEquals regHead >> parseNumber)
              ]
 
-parseIntegerVariable :: SimpExpandParser IntegerVariable
+parseIntegerVariable :: SimpExpandParser (QuantVariable T.IntegerParameter)
 parseIntegerVariable =
-    IntegerVariable <$> parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegInt)
+    parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegInt)
   where
     getParam (T.IntParamVarTok p) = Just p
     getParam _ = Nothing
@@ -60,12 +58,22 @@ parseIntegerVariable =
     getTok (T.TokenVariableTok T.DefInt s) = Just s
     getTok _ = Nothing
 
-parseLengthVariable :: SimpExpandParser LengthVariable
+parseLengthVariable :: SimpExpandParser (QuantVariable T.LengthParameter)
 parseLengthVariable =
-    LengthVariable <$> parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegLen)
+    parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegLen)
   where
     getParam (T.LenParamVarTok p) = Just p
     getParam _ = Nothing
 
     getTok (T.TokenVariableTok T.DefLen s) = Just s
+    getTok _ = Nothing
+
+parseGlueVariable :: SimpExpandParser (QuantVariable T.GlueParameter)
+parseGlueVariable =
+    parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegGlue)
+  where
+    getParam (T.GlueParamVarTok p) = Just p
+    getParam _ = Nothing
+
+    getTok (T.TokenVariableTok T.DefGlue s) = Just s
     getTok _ = Nothing

@@ -81,7 +81,7 @@ scaledPointIn = recip . inScaledPoint
 toScaledPoint :: Real n => n -> PhysicalUnit -> Rational
 toScaledPoint n u = realToFrac n * inScaledPoint u
 
-toScaledPointApprox :: Real n => n -> PhysicalUnit -> Int
+toScaledPointApprox :: (Real n, Integral i) => n -> PhysicalUnit -> i
 toScaledPointApprox n u = round $ toScaledPoint n u
 
 fromScaledPoint :: PhysicalUnit -> Rational

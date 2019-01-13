@@ -2,12 +2,10 @@
 
 module HeX.Config.Parameters where
 
+import           HeX.Type
 import           HeX.BreakList                  ( Glue(..), noFlex )
 import qualified HeX.Unit                      as Unit
 import           HeX.Parse.Token
-
-type IntVal = Int
-type LenVal = Int
 
 newtype IntParamVal a = IntParamVal {unIntParam :: IntVal}
     deriving (Eq, Enum, Ord, Show, Num, Real, Integral)
@@ -389,7 +387,7 @@ newParamConfig              = ParamConfig
     , deadCycles            = IntParamVal 0
     , insertPenalties       = IntParamVal 0
 
-    , prevDepth             = LenParamVal $ -Unit.oneKPt
+    , prevDepth             = LenParamVal $ fromIntegral $ -Unit.oneKPt
     , pageGoal              = LenParamVal 0
     , pageTotal             = LenParamVal 0
     , pageStretch           = LenParamVal 0

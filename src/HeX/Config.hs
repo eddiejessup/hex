@@ -27,7 +27,9 @@ import           System.Directory
 
 import           TFM                            ( TexFont )
 
-import qualified Data.Path                       as Path
+import qualified Data.Path                     as Path
+
+import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.Parse.Token

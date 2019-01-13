@@ -85,8 +85,8 @@ parseNormalInteger =
     parseConstant =
         do
         (digits, base) <- P.choice [ (, 10) <$> P.some parseDecimalIntegerDigit
-                                   -- , (, 16) <$> parseHexadecimalIntegerDigits
-                                   -- , (, 8) <$> parseOctalIntegerDigits
+                                   , (, 16) <$> parseHexadecimalIntegerDigits
+                                   , (, 8) <$> parseOctalIntegerDigits
                                    ]
         skipOneOptionalSpace
         pure $ digitsToInteger base digits

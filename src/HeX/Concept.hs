@@ -1,5 +1,7 @@
 module HeX.Concept where
 
+import HeX.Type
+
 data HDirection
     = Leftward
     | Rightward
@@ -32,13 +34,13 @@ data TypoDim
      deriving (Show)
 
 class Dimensioned a where
-    naturalLength :: TypoDim -> a -> Int
+    naturalLength :: TypoDim -> a -> LenVal
 
-naturalWidth, naturalHeight, naturalDepth :: Dimensioned a => a -> Int
+naturalWidth, naturalHeight, naturalDepth :: Dimensioned a => a -> LenVal
 naturalWidth  = naturalLength Width
 naturalHeight = naturalLength Height
 naturalDepth  = naturalLength Depth
 
-axisNaturalSpan :: Dimensioned a => Axis -> a -> Int
+axisNaturalSpan :: Dimensioned a => Axis -> a -> LenVal
 axisNaturalSpan Vertical   a = naturalHeight a + naturalDepth a
 axisNaturalSpan Horizontal a = naturalWidth a

@@ -159,18 +159,31 @@ handleModeIndep newStream com =
             case _body of
                 HP.DefineMacro m ->
                     modStream $ defineMacro newStream m
-                HP.SetVariable (HP.IntegerVariableAssignment (HP.IntegerVariable v) n) ->
+                HP.SetVariable (HP.IntegerVariableAssignment v n) ->
                     do
                     let en = (fromIntegral $ evaluateNumber n)
                     case v of
-                      (HP.ParamVar p) -> setConfIntParam p en
+                        (HP.ParamVar p)    -> setConfIntParam p en
+                        (HP.TokenVar _)    -> error "int short-def tokens not implemented"
+                        (HP.RegisterVar _) -> error "int registers not implemented"
                     continueUnchanged
-                HP.SetVariable (HP.LengthVariableAssignment (HP.LengthVariable v) d) ->
+                HP.SetVariable (HP.LengthVariableAssignment v d) ->
                     do
                     _mag <- gets (mag . params)
                     let ed = (fromIntegral $ evaluateLength _mag d)
                     case v of
-                      (HP.ParamVar p) -> setConfLenParam p ed
+                        (HP.ParamVar p)    -> setConfLenParam p ed
+                        (HP.TokenVar _)    -> error "length short-def tokens not implemented"
+                        (HP.RegisterVar _) -> error "length registers not implemented"
+                    continueUnchanged
+                HP.SetVariable (HP.GlueVariableAssignment v g) ->
+                    do
+                    _mag <- gets (mag . params)
+                    let eg = evaluateGlue _mag g
+                    case v of
+                        (HP.ParamVar p)    -> setConfGlueParam p eg
+                        (HP.TokenVar _)    -> error "length short-def tokens not implemented"
+                        (HP.RegisterVar _) -> error "length registers not implemented"
                     continueUnchanged
                 HP.SelectFont fNr ->
                     do
