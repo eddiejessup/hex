@@ -23,7 +23,7 @@ data CatCode
     | Active       -- 13
     | Comment      -- 14
     | Invalid      -- 15
-    deriving (Show, Eq, Enum)
+    deriving (Show, Eq, Enum, Bounded)
 
 type CharCode = Char
 

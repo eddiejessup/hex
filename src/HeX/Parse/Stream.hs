@@ -81,7 +81,7 @@ parseBalancedText = parseInhibited . unsafeParseBalancedText
 parseMacroArgs :: MacroContents -> SimpExpandParser (Map.Map Digit MacroArgument)
 parseMacroArgs = parseInhibited . unsafeParseMacroArgs
 
-parseCharLike :: SimpExpandParser Integer
+parseCharLike :: SimpExpandParser Int
 parseCharLike = parseInhibited unsafeParseCharLike
 
 parseCSName :: SimpExpandParser Lex.ControlSequenceLike
@@ -146,7 +146,6 @@ expandChangeCase direction (BalancedText caseToks) =
 
     switch Upward   = toUpper
     switch Downward = toLower
-
 
 runSyntaxCommand
   :: a
@@ -246,13 +245,18 @@ instance P.ShowErrorComponent (ParseError ExpandedStream) where
         "Error at " ++ show offset ++ ".\n"
         ++ "Found unexpected tokens: " ++ show (NE.toList unexpecteds) ++ ".\n"
         ++ "Expected one of: " ++ show (Set.toList expecteds)
-
     showErrorComponent (P.TrivialError offset Nothing expecteds) =
         "Error at " ++ show offset ++ ".\n"
         ++ "Found no unexpected tokens.\n"
         ++ "Expected one of: " ++ show (Set.toList expecteds)
-
     showErrorComponent (P.TrivialError offset (Just P.EndOfInput) expecteds) =
         "Error at " ++ show offset ++ ".\n"
         ++ "Found end of input.\n"
         ++ "Expected one of: " ++ show (Set.toList expecteds)
+    showErrorComponent (P.TrivialError offset (Just (P.Label lab)) expecteds) =
+        "Error at " ++ show offset ++ ".\n"
+        ++ "Found label: " ++ show lab ++ ".\n"
+        ++ "Expected one of: " ++ show (Set.toList expecteds)
+    showErrorComponent (P.FancyError offset sth) =
+        "Error at " ++ show offset ++ ".\n"
+        ++ "Found fancy error: " ++ show sth ++ ".\n"

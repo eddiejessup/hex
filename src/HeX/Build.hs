@@ -23,7 +23,8 @@ import           Control.Monad.Except           ( ExceptT
 import qualified Data.HashMap.Strict           as HMap
 import           Data.Either.Combinators        ( mapLeft )
 import           Path
-import           Safe                           ( headMay )
+import           Safe                           ( headMay
+                                                , toEnumMay )
 import qualified Text.Megaparsec               as PS
 
 import           Data.Adjacent                  ( Adj(..) )
@@ -122,7 +123,7 @@ spaceGlue =
     pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
 defineMacro :: HP.ExpandedStream -> HP.MacroAssignment -> HP.ExpandedStream
-defineMacro es@(HP.ExpandedStream { csMap = csMap }) (HP.MacroAssignment name macro False False) =
+defineMacro es@HP.ExpandedStream{csMap = csMap} (HP.MacroAssignment name macro False False) =
     es{HP.csMap = csMap'}
   where
     newMacro = HP.SyntaxCommandHead $ HP.MacroTok macro
@@ -157,8 +158,6 @@ handleModeIndep newStream com =
             modAccum [BL.ListGlue (evaluateGlue _mag g)]
         HP.Assign HP.Assignment{global = _, body = _body} ->
             case _body of
-                HP.DefineMacro m ->
-                    modStream $ defineMacro newStream m
                 HP.SetVariable (HP.IntegerVariableAssignment v n) ->
                     do
                     let en = (fromIntegral $ evaluateNumber n)
@@ -185,15 +184,28 @@ handleModeIndep newStream com =
                         (HP.TokenVar _)    -> error "length short-def tokens not implemented"
                         (HP.RegisterVar _) -> error "length registers not implemented"
                     continueUnchanged
+                HP.AssignCode HP.CodeAssignment{..} ->
+                    let eIdx = evaluateNumber codeIndex
+                        eVal = evaluateNumber codeValue
+                    in  case codeType of
+                            HP.CategoryCode ->
+                                do
+                                idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
+                                valCat <- liftMaybe ("Invalid category code value: " ++ show eVal) (toEnumMay eVal)
+                                modStream newStream{HP.ccMap=HMap.insert idxChar valCat $ HP.ccMap newStream}
+                            _ ->
+                                error $ "Code type not implemented: " ++ show codeType
+
                 HP.SelectFont fNr ->
                     do
                     fontSel <- BL.VListBaseElem . B.ElemFontSelection <$> selectFont fNr
                     modAccum [fontSel]
+                HP.DefineMacro m ->
+                    modStream $ defineMacro newStream m
                 HP.DefineFont cs fPath ->
                     do
                     fontDef <- BL.VListBaseElem . B.ElemFontDefinition <$> defineFont cs fPath
                     modAccum [fontDef]
-
 processHCommand
     :: (MonadState Config m, MonadIO m)
     => HP.ExpandedStream

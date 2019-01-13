@@ -67,6 +67,13 @@ defaultCSMap = HMap.fromList
     , (_cs "edef"        , _pt $ DefineMacroTok Local ExpandDef)
     , (_cs "gdef"        , _pt $ DefineMacroTok Global InhibitDef)
     , (_cs "xdef"        , _pt $ DefineMacroTok Global ExpandDef)
+      -- Code types.
+    , (_cs "catcode"     , _pt $ CodeTypeTok CategoryCode)
+    , (_cs "mathcode"    , _pt $ CodeTypeTok MathCode)
+    , (_cs "lccode"      , _pt $ CodeTypeTok $ ChangeCaseCode Downward)
+    , (_cs "uccode"      , _pt $ CodeTypeTok $ ChangeCaseCode Upward)
+    , (_cs "sfcode"      , _pt $ CodeTypeTok SpaceFactorCode)
+    , (_cs "delcode"     , _pt $ CodeTypeTok DelimiterCode)
       -- Integer parameters.
     , (_cs "pretolerance"         , _pt $ IntParamVarTok PreTolerance)
     , (_cs "tolerance"            , _pt $ IntParamVarTok Tolerance)

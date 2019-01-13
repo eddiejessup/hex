@@ -298,8 +298,8 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
 
 -- Case 10, character constant like "`c".
 
-unsafeParseCharLike :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s Integer
-unsafeParseCharLike = fromIntegral . ord <$> handleLex tokToCharLike
+unsafeParseCharLike :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s Int
+unsafeParseCharLike = ord <$> handleLex tokToCharLike
   where
     tokToCharLike (Lex.CharCatToken Lex.CharCat{char = c}) = Just c
     tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence [c])) = Just c

@@ -25,7 +25,7 @@ data UnsignedNumber
 
 -- Think: 'un-coerced integer'.
 data NormalInteger
-    = IntegerConstant Integer
+    = IntegerConstant Int
     -- | InternalInteger InternalInteger
     deriving (Show)-- = InternalLengthAsInt InternalLength
     -- \| InternalGlueAsInt InternalGlue
@@ -89,7 +89,7 @@ parseNormalInteger =
                                    , (, 8) <$> parseOctalIntegerDigits
                                    ]
         skipOneOptionalSpace
-        pure $ digitsToInteger base digits
+        pure $ fromIntegral $ digitsToInteger base digits
 
     parseCharacter =
         do

@@ -72,6 +72,14 @@ data SyntaxCommandArg
     = EndCSNameTok
     deriving (Show, Eq)
 
+data CodeType
+    = CategoryCode
+    | MathCode
+    | ChangeCaseCode VDirection
+    | SpaceFactorCode
+    | DelimiterCode
+    deriving (Show, Eq)
+
 data DefTokenType
     = DefInt
     | DefLen
@@ -231,12 +239,7 @@ data PrimitiveToken
     -- \| Advance -- \advance
     -- \| Multiply -- \multiply
     -- \| Divide -- \divide
-    -- > Setting code table values.
-    -- \| SetCodeCategory -- \catcode
-    -- \| SetCodeMathCategory -- \mathcode
-    -- \| SetCodeChangeCase VDirection -- \uccode, \lccode
-    -- \| SetCodeSpaceFactor -- \sfcode
-    -- \| SetCodeDelimiter -- \delcode
+    | CodeTypeTok CodeType
     -- > Aliasing tokens.
     -- \| Let -- \let
     -- \| FutureLet -- \futurelet

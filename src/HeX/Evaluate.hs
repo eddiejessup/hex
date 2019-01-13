@@ -8,13 +8,13 @@ import qualified HeX.Unit                      as Unit
 import qualified HeX.BreakList                 as BL
 import qualified HeX.Box                       as B
 
-evaluateNormalInteger :: HP.NormalInteger -> Integer
+evaluateNormalInteger :: HP.NormalInteger -> Int
 evaluateNormalInteger (HP.IntegerConstant n) = n
 
-evaluateUnsignedNumber :: HP.UnsignedNumber -> Integer
+evaluateUnsignedNumber :: HP.UnsignedNumber -> Int
 evaluateUnsignedNumber (HP.NormalIntegerAsUNumber n) = evaluateNormalInteger n
 
-evaluateNumber :: HP.Number -> Integer
+evaluateNumber :: HP.Number -> Int
 evaluateNumber (HP.Number (HP.Sign isPos) u)
     | isPos = size
     | otherwise = -(size)

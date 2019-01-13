@@ -12,10 +12,12 @@ import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
 
 import qualified HeX.Lex                       as Lex
-import           HeX.Parse.Helpers
-import qualified HeX.Parse.Token               as T
+
 import           HeX.Parse.Common
+import           HeX.Parse.Helpers
+import           HeX.Parse.Number
 import           HeX.Parse.Stream
+import qualified HeX.Parse.Token               as T
 import           HeX.Parse.VarAssignment
 
 -- AST.
@@ -26,12 +28,18 @@ data MacroAssignment = MacroAssignment
     , long, outer :: Bool
     } deriving (Show)
 
+data CodeAssignment = CodeAssignment
+    { codeType  :: T.CodeType
+    , codeIndex
+    , codeValue :: Number
+    } deriving (Show)
+
 data AssignmentBody
     = DefineMacro MacroAssignment
     -- \| ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
     | SetVariable VariableAssignment
     -- \| ModifyVariable VariableModificatxion
-    -- \| AssignCode { codeType :: CodeType, codeIndex, value :: Int }
+    | AssignCode CodeAssignment
     -- \| Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
     -- \| FutureLet { name :: ControlSequenceLike, token1, token2 :: Token}
     | SelectFont Int
@@ -39,9 +47,7 @@ data AssignmentBody
     -- \| SetParShape
     -- \| Read
     -- \| DefineBox
-    -- TEMP: Dummy label constructor until properly implemented.
-    | DefineFont Lex.ControlSequenceLike
-                 (Path Rel File)
+    | DefineFont Lex.ControlSequenceLike (Path Rel File)
     -- -- Global assignments.
     -- \| SetFontAttribute
     -- \| SetHyphenation
@@ -59,21 +65,6 @@ type AssignmentParser = SimpExpandParser Assignment
 
 parseAssignment :: AssignmentParser
 parseAssignment = parseDefineMacro <|> parseNonMacroAssignment
-
-parseNonMacroAssignment :: AssignmentParser
-parseNonMacroAssignment =
-    do
-    _global <- parseGlobal
-    _body <- parseNonMacroAssignmentBody
-    pure $ Assignment _body _global
-  where
-    -- TODO: Parse globals.
-    parseGlobal = pure T.Global
-    parseNonMacroAssignmentBody =
-        P.choice [ SetVariable <$> parseVariableAssignment
-                 , parseTokenForFont
-                 , parseMacroToFont
-                 ]
 
 -- Parse Macro.
 
@@ -111,15 +102,49 @@ parseDefineMacro =
     tokToDef (T.DefineMacroTok _global expand) = Just (_global, expand)
     tokToDef _ = Nothing
 
-parseTokenForFont :: SimpExpandParser AssignmentBody
-parseTokenForFont = satisfyThen tokToCom
+parseNonMacroAssignment :: AssignmentParser
+parseNonMacroAssignment =
+    do
+    _global <- parseGlobal
+    _body <- parseNonMacroAssignmentBody
+    pure $ Assignment _body _global
   where
-    tokToCom (T.TokenForFont n) = Just $ SelectFont n
-    tokToCom _ = Nothing
+    -- TODO: Parse globals.
+    parseGlobal = pure T.Global
+    parseNonMacroAssignmentBody =
+        P.choice [ SetVariable <$> parseVariableAssignment
+                 -- , parseArithmeticAssignment
+                 , AssignCode <$> parseCodeAssignment
+                 -- , LetAssign <$> parseLetAssignment
+                 -- , ShortMacroAssign <$> parseShortMacroAssignment
+                 , parseCurFontAssignment
+                 -- TODO: , Family assignment.
+                 -- TODO: , Shape assignment.
+                 -- TODO: , Read assignment.
+                 -- TODO: , Box assignment.
+                 , parseNewFontAssignment
+                 ]
+
+parseCodeAssignment :: SimpExpandParser CodeAssignment
+parseCodeAssignment =
+    do
+    typ <- satisfyThen tokToCodeType
+    idx <- parseNumber
+    skipOptionalEquals
+    CodeAssignment typ idx <$> parseNumber
+  where
+    tokToCodeType (T.CodeTypeTok c) = Just c
+    tokToCodeType _               = Nothing
+
+parseCurFontAssignment :: SimpExpandParser AssignmentBody
+parseCurFontAssignment = SelectFont <$> satisfyThen tokToFNr
+  where
+    tokToFNr (T.TokenForFont n) = Just n
+    tokToFNr _ = Nothing
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
-parseMacroToFont :: SimpExpandParser AssignmentBody
-parseMacroToFont =
+parseNewFontAssignment :: SimpExpandParser AssignmentBody
+parseNewFontAssignment =
     do
     skipSatisfiedEquals T.FontTok
     cs <- parseCSName
@@ -131,16 +156,16 @@ parseMacroToFont =
     parseFileName =
         do
         skipOptionalSpaces
-        fileName <- P.some $ satisfyThen tokToChar
+        fileName <- P.some $ satisfyThen tokToPathChar
         skipSatisfied isSpace
         case parseRelFile (fileName ++ ".tfm") of
           Just p -> pure p
           Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
 
-    tokToChar (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) =
+    tokToPathChar (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) =
         Just c
     -- 'Other' Characters for decimal digits are OK.
-    tokToChar (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
+    tokToPathChar (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
         case c of
             '0' -> Just c
             '1' -> Just c
@@ -156,4 +181,4 @@ parseMacroToFont =
             '/' -> Just c
             '.' -> Just c
             _ -> Nothing
-    tokToChar _ = Nothing
+    tokToPathChar _ = Nothing
