@@ -1,4 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
 
 module HeX.Parse.Assignment where
 
@@ -64,7 +65,8 @@ data Assignment = Assignment
 type AssignmentParser = SimpExpandParser Assignment
 
 parseAssignment :: AssignmentParser
-parseAssignment = parseDefineMacro <|> parseNonMacroAssignment
+-- 'Try' because both can start with 'global'.
+parseAssignment = P.try parseDefineMacro <|> parseNonMacroAssignment
 
 -- Parse Macro.
 
@@ -109,8 +111,13 @@ parseNonMacroAssignment =
     _body <- parseNonMacroAssignmentBody
     pure $ Assignment _body _global
   where
-    -- TODO: Parse globals.
-    parseGlobal = pure T.Global
+    parseGlobal =
+        do
+        gs <- P.many $ skipSatisfiedEquals $ T.AssignPrefixTok T.GlobalTok
+        pure $ case gs of
+            [] -> T.Local
+            _  -> T.Global
+
     parseNonMacroAssignmentBody =
         P.choice [ SetVariable <$> parseVariableAssignment
                  -- , parseArithmeticAssignment
