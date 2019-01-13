@@ -1,0 +1,15 @@
+\font\thefont=cmr10 \selectfont
+
+\def\noParamMacro{foo}
+
+\noParamMacro
+
+\def\oneUndelimParamMacro#1{foo, #1}
+
+\oneUndelimParamMacro{arg1}
+
+\def\oneDelimParamMacro Before#1After{foo, #1}
+
+\oneDelimParamMacro Before{arg1}After
+
+\end
