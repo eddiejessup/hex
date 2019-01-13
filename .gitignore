@@ -7,3 +7,5 @@
 *.log
 *.tfm
 hex.cabal
+support/plain.tex
+support/texbook.tex
