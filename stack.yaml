@@ -8,4 +8,4 @@ extra-deps: []
 extra-package-dbs: []
 
 ghc-options:
-  "$everything": -O0 -j4 -Wall
+  "$everything": -O0 -j4 -Wall -Werror
