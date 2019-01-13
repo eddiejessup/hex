@@ -14,11 +14,11 @@ isSignedNrExpressibleInNBits nrBits n =
         (-x <= n) && (n <= x - 1)
 
 toSignableInt :: Signedness -> Int -> Either String SignableInt
-toSignableInt Signed n
-    | n < 0 = fail "Number argument for unsigned is negative"
-    | otherwise = pure $ SignableInt Signed n
-toSignableInt s n =
-    pure $ SignableInt s n
+toSignableInt Unsigned n
+    | n < 0 = fail $ "Number argument for unsigned is negative: " ++ show n
+    | otherwise = pure $ SignableInt Unsigned n
+toSignableInt Signed n =
+    pure $ SignableInt Signed n
 
 toSignedInt, toUnsignedInt :: Int -> Either String SignableInt
 toSignedInt = toSignableInt Signed
