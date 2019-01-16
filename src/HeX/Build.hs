@@ -184,9 +184,9 @@ handleModeIndep newStream com =
                         (HP.TokenVar _)    -> error "length short-def tokens not implemented"
                         (HP.RegisterVar _) -> error "length registers not implemented"
                     continueUnchanged
-                HP.AssignCode HP.CodeAssignment{..} ->
-                    let eIdx = evaluateNumber codeIndex
-                        eVal = evaluateNumber codeValue
+                HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
+                    let eIdx = evaluateNumber idx
+                        eVal = evaluateNumber val
                     in  case codeType of
                             HP.CategoryCode ->
                                 do
@@ -202,7 +202,7 @@ handleModeIndep newStream com =
                     modAccum [fontSel]
                 HP.DefineMacro m ->
                     modStream $ defineMacro newStream m
-                HP.DefineFont cs fPath ->
+                HP.DefineFont cs HP.NaturalFont fPath ->
                     do
                     fontDef <- BL.VListBaseElem . B.ElemFontDefinition <$> defineFont cs fPath
                     modAccum [fontDef]
@@ -228,9 +228,10 @@ processHCommand oldStream newStream acc com =
             -- (Note that we pass oldStream, not newStream.)
             let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
             modStream $ HP.insertLexToken oldStream parToken
-        HP.AddCharacter _ c ->
+        HP.AddCharacter c ->
             do
-            hCharBox <- BL.HListHBaseElem . B.ElemCharacter <$> characterBox c
+            let charCode = evaluateCharCodeRef c
+            hCharBox <- BL.HListHBaseElem . B.ElemCharacter <$> characterBox charCode
             modAccum $ hCharBox : acc
         HP.HAllModesCommand aCom ->
             case aCom of

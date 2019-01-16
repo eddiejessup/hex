@@ -37,10 +37,6 @@ isSpace = primTokHasCategory Lex.Space
 
 -- Match particular tokens.
 
-isTokenForFont :: PrimitiveToken -> Bool
-isTokenForFont (T.TokenForFont _) = True
-isTokenForFont _                  = False
-
 isFillerItem :: PrimitiveToken -> Bool
 isFillerItem T.RelaxTok = True
 isFillerItem t          = isSpace t

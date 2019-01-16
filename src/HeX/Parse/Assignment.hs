@@ -14,53 +14,13 @@ import           Text.Megaparsec                ( (<|>) )
 
 import qualified HeX.Lex                       as Lex
 
-import           HeX.Parse.Common
 import           HeX.Parse.Helpers
+import           HeX.Parse.AST
+import           HeX.Parse.Common
 import           HeX.Parse.Number
 import           HeX.Parse.Stream
 import qualified HeX.Parse.Token               as T
 import           HeX.Parse.VarAssignment
-
--- AST.
-
-data MacroAssignment = MacroAssignment
-    { name        :: Lex.ControlSequenceLike
-    , contents    :: T.MacroContents
-    , long, outer :: Bool
-    } deriving (Show)
-
-data CodeAssignment = CodeAssignment
-    { codeType  :: T.CodeType
-    , codeIndex
-    , codeValue :: Number
-    } deriving (Show)
-
-data AssignmentBody
-    = DefineMacro MacroAssignment
-    -- \| ShortDefine {quantity :: QuantityType, name :: ControlSequenceLike, value :: Int}
-    | SetVariable VariableAssignment
-    -- \| ModifyVariable VariableModificatxion
-    | AssignCode CodeAssignment
-    -- \| Let { future :: Bool, name :: ControlSequenceLike, target :: Token}
-    -- \| FutureLet { name :: ControlSequenceLike, token1, token2 :: Token}
-    | SelectFont Int
-    -- \| SetFamilyMember {member :: FamilyMember, font :: Font}
-    -- \| SetParShape
-    -- \| Read
-    -- \| DefineBox
-    | DefineFont Lex.ControlSequenceLike (Path Rel File)
-    -- -- Global assignments.
-    -- \| SetFontAttribute
-    -- \| SetHyphenation
-    -- \| SetBoxSize
-    -- \| SetInteractionMode
-    -- \| SetSpecialVariable
-    deriving (Show)
-
-data Assignment = Assignment
-  { body   :: AssignmentBody
-  , global :: T.GlobalFlag
-  } deriving (Show)
 
 type AssignmentParser = SimpExpandParser Assignment
 
@@ -138,7 +98,7 @@ parseCodeAssignment =
     typ <- satisfyThen tokToCodeType
     idx <- parseNumber
     skipOptionalEquals
-    CodeAssignment typ idx <$> parseNumber
+    CodeAssignment (CodeTableRef typ idx) <$> parseNumber
   where
     tokToCodeType (T.CodeTypeTok c) = Just c
     tokToCodeType _               = Nothing
@@ -146,7 +106,7 @@ parseCodeAssignment =
 parseCurFontAssignment :: SimpExpandParser AssignmentBody
 parseCurFontAssignment = SelectFont <$> satisfyThen tokToFNr
   where
-    tokToFNr (T.TokenForFont n) = Just n
+    tokToFNr (T.FontToken n) = Just n
     tokToFNr _ = Nothing
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
@@ -156,7 +116,9 @@ parseNewFontAssignment =
     skipSatisfiedEquals T.FontTok
     cs <- parseCSName
     skipOptionalEquals
-    DefineFont cs <$> parseFileName
+    -- TODO: Parse font specification, a.k.a 'at-clause'.
+    let fontSpec = NaturalFont
+    DefineFont cs fontSpec <$> parseFileName
   where
     -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
     parseFileName :: SimpExpandParser (Path Rel File)

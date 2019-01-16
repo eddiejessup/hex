@@ -2,6 +2,9 @@
 
 module HeX.Evaluate where
 
+import           Data.Char                      ( chr )
+
+import           HeX.Categorise                 ( CharCode )
 import           HeX.Config
 import qualified HeX.Parse                     as HP
 import qualified HeX.Unit                      as Unit
@@ -74,3 +77,9 @@ evaluateKern m = B.Kern . evaluateLength m
 
 evaluatePenalty :: HP.Number -> BL.Penalty
 evaluatePenalty = BL.Penalty . fromIntegral . evaluateNumber
+
+evaluateCharCodeRef :: HP.CharCodeRef -> CharCode
+evaluateCharCodeRef ref = case ref of
+    HP.CharRef c       -> c
+    HP.CharTokenRef c  -> c
+    HP.CharCodeNrRef n -> chr $ evaluateNumber n

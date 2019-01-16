@@ -3,6 +3,7 @@
 module HeX.Config.Parameters where
 
 import           HeX.Type
+import qualified HeX.Lex                       as Lex
 import           HeX.BreakList                  ( Glue(..), noFlex )
 import qualified HeX.Unit                      as Unit
 import           HeX.Parse.Token
@@ -16,11 +17,11 @@ newtype LenParamVal a = LenParamVal {unLenParam :: LenVal}
 newtype GlueParamVal a = GlueParamVal {unGlueParam :: Glue}
     deriving (Show)
 
--- newtype MathGlueParamVal a = MathGlueParamVal {unGlueParam :: MathGluw}
---     deriving (Show)
+newtype MathGlueParamVal a = MathGlueParamVal {unMathGlueParam :: Glue}
+    deriving (Show)
 
--- newtype TokenListParamVal a = TokenListParamVal {unTokenListParam :: [Token]}
---     deriving (Show)
+newtype TokenListParamVal a = TokenListParamVal {unTokenListParam :: [Lex.Token]}
+    deriving (Show)
 
 data PreTolerance
 data Tolerance
@@ -242,19 +243,19 @@ data ParamConfig = ParamConfig
     , xSpaceSkip            :: GlueParamVal XSpaceSkip
     , parFillSkip           :: GlueParamVal ParFillSkip
 
-    --, thinMuSkip          :: MathGlueParam ThinMuSkip
-    --, medMuSkip           :: MathGlueParam MedMuSkip
-    --, thickMuSkip         :: MathGlueParam ThickMuSkip
+    , thinMuSkip            :: MathGlueParamVal ThinMuSkip
+    , medMuSkip             :: MathGlueParamVal MedMuSkip
+    , thickMuSkip           :: MathGlueParamVal ThickMuSkip
 
-    --, output              :: TokenListParam Output
-    --, everyPar            :: TokenListParam EveryPar
-    --, everyMath           :: TokenListParam EveryMath
-    --, everyDisplay        :: TokenListParam EveryDisplay
-    --, everyHBox           :: TokenListParam EveryHBox
-    --, everyVBox           :: TokenListParam EveryVBox
-    --, everyJob            :: TokenListParam EveryJob
-    --, everyCR             :: TokenListParam EveryCR
-    --, errHelp             :: TokenListParam ErrHelp
+    , output                :: TokenListParamVal Output
+    , everyPar              :: TokenListParamVal EveryPar
+    , everyMath             :: TokenListParamVal EveryMath
+    , everyDisplay          :: TokenListParamVal EveryDisplay
+    , everyHBox             :: TokenListParamVal EveryHBox
+    , everyVBox             :: TokenListParamVal EveryVBox
+    , everyJob              :: TokenListParamVal EveryJob
+    , everyCR               :: TokenListParamVal EveryCR
+    , errHelp               :: TokenListParamVal ErrHelp
 
     , spaceFactor           :: IntParamVal SpaceFactor
     , prevGraf              :: IntParamVal PrevGraf
@@ -368,19 +369,19 @@ newParamConfig              = ParamConfig
     , xSpaceSkip            = GlueParamVal mempty
     , parFillSkip           = GlueParamVal mempty
 
-    -- , thinMuSkip   :: MathGlueParamVal mempty
-    -- , medMuSkip    :: MathGlueParamVal mempty
-    -- , thickMuSkip  :: MathGlueParamVal mempty
+    , thinMuSkip            = MathGlueParamVal mempty
+    , medMuSkip             = MathGlueParamVal mempty
+    , thickMuSkip           = MathGlueParamVal mempty
 
-    -- , output       :: TokenListParamVal mempty
-    -- , everyPar     :: TokenListParamVal mempty
-    -- , everyMath    :: TokenListParamVal mempty
-    -- , everyDisplay :: TokenListParamVal mempty
-    -- , everyHBox    :: TokenListParamVal mempty
-    -- , everyVBox    :: TokenListParamVal mempty
-    -- , everyJob     :: TokenListParamVal mempty
-    -- , everyCR      :: TokenListParamVal mempty
-    -- , errHelp      :: TokenListParamVal mempty
+    , output                = TokenListParamVal mempty
+    , everyPar              = TokenListParamVal mempty
+    , everyMath             = TokenListParamVal mempty
+    , everyDisplay          = TokenListParamVal mempty
+    , everyHBox             = TokenListParamVal mempty
+    , everyVBox             = TokenListParamVal mempty
+    , everyJob              = TokenListParamVal mempty
+    , everyCR               = TokenListParamVal mempty
+    , errHelp               = TokenListParamVal mempty
 
     , spaceFactor           = IntParamVal 0
     , prevGraf              = IntParamVal 0

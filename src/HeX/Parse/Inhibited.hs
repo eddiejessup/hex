@@ -19,6 +19,7 @@ import           Data.Maybe                     ( fromMaybe )
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
+import           HeX.Parse.AST
 import           HeX.Parse.Token
 import           HeX.Parse.Common
 
@@ -248,9 +249,6 @@ parseNestedExpr n parseNext policy =
             Discard -> []
         -- Otherwise, append our result and continue.
         _ -> (x :) <$> parseNestedExpr nextN parseNext policy
-
-newtype BalancedText = BalancedText [Lex.Token]
-    deriving (Show, Eq)
 
 -- Part of case 7, \uppercase's body and such.
 

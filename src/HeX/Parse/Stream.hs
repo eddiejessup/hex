@@ -19,6 +19,7 @@ import           HeX.Concept
 import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
+import           HeX.Parse.AST
 import           HeX.Parse.Token
 import           HeX.Parse.Common
 import           HeX.Parse.Inhibited

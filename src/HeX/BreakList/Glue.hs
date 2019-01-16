@@ -9,7 +9,7 @@ import qualified HeX.Unit                      as UN
 data GlueFlex = GlueFlex
     { factor :: !Rational
     , order :: !Int
-    } deriving (Show)
+    } deriving (Show, Eq)
 
 instance Readable GlueFlex where
     describe (GlueFlex 0 0) = "0"
@@ -41,7 +41,7 @@ data Glue = Glue
     { dimen :: !Int
     , stretch :: !GlueFlex
     , shrink :: !GlueFlex
-    } deriving (Show)
+    } deriving (Show, Eq)
 
 instance Readable Glue where
     describe (Glue d (GlueFlex 0 0) (GlueFlex 0 0)) =

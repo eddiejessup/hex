@@ -3,7 +3,10 @@ module HeX.Parse.Token.Token where
 import qualified Data.Map.Strict               as Map
 
 import           HeX.Concept
+import           HeX.Type
+import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
+import qualified HeX.BreakList                 as BL
 import           HeX.Parse.Token.Parameter
 
 
@@ -233,7 +236,19 @@ data PrimitiveToken
     | TokenListParamVarTok TokenListParameter
     | SpecialIntegerTok SpecialInteger -- \example: \spacefactor
     | SpecialLengthTok SpecialLength -- \example: \pagestretch
-    | TokenVariableTok DefTokenType String
+    -- Tokens storing values defined by short-hand definitions.
+    | IntToken IntVal
+    | LenToken LenVal
+    | GlueToken BL.Glue
+    | MathGlueToken BL.Glue
+    | TokenListToken [Lex.Token]
+    | CharToken CharCode
+    -- TODO: What is a MathChar? Probably not a CharCode.
+    | MathCharToken CharCode
+    -- A control sequence representing a particular font, such as defined through
+    -- \font.
+    | FontToken IntVal
+    -- Heads of register references.
     | RegisterVariableTok RegisterType
     -- > Modifying variable values with arithmetic.
     -- \| Advance -- \advance
@@ -253,10 +268,6 @@ data PrimitiveToken
     -- \| MacroToGlueLookup -- \skipdef
     -- \| MacroToMathGlueLookup -- \muskipdef
     -- \| MacroToTokenListLookup -- \toksdef
-    -- > Setting the current font.
-    -- A control sequence representing a particular font, such as defined through
-    -- \font.
-    | TokenForFont Int
     -- > Setting font math-family-member things.
     -- \| SetTextSizeFont -- \textfont
     -- \| SetScriptSizeFont -- \scriptfont

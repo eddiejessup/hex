@@ -56,7 +56,7 @@ defaultCSMap = HMap.fromList
     , (_cs "csname"      , SyntaxCommandHead CSNameTok)
     , (_cs "endcsname"   , _pt $ SyntaxCommandArg EndCSNameTok)
       -- Temporary pragmatism.
-    , (_cs "selectfont"  , _pt $ TokenForFont theFontNr)
+    , (_cs "selectfont"  , _pt $ FontToken theFontNr)
     , (_cs "end"         , _pt EndTok)
       -- Macro prefixes.
     , (_cs "global"      , _pt $ AssignPrefixTok GlobalTok)

@@ -5,60 +5,10 @@ module HeX.Parse.Length where
 import qualified Text.Megaparsec               as P
 
 import           HeX.Unit                       ( PhysicalUnit(..) )
+import           HeX.Parse.AST
 import           HeX.Parse.Common
 import           HeX.Parse.Number
 import           HeX.Parse.Stream
-
--- AST.
-
-data PhysicalUnitFrame
-    = MagnifiedFrame
-    | TrueFrame
-    deriving (Show)
-
-data Length = Length Sign UnsignedLength
-    deriving (Show)
-
-data UnsignedLength
-    = NormalLengthAsULength NormalLength
-    -- \| CoercedLength CoercedLength
-    deriving (Show)
-
--- Think: 'un-coerced length'.
-data NormalLength
-    -- = InternalLength InternalLength
-    -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
-    = LengthSemiConstant Factor Unit
-    deriving (Show)
-
-data Factor
-    = NormalIntegerFactor NormalInteger
-    -- Badly named 'decimal constant' in the TeXbook. Granted, it is specified
-    -- with decimal digits, but its main feature is that it can represent
-    -- non-integers.
-    | RationalConstant Rational
-    deriving (Show)
-
-data Unit
-    = InternalUnit InternalUnit
-    | PhysicalUnit PhysicalUnitFrame PhysicalUnit
-    deriving (Show)
-
-data InternalUnit
-    = Em
-    | Ex
-    -- \| InternalIntegerUnit InternalInteger
-    -- \| InternalLengthUnit InternalLength
-    -- \| InternalGlueUnit InternalGlue
-    deriving (Show)
-
--- data CoercedLength
---   = InternalGlueAsLength InternalGlue
-
--- Parse.
-
--- TODO:
--- - Internal quantity units
 
 parseLength :: SimpExpandParser Length
 parseLength = Length <$> parseSigns <*> parseUnsignedLength

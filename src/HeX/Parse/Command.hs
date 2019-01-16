@@ -8,9 +8,9 @@ import           Data.Functor                   ( ($>) )
 
 import           HeX.Concept
 import qualified HeX.Lex                       as Lex
-import           HeX.Categorise                 ( CharCode )
 
 import           HeX.Parse.Helpers
+import           HeX.Parse.AST
 import qualified HeX.Parse.Token               as T
 import           HeX.Parse.Common
 import           HeX.Parse.Glue
@@ -18,84 +18,6 @@ import           HeX.Parse.Length
 import           HeX.Parse.Number
 import           HeX.Parse.Stream
 import           HeX.Parse.Assignment
-
--- AST.
-
-data CharSource
-    = ExplicitChar
-    | CodeChar
-    | TokenChar
-    deriving (Show)
-
-data ModeIndependentCommand
-    = Assign Assignment
-    | Relax
-    | IgnoreSpaces
-    | AddPenalty Number
-    | AddKern Length
-    | AddGlue Glue
-    deriving (Show)
-
-data Rule = Rule
-    { width, height, depth :: Maybe Length }
-    deriving (Show)
-
-data AllModesCommand
-    -- \| LeftBrace
-    -- \| RightBrace
-    -- \| BeginGroup
-    -- \| EndGroup
-    -- \| ShowToken Token
-    -- \| ShowBox Int
-    -- \| ShowLists
-    -- \| ShowInternalQuantity InternalQuantity
-    -- \| ShipOut Box
-    -- \| SetAfterAssignmentToken Token
-    -- \| AddToAfterGroupTokens Tokens
-    -- \| Message MessageStream GeneralText
-    -- \| OpenInput { streamNr :: Int, fileName :: String }
-    -- \| CloseInput { streamNr :: Int }
-    -- \| OpenOutput { streamNr :: Int, fileName :: String, immediate :: Bool }
-    -- \| CloseOutput { streamNr :: Int, immediate :: Bool }
-    -- \| Write { streamNr :: Int, contents :: GeneralText, immediate :: Bool }
-    -- \| AddWhatsit GeneralText
-    -- \| RemoveLastPenalty
-    -- \| RemoveLastKern
-    -- \| RemoveLastGlue
-    -- \| AddMark GeneralText
-    -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
-    -- -- then can 'migrate' out.
-    -- \| AddInsertion {nr :: Int, contents :: VModeMaterial}
-    -- \| AddLeaders {type :: LeadersType, template :: BoxOrRule, glue :: Glue}
-    = AddSpace
-    -- \| AddBox Box
-    -- \| AddShiftedBox Distance Box
-    -- \| AddFetchedBox { register :: Int, unwrap, pop :: Bool } -- \box, \copy, \un{v,h}{box,copy}
-    | AddRule Rule
-    -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
-    | StartParagraph T.IndentFlag
-    | EndParagraph
-    | ModeIndependentCommand ModeIndependentCommand
-    deriving (Show)
-
-data VModeCommand
-    = VAllModesCommand AllModesCommand
-    | EnterHMode
-    | End
-    -- \| Dump
-    deriving (Show)
-
-data HModeCommand
-    = HAllModesCommand AllModesCommand
-    | LeaveHMode
-    -- \| EnterMathMode
-    -- \| AddAdjustment VModeMaterial
-    -- \| AddControlSpace
-    | AddCharacter CharSource CharCode
-    -- \| AddAccentedCharacter { accentCode :: Int, targetCode :: Maybe Int, assignments :: [Assignment]}
-    -- \| AddItalicCorrection
-    -- \| AddDiscretionaryText { preBreak, postBreak, noBreak :: GeneralText }
-    deriving (Show)
 
 -- Entry-points.
 
@@ -246,9 +168,7 @@ leaveHMode =
 
 addCharacter :: SimpExpandParser HModeCommand
 addCharacter =
-    do
-    c <- satisfyThen charToCode
-    pure $ AddCharacter ExplicitChar c
+    (AddCharacter . CharRef) <$> satisfyThen charToCode
   where
     charToCode (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) =
       Just c

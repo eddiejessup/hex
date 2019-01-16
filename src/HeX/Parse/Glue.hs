@@ -5,27 +5,12 @@ module HeX.Parse.Glue where
 import qualified Text.Megaparsec               as P
 
 import           HeX.Parse.Helpers
+import           HeX.Parse.AST
 import           HeX.Parse.Common
 import           HeX.Parse.Length
 import           HeX.Parse.Number
 import           HeX.Parse.Stream
 
--- AST.
-
-data Glue
-    = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
-    -- \| InternalGlue Bool InternalGlue
-    deriving (Show)
-
-data Flex
-    = FiniteFlex Length
-    | FilFlex FilLength
-    deriving (Show)
-
-data FilLength = FilLength Sign Factor Int
-    deriving (Show)
-
--- Parse.
 parseGlue :: SimpExpandParser Glue
 parseGlue = P.choice [ parseExplicitGlue
                      -- , parseInternalGlue

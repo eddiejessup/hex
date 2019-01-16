@@ -9,49 +9,15 @@ import qualified Text.Megaparsec               as P
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
+import           HeX.Parse.AST
 import qualified HeX.Parse.Token               as T
 import           HeX.Parse.Common
 import           HeX.Parse.Stream
-
--- AST.
-
-data Number = Number Sign UnsignedNumber
-    deriving (Show)
-
-data UnsignedNumber
-    = NormalIntegerAsUNumber NormalInteger
-    -- \| CoercedInteger CoercedInteger
-    deriving (Show)
-
--- Think: 'un-coerced integer'.
-data NormalInteger
-    = IntegerConstant Int
-    -- | InternalInteger InternalInteger
-    deriving (Show)-- = InternalLengthAsInt InternalLength
-    -- \| InternalGlueAsInt InternalGlue
-
--- data CoercedInteger
--- data InternalInteger = TODO
--- data InternalLength = TODO
--- data InternalGlue = TODO
-
--- Parsing.
 
 -- Restrict pure type, and therefore accumulator, to Integer, to disallow
 -- overflow.
 digitsToInteger :: Integral n => n -> [n] -> Integer
 digitsToInteger base = foldl' (\a b -> a * fromIntegral base + fromIntegral b) 0
-
--- mconcat on this newtype wrapper should get the final sign of a list of
--- signs. Bit pretentious, sorry.
-newtype Sign = Sign { getSign :: Bool }
-    deriving (Show, Eq)
-
-instance Semigroup Sign where
-    Sign x <> Sign y = Sign $ x == y
-
-instance Monoid Sign where
-    mempty = Sign True
 
 parseSigns :: SimpExpandParser Sign
 parseSigns = mconcat <$> parseOptionalSigns
