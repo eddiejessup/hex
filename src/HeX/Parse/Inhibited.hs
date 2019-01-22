@@ -102,7 +102,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
         do
         -- Skip blank tokens (assumed to mean spaces).
         skipManySatisfied (primTokHasCategory Lex.Space)
-        anySingleLex >>= \case
+        unsafeAnySingleLex >>= \case
             t@(Lex.CharCatToken Lex.CharCat{cat = Lex.BeginGroup}) ->
                 do
                 (BalancedText ts) <- unsafeParseBalancedText Include
@@ -121,7 +121,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
     parseDelimitedArgs ts delims = do
         -- Parse tokens until we see the delimiter tokens, then add what we grab
         -- to our accumulating argument.
-        arg <- (ts ++) <$> P.manyTill anySingleLex (skipSatisfiedLexChunk delims)
+        arg <- (ts ++) <$> P.manyTill unsafeAnySingleLex (skipSatisfiedLexChunk delims)
         if hasValidGrouping tokToChange arg
             -- If the argument has valid grouping, then we are done.
             then pure arg
@@ -158,6 +158,13 @@ unsafeParseCSName = handleLex tokToCSLike
         Just $ Lex.ControlSequenceProper cs
     tokToCSLike _ =
         Nothing
+
+-- Case 5, arbitrary tokens such as for \let\foo=<token>.
+
+unsafeAnySingleLex
+    :: (P.Stream s, P.Token s ~ PrimitiveToken)
+    => SimpParser s Lex.Token
+unsafeAnySingleLex = satisfyThen tokToLex
 
 -- Case 6, macro parameter text.
 
@@ -278,7 +285,7 @@ unsafeParseMacroText :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s
 unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
   where
     parseNext =
-        anySingleLex >>= \case
+        unsafeAnySingleLex >>= \case
             -- If we see a '#', parse the parameter number and return a token
             -- representing the call.
             (Lex.CharCatToken Lex.CharCat{cat = Lex.Parameter}) -> do

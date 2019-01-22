@@ -32,10 +32,6 @@ data Flag
     | Mode !Mode
     deriving (Show, Eq)
 
-data Input
-    = Stdin
-    | File !FilePath
-
 options :: [OptDescr Flag]
 options =
     [ Option ['h'] ["help"]   (NoArg Help)           "show usage information"

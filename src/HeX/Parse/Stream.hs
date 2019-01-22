@@ -94,14 +94,19 @@ parseParamText = parseInhibited unsafeParseParamText
 parseMacroText :: SimpExpandParser MacroText
 parseMacroText = parseInhibited unsafeParseMacroText
 
+parseToken :: SimpExpandParser Lex.Token
+parseToken = parseInhibited unsafeAnySingleLex
+
 -- Expanding syntax commands.
 
 -- TODO: Move these parsers outside the module.
 
+skipFiller = skipManySatisfied isFillerItem
+
 parseGeneralText :: SimpExpandParser BalancedText
 parseGeneralText =
     do
-    skipManySatisfied isFillerItem
+    skipFiller
     -- TODO: Maybe other things can act as left braces.
     skipSatisfied $ primTokHasCategory Lex.BeginGroup
     parseBalancedText Discard

@@ -67,11 +67,6 @@ handleLex
     -> SimpParser s a
 handleLex f = satisfyThen $ \x -> tokToLex x >>= f
 
-anySingleLex
-    :: (P.Stream s, P.Token s ~ PrimitiveToken)
-    => SimpParser s Lex.Token
-anySingleLex = satisfyThen tokToLex
-
 skipSatisfiedEqualsLex :: (P.Stream s, P.Token s ~ PrimitiveToken) => Lex.Token -> NullSimpParser s
 skipSatisfiedEqualsLex lt = skipSatisfiedEquals (T.UnexpandedTok lt)
 
@@ -92,9 +87,10 @@ skipOptionalSpaces :: (P.Stream s, P.Token s ~ PrimitiveToken) => NullSimpParser
 skipOptionalSpaces = skipManySatisfied isSpace
 
 skipOptionalEquals :: (P.Stream s, P.Token s ~ PrimitiveToken) => NullSimpParser s
-skipOptionalEquals = do
-  skipOptionalSpaces
-  skipOneOptionalSatisfied isEquals
+skipOptionalEquals =
+    do
+    skipOptionalSpaces
+    skipOneOptionalSatisfied isEquals
 
 skipKeyword :: (P.Stream s, P.Token s ~ PrimitiveToken) => String -> NullSimpParser s
 skipKeyword s =

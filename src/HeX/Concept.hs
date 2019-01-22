@@ -31,7 +31,7 @@ data TypoDim
      = Width
      | Height
      | Depth
-     deriving (Show)
+     deriving (Show, Eq)
 
 class Dimensioned a where
     naturalLength :: TypoDim -> a -> LenVal

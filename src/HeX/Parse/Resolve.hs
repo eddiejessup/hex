@@ -31,49 +31,56 @@ _pt = PrimitiveToken
 
 defaultCSMap :: CSMap
 defaultCSMap = HMap.fromList
-    [ (_cs "relax"       , _pt RelaxTok)
-    , (_cs "ignorespaces", _pt IgnoreSpacesTok)
-    , (_cs "uppercase"   , SyntaxCommandHead $ ChangeCaseTok Upward)
+    -- Heads of syntax commands.
+    [ (_cs "uppercase"   , SyntaxCommandHead $ ChangeCaseTok Upward)
     , (_cs "lowercase"   , SyntaxCommandHead $ ChangeCaseTok Downward)
+    , (_cs "csname"      , SyntaxCommandHead CSNameTok)
+    -- Arguments of syntax commands.
+    , (_cs "endcsname"   , _pt $ SyntaxCommandArg EndCSNameTok)
+    -- Nothing special.
+    , (_cs "relax"       , _pt RelaxTok)
+    , (_cs "ignorespaces", _pt IgnoreSpacesTok)
     , (_cs "penalty"     , _pt AddPenaltyTok)
     , (_cs "kern"        , _pt AddKernTok)
-    , (_cs "vskip"       , _pt $ ModedCommand Vertical AddSpecifiedGlueTok)
-    , (_cs "hskip"       , _pt $ ModedCommand Horizontal AddSpecifiedGlueTok)
-    , (_cs "hfil"        , _pt $ ModedCommand Horizontal $ AddPresetGlueTok Fil)
-    , (_cs "vfil"        , _pt $ ModedCommand Vertical $ AddPresetGlueTok Fil)
-    , (_cs "hfill"       , _pt $ ModedCommand Horizontal $ AddPresetGlueTok Fill)
-    , (_cs "vfill"       , _pt $ ModedCommand Vertical $ AddPresetGlueTok Fill)
-    , (_cs "hfilneg"     , _pt $ ModedCommand Horizontal $ AddPresetGlueTok FilNeg)
-    , (_cs "vfilneg"     , _pt $ ModedCommand Vertical $ AddPresetGlueTok FilNeg)
-    , (_cs "hss"         , _pt $ ModedCommand Horizontal $ AddPresetGlueTok StretchOrShrink)
-    , (_cs "vss"         , _pt $ ModedCommand Vertical $ AddPresetGlueTok StretchOrShrink)
     , (_cs "indent"      , _pt $ StartParagraphTok Indent)
     , (_cs "noindent"    , _pt $ StartParagraphTok DoNotIndent)
     , (_cs "par"         , _pt EndParagraphTok)
+    -- Glue.
+    , (_cs "vskip"       , _pt $ ModedCommand Vertical AddSpecifiedGlueTok)
+    , (_cs "hskip"       , _pt $ ModedCommand Horizontal AddSpecifiedGlueTok)
+    , (_cs "vfil"        , _pt $ ModedCommand Vertical $ AddPresetGlueTok Fil)
+    , (_cs "hfil"        , _pt $ ModedCommand Horizontal $ AddPresetGlueTok Fil)
+    , (_cs "vfill"       , _pt $ ModedCommand Vertical $ AddPresetGlueTok Fill)
+    , (_cs "hfill"       , _pt $ ModedCommand Horizontal $ AddPresetGlueTok Fill)
+    , (_cs "vfilneg"     , _pt $ ModedCommand Vertical $ AddPresetGlueTok FilNeg)
+    , (_cs "hfilneg"     , _pt $ ModedCommand Horizontal $ AddPresetGlueTok FilNeg)
+    , (_cs "vss"         , _pt $ ModedCommand Vertical $ AddPresetGlueTok StretchOrShrink)
+    , (_cs "hss"         , _pt $ ModedCommand Horizontal $ AddPresetGlueTok StretchOrShrink)
+    -- Other moded.
+    , (_cs "halign"      , _pt $ ModedCommand Horizontal AddAlignedMaterial)
+    , (_cs "valign"      , _pt $ ModedCommand Vertical AddAlignedMaterial)
+    , (_cs "moveleft"    , _pt $ ModedCommand Horizontal $ AddShiftedBox Backward)
+    , (_cs "moveright"   , _pt $ ModedCommand Horizontal $ AddShiftedBox Forward)
+    , (_cs "raise"       , _pt $ ModedCommand Vertical $ AddShiftedBox Backward)
+    , (_cs "lower"       , _pt $ ModedCommand Vertical $ AddShiftedBox Forward)
+    , (_cs "unvbox"      , _pt $ ModedCommand Vertical $ AddUnwrappedFetchedBoxTok Pop)
+    , (_cs "unhbox"      , _pt $ ModedCommand Horizontal $ AddUnwrappedFetchedBoxTok Pop)
+    , (_cs "unvcopy"     , _pt $ ModedCommand Vertical $ AddUnwrappedFetchedBoxTok Lookup)
+    , (_cs "unhcopy"     , _pt $ ModedCommand Horizontal $ AddUnwrappedFetchedBoxTok Lookup)
     , (_cs "hrule"       , _pt $ ModedCommand Vertical AddRuleTok)
     , (_cs "vrule"       , _pt $ ModedCommand Horizontal AddRuleTok)
-    , (_cs "font"        , _pt FontTok)
-    , (_cs "csname"      , SyntaxCommandHead CSNameTok)
-    , (_cs "endcsname"   , _pt $ SyntaxCommandArg EndCSNameTok)
-      -- Temporary pragmatism.
-    , (_cs "selectfont"  , _pt $ FontToken theFontNr)
+    -- Final commands.
     , (_cs "end"         , _pt EndTok)
+    , (_cs "dump"        , _pt DumpTok)
       -- Macro prefixes.
-    , (_cs "global"      , _pt $ AssignPrefixTok GlobalTok)
     , (_cs "long"        , _pt $ AssignPrefixTok LongTok)
     , (_cs "outer"       , _pt $ AssignPrefixTok OuterTok)
+    , (_cs "global"      , _pt $ AssignPrefixTok GlobalTok)
       -- Macro def types.
     , (_cs "def"         , _pt $ DefineMacroTok Local InhibitDef)
     , (_cs "edef"        , _pt $ DefineMacroTok Local ExpandDef)
     , (_cs "gdef"        , _pt $ DefineMacroTok Global InhibitDef)
     , (_cs "xdef"        , _pt $ DefineMacroTok Global ExpandDef)
-      -- Code types.
-    , (_cs "catcode"     , _pt $ CodeTypeTok CategoryCode)
-    , (_cs "mathcode"    , _pt $ CodeTypeTok MathCode)
-    , (_cs "lccode"      , _pt $ CodeTypeTok $ ChangeCaseCode Downward)
-    , (_cs "uccode"      , _pt $ CodeTypeTok $ ChangeCaseCode Upward)
-    , (_cs "sfcode"      , _pt $ CodeTypeTok SpaceFactorCode)
-    , (_cs "delcode"     , _pt $ CodeTypeTok DelimiterCode)
       -- Integer parameters.
     , (_cs "pretolerance"         , _pt $ IntParamVarTok PreTolerance)
     , (_cs "tolerance"            , _pt $ IntParamVarTok Tolerance)
@@ -198,4 +205,57 @@ defaultCSMap = HMap.fromList
     , (_cs "pagefilllstretch"     , _pt $ SpecialLengthTok PageFilllStretch)
     , (_cs "pageshrink"           , _pt $ SpecialLengthTok PageShrink)
     , (_cs "pagedepth"            , _pt $ SpecialLengthTok PageDepth)
+    -- Register reference type prefixes.
+    , (_cs "count"            , _pt $ RegisterVariableTok RegInt)
+    , (_cs "dimen"            , _pt $ RegisterVariableTok RegLen)
+    , (_cs "skip"             , _pt $ RegisterVariableTok RegGlue)
+    , (_cs "muskip"           , _pt $ RegisterVariableTok RegMathGlue)
+    , (_cs "toks"             , _pt $ RegisterVariableTok RegTokenList)
+    -- Short-hand definition heads.
+    , (_cs "chardef"          , _pt $ ShortDefHeadTok CharQuantity)
+    , (_cs "mathchardef"      , _pt $ ShortDefHeadTok MathCharQuantity)
+    , (_cs "countdef"         , _pt $ ShortDefHeadTok IntegerQuantity)
+    , (_cs "dimendef"         , _pt $ ShortDefHeadTok LengthQuantity)
+    , (_cs "skipdef"          , _pt $ ShortDefHeadTok GlueQuantity)
+    , (_cs "muskipdef"        , _pt $ ShortDefHeadTok MathGlueQuantity)
+    , (_cs "toksdef"          , _pt $ ShortDefHeadTok TokenListQuantity)
+    -- Modify variables.
+    , (_cs "advance"          , _pt AdvanceVarTok)
+    , (_cs "multiply"         , _pt $ ScaleVarTok Upward)
+    , (_cs "divide"           , _pt $ ScaleVarTok Downward)
+    -- Alias tokens.
+    , (_cs "let"              , _pt $ LetTok)
+    , (_cs "futurelet"        , _pt $ FutureLetTok)
+      -- Code types.
+    , (_cs "catcode"          , _pt $ CodeTypeTok CategoryCode)
+    , (_cs "mathcode"         , _pt $ CodeTypeTok MathCode)
+    , (_cs "lccode"           , _pt $ CodeTypeTok $ ChangeCaseCode Downward)
+    , (_cs "uccode"           , _pt $ CodeTypeTok $ ChangeCaseCode Upward)
+    , (_cs "sfcode"           , _pt $ CodeTypeTok SpaceFactorCode)
+    , (_cs "delcode"          , _pt $ CodeTypeTok DelimiterCode)
+    -- Font range.
+    , (_cs "textfont"         , _pt $ FontRangeTok TextSizeFontRange)
+    , (_cs "scriptfont"       , _pt $ FontRangeTok ScriptSizeFontRange)
+    , (_cs "scriptscriptfont" , _pt $ FontRangeTok ScriptScriptSizeFontRange)
+    -- Internal integer.
+    , (_cs "lastpenalty"      , _pt LastPenaltyTok)
+    , (_cs "parshape"         , _pt ParagraphShapeTok)
+    , (_cs "badness"          , _pt BadnessTok)
+    , (_cs "inputlineno"      , _pt InputLineNrTok)
+    -- Internal length.
+    , (_cs "lastkern"         , _pt LastKernTok)
+    , (_cs "fontdimen"        , _pt FontDimensionTok)
+    , (_cs "ht"               , _pt $ BoxDimensionTok Height)
+    , (_cs "wd"               , _pt $ BoxDimensionTok Width)
+    , (_cs "dp"               , _pt $ BoxDimensionTok Depth)
+    -- Internal glue.
+    , (_cs "lastskip"         , _pt LastGlueTok)
+    -- Streams.
+    , (_cs "read"             , _pt ReadTok)
+    -- Fonts.
+    , (_cs "font"             , _pt FontTok)
+    , (_cs "hyphenchar"       , _pt $ FontCharTok HyphenChar)
+    , (_cs "skewchar"         , _pt $ FontCharTok SkewChar)
+      -- Temporary pragmatism.
+    , (_cs "selectfont"  , _pt $ FontRefToken theFontNr)
     ]

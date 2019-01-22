@@ -14,7 +14,6 @@ import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 import           HeX.Unit                       ( PhysicalUnit(..) )
 import qualified HeX.Parse.Token               as T
-import           HeX.Parse.Token.Parameter
 
 -- Number.
 
@@ -108,7 +107,7 @@ data UnsignedMathLength
 -- Think: 'un-coerced length'.
 data NormalMathLength
     -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
-    = MathLengthSemiConstant Factor Unit
+    = MathLengthSemiConstant Factor MathUnit
     deriving (Show)
 
 data MathUnit
@@ -117,7 +116,7 @@ data MathUnit
     deriving (Show)
 
 data CoercedMathLength
-    = InternalGlueAsMathLength InternalMathGlue
+    = InternalMathGlueAsMathLength InternalMathGlue
     deriving (Show)
 
 -- Glue.
@@ -164,11 +163,11 @@ type TokenListVariable = QuantVariable T.TokenListParameter [Lex.Token]
 
 data InternalInteger
     = InternalIntegerVariable IntegerVariable
-    | InternalSpecialInteger SpecialInteger
+    | InternalSpecialInteger T.SpecialInteger
     | InternalCodeTableRef CodeTableRef
-    | InternalCharToken String
-    | InternalMathCharToken String
-    | InternalFontCharAttr FontCharAttr FontRef
+    | InternalCharToken CharCode
+    | InternalMathCharToken CharCode
+    | InternalFontCharRef FontCharRef
     | LastPenalty
     | ParShape
     | InputLineNr
@@ -178,31 +177,29 @@ data InternalInteger
 data CodeTableRef = CodeTableRef T.CodeType Number
     deriving (Show)
 
-data FontCharAttr
-    = HyphenChar
-    | SkewChar
+data FontCharRef = FontCharRef T.FontChar FontRef
     deriving (Show)
 
 data FontRef
-    = FontTokenRef String
+    = FontTokenRef Int
     | CurrentFontRef
     | FamilyMemberFontRef FamilyMember
     deriving (Show)
 
-data FamilyMember = FamilyMember FontRange Number
+data FamilyMember = FamilyMember T.FontRange Number
     deriving (Show)
 
-data FontRange
-    = TextFontRange
-    | ScriptFontRange
-    | ScriptScriptFontRange
+data BoxDimensionRef = BoxDimensionRef Number TypoDim
+    deriving (Show)
+
+data FontDimensionRef = FontDimensionRef Number FontRef
     deriving (Show)
 
 data InternalLength
     = InternalLengthVariable LengthVariable
-    | InternalSpecialLength SpecialLength
-    | InternalFontLengthAttr Number FontRef
-    | InternalBoxDimension TypoDim Number
+    | InternalSpecialLength T.SpecialLength
+    | InternalFontDimensionRef FontDimensionRef
+    | InternalBoxDimensionRef BoxDimensionRef
     | LastKern
     deriving (Show)
 
@@ -223,16 +220,6 @@ data Assignment = Assignment
   , global :: T.GlobalFlag
   } deriving (Show)
 
-data QuantityType
-    = CharQuantity
-    | MathCharQuantity
-    | IntegerQuantity
-    | LengthQuantity
-    | GlueQuantity
-    | MathGlueQuantity
-    | TokenListQuantity
-    deriving (Show)
-
 data AssignmentBody
     = DefineMacro MacroAssignment
     | SetVariable VariableAssignment
@@ -240,22 +227,22 @@ data AssignmentBody
     | AssignCode CodeAssignment
     | Let Lex.ControlSequenceLike Lex.Token
     | FutureLet Lex.ControlSequenceLike Lex.Token Lex.Token
-    | ShortDefine QuantityType Lex.ControlSequenceLike Number
+    | ShortDefine T.QuantityType Lex.ControlSequenceLike Number
     | SelectFont IntVal
     | SetFamilyMember FamilyMember FontRef
-    -- \| SetParShape ParShapeAssignment
+    | SetParShape [(Length, Length)]
     | ReadToControlSequence Number Lex.ControlSequenceLike
     | SetBoxRegister Number Box
     | DefineFont Lex.ControlSequenceLike FontSpecification (Path Rel File)
     -- -- Global assignments.
-    | SetFontDimension Number FontRef Length
-    | SetFontChar FontCharAttr FontRef Number
+    | SetFontDimension FontDimensionRef Length
+    | SetFontChar FontCharRef Number
     | SetHyphenation BalancedText
     | SetHyphenationPatterns BalancedText
-    | SetBoxSize TypoDim Number Length
+    | SetBoxDimension BoxDimensionRef Length
     | SetInteractionMode InteractionMode
-    | SetSpecialInteger SpecialInteger Number
-    | SetSpecialLength SpecialLength Length
+    | SetSpecialInteger T.SpecialInteger Number
+    | SetSpecialLength T.SpecialLength Length
     deriving (Show)
 
 data MacroAssignment = MacroAssignment
@@ -268,26 +255,24 @@ data VariableAssignment
     = IntegerVariableAssignment IntegerVariable Number
     | LengthVariableAssignment LengthVariable Length
     | GlueVariableAssignment GlueVariable Glue
+    | MathGlueVariableAssignment MathGlueVariable MathGlue
+    | TokenListVariableAssignmentVar TokenListVariable TokenListVariable
+    | TokenListVariableAssignmentText TokenListVariable BalancedText
     deriving (Show)
 
 data VariableModification
-    = AdvanceInteger IntegerVariable Number
-    | AdvanceLength LengthVariable Length
-    | AdvanceGlue GlueVariable Glue
-    | AdvanceMathGlue MathGlueVariable MathGlue
-    | ScaleVariable ScaleOp NumberVariable Number
+    = AdvanceIntegerVariable IntegerVariable Number
+    | AdvanceLengthVariable LengthVariable Length
+    | AdvanceGlueVariable GlueVariable Glue
+    | AdvanceMathGlueVariable MathGlueVariable MathGlue
+    | ScaleVariable VDirection NumericVariable Number
     deriving (Show)
 
-data ScaleOp
-    = Multiply
-    | Divide
-    deriving (Show)
-
-data NumberVariable
-    = IntegerNumberVariable IntegerVariable
-    | LengthNumberVariable LengthVariable
-    | GlueNumberVariable GlueVariable
-    | MathGlueNumberVariable MathGlueVariable
+data NumericVariable
+    = IntegerNumericVariable IntegerVariable
+    | LengthNumericVariable LengthVariable
+    | GlueNumericVariable GlueVariable
+    | MathGlueNumericVariable MathGlueVariable
     deriving (Show)
 
 data CodeAssignment = CodeAssignment CodeTableRef Number
@@ -309,15 +294,10 @@ data InteractionMode
 -- Box specification.
 
 data Box
-    = FetchedRegisterBox BoxFetchMode Number
+    = FetchedRegisterBox T.BoxFetchMode Number
     | LastBox
     -- \| VSplit
     -- \| ExplicitBox BoxSpecification ExplicitBox
-    deriving (Show)
-
-data BoxFetchMode
-    = Pop
-    | Lookup
     deriving (Show)
 
 data BoxSpecification
@@ -369,7 +349,7 @@ data AllModesCommand
     | AddLeaders T.LeadersType BoxOrRule Glue
     | AddSpace
     | AddBox BoxPlacement Box
-    | AddUnwrappedFetchedBox Number BoxFetchMode -- \un{v,h}{box,copy}
+    | AddUnwrappedFetchedBox Number T.BoxFetchMode -- \un{v,h}{box,copy}
     | AddRule Rule
     -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
     | StartParagraph T.IndentFlag

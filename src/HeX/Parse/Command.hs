@@ -13,8 +13,6 @@ import           HeX.Parse.Helpers
 import           HeX.Parse.AST
 import qualified HeX.Parse.Token               as T
 import           HeX.Parse.Common
-import           HeX.Parse.Glue
-import           HeX.Parse.Length
 import           HeX.Parse.Number
 import           HeX.Parse.Stream
 import           HeX.Parse.Assignment
@@ -74,24 +72,15 @@ relax = skipSatisfiedEquals T.RelaxTok $> Relax
 -- \ignorespaces.
 ignorespaces :: SimpExpandParser ModeIndependentCommand
 ignorespaces =
-    do
-    skipSatisfiedEquals T.IgnoreSpacesTok
-    skipOptionalSpaces
-    pure IgnoreSpaces
+    skipSatisfiedEquals T.IgnoreSpacesTok >> skipOptionalSpaces $> IgnoreSpaces
 
 -- \penalty 100.
 addPenalty :: SimpExpandParser ModeIndependentCommand
-addPenalty =
-    do
-    skipSatisfiedEquals T.AddPenaltyTok
-    AddPenalty <$> parseNumber
+addPenalty = skipSatisfiedEquals T.AddPenaltyTok >> (AddPenalty <$> parseNumber)
 
 -- \kern 100.
 addKern :: SimpExpandParser ModeIndependentCommand
-addKern =
-    do
-    skipSatisfiedEquals T.AddKernTok
-    AddKern <$> parseLength
+addKern = skipSatisfiedEquals T.AddKernTok >> (AddKern <$> parseLength)
 
 -- \hskip 10pt and such.
 addSpecifiedGlue :: Axis -> SimpExpandParser ModeIndependentCommand
@@ -148,7 +137,7 @@ startParagraph =
         Nothing
 
 endParagraph :: SimpExpandParser AllModesCommand
-endParagraph = const EndParagraph <$> skipSatisfiedEquals T.EndParagraphTok
+endParagraph = skipSatisfiedEquals T.EndParagraphTok $> EndParagraph
 
 -- HMode.
 
