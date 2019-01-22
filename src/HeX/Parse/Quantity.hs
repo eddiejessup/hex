@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 
-module HeX.Parse.Number where
+module HeX.Parse.Quantity where
 
 import           Data.Foldable                  ( foldl' )
 import           Data.Ratio                     ( (%) )
@@ -367,12 +367,12 @@ parseInternalInteger = P.choice [ InternalIntegerVariable <$> parseIntegerVariab
                                 ]
 
 parseCharToken = satisfyThen (\case
-    (T.CharToken c) -> Just c
-    _               -> Nothing)
+    T.CharToken c -> Just c
+    _             -> Nothing)
 
 parseMathCharToken = satisfyThen (\case
-    (T.MathCharToken c) -> Just c
-    _                   -> Nothing)
+    T.MathCharToken c -> Just c
+    _                 -> Nothing)
 
 parseSpecialInteger = satisfyThen (\case
     T.SpecialIntegerTok p -> Just p
@@ -422,8 +422,8 @@ parseBoxDimensionRef = do
     pure $ BoxDimensionRef boxNr dim
 
 parseBoxDimension = satisfyThen (\case
-    (T.BoxDimensionTok d) -> Just d
-    _                     -> Nothing)
+    T.BoxDimensionTok d -> Just d
+    _                   -> Nothing)
 
 parseInternalGlue = P.choice [ InternalGlueVariable <$> parseGlueVariable
                              , skipSatisfiedEquals T.LastGlueTok $> LastGlue
@@ -432,3 +432,22 @@ parseInternalGlue = P.choice [ InternalGlueVariable <$> parseGlueVariable
 parseInternalMathGlue = P.choice [ InternalMathGlueVariable <$> parseMathGlueVariable
                                  , skipSatisfiedEquals T.LastGlueTok $> LastMathGlue
                                  ]
+
+parseBox = P.choice [ parseRegisterBox
+                    , skipSatisfiedEquals T.LastBoxTok $> LastBox
+                    , parseVSplitBox
+                    -- TODO: Implement (it will be complicated).
+                    -- , parseExplicitBox
+                    ]
+
+parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseNumber
+  where
+    parseFetchMode = satisfyThen (\case
+        T.AddFetchedBoxTok m -> Just m
+        _                    -> Nothing)
+
+parseVSplitBox =
+    do
+    nr <- parseNumber
+    skipKeyword "to"
+    VSplitBox nr <$> parseLength

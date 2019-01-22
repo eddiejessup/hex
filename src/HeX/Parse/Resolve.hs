@@ -214,18 +214,15 @@ defaultCSMap = HMap.fromList
     -- Short-hand definition heads.
     , (_cs "chardef"          , _pt $ ShortDefHeadTok CharQuantity)
     , (_cs "mathchardef"      , _pt $ ShortDefHeadTok MathCharQuantity)
-    , (_cs "countdef"         , _pt $ ShortDefHeadTok IntegerQuantity)
-    , (_cs "dimendef"         , _pt $ ShortDefHeadTok LengthQuantity)
-    , (_cs "skipdef"          , _pt $ ShortDefHeadTok GlueQuantity)
-    , (_cs "muskipdef"        , _pt $ ShortDefHeadTok MathGlueQuantity)
-    , (_cs "toksdef"          , _pt $ ShortDefHeadTok TokenListQuantity)
+    , (_cs "countdef"         , _pt $ ShortDefHeadTok $ RegQuantity RegInt)
+    , (_cs "dimendef"         , _pt $ ShortDefHeadTok $ RegQuantity RegLen)
+    , (_cs "skipdef"          , _pt $ ShortDefHeadTok $ RegQuantity RegGlue)
+    , (_cs "muskipdef"        , _pt $ ShortDefHeadTok $ RegQuantity RegMathGlue)
+    , (_cs "toksdef"          , _pt $ ShortDefHeadTok $ RegQuantity RegTokenList)
     -- Modify variables.
     , (_cs "advance"          , _pt AdvanceVarTok)
     , (_cs "multiply"         , _pt $ ScaleVarTok Upward)
     , (_cs "divide"           , _pt $ ScaleVarTok Downward)
-    -- Alias tokens.
-    , (_cs "let"              , _pt $ LetTok)
-    , (_cs "futurelet"        , _pt $ FutureLetTok)
       -- Code types.
     , (_cs "catcode"          , _pt $ CodeTypeTok CategoryCode)
     , (_cs "mathcode"         , _pt $ CodeTypeTok MathCode)
@@ -233,6 +230,9 @@ defaultCSMap = HMap.fromList
     , (_cs "uccode"           , _pt $ CodeTypeTok $ ChangeCaseCode Upward)
     , (_cs "sfcode"           , _pt $ CodeTypeTok SpaceFactorCode)
     , (_cs "delcode"          , _pt $ CodeTypeTok DelimiterCode)
+    -- Alias tokens.
+    , (_cs "let"              , _pt $ LetTok)
+    , (_cs "futurelet"        , _pt $ FutureLetTok)
     -- Font range.
     , (_cs "textfont"         , _pt $ FontRangeTok TextSizeFontRange)
     , (_cs "scriptfont"       , _pt $ FontRangeTok ScriptSizeFontRange)
@@ -250,12 +250,26 @@ defaultCSMap = HMap.fromList
     , (_cs "dp"               , _pt $ BoxDimensionTok Depth)
     -- Internal glue.
     , (_cs "lastskip"         , _pt LastGlueTok)
-    -- Streams.
+    -- Specifying a box.
+    , (_cs "box"              , _pt $ AddFetchedBoxTok Pop)
+    , (_cs "copy"             , _pt $ AddFetchedBoxTok Lookup)
+    , (_cs "lastbox"          , _pt LastBoxTok)
+    , (_cs "vsplit"           , _pt SplitVBoxTok)
+    , (_cs "hbox"             , _pt HBoxTok)
+    , (_cs "vbox"             , _pt $ VBoxTok False)
+    , (_cs "vtop"             , _pt $ VBoxTok True)
+    , (_cs "setbox"           , _pt SetBoxRegisterTok)
+    -- Stream.
     , (_cs "read"             , _pt ReadTok)
-    -- Fonts.
+    -- Font.
     , (_cs "font"             , _pt FontTok)
     , (_cs "hyphenchar"       , _pt $ FontCharTok HyphenChar)
     , (_cs "skewchar"         , _pt $ FontCharTok SkewChar)
+    -- Interaction mode.
+    , (_cs "errorstopmode"    , _pt $ InteractionModeTok ErrorStopMode)
+    , (_cs "scrollmode"       , _pt $ InteractionModeTok ScrollMode)
+    , (_cs "nonstopmode"      , _pt $ InteractionModeTok NonStopMode)
+    , (_cs "batchmode"        , _pt $ InteractionModeTok BatchMode)
       -- Temporary pragmatism.
     , (_cs "selectfont"  , _pt $ FontRefToken theFontNr)
     ]

@@ -240,7 +240,7 @@ data AssignmentBody
     | SetHyphenation BalancedText
     | SetHyphenationPatterns BalancedText
     | SetBoxDimension BoxDimensionRef Length
-    | SetInteractionMode InteractionMode
+    | SetInteractionMode T.InteractionMode
     | SetSpecialInteger T.SpecialInteger Number
     | SetSpecialLength T.SpecialLength Length
     deriving (Show)
@@ -284,19 +284,12 @@ data FontSpecification
     | FontScaled Number
     deriving (Show)
 
-data InteractionMode
-    = ErrorStopMode
-    | ScrollMode
-    | NonStopMode
-    | BatchMode
-    deriving (Show)
-
 -- Box specification.
 
 data Box
     = FetchedRegisterBox T.BoxFetchMode Number
     | LastBox
-    -- \| VSplit
+    | VSplitBox Number Length
     -- \| ExplicitBox BoxSpecification ExplicitBox
     deriving (Show)
 

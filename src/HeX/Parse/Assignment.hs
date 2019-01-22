@@ -23,7 +23,7 @@ import           HeX.Evaluate                   ( evaluateNumber )
 import           HeX.Parse.Helpers
 import           HeX.Parse.AST
 import           HeX.Parse.Common
-import           HeX.Parse.Number
+import           HeX.Parse.Quantity
 import           HeX.Parse.Stream
 import qualified HeX.Parse.Token               as T
 
@@ -93,24 +93,30 @@ parseNonMacroAssignment =
                  , SelectFont <$> parseFontRefToken
                  , parseSetFamilyMember
                  , parseSetParShape
-                 -- , parseReadToControlSequence
-                 -- , parseSetBoxRegister
+                 , parseReadToControlSequence
+                 , parseSetBoxRegister
                  , parseNewFontAssignment
-                 -- , parseSetFontDimension
-                 -- , parseSetFontChar
-                 -- , parseSetHyphenation
-                 -- , parseSetHyphenationPatterns
-                 -- , parseSetBoxDimension
-                 -- , parseSetInteractionMode
-                 -- , parseSetSpecialInteger
-                 -- , parseSetSpecialLength
+                 , parseSetFontDimension
+                 , parseSetFontChar
+                 , SetHyphenation <$> parseGeneralText
+                 , SetHyphenationPatterns <$> parseGeneralText
+                 , parseSetBoxDimension
+                 , SetInteractionMode <$> satisfyThen tokToInteractionMode
+                 , parseSetSpecialInteger
+                 , parseSetSpecialLength
                  ]
+
+    tokToInteractionMode (T.InteractionModeTok m) = Just m
+    tokToInteractionMode _                        = Nothing
 
 numVarValPair = (parseIntegerVariable, parseNumber)
 lenVarValPair = (parseLengthVariable, parseLength)
 glueVarValPair = (parseGlueVariable, parseGlue)
 mathGlueVarValPair = (parseMathGlueVariable, parseMathGlue)
 tokenListVarValPair = (parseTokenListVariable, parseGeneralText)
+
+parseVarEqVal (varParser, valParser) f =
+    f <$> varParser <* skipOptionalEquals <*> valParser
 
 parseVariableAssignment :: SimpExpandParser VariableAssignment
 parseVariableAssignment =
@@ -121,9 +127,6 @@ parseVariableAssignment =
              , parseVarEqVal tokenListVarValPair TokenListVariableAssignmentText
              , TokenListVariableAssignmentVar <$> parseTokenListVariable <* skipFiller <*> parseTokenListVariable
              ]
-  where
-    parseVarEqVal (varParser, valParser) f =
-        f <$> varParser <* skipOptionalEquals <*> valParser
 
 parseVariableModification :: SimpExpandParser VariableModification
 parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceIntegerVariable
@@ -162,18 +165,12 @@ parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceInte
 
 parseCodeAssignment :: SimpExpandParser CodeAssignment
 parseCodeAssignment =
-    do
-    codeRef <- parseCodeTableRef
-    skipOptionalEquals
-    CodeAssignment codeRef <$> parseNumber
+    parseVarEqVal (parseCodeTableRef, parseNumber) CodeAssignment
 
 parseLet =
     do
     skipSatisfiedEquals T.LetTok
-    cs <- parseCSName
-    skipOptionalEquals
-    skipOneOptionalSpace
-    Let cs <$> parseToken
+    parseVarEqVal (parseCSName, skipOneOptionalSpace >> parseToken) Let
 
 parseFutureLet =
     do
@@ -185,12 +182,11 @@ parseShortMacroAssignment =
     quant <- satisfyThen (\case
         T.ShortDefHeadTok t -> Just t
         _                   -> Nothing)
-    cs <- parseCSName
-    skipOptionalEquals
-    ShortDefine quant cs <$> parseNumber
+    parseVarEqVal (parseCSName, parseNumber) $ ShortDefine quant
 
 parseSetFamilyMember :: SimpExpandParser AssignmentBody
-parseSetFamilyMember = SetFamilyMember <$> parseFamilyMember <*> (skipOptionalEquals >> parseFontRef)
+parseSetFamilyMember =
+    parseVarEqVal (parseFamilyMember, parseFontRef) SetFamilyMember
 
 parseSetParShape :: SimpExpandParser AssignmentBody
 parseSetParShape =
@@ -207,6 +203,20 @@ parseSetParShape =
     SetParShape <$> P.count eNrPairs parseLengthPair
   where
     parseLengthPair = (,) <$> parseLength <*> parseLength
+
+parseReadToControlSequence =
+    do
+    skipSatisfiedEquals T.ReadTok
+    nr <- parseNumber
+    skipKeyword "to"
+    skipOptionalSpaces
+    cs <- parseCSName
+    pure $ ReadToControlSequence nr cs
+
+parseSetBoxRegister =
+    do
+    skipSatisfiedEquals T.SetBoxRegisterTok
+    parseVarEqVal (parseNumber, skipFiller >> parseBox) SetBoxRegister
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
 parseNewFontAssignment :: SimpExpandParser AssignmentBody
@@ -257,3 +267,18 @@ parseNewFontAssignment =
 
     parseFontSpecAt = skipKeyword "at" >> (FontAt <$> parseLength)
     parseFontSpecScaled = skipKeyword "scaled" >> (FontScaled <$> parseNumber)
+
+parseSetFontDimension =
+    parseVarEqVal (parseFontDimensionRef, parseLength) SetFontDimension
+
+parseSetFontChar =
+    parseVarEqVal (parseFontCharRef, parseNumber) SetFontChar
+
+parseSetBoxDimension =
+    parseVarEqVal (parseBoxDimensionRef, parseLength) SetBoxDimension
+
+parseSetSpecialInteger =
+    parseVarEqVal (parseSpecialInteger, parseNumber) SetSpecialInteger
+
+parseSetSpecialLength =
+    parseVarEqVal (parseSpecialLength, parseLength) SetSpecialLength

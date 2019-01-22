@@ -237,19 +237,22 @@ data CodeType
 data QuantityType
     = CharQuantity  -- \chardef
     | MathCharQuantity  -- \mathchardef
-    | IntegerQuantity  -- \countdef
-    | LengthQuantity  -- \dimendef
-    | GlueQuantity  -- \skipdef
-    | MathGlueQuantity  -- \muskipdef
-    | TokenListQuantity  -- \toksdef
+    | RegQuantity RegisterType
     deriving (Show, Eq)
 
 data RegisterType
-    = RegInt        -- \count
-    | RegLen        -- \dimen
-    | RegGlue       -- \skip
-    | RegMathGlue   -- \muskip
-    | RegTokenList  -- \toks
+    = RegInt        -- \count, \countdef
+    | RegLen        -- \dimen, \dimendef
+    | RegGlue       -- \skip, \skipdef
+    | RegMathGlue   -- \muskip, \muskipdef
+    | RegTokenList  -- \toks, \toksdef
+    deriving (Show, Eq)
+
+data InteractionMode
+    = ErrorStopMode  -- \errorstopmode
+    | ScrollMode  -- \scrollmode
+    | NonStopMode  -- \nonstopmode
+    | BatchMode  -- \batchmode
     deriving (Show, Eq)
 
 data Digit
@@ -358,16 +361,6 @@ data PrimitiveToken
     -- \| AddDiscretionaryText -- \discretionary
     -- \| AddDiscretionaryHyphen -- \-
     -- \| ToggleMathMode -- $
-    -- -- Starters of box invocations.
-    -- \| PopRegisterBox -- \box
-    -- \| LookupRegisterBox -- \copy
-    -- \| LastBox -- \lastbox
-    -- -- VBox from splitting off some material from a box register.
-    -- \| SplitVBox -- \vsplit
-    -- \| HBox -- \hbox
-    -- \| VBox {top :: Bool} -- \vbox, \vtop
-    -- Direction represents reading direction: forward means right, or down.
-    -- \| AddFetchedBox { pop :: Bool } -- \box, \copy
     -- -- Involved in assignments.
     -- -- > > Modifying how to apply assignments.
     | AssignPrefixTok AssignPrefixTok
@@ -398,6 +391,8 @@ data PrimitiveToken
     | FontRefToken IntVal
     -- Heads of register references.
     | RegisterVariableTok RegisterType
+    -- > Defining simple token macros (also known as 'short-hand definitions').
+    | ShortDefHeadTok QuantityType
     -- > Modifying variable values with arithmetic.
     | AdvanceVarTok -- \advance
     | ScaleVarTok VDirection -- \multiply, \divide.
@@ -405,8 +400,6 @@ data PrimitiveToken
     -- > Aliasing tokens.
     | LetTok -- \let
     | FutureLetTok -- \futurelet
-    -- > Defining simple token macros (also known as 'short-hand definitions').
-    | ShortDefHeadTok QuantityType
     -- > Setting font math-family-member things.
     | FontRangeTok FontRange
     -- > Internal integers.
@@ -420,10 +413,16 @@ data PrimitiveToken
     | BoxDimensionTok TypoDim -- \ht, \wd, \dp
     -- Internal glues.
     | LastGlueTok -- \lastskip
+    -- Specifying boxes.
+    | AddFetchedBoxTok BoxFetchMode -- \box, \copy
+    | LastBoxTok -- \lastbox
+    | SplitVBoxTok -- \vsplit
+    | HBoxTok -- \hbox
+    | VBoxTok {top :: Bool} -- \vbox, \vtop
+    -- > Setting the contents of a box register.
+    | SetBoxRegisterTok -- \setbox
     -- > Reading contents into control sequences (not sure what this is about).
     | ReadTok -- \read
-    -- > Setting the contents of a box register.
-    -- \| SetBoxRegister -- \setbox
     -- > Defining macros resolving to a font.
     | FontTok -- \font
     -- Involved in global assignments.
@@ -433,10 +432,7 @@ data PrimitiveToken
     -- \| AddHyphenationExceptions -- \hyphenation
     -- \| SetHyphenationPatterns -- \patterns
     -- > Setting interaction mode.
-    -- \| SwitchToErrorStopMode -- \errorstopmode
-    -- \| SwitchToScrollMode -- \scrollmode
-    -- \| SwitchToNonStopMode -- \nonstopmode
-    -- \| SwitchToBatchMode -- \batchmode
+    | InteractionModeTok InteractionMode
     -- Conditions.
     -- \| CompareIntegers -- \ifnum
     -- \| CompareDistances -- \ifdim

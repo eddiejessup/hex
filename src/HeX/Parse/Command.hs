@@ -13,7 +13,7 @@ import           HeX.Parse.Helpers
 import           HeX.Parse.AST
 import qualified HeX.Parse.Token               as T
 import           HeX.Parse.Common
-import           HeX.Parse.Number
+import           HeX.Parse.Quantity
 import           HeX.Parse.Stream
 import           HeX.Parse.Assignment
 
