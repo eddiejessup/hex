@@ -7,6 +7,7 @@ import           Data.Char                      ( chr )
 import           HeX.Categorise                 ( CharCode )
 import           HeX.Config
 import qualified HeX.Parse.AST                 as AST
+import qualified HeX.Parse.Token               as T
 import qualified HeX.Unit                      as Unit
 import qualified HeX.BreakList                 as BL
 import qualified HeX.Box                       as B
@@ -18,9 +19,9 @@ evaluateUnsignedNumber :: AST.UnsignedNumber -> Int
 evaluateUnsignedNumber (AST.NormalIntegerAsUNumber n) = evaluateNormalInteger n
 
 evaluateNumber :: AST.Number -> Int
-evaluateNumber (AST.Number (AST.Sign isPos) u)
+evaluateNumber (AST.Number (T.Sign isPos) u)
     | isPos = size
-    | otherwise = -(size)
+    | otherwise = -size
   where
     size = evaluateUnsignedNumber u
 
@@ -48,18 +49,18 @@ evaluateULength :: (IntParamVal Mag) -> AST.UnsignedLength -> Int
 evaluateULength m (AST.NormalLengthAsULength nLn) = evaluateNormalLength m nLn
 
 evaluateLength :: (IntParamVal Mag) -> AST.Length -> Int
-evaluateLength m (AST.Length (AST.Sign isPos) uLn) 
+evaluateLength m (AST.Length (T.Sign isPos) uLn)
     | isPos = size
-    | otherwise = -(size)
+    | otherwise = -size
   where
     size = evaluateULength m uLn
 
 evaluateFlex :: (IntParamVal Mag) -> Maybe AST.Flex -> BL.GlueFlex
 evaluateFlex m (Just (AST.FiniteFlex ln)) =
     BL.GlueFlex{factor = fromIntegral $ evaluateLength m ln, order = 0}
-evaluateFlex _ (Just (AST.FilFlex (AST.FilLength (AST.Sign isPos) f ord)))
+evaluateFlex _ (Just (AST.FilFlex (AST.FilLength (T.Sign isPos) f ord)))
     | isPos     = BL.GlueFlex{factor = size,    order = ord}
-    | otherwise = BL.GlueFlex{factor = -(size), order = ord}
+    | otherwise = BL.GlueFlex{factor = -size, order = ord}
   where
     size = evaluateFactor f
 evaluateFlex _ Nothing =

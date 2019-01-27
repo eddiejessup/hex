@@ -8,6 +8,17 @@ import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 import qualified HeX.BreakList                 as BL
 
+-- mconcat on this newtype wrapper should get the final sign of a list of
+-- signs. Bit pretentious, sorry.
+newtype Sign = Sign { getSign :: Bool }
+    deriving (Show, Eq)
+
+instance Semigroup Sign where
+    Sign x <> Sign y = Sign $ x == y
+
+instance Monoid Sign where
+    mempty = Sign True
+
 data IntegerParameter
     = PreTolerance           -- Badness tolerance before hyphenation
     | Tolerance              -- Badness tolerance after hyphenation
@@ -314,53 +325,55 @@ data MacroContents = MacroContents
     , replacementTokens :: MacroText
     } deriving (Show, Eq)
 
+data RemovableItem
+    = PenaltyItem  -- \unpenalty
+    | KernItem  -- \unkern
+    | GlueItem  -- \unskip
+    deriving (Show, Eq)
+
 data PrimitiveToken
     = SyntaxCommandArg SyntaxCommandArg
     -- Starters of commands.
     | RelaxTok -- \relax
-    -- \| RightBrace -- }
-    -- \| BeginGroup -- \begingroup
-    -- \| EndGroup -- \endgroup
-    -- \| ShowToken -- \show
-    -- \| ShowBox -- \showbox
-    -- \| ShowLists -- \showlists
-    -- \| ShowInternalQuantity -- \showthe
-    -- \| ShipOut -- \shipout
+    | ChangeScopeCSTok Sign
+    | ShowTokenTok -- \show
+    | ShowBoxTok -- \showbox
+    | ShowListsTok -- \showlists
+    | ShowInternalQuantity -- \showthe
+    | ShipOutTok -- \shipout
     | IgnoreSpacesTok -- \ignorespaces
-    -- \| SetAfterAssignmentToken -- \afterassignment
-    -- \| AddToAfterGroupTokens -- \aftergroup
-    -- \| Message MessageStream -- \message, \errmessage
-    -- \| Immediate -- \immediate
-    -- \| OpenInput -- \openin
-    -- \| CloseInput -- \closein
-    -- \| OpenOutput -- \openout
-    -- \| CloseOutput -- \closeout
-    -- \| Write -- \write
-    -- \| AddWhatsit -- \special
+    | SetAfterAssignmentTokenTok -- \afterassignment
+    | AddToAfterGroupTokensTok -- \aftergroup
+    | MessageTok MessageStream -- \message, \errmessage
+    | ImmediateTok -- \immediate
+    | OpenInputTok -- \openin
+    | CloseInputTok -- \closein
+    | OpenOutputTok -- \openout
+    | CloseOutputTok -- \closeout
+    | WriteTok -- \write
+    | DoSpecialTok -- \special
     | AddPenaltyTok -- \penalty
     | AddKernTok -- \kern
-    -- \| RemoveLastPenalty -- \unpenalty
-    -- \| RemoveLastKern -- \unkern
-    -- \| RemoveLastGlue -- \unskip
-    -- \| AddMark -- \mark
-    -- \| AddInsertion -- \insert
-    -- \| AddLeaders LeadersType
+    | AddMathKernTok -- \mkern
+    | RemoveItemTok RemovableItem
+    | AddMarkTok -- \mark
+    | AddInsertionTok -- \insert
+    | AddLeadersTok LeadersType
     | StartParagraphTok IndentFlag -- \indent, \noindent
     | EndParagraphTok -- \par
-    -- \| LeftBrace -- {
     -- Starters of mode-specific commands with almost mode-independent grammar.
     | ModedCommand Axis ModedCommandPrimitiveToken
     -- Starters of Vertical-Mode-specific commands.
     | EndTok -- \end
     | DumpTok -- \dump
     -- Starters of Horizontal-Mode-specific commands.
-    -- \| ControlSpace -- \␣ (a control symbol named ' ')
-    -- \| AddCharacterCode -- \char
-    -- \| AddAccentedCharacter -- \accent
-    -- \| AddItalicCorrection -- \/
-    -- \| AddDiscretionaryText -- \discretionary
-    -- \| AddDiscretionaryHyphen -- \-
-    -- \| ToggleMathMode -- $
+    | ControlSpaceTok -- \␣ (a control symbol named ' ')
+    | ControlCharTok -- \char
+    | AccentTok -- \accent
+    | ItalicCorrectionTok -- \/
+    | DiscretionaryTextTok -- \discretionary
+    | DiscretionaryHyphenTok -- \-
+    | ToggleMathModeTok -- $
     -- -- Involved in assignments.
     -- -- > > Modifying how to apply assignments.
     | AssignPrefixTok AssignPrefixTok

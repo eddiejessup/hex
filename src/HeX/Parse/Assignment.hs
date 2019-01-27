@@ -2,18 +2,17 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
 
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-
 module HeX.Parse.Assignment where
 
 import           Data.Functor                   ( ($>) )
 import           Control.Monad                  ( when )
+
 import           Path                           ( File
                                                 , Path
                                                 , Rel
                                                 , parseRelFile
                                                 )
+
 import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
 
@@ -31,7 +30,7 @@ type AssignmentParser = SimpExpandParser Assignment
 
 parseAssignment :: AssignmentParser
 -- 'Try' because both can start with 'global'.
-parseAssignment = P.try parseDefineMacro <|> parseNonMacroAssignment
+parseAssignment = (P.try parseDefineMacro) <|> parseNonMacroAssignment
 
 -- Parse Macro.
 
@@ -218,28 +217,17 @@ parseSetBoxRegister =
     skipSatisfiedEquals T.SetBoxRegisterTok
     parseVarEqVal (parseNumber, skipFiller >> parseBox) SetBoxRegister
 
--- \font <control-sequence> <equals> <file-name> <at-clause>
-parseNewFontAssignment :: SimpExpandParser AssignmentBody
-parseNewFontAssignment =
+-- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
+parseFileName :: SimpExpandParser (Path Rel File)
+parseFileName =
     do
-    skipSatisfiedEquals T.FontTok
-    cs <- parseCSName
-    skipOptionalEquals
-    fname <- parseFileName
-    fontSpec <- parseFontSpecification
-    pure $ DefineFont cs fontSpec fname
+    skipOptionalSpaces
+    fileName <- P.some $ satisfyThen tokToPathChar
+    skipSatisfied isSpace
+    case parseRelFile (fileName ++ ".tfm") of
+      Just p -> pure p
+      Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
   where
-    -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-    parseFileName :: SimpExpandParser (Path Rel File)
-    parseFileName =
-        do
-        skipOptionalSpaces
-        fileName <- P.some $ satisfyThen tokToPathChar
-        skipSatisfied isSpace
-        case parseRelFile (fileName ++ ".tfm") of
-          Just p -> pure p
-          Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
-
     tokToPathChar (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) =
         Just c
     -- 'Other' Characters for decimal digits are OK.
@@ -261,6 +249,17 @@ parseNewFontAssignment =
             _ -> Nothing
     tokToPathChar _ = Nothing
 
+-- \font <control-sequence> <equals> <file-name> <at-clause>
+parseNewFontAssignment :: SimpExpandParser AssignmentBody
+parseNewFontAssignment =
+    do
+    skipSatisfiedEquals T.FontTok
+    cs <- parseCSName
+    skipOptionalEquals
+    fname <- parseFileName
+    fontSpec <- parseFontSpecification
+    pure $ DefineFont cs fontSpec fname
+  where
     parseFontSpecification = P.choice [ parseFontSpecAt
                                       , parseFontSpecScaled
                                       , skipOptionalSpaces $> NaturalFont ]

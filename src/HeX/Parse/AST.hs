@@ -17,19 +17,8 @@ import qualified HeX.Parse.Token               as T
 
 -- Number.
 
-data Number = Number Sign UnsignedNumber
+data Number = Number T.Sign UnsignedNumber
     deriving (Show)
-
--- mconcat on this newtype wrapper should get the final sign of a list of
--- signs. Bit pretentious, sorry.
-newtype Sign = Sign { getSign :: Bool }
-    deriving (Show, Eq)
-
-instance Semigroup Sign where
-    Sign x <> Sign y = Sign $ x == y
-
-instance Monoid Sign where
-    mempty = Sign True
 
 data UnsignedNumber
     = NormalIntegerAsUNumber NormalInteger
@@ -42,6 +31,10 @@ data NormalInteger
     | InternalInteger InternalInteger
     deriving (Show)
 
+zeroInteger, oneInteger :: NormalInteger
+zeroInteger = IntegerConstant 0
+oneInteger = IntegerConstant 1
+
 data CoercedInteger
     = InternalLengthAsInt InternalLength
     | InternalGlueAsInt InternalGlue
@@ -49,8 +42,11 @@ data CoercedInteger
 
 -- Length.
 
-data Length = Length Sign UnsignedLength
+data Length = Length T.Sign UnsignedLength
     deriving (Show)
+
+zeroLength :: Length
+zeroLength = Length (T.Sign True) $ NormalLengthAsULength $ LengthSemiConstant zeroFactor scaledPointUnit
 
 data UnsignedLength
     = NormalLengthAsULength NormalLength
@@ -72,10 +68,17 @@ data Factor
     | RationalConstant Rational
     deriving (Show)
 
+zeroFactor, oneFactor :: Factor
+zeroFactor = NormalIntegerFactor zeroInteger
+oneFactor = NormalIntegerFactor oneInteger
+
 data Unit
     = PhysicalUnit PhysicalUnitFrame PhysicalUnit
     | InternalUnit InternalUnit
     deriving (Show)
+
+scaledPointUnit :: Unit
+scaledPointUnit = PhysicalUnit MagnifiedFrame ScaledPoint
 
 data InternalUnit
     = Em
@@ -96,7 +99,7 @@ data CoercedLength
 
 -- Math-length.
 
-data MathLength = MathLength Sign UnsignedMathLength
+data MathLength = MathLength T.Sign UnsignedMathLength
     deriving (Show)
 
 data UnsignedMathLength
@@ -123,7 +126,7 @@ data CoercedMathLength
 
 data Glue
     = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
-    | InternalGlue Sign InternalGlue
+    | InternalGlue T.Sign InternalGlue
     deriving (Show)
 
 data Flex
@@ -131,14 +134,24 @@ data Flex
     | FilFlex FilLength
     deriving (Show)
 
-data FilLength = FilLength Sign Factor Int
+oneFilFlex, minusOneFilFlex, oneFillFlex :: Flex
+oneFilFlex = FilFlex oneFil
+minusOneFilFlex = FilFlex minusOneFil
+oneFillFlex = FilFlex oneFill
+
+data FilLength = FilLength T.Sign Factor Int
     deriving (Show)
+
+oneFil, minusOneFil, oneFill :: FilLength
+oneFil = FilLength (T.Sign True) oneFactor 1
+minusOneFil = FilLength (T.Sign False) oneFactor 1
+oneFill = FilLength (T.Sign True) oneFactor 2
 
 -- Math glue.
 
 data MathGlue
     = ExplicitMathGlue MathLength (Maybe MathFlex) (Maybe MathFlex)
-    | InternalMathGlue Sign InternalMathGlue
+    | InternalMathGlue T.Sign InternalMathGlue
     deriving (Show)
 
 data MathFlex
@@ -314,13 +327,15 @@ data BoxOrRule
     | BoxOrRuleRule Rule
     deriving (Show)
 
+data CommandTrigger
+    = CharCommandTrigger
+    | CSCommandTrigger
+    deriving (Show)
+
 -- Commands.
 
 data AllModesCommand
-    = LeftBrace
-    | RightBrace
-    | BeginGroup
-    | EndGroup
+    = ChangeScope T.Sign CommandTrigger
     | ShowToken Lex.Token
     | ShowBox Number
     | ShowLists
@@ -329,24 +344,21 @@ data AllModesCommand
     | SetAfterAssignmentToken Lex.Token
     | AddToAfterGroupTokens Lex.Token
     | Message T.MessageStream BalancedText
-    | ModifyFileStream Number FileStreamAction FileStreamType
+    | ModifyFileStream FileStreamType FileStreamAction Number
     | WriteToStream Number BalancedText WritePolicy
-    | AddWhatsit BalancedText
-    | RemoveLastPenalty
-    | RemoveLastKern
-    | RemoveLastGlue
+    | DoSpecial BalancedText
     | AddMark BalancedText
     -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
     -- -- then can 'migrate' out.
     -- \| AddInsertion Number VModeMaterial
-    | AddLeaders T.LeadersType BoxOrRule Glue
     | AddSpace
     | AddBox BoxPlacement Box
+    | StartParagraph T.IndentFlag
+    | EndParagraph
+    | AddLeaders T.LeadersType BoxOrRule Glue
     | AddUnwrappedFetchedBox Number T.BoxFetchMode -- \un{v,h}{box,copy}
     | AddRule Rule
     -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
-    | StartParagraph T.IndentFlag
-    | EndParagraph
     | ModeIndependentCommand ModeIndependentCommand
     deriving (Show)
 
@@ -357,26 +369,27 @@ data ModeIndependentCommand
     | AddPenalty Number
     | AddKern Length
     | AddMathKern MathLength
+    | RemoveItem T.RemovableItem
     | AddGlue Glue
     deriving (Show)
 
 data VModeCommand
     = VAllModesCommand AllModesCommand
-    | EnterHMode
     | End
     | Dump
+    | EnterHMode
     deriving (Show)
 
 data HModeCommand
     = HAllModesCommand AllModesCommand
-    | LeaveHMode
-    | EnterMathMode
     -- \| AddAdjustment VModeMaterial
     | AddControlSpace
     | AddCharacter CharCodeRef
-    | AddAccentedCharacter { accentCode :: Number, targetCode :: Maybe Number, assignments :: [Assignment]}
+    | AddAccentedCharacter Number [Assignment] (Maybe CharCodeRef)
     | AddItalicCorrection
     | AddDiscretionaryText { preBreak, postBreak, noBreak :: BalancedText }
+    | EnterMathMode
+    | LeaveHMode
     deriving (Show)
 
 data WritePolicy
@@ -392,7 +405,7 @@ data Rule = Rule
     deriving (Show)
 
 data FileStreamAction
-    = Open String
+    = Open (Path Rel File)
     | Close
     deriving (Show)
 

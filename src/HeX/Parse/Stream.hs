@@ -101,6 +101,7 @@ parseToken = parseInhibited unsafeAnySingleLex
 
 -- TODO: Move these parsers outside the module.
 
+skipFiller :: NullSimpParser ExpandedStream
 skipFiller = skipManySatisfied isFillerItem
 
 parseGeneralText :: SimpExpandParser BalancedText

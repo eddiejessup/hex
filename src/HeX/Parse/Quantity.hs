@@ -23,16 +23,16 @@ import           HeX.Parse.Stream
 parseNumber :: SimpExpandParser Number
 parseNumber = Number <$> parseSigns <*> parseUnsignedNumber
 
-parseSigns :: SimpExpandParser Sign
+parseSigns :: SimpExpandParser T.Sign
 parseSigns = mconcat <$> parseOptionalSigns
   where
     parseOptionalSigns =
         skipOptionalSpaces *> P.sepEndBy (satisfyThen signToPos) skipOptionalSpaces
 
     signToPos (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '+' Lex.Other))) =
-        Just $ Sign True
+        Just $ T.Sign True
     signToPos (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '-' Lex.Other))) =
-        Just $ Sign False
+        Just $ T.Sign False
     signToPos _ =
         Nothing
 
@@ -163,13 +163,11 @@ parseNormalLength = P.choice [ LengthSemiConstant <$> parseFactor <*> parseUnit
                              ]
 
 parseFactor :: SimpExpandParser Factor
--- NOTE: The order matters here: The TeX grammar seems to be ambiguous: '2.2'
+-- NOTE: The parser order matters because TeX's grammar is ambiguous: '2.2'
 -- could be parsed as an integer constant, '2', followed by '.2'. We break the
 -- ambiguity by prioritising the rational constant parser.
--- I don't think this is just a matter of backtracking, because the grammar is
--- simply ambiguous.
-parseFactor = P.choice $ P.try <$> [ NormalIntegerFactor <$> parseNormalInteger
-                                   , RationalConstant <$> parseRationalConstant
+parseFactor = P.choice $ P.try <$> [ RationalConstant <$> parseRationalConstant
+                                   , NormalIntegerFactor <$> parseNormalInteger
                                    ]
 
 parseRationalConstant :: SimpExpandParser Rational
@@ -194,7 +192,7 @@ parseRationalConstant =
     isDotOrComma _ = False
 
 parseUnit :: SimpExpandParser Unit
-parseUnit = P.choice [ skipOptionalSpaces *> (InternalUnit <$> parseInternalUnit)
+parseUnit = P.choice [ P.try $ skipOptionalSpaces *> (InternalUnit <$> parseInternalUnit)
                      , (PhysicalUnit <$> parseFrame <*> parsePhysicalUnitLit) <* skipOneOptionalSpace
                      ]
   where
@@ -207,6 +205,11 @@ parseUnit = P.choice [ skipOptionalSpaces *> (InternalUnit <$> parseInternalUnit
     parseInternalUnitLit = P.choice $ P.try <$> [ parseKeywordToValue "em" Em
                                                 , parseKeywordToValue "ex" Ex
                                                 ]
+
+    parseFrame =
+        do
+        isTrue <- parseOptionalKeyword "true"
+        pure $ if isTrue then TrueFrame else MagnifiedFrame
 
     -- TODO: Use 'try' because keywords with common prefixes lead the parser
     -- down a blind alley. Could refactor to avoid, but it would be ugly.
@@ -224,11 +227,6 @@ parseUnit = P.choice [ skipOptionalSpaces *> (InternalUnit <$> parseInternalUnit
                                                 , parseKeywordToValue "pt" Point
                                                 , parseKeywordToValue "sp" ScaledPoint
                                                 ]
-
-    parseFrame =
-        do
-        isTrue <- parseOptionalKeyword "true"
-        pure $ if isTrue then TrueFrame else MagnifiedFrame
 
 parseCoercedLength = InternalGlueAsLength <$> parseInternalGlue
 
@@ -448,6 +446,7 @@ parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseNumber
 
 parseVSplitBox =
     do
+    skipSatisfiedEquals T.SplitVBoxTok
     nr <- parseNumber
     skipKeyword "to"
     VSplitBox nr <$> parseLength
