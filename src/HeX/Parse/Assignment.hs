@@ -108,12 +108,24 @@ parseNonMacroAssignment =
     tokToInteractionMode (T.InteractionModeTok m) = Just m
     tokToInteractionMode _                        = Nothing
 
+numVarValPair :: (SimpExpandParser IntegerVariable, SimpExpandParser Number)
 numVarValPair = (parseIntegerVariable, parseNumber)
+
+lenVarValPair :: (SimpExpandParser LengthVariable, SimpExpandParser Length)
 lenVarValPair = (parseLengthVariable, parseLength)
+
+glueVarValPair :: (SimpExpandParser GlueVariable, SimpExpandParser Glue)
 glueVarValPair = (parseGlueVariable, parseGlue)
+
+mathGlueVarValPair :: (SimpExpandParser MathGlueVariable, SimpExpandParser MathGlue)
 mathGlueVarValPair = (parseMathGlueVariable, parseMathGlue)
+
+tokenListVarValPair :: (SimpExpandParser TokenListVariable, SimpExpandParser BalancedText)
 tokenListVarValPair = (parseTokenListVariable, parseGeneralText)
 
+parseVarEqVal :: (SimpExpandParser a, SimpExpandParser b)
+              -> (a -> b -> c)
+              -> SimpExpandParser c
 parseVarEqVal (varParser, valParser) f =
     f <$> varParser <* skipOptionalEquals <*> valParser
 
@@ -141,8 +153,7 @@ parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceInte
         skipSatisfiedEquals T.AdvanceVarTok
         var <- varParser
         skipOptionalBy
-        val <- valParser
-        pure $ f var val
+        f var <$> valParser
 
     parseScaleVar =
         do
@@ -151,8 +162,7 @@ parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceInte
             _               -> Nothing)
         var <- parseNumericVariable
         skipOptionalBy
-        nr <- parseNumber
-        pure $ ScaleVariable d var nr
+        ScaleVariable d var <$> parseNumber
 
     skipOptionalBy = (parseOptionalKeyword "by" $> ()) <|> skipOptionalSpaces
 
@@ -166,16 +176,19 @@ parseCodeAssignment :: SimpExpandParser CodeAssignment
 parseCodeAssignment =
     parseVarEqVal (parseCodeTableRef, parseNumber) CodeAssignment
 
+parseLet :: SimpExpandParser AssignmentBody
 parseLet =
     do
     skipSatisfiedEquals T.LetTok
     parseVarEqVal (parseCSName, skipOneOptionalSpace >> parseToken) Let
 
+parseFutureLet :: SimpExpandParser AssignmentBody
 parseFutureLet =
     do
     skipSatisfiedEquals T.FutureLetTok
     FutureLet <$> parseCSName <*> parseToken <*> parseToken
 
+parseShortMacroAssignment :: SimpExpandParser AssignmentBody
 parseShortMacroAssignment =
     do
     quant <- satisfyThen (\case
@@ -203,15 +216,16 @@ parseSetParShape =
   where
     parseLengthPair = (,) <$> parseLength <*> parseLength
 
+parseReadToControlSequence :: SimpExpandParser AssignmentBody
 parseReadToControlSequence =
     do
     skipSatisfiedEquals T.ReadTok
     nr <- parseNumber
     skipKeyword "to"
     skipOptionalSpaces
-    cs <- parseCSName
-    pure $ ReadToControlSequence nr cs
+    ReadToControlSequence nr <$> parseCSName
 
+parseSetBoxRegister :: SimpExpandParser AssignmentBody
 parseSetBoxRegister =
     do
     skipSatisfiedEquals T.SetBoxRegisterTok
@@ -267,17 +281,22 @@ parseNewFontAssignment =
     parseFontSpecAt = skipKeyword "at" >> (FontAt <$> parseLength)
     parseFontSpecScaled = skipKeyword "scaled" >> (FontScaled <$> parseNumber)
 
+parseSetFontDimension :: SimpExpandParser AssignmentBody
 parseSetFontDimension =
     parseVarEqVal (parseFontDimensionRef, parseLength) SetFontDimension
 
+parseSetFontChar :: SimpExpandParser AssignmentBody
 parseSetFontChar =
     parseVarEqVal (parseFontCharRef, parseNumber) SetFontChar
 
+parseSetBoxDimension :: SimpExpandParser AssignmentBody
 parseSetBoxDimension =
     parseVarEqVal (parseBoxDimensionRef, parseLength) SetBoxDimension
 
+parseSetSpecialInteger :: SimpExpandParser AssignmentBody
 parseSetSpecialInteger =
     parseVarEqVal (parseSpecialInteger, parseNumber) SetSpecialInteger
 
+parseSetSpecialLength :: SimpExpandParser AssignmentBody
 parseSetSpecialLength =
     parseVarEqVal (parseSpecialLength, parseLength) SetSpecialLength

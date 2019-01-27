@@ -55,9 +55,9 @@ parseAllModeCommand mode =
              , parseCloseOutput
              , parseWriteToStream
              , skipSatisfiedEquals T.DoSpecialTok >> (DoSpecial <$> parseGeneralText)
+             , skipSatisfiedEquals T.AddMarkTok >> (AddMark <$> parseGeneralText)
              -- , parseInsert
              -- , parseVAdjust
-             , skipSatisfiedEquals T.AddMarkTok >> (AddMark <$> parseGeneralText)
              , skipSatisfied isSpace $> AddSpace
              , AddBox NaturalPlacement <$> parseBox
              , parseStartParagraph
@@ -65,8 +65,8 @@ parseAllModeCommand mode =
 
              -- Mode-parametrised.
              , parseAddLeaders mode
-             -- , parseAddShiftedBox mode
-             -- , parseAddUnwrappedFetchedBox mode
+             , parseAddShiftedBox mode
+             , parseAddUnwrappedFetchedBox mode
              , AddRule <$> parseRule mode
              -- , parseAlign mode
 
@@ -141,6 +141,22 @@ parseAddLeaders mode =
     parseLeaders = satisfyThen (\case
         T.AddLeadersTok t -> Just t
         _                 -> Nothing)
+
+parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
+  where
+    parseDirection = satisfyThen (\case
+        T.ModedCommand mode2 (T.AddShiftedBox d) | (mode == mode2) -> Just d
+        _ -> Nothing)
+
+    parsePlacement = ShiftedPlacement <$> parseDirection <*> parseLength
+
+parseAddUnwrappedFetchedBox mode =
+    do
+    fetchMode <- satisfyThen (\case
+        T.ModedCommand mode2 (T.AddUnwrappedFetchedBoxTok fm) | (mode == mode2) -> Just fm
+        _ -> Nothing)
+    n <- parseNumber
+    pure $ AddUnwrappedFetchedBox n fetchMode
 
 parseBoxOrRule :: SimpExpandParser BoxOrRule
 parseBoxOrRule = P.choice [ BoxOrRuleBox <$> parseBox
@@ -272,10 +288,10 @@ parseHModeCommand =
     P.choice [ skipSatisfiedEquals T.ControlSpaceTok $> AddControlSpace
              , AddCharacter <$> parseCharCodeRef
              , parseAddAccentedCharacter
-             -- , parseAddItalicCorrection
-             -- , parseAddDiscretionaryText
-             -- , parseAddDiscretionaryHyphen
-             -- , parseToggleMathMode
+             , skipSatisfiedEquals T.ItalicCorrectionTok $> AddItalicCorrection
+             , parseAddDiscretionaryText
+             , skipSatisfiedEquals T.DiscretionaryHyphenTok $> AddDiscretionaryHyphen
+             , skipSatisfied (primTokHasCategory Lex.MathShift) $> EnterMathMode
              , parseLeaveHMode
              ] <|> (HAllModesCommand <$> parseAllModeCommand Horizontal)
 
@@ -313,6 +329,11 @@ parseAddAccentedCharacter =
         parseAssignment >>= \case
             Assignment (SetBoxRegister _ _) _ -> P.empty
             a -> pure a
+
+parseAddDiscretionaryText =
+    do
+    skipSatisfiedEquals T.DiscretionaryTextTok
+    AddDiscretionaryText <$> parseGeneralText <*> parseGeneralText <*> parseGeneralText
 
 parseLeaveHMode :: SimpExpandParser HModeCommand
 parseLeaveHMode = skipSatisfied endsHMode $> LeaveHMode

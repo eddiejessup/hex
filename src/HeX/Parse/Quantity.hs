@@ -10,6 +10,9 @@ import           Data.Functor                   ( ($>) )
 
 import qualified Text.Megaparsec               as P
 
+import           HeX.Concept
+import           HeX.Type
+import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import           HeX.Unit                       ( PhysicalUnit(..) )
 import           HeX.Parse.Helpers
@@ -228,10 +231,12 @@ parseUnit = P.choice [ P.try $ skipOptionalSpaces *> (InternalUnit <$> parseInte
                                                 , parseKeywordToValue "sp" ScaledPoint
                                                 ]
 
+parseCoercedLength :: SimpExpandParser CoercedLength
 parseCoercedLength = InternalGlueAsLength <$> parseInternalGlue
 
 -- Math length.
 
+parseMathLength :: SimpExpandParser MathLength
 parseMathLength = MathLength <$> parseSigns <*> parseUnsignedMathLength
 
 parseUnsignedMathLength :: SimpExpandParser UnsignedMathLength
@@ -247,6 +252,7 @@ parseMathUnit = P.choice [ skipKeyword "mu" >> skipOneOptionalSpace $> Mu
                          , skipOptionalSpaces *> (InternalMathGlueAsUnit <$> parseInternalMathGlue)
                          ]
 
+parseCoercedMathLength :: SimpExpandParser CoercedMathLength
 parseCoercedMathLength = InternalMathGlueAsMathLength <$> parseInternalMathGlue
 
 -- Glue.
@@ -352,6 +358,7 @@ parseTokenListVariable =
     getTok (T.TokenListToken s) = Just s
     getTok _ = Nothing
 
+parseInternalInteger :: SimpExpandParser InternalInteger
 parseInternalInteger = P.choice [ InternalIntegerVariable <$> parseIntegerVariable
                                 , InternalSpecialInteger <$> parseSpecialInteger
                                 , InternalCodeTableRef <$> parseCodeTableRef
@@ -364,37 +371,45 @@ parseInternalInteger = P.choice [ InternalIntegerVariable <$> parseIntegerVariab
                                 , skipSatisfiedEquals T.BadnessTok $> Badness
                                 ]
 
+parseCharToken :: SimpExpandParser Cat.CharCode
 parseCharToken = satisfyThen (\case
     T.CharToken c -> Just c
     _             -> Nothing)
 
+parseMathCharToken :: SimpExpandParser Cat.CharCode
 parseMathCharToken = satisfyThen (\case
     T.MathCharToken c -> Just c
     _                 -> Nothing)
 
+parseSpecialInteger :: SimpExpandParser T.SpecialInteger
 parseSpecialInteger = satisfyThen (\case
     T.SpecialIntegerTok p -> Just p
     _                     -> Nothing)
 
+parseCodeTableRef :: SimpExpandParser CodeTableRef
 parseCodeTableRef = CodeTableRef <$> satisfyThen tokToCodeType <*> parseNumber
   where
     tokToCodeType (T.CodeTypeTok c) = Just c
     tokToCodeType _               = Nothing
 
+parseFontCharRef :: SimpExpandParser FontCharRef
 parseFontCharRef = FontCharRef <$> satisfyThen tokToFontChar <*> parseFontRef
   where
     tokToFontChar (T.FontCharTok c) = Just c
     tokToFontChar _                 = Nothing
 
+parseFontRef :: SimpExpandParser FontRef
 parseFontRef = P.choice [ FontTokenRef <$> parseFontRefToken
                         , skipSatisfiedEquals T.FontTok $> CurrentFontRef
                         , FamilyMemberFontRef <$> parseFamilyMember
                         ]
 
+parseFontRefToken :: SimpExpandParser IntVal
 parseFontRefToken = satisfyThen (\case
     T.FontRefToken n -> Just n
     _                -> Nothing)
 
+parseFamilyMember :: SimpExpandParser FamilyMember
 parseFamilyMember = FamilyMember <$> (satisfyThen tokToFontRange) <*> parseNumber
   where
     tokToFontRange (T.FontRangeTok r) = Just r
@@ -408,29 +423,36 @@ parseInternalLength = P.choice [ InternalLengthVariable <$> parseLengthVariable
                                , skipSatisfiedEquals T.LastKernTok $> LastKern
                                ]
 
+parseSpecialLength :: SimpExpandParser T.SpecialLength
 parseSpecialLength = satisfyThen (\case
     T.SpecialLengthTok p -> Just p
     _                    -> Nothing)
 
+parseFontDimensionRef :: SimpExpandParser FontDimensionRef
 parseFontDimensionRef = skipSatisfiedEquals T.FontDimensionTok >> (FontDimensionRef <$> parseNumber <*> parseFontRef)
 
+parseBoxDimensionRef :: SimpExpandParser BoxDimensionRef
 parseBoxDimensionRef = do
     dim <- parseBoxDimension
     boxNr <- parseNumber
     pure $ BoxDimensionRef boxNr dim
 
+parseBoxDimension :: SimpExpandParser TypoDim
 parseBoxDimension = satisfyThen (\case
     T.BoxDimensionTok d -> Just d
     _                   -> Nothing)
 
+parseInternalGlue :: SimpExpandParser InternalGlue
 parseInternalGlue = P.choice [ InternalGlueVariable <$> parseGlueVariable
                              , skipSatisfiedEquals T.LastGlueTok $> LastGlue
                              ]
 
+parseInternalMathGlue :: SimpExpandParser InternalMathGlue
 parseInternalMathGlue = P.choice [ InternalMathGlueVariable <$> parseMathGlueVariable
                                  , skipSatisfiedEquals T.LastGlueTok $> LastMathGlue
                                  ]
 
+parseBox :: SimpExpandParser Box
 parseBox = P.choice [ parseRegisterBox
                     , skipSatisfiedEquals T.LastBoxTok $> LastBox
                     , parseVSplitBox
@@ -438,12 +460,14 @@ parseBox = P.choice [ parseRegisterBox
                     -- , parseExplicitBox
                     ]
 
+parseRegisterBox :: SimpExpandParser Box
 parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseNumber
   where
     parseFetchMode = satisfyThen (\case
         T.AddFetchedBoxTok m -> Just m
         _                    -> Nothing)
 
+parseVSplitBox :: SimpExpandParser Box
 parseVSplitBox =
     do
     skipSatisfiedEquals T.SplitVBoxTok

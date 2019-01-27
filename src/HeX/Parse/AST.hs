@@ -351,6 +351,7 @@ data AllModesCommand
     -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
     -- -- then can 'migrate' out.
     -- \| AddInsertion Number VModeMaterial
+    -- \| AddAdjustment VModeMaterial
     | AddSpace
     | AddBox BoxPlacement Box
     | StartParagraph T.IndentFlag
@@ -382,12 +383,12 @@ data VModeCommand
 
 data HModeCommand
     = HAllModesCommand AllModesCommand
-    -- \| AddAdjustment VModeMaterial
     | AddControlSpace
     | AddCharacter CharCodeRef
     | AddAccentedCharacter Number [Assignment] (Maybe CharCodeRef)
     | AddItalicCorrection
     | AddDiscretionaryText { preBreak, postBreak, noBreak :: BalancedText }
+    | AddDiscretionaryHyphen
     | EnterMathMode
     | LeaveHMode
     deriving (Show)
@@ -416,7 +417,7 @@ data FileStreamType
 
 data BoxPlacement
     = NaturalPlacement
-    | ShiftedPlacement Length
+    | ShiftedPlacement Direction Length
     deriving (Show)
 
 data CharCodeRef
