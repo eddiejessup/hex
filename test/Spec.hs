@@ -6,18 +6,21 @@ import System.Directory ( listDirectory )
 
 import           HeX.Run                        ( codesToDVIBytes )
 
-cmpFiles :: FilePath -> IO ()
-cmpFiles fname =
+cmpFile :: FilePath -> IO ()
+cmpFile fname =
     do
     inp <- readFile $ "test/input/" ++ fname
     outp <- codesToDVIBytes inp
     outpValid <- BS.readFile $ "test/output/" ++ replace ".tex" ".dvi" fname
     outp `shouldBe` outpValid
 
+testFile :: FilePath -> SpecWith ()
+testFile fname =
+    it ("turns TeX into DVI: " ++ fname) $ cmpFile fname
+
 main :: IO ()
-main = hspec $
-    describe "HeX" $
-        it "turns TeX into DVI" $
-            do
-            inpFnames <- (listDirectory "test/input")
-            mapM_ cmpFiles inpFnames
+main = do
+    inpFnames <- listDirectory "test/input"
+    hspec $
+        describe "HeX" $
+            mapM_ testFile inpFnames
