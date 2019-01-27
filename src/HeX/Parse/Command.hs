@@ -271,7 +271,7 @@ parseEnterHMode = skipSatisfied startsHMode $> EnterHMode
     startsHMode t = case t of
         T.ModedCommand Horizontal _         -> True
         T.ControlCharTok                    -> True
-        T.CharToken _                       -> True
+        T.ShortCharRefToken _               -> True
         T.AccentTok                         -> True
         T.DiscretionaryTextTok              -> True
         T.DiscretionaryHyphenTok            -> True
@@ -306,7 +306,7 @@ parseCharCodeRef =
             Just $ CharRef c
         T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
             Just $ CharRef c
-        T.CharToken c ->
+        T.ShortCharRefToken c ->
             Just $ CharTokenRef c
         _ ->
           Nothing)

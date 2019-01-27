@@ -299,64 +299,54 @@ parseMathFlex s = P.choice [ Just <$> P.try parsePresentFlex
 
 parseQuantityVariable
     :: (T.PrimitiveToken -> Maybe p) -- Try to extract a parameter from a token.
-    -> (T.PrimitiveToken -> Maybe v) -- Try to extract a short-def token value from a token.
-    -> T.PrimitiveToken -- A token signifying the start of a relevant register address.
-    -> SimpExpandParser (QuantVariable p v)
-parseQuantityVariable getParam getTok regHead =
+    -> T.RegisterType
+    -> SimpExpandParser (QuantVariable p)
+parseQuantityVariable getParam rTyp =
     P.choice [ ParamVar <$> satisfyThen getParam
-             , TokenVar <$> satisfyThen getTok
-             , RegisterVar <$> (skipSatisfiedEquals regHead >> parseNumber)
+             , RegisterVar <$> parseShortRegRef
+             , RegisterVar <$> parseRegRef
              ]
+  where
+    parseShortRegRef = satisfyThen (\case
+        T.ShortRegRefTok typ n | typ == rTyp -> Just $ constNumber n
+        _ -> Nothing)
+
+    parseRegRef = skipSatisfied (== T.RegisterVariableTok rTyp) >> parseNumber
 
 parseIntegerVariable :: SimpExpandParser IntegerVariable
 parseIntegerVariable =
-    parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegInt)
+    parseQuantityVariable getParam T.RegInt
   where
     getParam (T.IntParamVarTok p) = Just p
     getParam _ = Nothing
 
-    getTok (T.IntToken s) = Just s
-    getTok _ = Nothing
-
 parseLengthVariable :: SimpExpandParser LengthVariable
 parseLengthVariable =
-    parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegLen)
+    parseQuantityVariable getParam T.RegLen
   where
     getParam (T.LenParamVarTok p) = Just p
     getParam _ = Nothing
 
-    getTok (T.LenToken s) = Just s
-    getTok _ = Nothing
-
 parseGlueVariable :: SimpExpandParser GlueVariable
 parseGlueVariable =
-    parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegGlue)
+    parseQuantityVariable getParam T.RegGlue
   where
     getParam (T.GlueParamVarTok p) = Just p
     getParam _ = Nothing
 
-    getTok (T.GlueToken s) = Just s
-    getTok _ = Nothing
-
 parseMathGlueVariable :: SimpExpandParser MathGlueVariable
 parseMathGlueVariable =
-    parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegMathGlue)
+    parseQuantityVariable getParam T.RegMathGlue
   where
     getParam (T.MathGlueParamVarTok p) = Just p
     getParam _ = Nothing
 
-    getTok (T.MathGlueToken s) = Just s
-    getTok _ = Nothing
-
 parseTokenListVariable :: SimpExpandParser TokenListVariable
 parseTokenListVariable =
-    parseQuantityVariable getParam getTok (T.RegisterVariableTok T.RegTokenList)
+    parseQuantityVariable getParam T.RegTokenList
   where
     getParam (T.TokenListParamVarTok p) = Just p
     getParam _ = Nothing
-
-    getTok (T.TokenListToken s) = Just s
-    getTok _ = Nothing
 
 parseInternalInteger :: SimpExpandParser InternalInteger
 parseInternalInteger = P.choice [ InternalIntegerVariable <$> parseIntegerVariable
@@ -373,13 +363,13 @@ parseInternalInteger = P.choice [ InternalIntegerVariable <$> parseIntegerVariab
 
 parseCharToken :: SimpExpandParser Cat.CharCode
 parseCharToken = satisfyThen (\case
-    T.CharToken c -> Just c
-    _             -> Nothing)
+    T.ShortCharRefToken c -> Just c
+    _                     -> Nothing)
 
 parseMathCharToken :: SimpExpandParser Cat.CharCode
 parseMathCharToken = satisfyThen (\case
-    T.MathCharToken c -> Just c
-    _                 -> Nothing)
+    T.ShortMathCharRefToken c -> Just c
+    _                         -> Nothing)
 
 parseSpecialInteger :: SimpExpandParser T.SpecialInteger
 parseSpecialInteger = satisfyThen (\case

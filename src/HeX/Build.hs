@@ -1,5 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module HeX.Build where
@@ -131,6 +132,38 @@ defineMacro es@HP.ExpandedStream{csMap = csMap} (HP.MacroAssignment name macro F
 defineMacro _ _
   = error "Not implemented: long and outer macros"
 
+doAssignment
+    :: (MonadState Config m, MonadIO m)
+    => HP.VariableAssignment
+    -> ExceptT String m ()
+doAssignment = \case
+    HP.IntegerVariableAssignment v n ->
+        do
+        let en = evaluateNumber n
+        case v of
+            (HP.ParamVar p)    -> setConfIntParam p en
+            (HP.RegisterVar _) -> error "int registers not implemented"
+    HP.LengthVariableAssignment v d ->
+        do
+        _mag <- gets (mag . params)
+        let ed = evaluateLength _mag d
+        case v of
+            (HP.ParamVar p)    -> setConfLenParam p ed
+            (HP.RegisterVar _) -> error "length registers not implemented"
+    HP.GlueVariableAssignment v g ->
+        do
+        _mag <- gets (mag . params)
+        let eg = evaluateGlue _mag g
+        case v of
+            (HP.ParamVar p)    -> setConfGlueParam p eg
+            (HP.RegisterVar _) -> error "glue registers not implemented"
+    HP.MathGlueVariableAssignment v g ->
+        error "math-glue assignment not implemented"
+    HP.TokenListVariableAssignmentVar v g ->
+        error "token-list-to-variable assignment not implemented"
+    HP.TokenListVariableAssignmentText v g ->
+        error "token-list-to-text assignment not implemented"
+
 handleModeIndep
     :: (MonadState Config m, MonadIO m)
     => HP.ExpandedStream
@@ -158,31 +191,9 @@ handleModeIndep newStream com =
             modAccum [BL.ListGlue (evaluateGlue _mag g)]
         HP.Assign HP.Assignment{global = _, body = _body} ->
             case _body of
-                HP.SetVariable (HP.IntegerVariableAssignment v n) ->
+                HP.SetVariable ass ->
                     do
-                    let en = (fromIntegral $ evaluateNumber n)
-                    case v of
-                        (HP.ParamVar p)    -> setConfIntParam p en
-                        (HP.TokenVar _)    -> error "int short-def tokens not implemented"
-                        (HP.RegisterVar _) -> error "int registers not implemented"
-                    continueUnchanged
-                HP.SetVariable (HP.LengthVariableAssignment v d) ->
-                    do
-                    _mag <- gets (mag . params)
-                    let ed = (fromIntegral $ evaluateLength _mag d)
-                    case v of
-                        (HP.ParamVar p)    -> setConfLenParam p ed
-                        (HP.TokenVar _)    -> error "length short-def tokens not implemented"
-                        (HP.RegisterVar _) -> error "length registers not implemented"
-                    continueUnchanged
-                HP.SetVariable (HP.GlueVariableAssignment v g) ->
-                    do
-                    _mag <- gets (mag . params)
-                    let eg = evaluateGlue _mag g
-                    case v of
-                        (HP.ParamVar p)    -> setConfGlueParam p eg
-                        (HP.TokenVar _)    -> error "length short-def tokens not implemented"
-                        (HP.RegisterVar _) -> error "length registers not implemented"
+                    doAssignment ass
                     continueUnchanged
                 HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                     let eIdx = evaluateNumber idx

@@ -6,7 +6,6 @@ import           HeX.Concept
 import           HeX.Type
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
-import qualified HeX.BreakList                 as BL
 
 -- mconcat on this newtype wrapper should get the final sign of a list of
 -- signs. Bit pretentious, sorry.
@@ -391,20 +390,16 @@ data PrimitiveToken
     | SpecialIntegerTok SpecialInteger -- \example: \spacefactor
     | SpecialLengthTok SpecialLength -- \example: \pagestretch
     -- Tokens storing values defined by short-hand definitions.
-    | IntToken IntVal
-    | LenToken LenVal
-    | GlueToken BL.Glue
-    | MathGlueToken BL.Glue
-    | TokenListToken [Lex.Token]
-    | CharToken CharCode
+    | ShortRegRefTok RegisterType IntVal
+    | ShortCharRefToken CharCode
     -- TODO: What is a MathChar? Probably not a CharCode.
-    | MathCharToken CharCode
+    | ShortMathCharRefToken CharCode
     -- A control sequence representing a particular font, such as defined through
     -- \font.
     | FontRefToken IntVal
     -- Heads of register references.
     | RegisterVariableTok RegisterType
-    -- > Defining simple token macros (also known as 'short-hand definitions').
+    -- Heads of register-ref definitions.
     | ShortDefHeadTok QuantityType
     -- > Modifying variable values with arithmetic.
     | AdvanceVarTok -- \advance

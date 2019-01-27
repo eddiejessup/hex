@@ -9,7 +9,6 @@ import           Path                           ( File
 
 import           HeX.Concept
 import           HeX.Type
-import qualified HeX.BreakList                 as BL
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 import           HeX.Unit                       ( PhysicalUnit(..) )
@@ -20,10 +19,16 @@ import qualified HeX.Parse.Token               as T
 data Number = Number T.Sign UnsignedNumber
     deriving (Show)
 
+constNumber :: IntVal -> Number
+constNumber n = Number (T.Sign True) $ constUNumber n
+
 data UnsignedNumber
     = NormalIntegerAsUNumber NormalInteger
     | CoercedInteger CoercedInteger
     deriving (Show)
+
+constUNumber :: IntVal -> UnsignedNumber
+constUNumber n = NormalIntegerAsUNumber $ IntegerConstant n
 
 -- Think: 'un-coerced integer'.
 data NormalInteger
@@ -161,18 +166,17 @@ data MathFlex
 
 -- Internal quantities.
 
-data QuantVariable a v
+data QuantVariable a
     = ParamVar a
-    | TokenVar v
     | RegisterVar Number
     deriving (Show)
 
-type IntegerVariable = QuantVariable T.IntegerParameter IntVal
-type LengthVariable = QuantVariable T.LengthParameter LenVal
-type GlueVariable = QuantVariable T.GlueParameter BL.Glue
+type IntegerVariable = QuantVariable T.IntegerParameter
+type LengthVariable = QuantVariable T.LengthParameter
+type GlueVariable = QuantVariable T.GlueParameter
 -- TODO: What does a MathGlue evaluate to? Maybe not a BreakList Glue.
-type MathGlueVariable = QuantVariable T.MathGlueParameter BL.Glue
-type TokenListVariable = QuantVariable T.TokenListParameter [Lex.Token]
+type MathGlueVariable = QuantVariable T.MathGlueParameter
+type TokenListVariable = QuantVariable T.TokenListParameter
 
 data InternalInteger
     = InternalIntegerVariable IntegerVariable
