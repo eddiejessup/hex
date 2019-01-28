@@ -97,8 +97,8 @@ parseNonMacroAssignment =
                  , parseNewFontAssignment
                  , parseSetFontDimension
                  , parseSetFontChar
-                 , SetHyphenation <$> parseGeneralText
-                 , SetHyphenationPatterns <$> parseGeneralText
+                 , skipSatisfiedEquals T.HyphenationTok >> (SetHyphenation <$> parseGeneralText)
+                 , skipSatisfiedEquals T.HyphenationPatternsTok >> (SetHyphenationPatterns <$> parseGeneralText)
                  , parseSetBoxDimension
                  , SetInteractionMode <$> satisfyThen tokToInteractionMode
                  , parseSetSpecialInteger

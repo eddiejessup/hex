@@ -224,16 +224,16 @@ data FontRange
     deriving (Show, Eq)
 
 data ModedCommandPrimitiveToken
-    = AddSpecifiedGlueTok -- \vskip, \hskip
-    | AddPresetGlueTok PresetGlueType -- \{v,h}{fil,fill,filneg,ss}
-    | AddAlignedMaterial -- \halign, \valign
-    | AddShiftedBox Direction -- \moveleft, \moveright, \raise, \lower
-    | AddUnwrappedFetchedBoxTok BoxFetchMode -- \un{v,h}{box,copy}
-    | AddRuleTok -- \hrule, \vrule
+    = SpecifiedGlueTok -- \vskip, \hskip
+    | PresetGlueTok PresetGlueType -- \{v,h}{fil,fill,filneg,ss}
+    | AlignedMaterialTok -- \halign, \valign
+    | ShiftedBoxTok Direction -- \moveleft, \moveright, \raise, \lower
+    | UnwrappedFetchedBoxTok BoxFetchMode -- \un{v,h}{box,copy}
+    | RuleTok -- \hrule, \vrule
     deriving (Show, Eq)
 
 data SyntaxCommandArg
-    = EndCSNameTok
+    = EndCSNameTok -- \endcsname
     deriving (Show, Eq)
 
 data CodeType
@@ -338,11 +338,11 @@ data PrimitiveToken
     | ShowTokenTok -- \show
     | ShowBoxTok -- \showbox
     | ShowListsTok -- \showlists
-    | ShowInternalQuantity -- \showthe
+    | ShowInternalQuantityTok -- \showthe
     | ShipOutTok -- \shipout
     | IgnoreSpacesTok -- \ignorespaces
     | SetAfterAssignmentTokenTok -- \afterassignment
-    | AddToAfterGroupTokensTok -- \aftergroup
+    | ToAfterGroupTokensTok -- \aftergroup
     | MessageTok MessageStream -- \message, \errmessage
     | ImmediateTok -- \immediate
     | OpenInputTok -- \openin
@@ -351,13 +351,13 @@ data PrimitiveToken
     | CloseOutputTok -- \closeout
     | WriteTok -- \write
     | DoSpecialTok -- \special
-    | AddPenaltyTok -- \penalty
-    | AddKernTok -- \kern
-    | AddMathKernTok -- \mkern
+    | PenaltyTok -- \penalty
+    | KernTok -- \kern
+    | MathKernTok -- \mkern
     | RemoveItemTok RemovableItem
-    | AddMarkTok -- \mark
-    | AddInsertionTok -- \insert
-    | AddLeadersTok LeadersType
+    | MarkTok -- \mark
+    | InsertionTok -- \insert
+    | LeadersTok LeadersType
     | StartParagraphTok IndentFlag -- \indent, \noindent
     | EndParagraphTok -- \par
     -- Starters of mode-specific commands with almost mode-independent grammar.
@@ -373,15 +373,12 @@ data PrimitiveToken
     | DiscretionaryTextTok -- \discretionary
     | DiscretionaryHyphenTok -- \-
     | ToggleMathModeTok -- $
-    -- -- Involved in assignments.
-    -- -- > > Modifying how to apply assignments.
+    -- > > Modifying how to apply assignments.
     | AssignPrefixTok AssignPrefixTok
-    -- -- > Defining macros.
-    -- -- > > Modifying how to parse the macro.
+    -- > > Modifying how to parse the macro.
     --     \def, \gdef, \edef (expanded-def), \xdef (global-expanded-def).
-    -- -- > > Modifying how to parse the macro.
     | DefineMacroTok GlobalFlag ExpandDefFlag
-    -- -- > Setting variable values.
+    -- > Setting variable values.
     | IntParamVarTok IntegerParameter
     | LenParamVarTok LengthParameter
     | GlueParamVarTok GlueParameter
@@ -422,7 +419,7 @@ data PrimitiveToken
     -- Internal glues.
     | LastGlueTok -- \lastskip
     -- Specifying boxes.
-    | AddFetchedBoxTok BoxFetchMode -- \box, \copy
+    | FetchedBoxTok BoxFetchMode -- \box, \copy
     | LastBoxTok -- \lastbox
     | SplitVBoxTok -- \vsplit
     | HBoxTok -- \hbox
@@ -437,8 +434,8 @@ data PrimitiveToken
     -- > Setting properties of a font.
     | FontCharTok FontChar
     -- > Configuring hyphenation.
-    -- \| AddHyphenationExceptions -- \hyphenation
-    -- \| SetHyphenationPatterns -- \patterns
+    | HyphenationTok -- \hyphenation
+    | HyphenationPatternsTok -- \patterns
     -- > Setting interaction mode.
     | InteractionModeTok InteractionMode
     -- Conditions.

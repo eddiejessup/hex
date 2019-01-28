@@ -47,15 +47,8 @@ parseAllModeCommand mode =
              , skipSatisfiedEquals T.ShowListsTok $> ShowLists
              , skipSatisfiedEquals T.ShipOutTok >> (ShipOut <$> parseBox)
              , skipSatisfiedEquals T.SetAfterAssignmentTokenTok >> (SetAfterAssignmentToken <$> parseToken)
-             , skipSatisfiedEquals T.AddToAfterGroupTokensTok >> (AddToAfterGroupTokens <$> parseToken)
-             , parseMessage
-             , parseOpenInput
-             , skipSatisfiedEquals T.CloseInputTok >> (ModifyFileStream FileInput Close <$> parseNumber)
-             , parseOpenOutput
-             , parseCloseOutput
-             , parseWriteToStream
-             , skipSatisfiedEquals T.DoSpecialTok >> (DoSpecial <$> parseGeneralText)
-             , skipSatisfiedEquals T.AddMarkTok >> (AddMark <$> parseGeneralText)
+             , skipSatisfiedEquals T.ToAfterGroupTokensTok >> (AddToAfterGroupTokens <$> parseToken)
+             , skipSatisfiedEquals T.MarkTok >> (AddMark <$> parseGeneralText)
              -- , parseInsert
              -- , parseVAdjust
              , skipSatisfied isSpace $> AddSpace
@@ -85,50 +78,6 @@ parseChangeScope = satisfyThen tokToChangeScope
 parseShowToken :: SimpExpandParser AllModesCommand
 parseShowToken = skipSatisfiedEquals T.ShowTokenTok >> (ShowToken <$> parseToken)
 
-parseMessage :: SimpExpandParser AllModesCommand
-parseMessage = Message <$> parseMsgStream <*> parseGeneralText
-  where
-    parseMsgStream = satisfyThen (\case
-        T.MessageTok str -> Just str
-        _                -> Nothing)
-
-parseOpenInput :: SimpExpandParser AllModesCommand
-parseOpenInput =
-    do
-    skipSatisfiedEquals T.OpenInputTok
-    n <- parseNumber
-    skipOptionalEquals
-    fn <- parseFileName
-    pure $ ModifyFileStream FileInput (Open fn) n
-
-parseOptionalImmediate :: SimpExpandParser WritePolicy
-parseOptionalImmediate = P.option Deferred $ skipSatisfiedEquals T.ImmediateTok $> Immediate
-
-parseOpenOutput :: SimpExpandParser AllModesCommand
-parseOpenOutput =
-    do
-    writePolicy <- parseOptionalImmediate
-    skipSatisfiedEquals T.OpenOutputTok
-    n <- parseNumber
-    skipOptionalEquals
-    fn <- parseFileName
-    pure $ ModifyFileStream (FileOutput writePolicy) (Open fn) n
-
-parseCloseOutput :: SimpExpandParser AllModesCommand
-parseCloseOutput =
-    do
-    writePolicy <- parseOptionalImmediate
-    skipSatisfiedEquals T.CloseOutputTok >> (ModifyFileStream (FileOutput writePolicy) Close <$> parseNumber)
-
-parseWriteToStream :: SimpExpandParser AllModesCommand
-parseWriteToStream =
-    do
-    writePolicy <- parseOptionalImmediate
-    skipSatisfiedEquals T.WriteTok
-    n <- parseNumber
-    txt <- parseGeneralText
-    pure $ WriteToStream n txt writePolicy
-
 parseStartParagraph :: SimpExpandParser AllModesCommand
 parseStartParagraph = satisfyThen (\case
     (T.StartParagraphTok _indent) -> Just $ StartParagraph _indent
@@ -139,13 +88,13 @@ parseAddLeaders mode =
     AddLeaders <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue mode
   where
     parseLeaders = satisfyThen (\case
-        T.AddLeadersTok t -> Just t
+        T.LeadersTok t -> Just t
         _                 -> Nothing)
 
 parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
   where
     parseDirection = satisfyThen (\case
-        T.ModedCommand mode2 (T.AddShiftedBox d) | (mode == mode2) -> Just d
+        T.ModedCommand mode2 (T.ShiftedBoxTok d) | (mode == mode2) -> Just d
         _ -> Nothing)
 
     parsePlacement = ShiftedPlacement <$> parseDirection <*> parseLength
@@ -153,7 +102,7 @@ parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
 parseAddUnwrappedFetchedBox mode =
     do
     fetchMode <- satisfyThen (\case
-        T.ModedCommand mode2 (T.AddUnwrappedFetchedBoxTok fm) | (mode == mode2) -> Just fm
+        T.ModedCommand mode2 (T.UnwrappedFetchedBoxTok fm) | (mode == mode2) -> Just fm
         _ -> Nothing)
     n <- parseNumber
     pure $ AddUnwrappedFetchedBox n fetchMode
@@ -168,7 +117,7 @@ parseBoxOrRule = P.choice [ BoxOrRuleBox <$> parseBox
 parseRule :: Axis -> SimpExpandParser Rule
 parseRule mode =
     do
-    skipSatisfied $ checkModeAndToken mode T.AddRuleTok
+    skipSatisfied $ checkModeAndToken mode T.RuleTok
     parseRuleSpecification Rule { width = Nothing, height = Nothing, depth = Nothing }
   where
     parseRuleSpecification rule =
@@ -201,12 +150,19 @@ parseModeIndependentCommand :: Axis -> SimpExpandParser ModeIndependentCommand
 parseModeIndependentCommand mode =
     P.choice [ skipSatisfiedEquals T.RelaxTok $> Relax
              , skipSatisfiedEquals T.IgnoreSpacesTok >> skipOptionalSpaces $> IgnoreSpaces
-             , skipSatisfiedEquals T.AddPenaltyTok >> (AddPenalty <$> parseNumber)
-             , skipSatisfiedEquals T.AddKernTok >> (AddKern <$> parseLength)
-             , skipSatisfiedEquals T.AddMathKernTok >> (AddMathKern <$> parseMathLength)
+             , skipSatisfiedEquals T.PenaltyTok >> (AddPenalty <$> parseNumber)
+             , skipSatisfiedEquals T.KernTok >> (AddKern <$> parseLength)
+             , skipSatisfiedEquals T.MathKernTok >> (AddMathKern <$> parseMathLength)
              , parseRemoveItem
              , AddGlue <$> parseModedGlue mode
              , Assign <$> parseAssignment
+             , parseMessage
+             , parseOpenInput
+             , skipSatisfiedEquals T.CloseInputTok >> (ModifyFileStream FileInput Close <$> parseNumber)
+             , parseOpenOutput
+             , parseCloseOutput
+             , parseWriteToStream
+             , skipSatisfiedEquals T.DoSpecialTok >> (DoSpecial <$> parseGeneralText)
              ]
 
 checkModeAndToken
@@ -234,7 +190,7 @@ parseModedGlue mode = P.choice [ parseSpecifiedGlue mode
 parseSpecifiedGlue :: Axis -> SimpExpandParser Glue
 parseSpecifiedGlue mode =
     do
-    skipSatisfied $ checkModeAndToken mode T.AddSpecifiedGlueTok
+    skipSatisfied $ checkModeAndToken mode T.SpecifiedGlueTok
     parseGlue
 
 -- \{v,h}fil:    0pt plus 1fil
@@ -253,8 +209,52 @@ presetToSpecifiedGlue = \case
 parsePresetGlue :: Axis -> T.PresetGlueType -> SimpExpandParser Glue
 parsePresetGlue mode t =
     do
-    skipSatisfied $ checkModeAndToken mode (T.AddPresetGlueTok t)
+    skipSatisfied $ checkModeAndToken mode (T.PresetGlueTok t)
     pure $ presetToSpecifiedGlue t
+
+parseMessage :: SimpExpandParser ModeIndependentCommand
+parseMessage = Message <$> parseMsgStream <*> parseGeneralText
+  where
+    parseMsgStream = satisfyThen (\case
+        T.MessageTok str -> Just str
+        _                -> Nothing)
+
+parseOpenInput :: SimpExpandParser ModeIndependentCommand
+parseOpenInput =
+    do
+    skipSatisfiedEquals T.OpenInputTok
+    n <- parseNumber
+    skipOptionalEquals
+    fn <- parseFileName
+    pure $ ModifyFileStream FileInput (Open fn) n
+
+parseOptionalImmediate :: SimpExpandParser WritePolicy
+parseOptionalImmediate = P.option Deferred $ skipSatisfiedEquals T.ImmediateTok $> Immediate
+
+parseOpenOutput :: SimpExpandParser ModeIndependentCommand
+parseOpenOutput =
+    do
+    writePolicy <- parseOptionalImmediate
+    skipSatisfiedEquals T.OpenOutputTok
+    n <- parseNumber
+    skipOptionalEquals
+    fn <- parseFileName
+    pure $ ModifyFileStream (FileOutput writePolicy) (Open fn) n
+
+parseCloseOutput :: SimpExpandParser ModeIndependentCommand
+parseCloseOutput =
+    do
+    writePolicy <- parseOptionalImmediate
+    skipSatisfiedEquals T.CloseOutputTok >> (ModifyFileStream (FileOutput writePolicy) Close <$> parseNumber)
+
+parseWriteToStream :: SimpExpandParser ModeIndependentCommand
+parseWriteToStream =
+    do
+    writePolicy <- parseOptionalImmediate
+    skipSatisfiedEquals T.WriteTok
+    n <- parseNumber
+    txt <- parseGeneralText
+    pure $ WriteToStream n txt writePolicy
 
 -- VMode.
 

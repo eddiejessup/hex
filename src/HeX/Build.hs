@@ -44,6 +44,7 @@ import           HeX.BreakList.Page             ( PageBreakJudgment(..)
                                                 , setPage
                                                 )
 import           HeX.Config
+import qualified HeX.Categorise                as Cat
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 import           HeX.Evaluate
@@ -164,6 +165,12 @@ doAssignment = \case
     HP.TokenListVariableAssignmentText v g ->
         error "token-list-to-text assignment not implemented"
 
+showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Letter})) = [c]
+showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Other})) = [c]
+showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Space})) = [c]
+showMsg (Lex.CharCatToken cc) = show cc
+showMsg (Lex.ControlSequenceToken (Lex.ControlSequence cs)) = "\\" ++ cs
+
 handleModeIndep
     :: (MonadState Config m, MonadIO m)
     => HP.ExpandedStream
@@ -175,6 +182,10 @@ handleModeIndep newStream com =
         modStream mStream = pure ([], mStream)
         continueUnchanged = pure ([], newStream)
     in  case com of
+        HP.Message HP.Out (HP.BalancedText txt) ->
+            do
+            liftIO $ putStrLn $ concatMap showMsg txt
+            continueUnchanged
         HP.Relax ->
             continueUnchanged
         HP.IgnoreSpaces ->
@@ -217,6 +228,7 @@ handleModeIndep newStream com =
                     do
                     fontDef <- BL.VListBaseElem . B.ElemFontDefinition <$> defineFont cs fPath
                     modAccum [fontDef]
+
 processHCommand
     :: (MonadState Config m, MonadIO m)
     => HP.ExpandedStream

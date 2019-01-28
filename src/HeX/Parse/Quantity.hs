@@ -55,7 +55,9 @@ parseNormalInteger =
              , IntegerConstant <$> parseConstantInt <* skipOneOptionalSpace
              ]
   where
-    parseConstantInt = P.choice [ parseConstant, parseCharacter ]
+    parseConstantInt = P.choice [ parseConstant
+                                , parseCharacter
+                                ]
 
     parseConstant =
         do
@@ -454,8 +456,8 @@ parseRegisterBox :: SimpExpandParser Box
 parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseNumber
   where
     parseFetchMode = satisfyThen (\case
-        T.AddFetchedBoxTok m -> Just m
-        _                    -> Nothing)
+        T.FetchedBoxTok m -> Just m
+        _                 -> Nothing)
 
 parseVSplitBox :: SimpExpandParser Box
 parseVSplitBox =

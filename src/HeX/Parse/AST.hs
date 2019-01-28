@@ -347,10 +347,6 @@ data AllModesCommand
     | ShipOut Box
     | SetAfterAssignmentToken Lex.Token
     | AddToAfterGroupTokens Lex.Token
-    | Message T.MessageStream BalancedText
-    | ModifyFileStream FileStreamType FileStreamAction Number
-    | WriteToStream Number BalancedText WritePolicy
-    | DoSpecial BalancedText
     | AddMark BalancedText
     -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
     -- -- then can 'migrate' out.
@@ -376,6 +372,10 @@ data ModeIndependentCommand
     | AddMathKern MathLength
     | RemoveItem T.RemovableItem
     | AddGlue Glue
+    | Message T.MessageStream BalancedText
+    | ModifyFileStream FileStreamType FileStreamAction Number
+    | WriteToStream Number BalancedText WritePolicy
+    | DoSpecial BalancedText
     deriving (Show)
 
 data VModeCommand
