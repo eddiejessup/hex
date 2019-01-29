@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module HeX.Parse.Stream where
 
@@ -10,6 +11,7 @@ import           Data.Char                      ( toLower
 import           Data.Proxy
 import qualified Data.Map.Strict               as Map
 import           Data.Map.Strict                ( (!?) )
+import qualified Data.HashMap.Strict           as HMap
 import qualified Data.Set                      as Set
 import qualified Data.List.NonEmpty            as NE
 import qualified Data.Foldable                 as Fold
@@ -53,6 +55,14 @@ insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
 
 insertLexToken :: ExpandedStream -> Lex.Token -> ExpandedStream
 insertLexToken s t = s{lexTokens = t : lexTokens s}
+
+insertControlSequence
+    :: ExpandedStream
+    -> Lex.ControlSequenceLike
+    -> ResolvedToken
+    -> ExpandedStream
+insertControlSequence es@ExpandedStream{..} cs t =
+    es{csMap = HMap.insert cs t csMap}
 
 -- Inhibition.
 
@@ -218,7 +228,7 @@ instance P.Stream ExpandedStream where
             PrimitiveToken pt   -> pure (pt, es')
             -- If it indicates the start of a syntax command.
             -- Parse the remainder of the syntax command.
-            SyntaxCommandHead c -> case c of
+            SyntaxCommandHeadToken c -> case c of
                 (ChangeCaseTok direction) ->
                     runSyntaxCommand direction parseGeneralText es' expandChangeCase
                 (MacroTok m) ->

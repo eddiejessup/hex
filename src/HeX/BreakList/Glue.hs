@@ -56,5 +56,8 @@ instance Semigroup Glue where
 instance Monoid Glue where
     mempty = Glue 0 mempty mempty
 
+negateGlue :: Glue -> Glue
+negateGlue (Glue d str shr) = Glue (-d) str shr
+
 filGlue :: Glue
 filGlue = Glue {dimen = 0, stretch = filFlex, shrink = noFlex}

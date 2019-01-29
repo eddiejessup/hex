@@ -91,6 +91,7 @@ parseAddLeaders mode =
         T.LeadersTok t -> Just t
         _                 -> Nothing)
 
+parseAddShiftedBox :: Axis -> SimpExpandParser AllModesCommand
 parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
   where
     parseDirection = satisfyThen (\case
@@ -99,6 +100,7 @@ parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
 
     parsePlacement = ShiftedPlacement <$> parseDirection <*> parseLength
 
+parseAddUnwrappedFetchedBox :: Axis -> SimpExpandParser AllModesCommand
 parseAddUnwrappedFetchedBox mode =
     do
     fetchMode <- satisfyThen (\case
@@ -271,7 +273,7 @@ parseEnterHMode = skipSatisfied startsHMode $> EnterHMode
     startsHMode t = case t of
         T.ModedCommand Horizontal _         -> True
         T.ControlCharTok                    -> True
-        T.ShortCharRefToken _               -> True
+        T.IntRefTok T.CharQuantity _        -> True
         T.AccentTok                         -> True
         T.DiscretionaryTextTok              -> True
         T.DiscretionaryHyphenTok            -> True
@@ -306,8 +308,8 @@ parseCharCodeRef =
             Just $ CharRef c
         T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
             Just $ CharRef c
-        T.ShortCharRefToken c ->
-            Just $ CharTokenRef c
+        T.IntRefTok T.CharQuantity i ->
+            Just $ CharTokenRef i
         _ ->
           Nothing)
 
@@ -330,6 +332,7 @@ parseAddAccentedCharacter =
             Assignment (SetBoxRegister _ _) _ -> P.empty
             a -> pure a
 
+parseAddDiscretionaryText :: SimpExpandParser HModeCommand
 parseAddDiscretionaryText =
     do
     skipSatisfiedEquals T.DiscretionaryTextTok

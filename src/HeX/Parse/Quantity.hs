@@ -12,7 +12,6 @@ import qualified Text.Megaparsec               as P
 
 import           HeX.Concept
 import           HeX.Type
-import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import           HeX.Unit                       ( PhysicalUnit(..) )
 import           HeX.Parse.Helpers
@@ -310,7 +309,7 @@ parseQuantityVariable getParam rTyp =
              ]
   where
     parseShortRegRef = satisfyThen (\case
-        T.ShortRegRefTok typ n | typ == rTyp -> Just $ constNumber n
+        T.IntRefTok (T.RegQuantity typ) n | typ == rTyp -> Just $ constNumber n
         _ -> Nothing)
 
     parseRegRef = skipSatisfied (== T.RegisterVariableTok rTyp) >> parseNumber
@@ -363,15 +362,15 @@ parseInternalInteger = P.choice [ InternalIntegerVariable <$> parseIntegerVariab
                                 , skipSatisfiedEquals T.BadnessTok $> Badness
                                 ]
 
-parseCharToken :: SimpExpandParser Cat.CharCode
+parseCharToken :: SimpExpandParser IntVal
 parseCharToken = satisfyThen (\case
-    T.ShortCharRefToken c -> Just c
-    _                     -> Nothing)
+    T.IntRefTok T.CharQuantity c -> Just c
+    _                            -> Nothing)
 
-parseMathCharToken :: SimpExpandParser Cat.CharCode
+parseMathCharToken :: SimpExpandParser IntVal
 parseMathCharToken = satisfyThen (\case
-    T.ShortMathCharRefToken c -> Just c
-    _                         -> Nothing)
+    T.IntRefTok T.MathCharQuantity c -> Just c
+    _                                -> Nothing)
 
 parseSpecialInteger :: SimpExpandParser T.SpecialInteger
 parseSpecialInteger = satisfyThen (\case

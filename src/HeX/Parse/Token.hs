@@ -4,7 +4,6 @@ import qualified Data.Map.Strict               as Map
 
 import           HeX.Concept
 import           HeX.Type
-import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 
 -- mconcat on this newtype wrapper should get the final sign of a list of
@@ -386,17 +385,14 @@ data PrimitiveToken
     | TokenListParamVarTok TokenListParameter
     | SpecialIntegerTok SpecialInteger -- \example: \spacefactor
     | SpecialLengthTok SpecialLength -- \example: \pagestretch
-    -- Tokens storing values defined by short-hand definitions.
-    | ShortRegRefTok RegisterType IntVal
-    | ShortCharRefToken CharCode
-    -- TODO: What is a MathChar? Probably not a CharCode.
-    | ShortMathCharRefToken CharCode
+    -- Tokens storing integers defined by short-hand definitions.
+    | IntRefTok QuantityType IntVal
     -- A control sequence representing a particular font, such as defined through
     -- \font.
     | FontRefToken IntVal
     -- Heads of register references.
     | RegisterVariableTok RegisterType
-    -- Heads of register-ref definitions.
+    -- Heads of int-ref definitions.
     | ShortDefHeadTok QuantityType
     -- > Modifying variable values with arithmetic.
     | AdvanceVarTok -- \advance
@@ -464,14 +460,14 @@ data PrimitiveToken
 instance Ord PrimitiveToken where
     compare _ _ = EQ
 
-data SyntaxCommandHead
+data SyntaxCommandHeadToken
     = ChangeCaseTok VDirection -- \uppercase, \lowercase
     | CSNameTok
     | MacroTok MacroContents
     deriving (Show, Eq)
 
 data ResolvedToken
-    = SyntaxCommandHead SyntaxCommandHead
+    = SyntaxCommandHeadToken SyntaxCommandHeadToken
     | PrimitiveToken PrimitiveToken
     deriving (Show, Eq)
 

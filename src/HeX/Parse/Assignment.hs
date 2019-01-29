@@ -17,7 +17,6 @@ import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
 
 import qualified HeX.Lex                       as Lex
-import           HeX.Evaluate                   ( evaluateNumber )
 
 import           HeX.Parse.Helpers
 import           HeX.Parse.AST
@@ -208,10 +207,11 @@ parseSetParShape =
     -- In a ⟨shape assignment⟩ for which the ⟨number⟩ is n, the ⟨shape
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
-    nrPairs <- parseNumber
     -- TODO: Not sure how to handle this, we must be able to evaluate things
     -- halfway through a command.
-    let eNrPairs = evaluateNumber nrPairs
+    -- nrPairs <- parseNumber
+    -- let eNrPairs = evaluateNumber nrPairs
+    let eNrPairs = undefined
     SetParShape <$> P.count eNrPairs parseLengthPair
   where
     parseLengthPair = (,) <$> parseLength <*> parseLength

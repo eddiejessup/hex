@@ -182,8 +182,8 @@ data InternalInteger
     = InternalIntegerVariable IntegerVariable
     | InternalSpecialInteger T.SpecialInteger
     | InternalCodeTableRef CodeTableRef
-    | InternalCharToken CharCode
-    | InternalMathCharToken CharCode
+    | InternalCharToken IntVal
+    | InternalMathCharToken IntVal
     | InternalFontCharRef FontCharRef
     | LastPenalty
     | ParShape
@@ -426,6 +426,6 @@ data BoxPlacement
 
 data CharCodeRef
     = CharRef CharCode
-    | CharTokenRef CharCode
+    | CharTokenRef IntVal
     | CharCodeNrRef Number
     deriving (Show)

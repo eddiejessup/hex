@@ -4,6 +4,7 @@
 module HeX.Config
     ( module HeX.Config.Parameters
     , Config(..)
+    , currentFontInfo
     , newConfig
     , ConfReaderT, ConfStateT
     , parIndentBox
@@ -18,8 +19,13 @@ module HeX.Config
     )
 where
 
-import           Control.Monad.State.Lazy       ( StateT, modify, MonadState, gets )
+import           Control.Monad.State.Lazy       ( StateT
+                                                , modify
+                                                , MonadState
+                                                , gets )
 import           Control.Monad.Trans.Reader     ( ReaderT )
+import           Control.Monad.Except           ( MonadError
+                                                )
 import qualified Data.HashMap.Strict           as HMap
 import           Data.Maybe                     ( fromJust )
 import           Path
@@ -29,6 +35,7 @@ import           TFM                            ( TexFont )
 
 import qualified Data.Path                     as Path
 
+import           HeXPrelude
 import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
@@ -56,6 +63,16 @@ newConfig =
 
 type ConfStateT = StateT Config
 type ConfReaderT = ReaderT Config
+
+currentFontInfo :: (MonadState Config m, MonadError String m) => m TexFont
+currentFontInfo =
+    do
+    -- Maybe font number isn't set.
+    fNr <- gets currentFontNr >>= liftMaybe "Font number isn't set"
+    -- Or maybe there's no font where there should be.
+    -- TODO: I think I can make this case impossible, maybe by storing the
+    -- current font info directly instead of a lookup.
+    gets fontInfoMap >>= (liftMaybe "No such font number" . (HMap.lookup fNr))
 
 modifyParams :: MonadState Config m => (ParamConfig -> ParamConfig) -> m ()
 modifyParams f =

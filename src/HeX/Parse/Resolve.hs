@@ -32,9 +32,9 @@ _pt = PrimitiveToken
 defaultCSMap :: CSMap
 defaultCSMap = HMap.fromList
       -- Heads of syntax commands.
-    [ (_cs "uppercase"   , SyntaxCommandHead $ ChangeCaseTok Upward)
-    , (_cs "lowercase"   , SyntaxCommandHead $ ChangeCaseTok Downward)
-    , (_cs "csname"      , SyntaxCommandHead CSNameTok)
+    [ (_cs "uppercase"   , SyntaxCommandHeadToken $ ChangeCaseTok Upward)
+    , (_cs "lowercase"   , SyntaxCommandHeadToken $ ChangeCaseTok Downward)
+    , (_cs "csname"      , SyntaxCommandHeadToken CSNameTok)
       -- Arguments of syntax commands.
     , (_cs "endcsname"   , _pt $ SyntaxCommandArg EndCSNameTok)
       -- Nothing special.
@@ -303,5 +303,5 @@ defaultCSMap = HMap.fromList
     , (_cs "batchmode"        , _pt $ InteractionModeTok BatchMode)
       -- Temporary pragmatism.
     , (_cs "selectfont"       , _pt $ FontRefToken theFontNr)
-    , (_cs "active"           , _pt $ ShortCharRefToken '\r')
+    , (_cs "active"           , _pt $ IntRefTok CharQuantity 13)
     ]

@@ -18,7 +18,6 @@ import           Control.Monad.Trans.Maybe      ( MaybeT(..)
 import           Control.Monad.Except           ( ExceptT
                                                 , liftEither
                                                 , MonadError
-                                                , throwError
                                                 , withExceptT
                                                 )
 import qualified Data.HashMap.Strict           as HMap
@@ -35,7 +34,9 @@ import qualified TFM
 import           TFM                            ( TexFont(..) )
 import qualified TFM.Character                 as TFMC
 
+import           HeXPrelude
 import           HeX.Concept
+import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.BreakList.Line             ( setParagraph )
@@ -44,26 +45,11 @@ import           HeX.BreakList.Page             ( PageBreakJudgment(..)
                                                 , setPage
                                                 )
 import           HeX.Config
-import qualified HeX.Categorise                as Cat
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 import           HeX.Evaluate
 import qualified HeX.Parse                     as HP
 import qualified HeX.Unit                      as Unit
-
-liftMaybe :: MonadError e m => e -> Maybe a -> m a
-liftMaybe e Nothing  = throwError e
-liftMaybe _ (Just a) = pure a
-
-currentFontInfo :: (MonadState Config m, MonadError String m) => m TexFont
-currentFontInfo =
-    do
-    -- Maybe font number isn't set.
-    fNr <- gets currentFontNr >>= liftMaybe "Font number isn't set"
-    -- Or maybe there's no font where there should be.
-    -- TODO: I think I can make this case impossible, maybe by storing the
-    -- current font info directly instead of a lookup.
-    gets fontInfoMap >>= (liftMaybe "No such font number" . (HMap.lookup fNr))
 
 defineFont
     :: (MonadState Config m, MonadIO m)
@@ -124,47 +110,55 @@ spaceGlue =
         toFlex = BL.finiteFlex . fromIntegral . toSP
     pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
-defineMacro :: HP.ExpandedStream -> HP.MacroAssignment -> HP.ExpandedStream
-defineMacro es@HP.ExpandedStream{csMap = csMap} (HP.MacroAssignment name macro False False) =
-    es{HP.csMap = csMap'}
-  where
-    newMacro = HP.SyntaxCommandHead $ HP.MacroTok macro
-    csMap' = HMap.insert name newMacro csMap
-defineMacro _ _
-  = error "Not implemented: long and outer macros"
+defineMacro
+    :: HP.ExpandedStream
+    -> HP.MacroAssignment
+    -> HP.ExpandedStream
+defineMacro es (HP.MacroAssignment cs macro False False) =
+    HP.insertControlSequence es cs $ HP.SyntaxCommandHeadToken $ HP.MacroTok macro
+defineMacro _ _ =
+    error "Not implemented: long and outer macros"
 
-doAssignment
+shortDefineMacro
+    :: HP.ExpandedStream
+    -> HP.QuantityType
+    -> Lex.ControlSequenceLike
+    -> IntVal
+    -> HP.ExpandedStream
+shortDefineMacro es q cs n =
+    HP.insertControlSequence es cs $ HP.PrimitiveToken $ HP.IntRefTok q n
+
+assignVariable
     :: (MonadState Config m, MonadIO m)
     => HP.VariableAssignment
     -> ExceptT String m ()
-doAssignment = \case
+assignVariable = \case
     HP.IntegerVariableAssignment v n ->
         do
-        let en = evaluateNumber n
+        en <- evaluateNumber n
         case v of
             (HP.ParamVar p)    -> setConfIntParam p en
             (HP.RegisterVar _) -> error "int registers not implemented"
     HP.LengthVariableAssignment v d ->
         do
-        _mag <- gets (mag . params)
-        let ed = evaluateLength _mag d
+        ed <- evaluateLength d
         case v of
             (HP.ParamVar p)    -> setConfLenParam p ed
             (HP.RegisterVar _) -> error "length registers not implemented"
     HP.GlueVariableAssignment v g ->
         do
-        _mag <- gets (mag . params)
-        let eg = evaluateGlue _mag g
+        eg <- evaluateGlue g
         case v of
             (HP.ParamVar p)    -> setConfGlueParam p eg
             (HP.RegisterVar _) -> error "glue registers not implemented"
-    HP.MathGlueVariableAssignment v g ->
+    HP.MathGlueVariableAssignment _ _ ->
         error "math-glue assignment not implemented"
-    HP.TokenListVariableAssignmentVar v g ->
+    HP.TokenListVariableAssignmentVar _ _ ->
         error "token-list-to-variable assignment not implemented"
-    HP.TokenListVariableAssignmentText v g ->
+    HP.TokenListVariableAssignmentText _ _ ->
         error "token-list-to-text assignment not implemented"
 
+showMsg :: Lex.Token -> [CharCode]
 showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Letter})) = [c]
 showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Other})) = [c]
 showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Space})) = [c]
@@ -191,39 +185,45 @@ handleModeIndep newStream com =
         HP.IgnoreSpaces ->
             continueUnchanged
         HP.AddPenalty n ->
-            modAccum [BL.ListPenalty $ evaluatePenalty n]
+            do
+            p <- evaluatePenalty n
+            modAccum [BL.ListPenalty $ p]
         HP.AddKern ln ->
             do
-            _mag <- gets (mag . params)
-            modAccum [BL.VListBaseElem $ B.ElemKern $ evaluateKern _mag ln]
+            k <- evaluateKern ln
+            modAccum [BL.VListBaseElem $ B.ElemKern $ k]
         HP.AddGlue g ->
             do
-            _mag <- gets (mag . params)
-            modAccum [BL.ListGlue (evaluateGlue _mag g)]
+            eG <- evaluateGlue g
+            modAccum [BL.ListGlue eG]
         HP.Assign HP.Assignment{global = _, body = _body} ->
             case _body of
+                HP.DefineMacro m ->
+                    modStream $ defineMacro newStream m
                 HP.SetVariable ass ->
                     do
-                    doAssignment ass
+                    assignVariable ass
                     continueUnchanged
                 HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
-                    let eIdx = evaluateNumber idx
-                        eVal = evaluateNumber val
-                    in  case codeType of
-                            HP.CategoryCode ->
-                                do
-                                idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
-                                valCat <- liftMaybe ("Invalid category code value: " ++ show eVal) (toEnumMay eVal)
-                                modStream newStream{HP.ccMap=HMap.insert idxChar valCat $ HP.ccMap newStream}
-                            _ ->
-                                error $ "Code type not implemented: " ++ show codeType
-
+                    do
+                    eIdx <- evaluateNumber idx
+                    eVal <- evaluateNumber val
+                    case codeType of
+                        HP.CategoryCode ->
+                            do
+                            idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
+                            valCat <- liftMaybe ("Invalid category code value: " ++ show eVal) (toEnumMay eVal)
+                            modStream newStream{HP.ccMap=HMap.insert idxChar valCat $ HP.ccMap newStream}
+                        _ ->
+                            error $ "Code type not implemented: " ++ show codeType
+                HP.ShortDefine q cs n ->
+                    do
+                    en <- evaluateNumber n
+                    modStream $ shortDefineMacro newStream q cs en
                 HP.SelectFont fNr ->
                     do
                     fontSel <- BL.VListBaseElem . B.ElemFontSelection <$> selectFont fNr
                     modAccum [fontSel]
-                HP.DefineMacro m ->
-                    modStream $ defineMacro newStream m
                 HP.DefineFont cs HP.NaturalFont fPath ->
                     do
                     fontDef <- BL.VListBaseElem . B.ElemFontDefinition <$> defineFont cs fPath
@@ -253,7 +253,7 @@ processHCommand oldStream newStream acc com =
             modStream $ HP.insertLexToken oldStream parToken
         HP.AddCharacter c ->
             do
-            let charCode = evaluateCharCodeRef c
+            charCode <- evaluateCharCodeRef c
             hCharBox <- BL.HListHBaseElem . B.ElemCharacter <$> characterBox charCode
             modAccum $ hCharBox : acc
         HP.HAllModesCommand aCom ->
@@ -276,17 +276,16 @@ processHCommand oldStream newStream acc com =
                     modAccum $ hGlue : acc
                 HP.AddRule HP.Rule{..} ->
                     do
-                    _mag <- gets (mag . params)
-                    let evalW = case width of
-                            Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                            Just ln -> evaluateLength _mag ln
-                        evalH = case height of
-                            Nothing -> Unit.toScaledPointApprox (10 :: Int) Unit.Point
-                            Just ln -> evaluateLength _mag ln
-                        evalD = case depth of
-                            Nothing -> 0
-                            Just ln -> evaluateLength _mag ln
-                        rule = B.Rule { width = evalW, height = evalH, depth = evalD }
+                    evalW <- case width of
+                        Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+                        Just ln -> evaluateLength ln
+                    evalH <- case height of
+                        Nothing -> pure $ Unit.toScaledPointApprox (10 :: Int) Unit.Point
+                        Just ln -> evaluateLength ln
+                    evalD <- case depth of
+                        Nothing -> pure 0
+                        Just ln -> evaluateLength ln
+                    let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
                     modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
                 HP.ModeIndependentCommand mcom ->
                     do
@@ -297,6 +296,9 @@ data BuildError
   = ParseError (HP.ParseErrorBundle HP.ExpandedStream)
   | ConfigError String
   deriving (Show)
+
+liftConfigError :: Monad m => ExceptT String m a -> ExceptT BuildError m a
+liftConfigError f = withExceptT ConfigError f
 
 extractParagraph
     :: (MonadState Config m, MonadIO m)
@@ -319,7 +321,7 @@ extractParagraph indentFlag stream =
         (PS.State {stateInput = newStream}, com) <-
             liftEither $ ParseError `mapLeft` HP.extractHModeCommand oldStream
         (procAcc, procStream, continue) <-
-            withExceptT ConfigError $ processHCommand oldStream newStream acc com
+            liftConfigError $ processHCommand oldStream newStream acc com
         if continue
             then extractParagraphInner procAcc procStream
             else pure (procAcc, procStream)
@@ -500,22 +502,21 @@ processVCommand oldStream newStream pages curPage acc com =
                         continueUnchanged
                     HP.AddRule HP.Rule{..} ->
                         do
-                        _mag <- gets (mag . params)
                         evalW <- case width of
                             Nothing -> gets (unLenParam . hSize . params)
-                            Just ln -> pure $ evaluateLength _mag ln
-                        let evalH = case height of
-                                -- TODO.
-                                Nothing -> Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                                Just ln -> evaluateLength _mag ln
-                            evalD = case depth of
-                                Nothing -> 0
-                                Just ln -> evaluateLength _mag ln
-                            rule = B.Rule{width = evalW, height = evalH, depth = evalD}
+                            Just ln -> liftConfigError $ evaluateLength ln
+                        evalH <- case height of
+                            -- TODO.
+                            Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+                            Just ln -> liftConfigError $ evaluateLength ln
+                        evalD <- case depth of
+                            Nothing -> pure 0
+                            Just ln -> liftConfigError $ evaluateLength ln
+                        let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
                         modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
                     HP.ModeIndependentCommand mcom ->
                         do
-                        (extraAcc, mStream) <- withExceptT ConfigError $ handleModeIndep newStream mcom
+                        (extraAcc, mStream) <- liftConfigError $ handleModeIndep newStream mcom
                         continueSamePage (extraAcc ++ acc) mStream
 
 newCurrentPage :: CurrentPage
