@@ -412,6 +412,66 @@ usableParamConfig           = newParamConfig
     , lineSkip              = GlueParamVal $ Glue (Unit.toScaledPointApprox (1 :: Int) Unit.Point) noFlex noFlex
     }
 
+getIntParam :: IntegerParameter -> ParamConfig -> IntVal
+getIntParam p c = f c
+  where
+    f = case p of
+        PreTolerance          -> unIntParam . preTolerance
+        Tolerance             -> unIntParam . tolerance
+        HBadness              -> unIntParam . hBadness
+        VBadness              -> unIntParam . vBadness
+        LinePenalty           -> unIntParam . linePenalty
+        HyphenPenalty         -> unIntParam . hyphenPenalty
+        ExHyphenPenalty       -> unIntParam . exHyphenPenalty
+        BinOpPenalty          -> unIntParam . binOpPenalty
+        RelPenalty            -> unIntParam . relPenalty
+        ClubPenalty           -> unIntParam . clubPenalty
+        WidowPenalty          -> unIntParam . widowPenalty
+        DisplayWidowPenalty   -> unIntParam . displayWidowPenalty
+        BrokenPenalty         -> unIntParam . brokenPenalty
+        PreDisplayPenalty     -> unIntParam . preDisplayPenalty
+        PostDisplayPenalty    -> unIntParam . postDisplayPenalty
+        InterlinePenalty      -> unIntParam . interlinePenalty
+        FloatingPenalty       -> unIntParam . floatingPenalty
+        OutputPenalty         -> unIntParam . outputPenalty
+        DoubleHyphenDemerits  -> unIntParam . doubleHyphenDemerits
+        FinalHyphenDemerits   -> unIntParam . finalHyphenDemerits
+        AdjDemerits           -> unIntParam . adjDemerits
+        Looseness             -> unIntParam . looseness
+        Pausing               -> unIntParam . pausing
+        HoldingInserts        -> unIntParam . holdingInserts
+        TracingOnline         -> unIntParam . tracingOnline
+        TracingMacros         -> unIntParam . tracingMacros
+        TracingStats          -> unIntParam . tracingStats
+        TracingParagraphs     -> unIntParam . tracingParagraphs
+        TracingPages          -> unIntParam . tracingPages
+        TracingOutput         -> unIntParam . tracingOutput
+        TracingLostChars      -> unIntParam . tracingLostChars
+        TracingCommands       -> unIntParam . tracingCommands
+        TracingRestores       -> unIntParam . tracingRestores
+        Language              -> unIntParam . language
+        UCHyph                -> unIntParam . uCHyph
+        LeftHyphenMin         -> unIntParam . leftHyphenMin
+        RightHyphenMin        -> unIntParam . rightHyphenMin
+        GlobalDefs            -> unIntParam . globalDefs
+        DefaultHyphenChar     -> unIntParam . defaultHyphenChar
+        DefaultSkewChar       -> unIntParam . defaultSkewChar
+        EscapeChar            -> unIntParam . escapeChar
+        EndLineChar           -> unIntParam . endLineChar
+        NewLineChar           -> unIntParam . newLineChar
+        MaxDeadCycles         -> unIntParam . maxDeadCycles
+        HangAfter             -> unIntParam . hangAfter
+        Fam                   -> unIntParam . fam
+        Mag                   -> unIntParam . mag
+        DelimiterFactor       -> unIntParam . delimiterFactor
+        Time                  -> unIntParam . time
+        Day                   -> unIntParam . day
+        Month                 -> unIntParam . month
+        Year                  -> unIntParam . year
+        ShowBoxBreadth        -> unIntParam . showBoxBreadth
+        ShowBoxDepth          -> unIntParam . showBoxDepth
+        ErrorContextLines     -> unIntParam . errorContextLines
+
 setIntParam :: IntegerParameter -> IntVal -> ParamConfig -> ParamConfig
 setIntParam p v c =
     let vp = IntParamVal v
@@ -472,7 +532,33 @@ setIntParam p v c =
         ShowBoxDepth          -> c{showBoxDepth=vp}
         ErrorContextLines     -> c{errorContextLines=vp}
 
-setLenParam :: LengthParameter -> IntVal -> ParamConfig -> ParamConfig
+getLenParam :: LengthParameter -> ParamConfig -> LenVal
+getLenParam p c = f c
+  where
+    f = case p of
+        HFuzz                 -> unLenParam . hFuzz
+        VFuzz                 -> unLenParam . vFuzz
+        OverfullRule          -> unLenParam . overfullRule
+        EmergencyStretch      -> unLenParam . emergencyStretch
+        HSize                 -> unLenParam . hSize
+        VSize                 -> unLenParam . vSize
+        MaxDepth              -> unLenParam . maxDepth
+        SplitMaxDepth         -> unLenParam . splitMaxDepth
+        BoxMaxDepth           -> unLenParam . boxMaxDepth
+        LineSkipLimit         -> unLenParam . lineSkipLimit
+        DelimiterShortfall    -> unLenParam . delimiterShortfall
+        NullDelimiterSpace    -> unLenParam . nullDelimiterSpace
+        ScriptSpace           -> unLenParam . scriptSpace
+        MathSurround          -> unLenParam . mathSurround
+        PreDisplaySize        -> unLenParam . preDisplaySize
+        DisplayWidth          -> unLenParam . displayWidth
+        DisplayIndent         -> unLenParam . displayIndent
+        ParIndent             -> unLenParam . parIndent
+        HangIndent            -> unLenParam . hangIndent
+        HOffset               -> unLenParam . hOffset
+        VOffset               -> unLenParam . vOffset
+
+setLenParam :: LengthParameter -> LenVal -> ParamConfig -> ParamConfig
 setLenParam p v c =
     let vp = LenParamVal v
     in case p of
@@ -497,6 +583,26 @@ setLenParam p v c =
         HangIndent            -> c{hangIndent=vp}
         HOffset               -> c{hOffset=vp}
         VOffset               -> c{vOffset=vp}
+
+getGlueParam :: GlueParameter -> ParamConfig -> Glue
+getGlueParam p c = f c
+  where
+    f = case p of
+        BaselineSkip          -> unGlueParam . baselineSkip
+        LineSkip              -> unGlueParam . lineSkip
+        ParSkip               -> unGlueParam . parSkip
+        AboveDisplaySkip      -> unGlueParam . aboveDisplaySkip
+        AboveDisplayShortSkip -> unGlueParam . aboveDisplayShortSkip
+        BelowDisplaySkip      -> unGlueParam . belowDisplaySkip
+        BelowDisplayShortSkip -> unGlueParam . belowDisplayShortSkip
+        LeftSkip              -> unGlueParam . leftSkip
+        RightSkip             -> unGlueParam . rightSkip
+        TopSkip               -> unGlueParam . topSkip
+        SplitTopSkip          -> unGlueParam . splitTopSkip
+        TabSkip               -> unGlueParam . tabSkip
+        SpaceSkip             -> unGlueParam . spaceSkip
+        XSpaceSkip            -> unGlueParam . xSpaceSkip
+        ParFillSkip           -> unGlueParam . parFillSkip
 
 setGlueParam :: GlueParameter -> Glue -> ParamConfig -> ParamConfig
 setGlueParam p v c =
@@ -524,6 +630,15 @@ setGlueParam p v c =
 -- setTokenListParam :: TokenListParameter -> [Token] -> ParamConfig -> ParamConfig
 -- setTokenListParam p v c = let vp = TokenListParamVal v in case p of
 
+getSpecialInt :: SpecialInteger -> ParamConfig -> IntVal
+getSpecialInt p c = f c
+  where
+    f = case p of
+        SpaceFactor           -> unIntParam . spaceFactor
+        PrevGraf              -> unIntParam . prevGraf
+        DeadCycles            -> unIntParam . deadCycles
+        InsertPenalties       -> unIntParam . insertPenalties
+
 setSpecialInt :: SpecialInteger -> IntVal -> ParamConfig -> ParamConfig
 setSpecialInt p v c =
     let vp = IntParamVal v
@@ -532,6 +647,20 @@ setSpecialInt p v c =
         PrevGraf              -> c{prevGraf=vp}
         DeadCycles            -> c{deadCycles=vp}
         InsertPenalties       -> c{insertPenalties=vp}
+
+getSpecialLen :: SpecialLength -> ParamConfig -> LenVal
+getSpecialLen p c = f c
+  where
+    f = case p of
+        PrevDepth             -> unLenParam . prevDepth
+        PageGoal              -> unLenParam . pageGoal
+        PageTotal             -> unLenParam . pageTotal
+        PageStretch           -> unLenParam . pageStretch
+        PageFilStretch        -> unLenParam . pageFilStretch
+        PageFillStretch       -> unLenParam . pageFillStretch
+        PageFilllStretch      -> unLenParam . pageFilllStretch
+        PageShrink            -> unLenParam . pageShrink
+        PageDepth             -> unLenParam . pageDepth
 
 setSpecialLen :: SpecialLength -> LenVal -> ParamConfig -> ParamConfig
 setSpecialLen p v c =

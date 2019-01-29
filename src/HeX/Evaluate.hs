@@ -51,14 +51,14 @@ evaluateInternalInteger = \case
     AST.Badness -> undefined
 
 evaluateIntegerVariable :: (MonadState Config m, MonadError String m) => AST.IntegerVariable -> m Int
-evaluateIntegerVariable (AST.ParamVar _) = undefined
+evaluateIntegerVariable (AST.ParamVar p) = gets (getIntParam p . params)
 evaluateIntegerVariable (AST.RegisterVar n) =
     do
     _ <- evaluateNumber n
     undefined
 
 evaluateSpecialInteger :: (MonadState Config m, MonadError String m) => T.SpecialInteger -> m Int
-evaluateSpecialInteger _ = undefined
+evaluateSpecialInteger p = gets (getSpecialInt p . params)
 
 evaluateCodeTableRef :: (MonadState Config m, MonadError String m) => AST.CodeTableRef -> m Int
 evaluateCodeTableRef (AST.CodeTableRef _ n) =
@@ -121,14 +121,14 @@ evaluateInternalLength (AST.InternalBoxDimensionRef v)  = evaluateBoxDimensionRe
 evaluateInternalLength (AST.LastKern) = undefined
 
 evaluateLengthVariable :: (MonadState Config m, MonadError String m) => AST.LengthVariable -> m Int
-evaluateLengthVariable (AST.ParamVar _) = undefined
+evaluateLengthVariable (AST.ParamVar p) = gets (getLenParam p . params)
 evaluateLengthVariable (AST.RegisterVar n) =
     do
     _ <- evaluateNumber n
     undefined
 
 evaluateSpecialLength :: (MonadState Config m, MonadError String m) => T.SpecialLength -> m Int
-evaluateSpecialLength _ = undefined
+evaluateSpecialLength p = gets (getSpecialLen p . params)
 
 evaluateFontDimensionRef :: (MonadState Config m, MonadError String m) => AST.FontDimensionRef -> m Int
 evaluateFontDimensionRef (AST.FontDimensionRef n _) =
@@ -176,7 +176,7 @@ evaluateInternalGlue (AST.InternalGlueVariable v) = evaluateGlueVariable v
 evaluateInternalGlue AST.LastGlue = undefined
 
 evaluateGlueVariable :: (MonadState Config m, MonadError String m) => AST.GlueVariable -> m BL.Glue
-evaluateGlueVariable (AST.ParamVar _) = undefined
+evaluateGlueVariable (AST.ParamVar p) = gets (getGlueParam p . params)
 evaluateGlueVariable (AST.RegisterVar n) =
     do
     _ <- evaluateNumber n
