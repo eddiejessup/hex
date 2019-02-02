@@ -63,7 +63,7 @@ chopLex' ls xs =
         Just (ls', xs') -> chopLex' ls' xs'
   where
     extractAndPrintLex =
-        case extractToken (extractCharCat usableCharToCat) ls xs of
+        case extractToken usableCharToCat ls xs of
             Just (tok, ls', s') ->
                 do
                 print tok
@@ -83,7 +83,7 @@ chopResolved' ls xs =
         Just (ls', xs') -> chopResolved' ls' xs'
   where
       extractAndPrintResolved =
-            case extractToken (extractCharCat usableCharToCat) ls xs of
+            case extractToken usableCharToCat ls xs of
                 Just (tok, lexState', s') ->
                     do
                     print $ resolveToken defaultCSMap Expanding tok

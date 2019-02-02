@@ -7,7 +7,7 @@ import           Data.Hashable                  ( Hashable
                                                 )
 
 import qualified HeX.Categorise                as Cat
-import           HeX.Categorise                 ( CharCode )
+import           HeX.Categorise                 ( CharCode, CatCode )
 
 newtype ControlSequence = ControlSequence String
     deriving (Show, Eq)
@@ -86,16 +86,18 @@ chopBreak get test cs = revFirst $ inner [] get cs
             | otherwise -> inner (next : acc) getNext rest
 
 extractToken
-    :: ([CharCode] -> Maybe (Cat.CharCat, [CharCode]))
+    :: (CharCode -> CatCode)
     -> LexState
     -> [CharCode]
     -> Maybe (Token, LexState, [CharCode])
 extractToken _     _     [] = Nothing
-extractToken getCC state cs =
+extractToken charToCat state cs =
     do
     (cc1, rest) <- getCC cs
     extractTokenRest cc1 rest
   where
+    getCC = Cat.extractCharCat charToCat
+
     extractTokenRest (Cat.CharCat n cat1) rest = case (cat1, state) of
         -- Control sequence: Grab it.
         (Cat.Escape, _) ->
@@ -116,12 +118,13 @@ extractToken getCC state cs =
                  , nextState
                  , rest2
                  )
-        -- Comment: Ignore rest' of line and switch to line-begin.
+        -- Comment: Ignore rest of line and switch to line-begin.
         (Cat.Comment, _) ->
-            extractToken getCC LineBegin $ chopDropWhile getCC ((/= Cat.EndOfLine) . Cat.cat) rest
+            extractToken charToCat LineBegin $
+                dropWhile (\c -> charToCat c /= Cat.EndOfLine) rest
         -- Space at the start of a line: Ignore.
         (Cat.Space, LineBegin) ->
-            extractToken getCC state rest
+            extractToken charToCat state rest
         -- Empty line: Make a paragraph.
         (Cat.EndOfLine, LineBegin) ->
             pure (ControlSequenceToken $ ControlSequence "par", LineBegin, rest)
@@ -148,9 +151,9 @@ extractToken getCC state cs =
             pure (CharCatToken $ CharCat n Active, LineMiddle, rest)
         -- Space, or end of line, while skipping blanks: Ignore.
         (Cat.Space, SkippingBlanks) ->
-            extractToken getCC state rest
+            extractToken charToCat state rest
         (Cat.EndOfLine, SkippingBlanks) ->
-            extractToken getCC  state rest
+            extractToken charToCat  state rest
         -- Space in middle of line: Make a space token and start skipping blanks.
         (Cat.Space, LineMiddle) ->
             pure (spaceTok, SkippingBlanks, rest)
@@ -159,8 +162,8 @@ extractToken getCC state cs =
             pure (spaceTok, LineBegin, rest)
         -- Ignored: Ignore.
         (Cat.Ignored, _) ->
-            extractToken getCC state rest
+            extractToken charToCat state rest
         -- Invalid: Print error message and ignore.
         -- TODO: TeXbook says to print an error message in this case.
         (Cat.Invalid, _) ->
-            extractToken getCC state rest
+            extractToken charToCat state rest

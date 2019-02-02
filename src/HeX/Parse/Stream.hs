@@ -219,8 +219,7 @@ instance P.Stream ExpandedStream where
             -- If the lex token buffer is empty, extract a token and use it.
             [] ->
                 do
-                let getCC = Cat.extractCharCat (Cat.catLookup _ccMap)
-                (lt, _lexState', cs') <- Lex.extractToken getCC _lexState cs
+                (lt, _lexState', cs') <- Lex.extractToken (Cat.catLookup _ccMap) _lexState cs
                 pure (lt, stream { codes = cs', lexState = _lexState' })
         -- Resolve the lex token, and inspect the result.
         case resolveToken _csMap expMode lt of
