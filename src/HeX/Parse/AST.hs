@@ -237,20 +237,24 @@ data Assignment = Assignment
   , global :: T.GlobalFlag
   } deriving (Show)
 
+data ControlSequenceTarget
+    = MacroTarget T.MacroContents
+    | LetTarget Lex.Token
+    | FutureLetTarget Lex.Token Lex.Token
+    | ShortDefineTarget T.QuantityType Number
+    | ReadTarget Number
+    | FontTarget FontSpecification (Path Rel File)
+    deriving (Show)
+
 data AssignmentBody
-    = DefineMacro MacroAssignment
+    = DefineControlSequence Lex.ControlSequenceLike ControlSequenceTarget
     | SetVariable VariableAssignment
     | ModifyVariable VariableModification
     | AssignCode CodeAssignment
-    | Let Lex.ControlSequenceLike Lex.Token
-    | FutureLet Lex.ControlSequenceLike Lex.Token Lex.Token
-    | ShortDefine T.QuantityType Lex.ControlSequenceLike Number
     | SelectFont IntVal
     | SetFamilyMember FamilyMember FontRef
     | SetParShape [(Length, Length)]
-    | ReadToControlSequence Number Lex.ControlSequenceLike
     | SetBoxRegister Number Box
-    | DefineFont Lex.ControlSequenceLike FontSpecification (Path Rel File)
     -- -- Global assignments.
     | SetFontDimension FontDimensionRef Length
     | SetFontChar FontCharRef Number
@@ -261,12 +265,6 @@ data AssignmentBody
     | SetSpecialInteger T.SpecialInteger Number
     | SetSpecialLength T.SpecialLength Length
     deriving (Show)
-
-data MacroAssignment = MacroAssignment
-    { name        :: Lex.ControlSequenceLike
-    , contents    :: T.MacroContents
-    , long, outer :: Bool
-    } deriving (Show)
 
 data VariableAssignment
     = IntegerVariableAssignment IntegerVariable Number

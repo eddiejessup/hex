@@ -321,6 +321,7 @@ data MacroContents = MacroContents
       preParamTokens :: [Lex.Token]
     , parameters :: MacroParameters
     , replacementTokens :: MacroText
+    , long, outer :: Bool
     } deriving (Show, Eq)
 
 data RemovableItem

@@ -43,18 +43,20 @@ parseDefineMacro =
     -- Macro's name.
     cs <- parseCSName
     -- Parameter text.
-    (preParamToks, paramDelims) <- parseParamText
+    (preParamTokens, parameters) <- parseParamText
     -- TODO: Support expanded-def.
     when (defExpandType == T.ExpandDef) $ error "expanded-def not implemented"
     -- Replacement text.
-    replaceToks <- parseMacroText
-    pure Assignment
-        { body = DefineMacro $ MacroAssignment
-            { name = cs
-            , contents = T.MacroContents preParamToks paramDelims replaceToks
+    replacementTokens <- parseMacroText
+    let tgt = T.MacroContents
+            { preParamTokens = preParamTokens
+            , parameters = parameters
+            , replacementTokens = replacementTokens
             , long = T.LongTok `elem` prefixes
             , outer = T.OuterTok `elem` prefixes
             }
+    pure Assignment
+        { body = DefineControlSequence cs (MacroTarget tgt)
         , global = case defGlobalType of
             T.Global                              -> T.Global
             T.Local | T.GlobalTok `elem` prefixes -> T.Global
@@ -179,13 +181,17 @@ parseLet :: SimpExpandParser AssignmentBody
 parseLet =
     do
     skipSatisfiedEquals T.LetTok
-    parseVarEqVal (parseCSName, skipOneOptionalSpace >> parseToken) Let
+    (cs, tok) <- parseVarEqVal (parseCSName, skipOneOptionalSpace >> parseToken) (,)
+    pure $ DefineControlSequence cs (LetTarget tok)
 
 parseFutureLet :: SimpExpandParser AssignmentBody
 parseFutureLet =
     do
     skipSatisfiedEquals T.FutureLetTok
-    FutureLet <$> parseCSName <*> parseToken <*> parseToken
+    cs <- parseCSName
+    tok1 <- parseToken
+    tok2 <- parseToken
+    pure $ DefineControlSequence cs (FutureLetTarget tok1 tok2)
 
 parseShortMacroAssignment :: SimpExpandParser AssignmentBody
 parseShortMacroAssignment =
@@ -193,7 +199,8 @@ parseShortMacroAssignment =
     quant <- satisfyThen (\case
         T.ShortDefHeadTok t -> Just t
         _                   -> Nothing)
-    parseVarEqVal (parseCSName, parseNumber) $ ShortDefine quant
+    (cs, n) <- parseVarEqVal (parseCSName, parseNumber) (,)
+    pure $ DefineControlSequence cs (ShortDefineTarget quant n)
 
 parseSetFamilyMember :: SimpExpandParser AssignmentBody
 parseSetFamilyMember =
@@ -223,7 +230,8 @@ parseReadToControlSequence =
     nr <- parseNumber
     skipKeyword "to"
     skipOptionalSpaces
-    ReadToControlSequence nr <$> parseCSName
+    cs <- parseCSName
+    pure $ DefineControlSequence cs (ReadTarget nr)
 
 parseSetBoxRegister :: SimpExpandParser AssignmentBody
 parseSetBoxRegister =
@@ -272,7 +280,7 @@ parseNewFontAssignment =
     skipOptionalEquals
     fname <- parseFileName
     fontSpec <- parseFontSpecification
-    pure $ DefineFont cs fontSpec fname
+    pure $ DefineControlSequence cs (FontTarget fontSpec fname)
   where
     parseFontSpecification = P.choice [ parseFontSpecAt
                                       , parseFontSpecScaled

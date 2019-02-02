@@ -136,7 +136,7 @@ expandCSName _ charToks =
     [Lex.ControlSequenceToken $ Lex.ControlSequence charToks]
 
 expandMacro :: MacroContents -> Map.Map Digit MacroArgument -> [Lex.Token]
-expandMacro MacroContents {replacementTokens=(MacroText replaceToks)} args =
+expandMacro MacroContents{replacementTokens=(MacroText replaceToks)} args =
     renderMacroText replaceToks
   where
     renderMacroText []     = []

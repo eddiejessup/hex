@@ -299,6 +299,4 @@ defaultCSMap = HMap.fromList
     , (_cs "scrollmode"       , _pt $ InteractionModeTok ScrollMode)
     , (_cs "nonstopmode"      , _pt $ InteractionModeTok NonStopMode)
     , (_cs "batchmode"        , _pt $ InteractionModeTok BatchMode)
-      -- Temporary pragmatism.
-    , (_cs "active"           , _pt $ IntRefTok CharQuantity 13)
     ]

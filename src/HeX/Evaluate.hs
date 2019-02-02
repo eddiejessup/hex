@@ -42,15 +42,15 @@ evaluateNormalInteger = \case
 evaluateInternalInteger :: (MonadState Config m, MonadError String m) => AST.InternalInteger -> m Int
 evaluateInternalInteger = \case
     AST.InternalIntegerVariable v -> evaluateIntegerVariable v
-    AST.InternalSpecialInteger v -> evaluateSpecialInteger v
-    AST.InternalCodeTableRef v -> evaluateCodeTableRef v
-    AST.InternalCharToken n -> pure n
-    AST.InternalMathCharToken n -> pure n
-    AST.InternalFontCharRef v -> evaluateFontCharRef v
-    AST.LastPenalty -> undefined
-    AST.ParShape -> undefined
-    AST.InputLineNr -> undefined
-    AST.Badness -> undefined
+    AST.InternalSpecialInteger v  -> evaluateSpecialInteger v
+    AST.InternalCodeTableRef v    -> evaluateCodeTableRef v
+    AST.InternalCharToken n       -> pure n
+    AST.InternalMathCharToken n   -> pure n
+    AST.InternalFontCharRef v     -> evaluateFontCharRef v
+    AST.LastPenalty               -> undefined
+    AST.ParShape                  -> undefined
+    AST.InputLineNr               -> undefined
+    AST.Badness                   -> undefined
 
 evaluateIntegerVariable :: (MonadState Config m, MonadError String m) => AST.IntegerVariable -> m Int
 evaluateIntegerVariable = \case
@@ -75,7 +75,7 @@ evaluateFontCharRef (AST.FontCharRef fChar fontRef) =
     fontInfo <- evaluateFontRef fontRef
     pure $ case fChar of
         T.HyphenChar -> hyphenChar fontInfo
-        T.SkewChar -> skewChar fontInfo
+        T.SkewChar   -> skewChar fontInfo
 
 evaluateFontRef :: (MonadState Config m, MonadError String m) => AST.FontRef -> m FontInfo
 evaluateFontRef = \case

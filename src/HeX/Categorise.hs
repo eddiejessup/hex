@@ -74,8 +74,8 @@ defaultCharToCat, usableCharToCat :: CharCode -> CatCode
 defaultCharToCat = catLookup defaultCharCatMap
 usableCharToCat  = catLookup usableCharCatMap
 
-extractCharCat ::
-    (CharCode -> CatCode)
+extractCharCat
+    :: (CharCode -> CatCode)
     -> [CharCode]
     -> Maybe (CharCat, [CharCode])
 extractCharCat _ [] = Nothing

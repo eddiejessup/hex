@@ -50,8 +50,8 @@ import           HeX.Parse.Token
 import           HeX.Config.Parameters
 
 data Config = Config
-    { currentFontNr :: Maybe Int
-    , fontInfos :: V.Vector FontInfo
+    { currentFontNr   :: Maybe Int
+    , fontInfos       :: V.Vector FontInfo
     , fontDirectories :: [Path Abs Dir]
     , params          :: ParamConfig
     }
@@ -74,8 +74,8 @@ type ConfReaderT = ReaderT Config
 
 data FontInfo = FontInfo
     { fontMetrics :: TexFont
-    , hyphenChar :: IntVal
-    , skewChar :: IntVal
+    , hyphenChar
+    , skewChar    :: IntVal
     }
 
 readFontInfo :: (MonadState Config m, MonadIO m) => Path Abs File -> m FontInfo

@@ -33,7 +33,6 @@ import qualified TFM.Character                 as TFMC
 
 import           HeXPrelude
 import           HeX.Concept
-import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.BreakList.Line             ( setParagraph )
@@ -92,24 +91,6 @@ spaceGlue =
     let toSP = TFM.designScaleSP fontMetrics
         toFlex = BL.finiteFlex . fromIntegral . toSP
     pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
-
-defineMacro
-    :: HP.ExpandedStream
-    -> HP.MacroAssignment
-    -> HP.ExpandedStream
-defineMacro es (HP.MacroAssignment cs macro False False) =
-    HP.insertControlSequence es cs $ HP.SyntaxCommandHeadToken $ HP.MacroTok macro
-defineMacro _ _ =
-    error "Not implemented: long and outer macros"
-
-shortDefineMacro
-    :: HP.ExpandedStream
-    -> HP.QuantityType
-    -> Lex.ControlSequenceLike
-    -> IntVal
-    -> HP.ExpandedStream
-shortDefineMacro es q cs n =
-    HP.insertControlSequence es cs $ HP.PrimitiveToken $ HP.IntRefTok q n
 
 assignVariable
     :: (MonadState Config m, MonadIO m)
@@ -181,8 +162,22 @@ handleModeIndep newStream com =
             modAccum [BL.ListGlue eG]
         HP.Assign HP.Assignment{global = _, body = _body} ->
             case _body of
-                HP.DefineMacro m ->
-                    modStream $ defineMacro newStream m
+                HP.DefineControlSequence cs tgt ->
+                    do
+                    (acc, newCSTok) <- case tgt of
+                        HP.MacroTarget macro ->
+                            pure ([], HP.SyntaxCommandHeadToken $ HP.MacroTok macro)
+                        HP.ShortDefineTarget q n ->
+                            do
+                            en <- evaluateNumber n
+                            pure ([], HP.PrimitiveToken $ HP.IntRefTok q en)
+                        HP.FontTarget HP.NaturalFont fPath ->
+                            do
+                            fontDef@B.FontDefinition{fontNr=fNr} <- loadFont fPath
+                            let fontRefTok = HP.PrimitiveToken $ HP.FontRefToken fNr
+                                boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
+                            pure ([boxElem], fontRefTok)
+                    pure (acc, HP.insertControlSequence newStream cs newCSTok)
                 HP.SetVariable ass ->
                     do
                     assignVariable ass
@@ -199,19 +194,10 @@ handleModeIndep newStream com =
                             modStream newStream{HP.ccMap=HMap.insert idxChar valCat $ HP.ccMap newStream}
                         _ ->
                             error $ "Code type not implemented: " ++ show codeType
-                HP.ShortDefine q cs n ->
-                    do
-                    en <- evaluateNumber n
-                    modStream $ shortDefineMacro newStream q cs en
                 HP.SelectFont fNr ->
                     do
                     fontSel <- selectFont fNr
                     modAccum [BL.VListBaseElem $ B.ElemFontSelection fontSel]
-                HP.DefineFont cs HP.NaturalFont fPath ->
-                    do
-                    fontDef@B.FontDefinition{fontNr=fNr} <- loadFont fPath
-                    let fontRefTok = HP.PrimitiveToken $ HP.FontRefToken fNr
-                    pure ([BL.VListBaseElem $ B.ElemFontDefinition fontDef], HP.insertControlSequence newStream cs fontRefTok)
 
 processHCommand
     :: (MonadState Config m, MonadIO m)
