@@ -13,23 +13,24 @@ description:         Please see the README on GitHub at <https://github.com/eddi
 
 dependencies:
 - base >= 4.7 && < 5
-- containers
-- bytestring
 - binary
-- split
+- bytestring
+- containers
+- directory
+- either
+- extra
 - filepath
+- hashable
 - megaparsec
 - MissingH
-- directory
-- path
 - mtl
-- unordered-containers
 - parser-combinators
-- hashable
+- path
 - safe
+- split
 - transformers
-- extra
-- either
+- unordered-containers
+- vector
 
 library:
   source-dirs: src

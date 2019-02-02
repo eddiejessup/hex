@@ -451,7 +451,7 @@ data PrimitiveToken
     -- \| EndIf -- \fi
     -- \| Or -- \or
 
-    | ResolutionError
+    | ResolutionError Lex.ControlSequenceLike
     | SubParserError String
 
     | UnexpandedTok Lex.Token

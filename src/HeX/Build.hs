@@ -12,9 +12,6 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 , liftIO
                                                 , modify
                                                 )
-import           Control.Monad.Trans.Maybe      ( MaybeT(..)
-                                                , runMaybeT
-                                                )
 import           Control.Monad.Except           ( ExceptT
                                                 , liftEither
                                                 , MonadError
@@ -51,62 +48,48 @@ import           HeX.Evaluate
 import qualified HeX.Parse                     as HP
 import qualified HeX.Unit                      as Unit
 
-defineFont
-    :: (MonadState Config m, MonadIO m)
-    => Lex.ControlSequenceLike
-    -> Path Rel File
+loadFont
+    :: (MonadState Config m, MonadIO m, MonadError String m)
+    => Path Rel File
     -> m B.FontDefinition
-defineFont _ fPath =
+loadFont fPath =
     do
     theFontDirectories <- gets fontDirectories
-    maybeFontDef <- liftIO $ runMaybeT $ ioFontDef theFontDirectories
-    case maybeFontDef of
-        Just fontDef@B.FontDefinition {fontInfo = font} ->
-            do
-            modify
-              (\conf -> conf {fontInfoMap = HMap.insert fNr font $ fontInfoMap conf})
-            pure fontDef
-        Nothing ->
-            fail "Could not define font"
-  where
-    -- TODO: Look up font number from control sequence.
-    fNr = HP.theFontNr
-    ioFontDef fontDirs =
-        do
-        fontPath <- findFilePath fPath fontDirs
-        font <- liftIO $ TFM.readTFMFancy fontPath
-        nonExtName <- Path.setFileExtension "" fPath
-        let fontName = Path.toFilePath $ Path.filename nonExtName
-        pure B.FontDefinition
-            { fontNr           = fNr
-            -- TODO: Improve mapping of name and path.
-            , fontPath         = fontName
-            , fontName         = fontName
-            , fontInfo         = font
-            , scaleFactorRatio = 1.0
-            }
+    fontPath <- liftThrow "Could not find font" $ findFilePath fPath theFontDirectories
+    fontInfo_ <- readFontInfo fontPath
+    nonExtName <- liftThrow "Could not strip font extension" $ Path.setFileExtension "" fPath
+    let fontName = Path.toFilePath $ Path.filename nonExtName
+    fNr <- addFont fontInfo_
+    pure B.FontDefinition
+        { fontNr           = fNr
+        -- TODO: Improve mapping of name and path.
+        , fontPath         = fontName
+        , fontName         = fontName
+        , fontInfo         = fontMetrics fontInfo_
+        , scaleFactorRatio = 1.0
+        }
 
 selectFont :: MonadState Config m => Int -> m B.FontSelection
 selectFont n =
     do
-    modify (\conf -> conf {currentFontNr = Just n})
-    pure B.FontSelection {fontNr = n}
+    modify (\conf -> conf{currentFontNr = Just n})
+    pure $ B.FontSelection n
 
 characterBox :: (MonadState Config m, MonadError String m) => CharCode -> m B.Character
 characterBox char =
     do
-    font <- currentFontInfo
-    let toSP = TFM.designScaleSP font
+    fontMetrics <- currentFontMetrics
+    let toSP = TFM.designScaleSP fontMetrics
     TFMC.Character {width = w, height = h, depth = d} <-
-        liftMaybe "No such character" $ (HMap.lookup char $ characters font)
+        liftMaybe "No such character" $ (HMap.lookup char $ characters fontMetrics)
     pure
         B.Character {char = char, width = toSP w, height = toSP h, depth = toSP d}
 
 spaceGlue :: (MonadState Config m, MonadError String m) => m BL.Glue
 spaceGlue =
     do
-    font@TexFont {spacing = d, spaceStretch = str, spaceShrink = shr} <- currentFontInfo
-    let toSP = TFM.designScaleSP font
+    fontMetrics@TexFont{spacing = d, spaceStretch = str, spaceShrink = shr} <- currentFontMetrics
+    let toSP = TFM.designScaleSP fontMetrics
         toFlex = BL.finiteFlex . fromIntegral . toSP
     pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
@@ -222,12 +205,13 @@ handleModeIndep newStream com =
                     modStream $ shortDefineMacro newStream q cs en
                 HP.SelectFont fNr ->
                     do
-                    fontSel <- BL.VListBaseElem . B.ElemFontSelection <$> selectFont fNr
-                    modAccum [fontSel]
+                    fontSel <- selectFont fNr
+                    modAccum [BL.VListBaseElem $ B.ElemFontSelection fontSel]
                 HP.DefineFont cs HP.NaturalFont fPath ->
                     do
-                    fontDef <- BL.VListBaseElem . B.ElemFontDefinition <$> defineFont cs fPath
-                    modAccum [fontDef]
+                    fontDef@B.FontDefinition{fontNr=fNr} <- loadFont fPath
+                    let fontRefTok = HP.PrimitiveToken $ HP.FontRefToken fNr
+                    pure ([BL.VListBaseElem $ B.ElemFontDefinition fontDef], HP.insertControlSequence newStream cs fontRefTok)
 
 processHCommand
     :: (MonadState Config m, MonadIO m)

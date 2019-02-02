@@ -1,10 +1,16 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module HeX.Config
     ( module HeX.Config.Parameters
     , Config(..)
+    , FontInfo(..)
+    , readFontInfo
+    , lookupFontInfo
     , currentFontInfo
+    , currentFontMetrics
+    , addFont
     , newConfig
     , ConfReaderT, ConfStateT
     , parIndentBox
@@ -19,21 +25,22 @@ module HeX.Config
     )
 where
 
+import           Control.Monad.IO.Class         ( MonadIO )
 import           Control.Monad.State.Lazy       ( StateT
+                                                , liftIO
                                                 , modify
                                                 , MonadState
                                                 , gets )
 import           Control.Monad.Trans.Reader     ( ReaderT )
 import           Control.Monad.Except           ( MonadError
                                                 )
-import qualified Data.HashMap.Strict           as HMap
-import           Data.Maybe                     ( fromJust )
+import qualified Data.Vector                   as V
+import           Data.Vector                    ( (!?) )
 import           Path
 import           System.Directory
 
+import qualified TFM
 import           TFM                            ( TexFont )
-
-import qualified Data.Path                     as Path
 
 import           HeXPrelude
 import           HeX.Type
@@ -42,37 +49,64 @@ import qualified HeX.BreakList                 as BL
 import           HeX.Parse.Token
 import           HeX.Config.Parameters
 
-type FontInfoMap = HMap.HashMap Int TexFont
-
 data Config = Config
-    { currentFontNr   :: Maybe Int
-    , fontInfoMap     :: FontInfoMap
-    , fontDirectories :: [Path.AbsPathToDir]
+    { currentFontNr :: Maybe Int
+    , fontInfos :: V.Vector FontInfo
+    , fontDirectories :: [Path Abs Dir]
     , params          :: ParamConfig
     }
 
-newConfig :: IO Config
+newConfig :: (MonadIO m, MonadError String m) => m Config
 newConfig =
     do
-    cwd <- fromJust . parseAbsDir <$> getCurrentDirectory
+    cwdRaw <- liftIO getCurrentDirectory
+    cwd <- liftThrow "Invalid current directory" $ parseAbsDir cwdRaw
     pure Config
-        { currentFontNr   = Nothing
-        , fontInfoMap     = HMap.empty
+        { currentFontNr = Nothing
+        , fontInfos = V.empty
         , fontDirectories = [cwd]
         , params          = usableParamConfig }
 
 type ConfStateT = StateT Config
 type ConfReaderT = ReaderT Config
 
-currentFontInfo :: (MonadState Config m, MonadError String m) => m TexFont
-currentFontInfo =
+-- Fonts.
+
+data FontInfo = FontInfo
+    { fontMetrics :: TexFont
+    , hyphenChar :: IntVal
+    , skewChar :: IntVal
+    }
+
+readFontInfo :: (MonadState Config m, MonadIO m) => Path Abs File -> m FontInfo
+readFontInfo fontPath =
     do
-    -- Maybe font number isn't set.
-    fNr <- gets currentFontNr >>= liftMaybe "Font number isn't set"
-    -- Or maybe there's no font where there should be.
-    -- TODO: I think I can make this case impossible, maybe by storing the
-    -- current font info directly instead of a lookup.
-    gets fontInfoMap >>= (liftMaybe "No such font number" . (HMap.lookup fNr))
+    fontMetrics <- liftIO $ TFM.readTFMFancy fontPath
+    hyphenChar <- unIntParam <$> gets (defaultHyphenChar . params)
+    skewChar <- unIntParam <$> gets (defaultSkewChar . params)
+    pure FontInfo{..}
+
+lookupFontInfo :: (MonadState Config m, MonadError String m) => Int -> m FontInfo
+lookupFontInfo fNr =
+    do
+    infos <- gets fontInfos
+    liftMaybe "No such font number" $ infos !? fNr
+
+currentFontInfo :: (MonadState Config m, MonadError String m) => m FontInfo
+currentFontInfo = gets currentFontNr >>= liftMaybe "Font number isn't set" >>= lookupFontInfo
+
+currentFontMetrics :: (MonadState Config m, MonadError String m) => m TexFont
+currentFontMetrics = fontMetrics <$> currentFontInfo
+
+addFont :: MonadState Config m => FontInfo -> m Int
+addFont newInfo =
+    do
+    infos <- gets fontInfos
+    let newInfos = V.snoc infos newInfo
+    modify (\conf -> conf{fontInfos = newInfos})
+    pure $ V.length newInfos - 1
+
+-- Parameters.
 
 modifyParams :: MonadState Config m => (ParamConfig -> ParamConfig) -> m ()
 modifyParams f =

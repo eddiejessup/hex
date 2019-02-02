@@ -6,15 +6,12 @@ import           System.Directory
 import           Control.Monad.Trans.Maybe      ( MaybeT(..) )
 import           Path
 
-type PathToFile b = Path b File
-type AbsPathToDir = Path Abs Dir
-
-firstExistingPath :: [PathToFile b] -> MaybeT IO (PathToFile b)
+firstExistingPath :: [Path b File] -> MaybeT IO (Path b File)
 -- Make a MaybeT of...
 -- The result of an IO function, lifted to our MaybeT IO monad.
 -- Namely 'find', but using a predicate which acts in the IO monad,
 -- and which tests if a file exists.
 firstExistingPath = MaybeT . liftIO . findM (doesFileExist . toFilePath)
 
-findFilePath :: PathToFile Rel -> [AbsPathToDir] -> MaybeT IO (PathToFile Abs)
+findFilePath :: Path Rel File -> [Path Abs Dir] -> MaybeT IO (Path Abs File)
 findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs

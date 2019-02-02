@@ -30,12 +30,14 @@ evaluateNumber (AST.Number (T.Sign isPos) u) =
     pure $ if isPos then size else (-size)
 
 evaluateUnsignedNumber :: (MonadState Config m, MonadError String m) => AST.UnsignedNumber -> m Int
-evaluateUnsignedNumber (AST.NormalIntegerAsUNumber v) = evaluateNormalInteger v
-evaluateUnsignedNumber (AST.CoercedInteger v) = evaluateCoercedInteger v
+evaluateUnsignedNumber = \case
+    AST.NormalIntegerAsUNumber v -> evaluateNormalInteger v
+    AST.CoercedInteger v -> evaluateCoercedInteger v
 
 evaluateNormalInteger :: (MonadState Config m, MonadError String m) => AST.NormalInteger -> m Int
-evaluateNormalInteger (AST.IntegerConstant n) = pure n
-evaluateNormalInteger (AST.InternalInteger v) = evaluateInternalInteger v
+evaluateNormalInteger = \case
+    AST.IntegerConstant n -> pure n
+    AST.InternalInteger v -> evaluateInternalInteger v
 
 evaluateInternalInteger :: (MonadState Config m, MonadError String m) => AST.InternalInteger -> m Int
 evaluateInternalInteger = \case
@@ -51,11 +53,12 @@ evaluateInternalInteger = \case
     AST.Badness -> undefined
 
 evaluateIntegerVariable :: (MonadState Config m, MonadError String m) => AST.IntegerVariable -> m Int
-evaluateIntegerVariable (AST.ParamVar p) = gets (getIntParam p . params)
-evaluateIntegerVariable (AST.RegisterVar n) =
-    do
-    _ <- evaluateNumber n
-    undefined
+evaluateIntegerVariable = \case
+    AST.ParamVar p -> gets (getIntParam p . params)
+    AST.RegisterVar n ->
+        do
+        _ <- evaluateNumber n
+        undefined
 
 evaluateSpecialInteger :: (MonadState Config m, MonadError String m) => T.SpecialInteger -> m Int
 evaluateSpecialInteger p = gets (getSpecialInt p . params)
@@ -67,11 +70,29 @@ evaluateCodeTableRef (AST.CodeTableRef _ n) =
     undefined
 
 evaluateFontCharRef :: (MonadState Config m, MonadError String m) => AST.FontCharRef -> m Int
-evaluateFontCharRef (AST.FontCharRef _ _) = undefined
+evaluateFontCharRef (AST.FontCharRef fChar fontRef) =
+    do
+    fontInfo <- evaluateFontRef fontRef
+    pure $ case fChar of
+        T.HyphenChar -> hyphenChar fontInfo
+        T.SkewChar -> skewChar fontInfo
+
+evaluateFontRef :: (MonadState Config m, MonadError String m) => AST.FontRef -> m FontInfo
+evaluateFontRef = \case
+    AST.FontTokenRef fNr -> lookupFontInfo fNr
+    AST.CurrentFontRef -> currentFontInfo
+    AST.FamilyMemberFontRef v -> evaluateFamilyMember v
+
+evaluateFamilyMember :: (MonadState Config m, MonadError String m) => AST.FamilyMember -> m FontInfo
+evaluateFamilyMember (AST.FamilyMember _ n) =
+    do
+    _ <- evaluateNumber n
+    undefined
 
 evaluateCoercedInteger :: (MonadState Config m, MonadError String m) => AST.CoercedInteger -> m Int
-evaluateCoercedInteger (AST.InternalLengthAsInt ln) = evaluateInternalLength ln
-evaluateCoercedInteger (AST.InternalGlueAsInt g) = BL.dimen <$> evaluateInternalGlue g
+evaluateCoercedInteger = \case
+    AST.InternalLengthAsInt ln -> evaluateInternalLength ln
+    AST.InternalGlueAsInt g -> BL.dimen <$> evaluateInternalGlue g
 
 -- Length.
 
@@ -82,8 +103,9 @@ evaluateLength (AST.Length (T.Sign isPos) uLn) =
     pure $ if isPos then eULn else -eULn
 
 evaluateUnsignedLength :: (MonadState Config m, MonadError String m) => AST.UnsignedLength -> m Int
-evaluateUnsignedLength (AST.NormalLengthAsULength v) = evaluateNormalLength v
-evaluateUnsignedLength (AST.CoercedLength v) = evaluateCoercedLength v
+evaluateUnsignedLength = \case
+    AST.NormalLengthAsULength v -> evaluateNormalLength v
+    AST.CoercedLength v -> evaluateCoercedLength v
 
 evaluateNormalLength :: (MonadState Config m, MonadError String m) => AST.NormalLength -> m Int
 evaluateNormalLength (AST.LengthSemiConstant f u) =
@@ -94,38 +116,43 @@ evaluateNormalLength (AST.LengthSemiConstant f u) =
 evaluateNormalLength (AST.InternalLength v) = evaluateInternalLength v
 
 evaluateFactor :: (MonadState Config m, MonadError String m) => AST.Factor -> m Rational
-evaluateFactor (AST.NormalIntegerFactor n) = fromIntegral <$> evaluateNormalInteger n
-evaluateFactor (AST.RationalConstant r) = pure r
+evaluateFactor = \case
+    AST.NormalIntegerFactor n -> fromIntegral <$> evaluateNormalInteger n
+    AST.RationalConstant r -> pure r
 
 evaluateUnit :: (MonadState Config m, MonadError String m) => AST.Unit -> m Rational
-evaluateUnit (AST.PhysicalUnit AST.TrueFrame u) = pure $ Unit.inScaledPoint u
-evaluateUnit (AST.PhysicalUnit AST.MagnifiedFrame u) =
-    do
-    _mag <- gets (mag . params)
-    eU <- evaluateUnit (AST.PhysicalUnit AST.TrueFrame u)
-    pure $ eU * 1000 / fromIntegral _mag
-evaluateUnit (AST.InternalUnit u) = evaluateInternalUnit u
+evaluateUnit = \case
+    AST.InternalUnit u -> evaluateInternalUnit u
+    AST.PhysicalUnit AST.TrueFrame u -> pure $ Unit.inScaledPoint u
+    AST.PhysicalUnit AST.MagnifiedFrame u ->
+        do
+        _mag <- gets (mag . params)
+        eU <- evaluateUnit (AST.PhysicalUnit AST.TrueFrame u)
+        pure $ eU * 1000 / fromIntegral _mag
 
 evaluateInternalUnit :: (MonadState Config m, MonadError String m) => AST.InternalUnit -> m Rational
-evaluateInternalUnit AST.Em = TFM.quad <$> currentFontInfo
-evaluateInternalUnit AST.Ex = TFM.xHeight <$> currentFontInfo
-evaluateInternalUnit (AST.InternalIntegerUnit v) = fromIntegral <$> evaluateInternalInteger v
-evaluateInternalUnit (AST.InternalLengthUnit v) = fromIntegral <$> evaluateInternalLength v
-evaluateInternalUnit (AST.InternalGlueUnit v) = (fromIntegral . BL.dimen) <$> evaluateInternalGlue v
+evaluateInternalUnit = \case
+    AST.Em -> (TFM.quad . fontMetrics) <$> currentFontInfo
+    AST.Ex -> (TFM.xHeight . fontMetrics) <$> currentFontInfo
+    AST.InternalIntegerUnit v -> fromIntegral <$> evaluateInternalInteger v
+    AST.InternalLengthUnit v -> fromIntegral <$> evaluateInternalLength v
+    AST.InternalGlueUnit v -> (fromIntegral . BL.dimen) <$> evaluateInternalGlue v
 
 evaluateInternalLength :: (MonadState Config m, MonadError String m) => AST.InternalLength -> m Int
-evaluateInternalLength (AST.InternalLengthVariable v) = evaluateLengthVariable v
-evaluateInternalLength (AST.InternalSpecialLength v) = evaluateSpecialLength v
-evaluateInternalLength (AST.InternalFontDimensionRef v) = evaluateFontDimensionRef v
-evaluateInternalLength (AST.InternalBoxDimensionRef v)  = evaluateBoxDimensionRef v
-evaluateInternalLength (AST.LastKern) = undefined
+evaluateInternalLength = \case
+    AST.InternalLengthVariable v -> evaluateLengthVariable v
+    AST.InternalSpecialLength v -> evaluateSpecialLength v
+    AST.InternalFontDimensionRef v -> evaluateFontDimensionRef v
+    AST.InternalBoxDimensionRef v -> evaluateBoxDimensionRef v
+    AST.LastKern -> undefined
 
 evaluateLengthVariable :: (MonadState Config m, MonadError String m) => AST.LengthVariable -> m Int
-evaluateLengthVariable (AST.ParamVar p) = gets (getLenParam p . params)
-evaluateLengthVariable (AST.RegisterVar n) =
-    do
-    _ <- evaluateNumber n
-    undefined
+evaluateLengthVariable = \case
+    AST.ParamVar p -> gets (getLenParam p . params)
+    AST.RegisterVar n ->
+        do
+        _ <- evaluateNumber n
+        undefined
 
 evaluateSpecialLength :: (MonadState Config m, MonadError String m) => T.SpecialLength -> m Int
 evaluateSpecialLength p = gets (getSpecialLen p . params)
@@ -148,22 +175,22 @@ evaluateCoercedLength (AST.InternalGlueAsLength g) = BL.dimen <$> evaluateIntern
 -- Glue.
 
 evaluateGlue :: (MonadState Config m, MonadError String m) => AST.Glue -> m BL.Glue
-evaluateGlue (AST.ExplicitGlue dim str shr) =
-    BL.Glue <$> evaluateLength dim <*> evaluateFlex str <*> evaluateFlex shr
-evaluateGlue (AST.InternalGlue (T.Sign isPos) v) =
-    do
-    ev <- evaluateInternalGlue v
-    pure $ if isPos then ev else (BL.negateGlue ev)
+evaluateGlue = \case
+    AST.ExplicitGlue dim str shr ->
+        BL.Glue <$> evaluateLength dim <*> evaluateFlex str <*> evaluateFlex shr
+    AST.InternalGlue (T.Sign isPos) v ->
+        do
+        ev <- evaluateInternalGlue v
+        pure $ if isPos then ev else (BL.negateGlue ev)
 
 evaluateFlex :: (MonadState Config m, MonadError String m) => Maybe AST.Flex -> m BL.GlueFlex
-evaluateFlex (Just (AST.FiniteFlex ln)) =
-    do
-    eLn <- evaluateLength ln
-    pure BL.GlueFlex{factor = fromIntegral eLn, order = 0}
-evaluateFlex (Just (AST.FilFlex ln)) =
-    evaluateFilLength ln
-evaluateFlex Nothing =
-    pure BL.noFlex
+evaluateFlex = \case
+    Just (AST.FiniteFlex ln) ->
+        do
+        eLn <- evaluateLength ln
+        pure BL.GlueFlex{factor = fromIntegral eLn, order = 0}
+    Just (AST.FilFlex ln) -> evaluateFilLength ln
+    Nothing -> pure BL.noFlex
 
 evaluateFilLength :: (MonadState Config m, MonadError String m) => AST.FilLength -> m BL.GlueFlex
 evaluateFilLength (AST.FilLength (T.Sign isPos) f ord) =
@@ -172,15 +199,17 @@ evaluateFilLength (AST.FilLength (T.Sign isPos) f ord) =
     pure BL.GlueFlex{factor = if isPos then eF else -eF, order = ord}
 
 evaluateInternalGlue :: (MonadState Config m, MonadError String m) => AST.InternalGlue -> m BL.Glue
-evaluateInternalGlue (AST.InternalGlueVariable v) = evaluateGlueVariable v
-evaluateInternalGlue AST.LastGlue = undefined
+evaluateInternalGlue = \case
+    AST.InternalGlueVariable v -> evaluateGlueVariable v
+    AST.LastGlue -> undefined
 
 evaluateGlueVariable :: (MonadState Config m, MonadError String m) => AST.GlueVariable -> m BL.Glue
-evaluateGlueVariable (AST.ParamVar p) = gets (getGlueParam p . params)
-evaluateGlueVariable (AST.RegisterVar n) =
-    do
-    _ <- evaluateNumber n
-    undefined
+evaluateGlueVariable = \case
+    AST.ParamVar p -> gets (getGlueParam p . params)
+    AST.RegisterVar n ->
+        do
+        _ <- evaluateNumber n
+        undefined
 
 -- Other.
 

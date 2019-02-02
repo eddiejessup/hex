@@ -144,7 +144,8 @@ codesToSth
 codesToSth xs f =
     do
     let stream = newExpandStream xs defaultCSMap
-    newConfig >>= evalStateT (runExceptT (fst <$> f stream)) >>= buildEitherToIO
+    conf <- runExceptT newConfig >>= strEitherToIO
+    evalStateT (runExceptT (fst <$> f stream)) conf >>= buildEitherToIO
 
 -- Paragraph list.
 

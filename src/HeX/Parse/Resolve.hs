@@ -6,9 +6,6 @@ import           HeX.Concept
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Token
 
-theFontNr :: Int
-theFontNr = 1
-
 data ExpansionMode = Expanding | NotExpanding
     deriving (Show)
 
@@ -16,7 +13,8 @@ type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
 
 resolveToken :: CSMap -> ExpansionMode -> Lex.Token -> ResolvedToken
 resolveToken _csMap Expanding (Lex.ControlSequenceToken cs) =
-    HMap.lookupDefault (PrimitiveToken ResolutionError) (Lex.ControlSequenceProper cs) _csMap
+    let key = Lex.ControlSequenceProper cs
+    in HMap.lookupDefault (PrimitiveToken $ ResolutionError key) key _csMap
 resolveToken _csMap NotExpanding t@(Lex.ControlSequenceToken _) =
     PrimitiveToken $ UnexpandedTok t
 -- TODO: Active characters.
@@ -302,6 +300,5 @@ defaultCSMap = HMap.fromList
     , (_cs "nonstopmode"      , _pt $ InteractionModeTok NonStopMode)
     , (_cs "batchmode"        , _pt $ InteractionModeTok BatchMode)
       -- Temporary pragmatism.
-    , (_cs "selectfont"       , _pt $ FontRefToken theFontNr)
     , (_cs "active"           , _pt $ IntRefTok CharQuantity 13)
     ]
