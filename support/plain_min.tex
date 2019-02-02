@@ -1,0 +1,15 @@
+\catcode`\{=1 % left brace is begin-group character
+\catcode`\}=2 % right brace is end-group character
+\catcode`\$=3 % dollar sign is math shift
+\catcode`\&=4 % ampersand is alignment tab
+\catcode`\#=6 % hash mark is macro parameter character
+\catcode`\^=7 \catcode`\^^K=7 % circumflex and uparrow are for superscripts
+\catcode`\_=8 \catcode`\^^A=8 % underline and downarrow are for subscripts
+\catcode`\^^I=10 % ascii tab is a blank space
+% \chardef\active=13
+\catcode`\~=\active % tilde is active
+\catcode`\^^L=\active
+\outer\def^^L{\par} % ascii form-feed is "\outer\par"
+
+\message{Preloading the plain format: codes,}
+\end

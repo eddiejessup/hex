@@ -4,12 +4,6 @@
     <empty>
     <space-token> <optional-spaces>
 
-# Units
-
-<unit-of-measure>
-    <optional-spaces> <internal-unit>
-    <optional-true> <physical-unit>
-
 # Number literals
 
 <plus-or-minus>
@@ -93,9 +87,6 @@
     <normal-dimen>
     <coerced-dimen>
 
-<coerced-dimen>
-    <internal-glue>
-
 <normal-dimen>
     <internal-dimen>
     <factor> <unit-of-measure>
@@ -136,6 +127,9 @@
     [cc]
     [sp]
 
+<coerced-dimen>
+    <internal-glue>
+
 <mudimen>
     <optional-signs> <unsigned mudimen>
 
@@ -143,15 +137,15 @@
     <normal-mudimen>
     <coerced-mudimen>
 
-<coerced-mudimen>
-    <internal-muglue>
-
 <normal-mudimen>
     <factor> <mu-unit>
 
 <mu-unit>
     <optional-spaces> <internal-muglue>
     [mu] <one-optional-space>
+
+<coerced-mudimen>
+    <internal-muglue>
 
 # Glue
 
@@ -193,25 +187,17 @@
 # Internal quantities
 
 <internal-integer>
-    <integer-parameter>
+    <integer-variable>
     <special-integer>
-    \lastpenalty
-    <countdef-token>
-    \count <8-bit-number>
     <codename> <8-bit-number>
     <chardef-token>
     <mathchardef-token>
-    \parshape
-    \inputlineno
     \hyphenchar <font>
     \skewchar <font>
+    \lastpenalty
+    \parshape
+    \inputlineno
     \badness
-
-<special-integer>
-    \spacefactor
-    \prevgraf
-    \deadcycles
-    \insertpenalties
 
 <codename>
     \catcode
@@ -235,24 +221,11 @@
     \scriptscriptfont
 
 <internal-dimen>
-    <dimen-parameter>
+    <dimen-variable>
     <special-dimen>
-    \lastkern
-    <dimendef-token>
-    \dimen <8-bit-number>
-    <box-dimension> <8-bit-number>
     \fontdimen <number> <font>
-
-<special-dimen>
-    \prevdepth
-    \pagegoal
-    \pagetotal
-    \pagestretch
-    \pagefilstretch
-    \pagefillstretch
-    \pagefilllstretch
-    \pageshrink
-    \pagedepth
+    <box-dimension> <8-bit-number>
+    \lastkern
 
 <box-dimension>
     \ht
@@ -260,16 +233,12 @@
     \dp
 
 <internal-glue>
-    <glue-parameter>
+    <glue-variable>
     \lastskip
-    <gluedef-token>
-    \glue <8-bit-number>
 
 <internal-muglue>
-    <muglue-parameter>
+    <muglue-variable>
     \lastskip
-    <mugluedef-token>
-    \muskip <8-bit-number>
 
 ## Assignments
 
@@ -382,17 +351,12 @@
     <glue-variable>
     <muglue-variable>
 
-<at-clause>
-    [at] <dimen>
-    [scaled] <number>
-    <optional-spaces>
-
 <code-assignment>
     <codename> <8-bit-number> <equals> <number>
 
 <let-assignment>
-    \futurelet <control-sequence> <token> <token>
     \let <control-sequence> <equals> <one-optional-space> <token>
+    \futurelet <control-sequence> <token> <token>
 
 <shorthand-definition>
     \chardef <control-sequence> <equals> <8-bit-number>
@@ -411,6 +375,11 @@
 
 <shape-assignment>
     \parshape <equals> <number> <shape-dimensions>
+
+<at-clause>
+    [at] <dimen>
+    [scaled] <number>
+    <optional-spaces>
 
 ### Global assignments
 
@@ -492,6 +461,7 @@
 <all-modes-command>
     <assignment>
     \relax
+    {
     }
     \begingroup
     \endgroup
@@ -509,7 +479,6 @@
     \errmessage <general-text>
     \openin <4-bit-number> <equals> <file-name>
     \closein <4-bit-number>
-    % (list-dependent commands)
     <optional-immediate> \openout <4-bit-number> <equals> <file-name>
     <optional-immediate> \closout <4-bit-number>
     <optional-immediate> \write <number> <general-text>
@@ -523,14 +492,25 @@
     \mark <general-text>
     \insert <8-bit-number> <filler> { <vertical-mode-material> }
     \vadjust <filler> { <vertical-mode-material> }
-    % Per-mode in Texbook, but grammatically all-mode.
     <space-token>
     <box>
     <start-par>
     \par
-    {
 
 ## Commands in vertical mode
+
+<v-mode-command>
+    <all-modes-command>
+    <vertical-glue>
+    <leaders> <box-or-rule> <vertical-glue>
+    <move-v-box> <dimen> <box>
+    <get-v-box> <8-bit-number>
+    <horizontal-rule>
+    \halign <box-specification> { <alignment-material> }
+    % Non mode-parametrisable..
+    \end
+    \dump
+    <enter-h-mode-command>
 
 <vertical-glue>
     \vskip <glue>
@@ -548,18 +528,18 @@
     \unvcopy
 
 <enter-h-mode-command>
+    <horizontal-glue>
+    <get-h-box>
+    \vrule
+    \valign
+    \ 
     <letter>
     <otherchar>
     \char
-    <chardef token>
-    <get-h-box>
-    \valign
-    \vrule
-    <horizontal-glue>
+    <chardef-token>
     \accent
     \discretionary
     \-
-    \ 
     $
 
 <leaders>
@@ -567,19 +547,28 @@
     \cleaders
     \xleaders
 
-<v-mode-command>
-    <all-modes-command>
-    <vertical-glue>
-    <leaders> <box-or-rule> <vertical-glue>
-    <move-v-box> <dimen> <box>
-    <get-v-box> <8-bit-number>
-    <horizontal-rule>
-    \halign <box-specification> { <alignment-material> }
-    <enter-h-mode-command>
-    \end
-    \dump
-
 ## Commands in Horizontal mode
+
+<h-mode-command>
+    <all-modes-command>
+    <horizontal-glue>
+    <leaders> <box-or-rule> <horizontal-glue>
+    <move-h-box> <dimen> <box>
+    <get-h-box> <8-bit-number>
+    <vertical-rule>
+    \valign <box-specification> { <alignment-material> }
+    % Non mode-parametrisable.
+    \ 
+    <letter>
+    <otherchar>
+    \char <8-bit-number>
+    <chardef-token>
+    \accent <8-bit-number> <optional-assignments>
+    \/
+    \discretionary <general-text> <general-text> <general-text>
+    \-
+    $
+    <leave-h-mode-command>
 
 <horizontal-glue>
     \hskip <glue>
@@ -597,30 +586,9 @@
     \unhcopy
 
 <leave-h-mode-command>
-    <get-v-box>
-    \halign
-    \hrule
     <vertical-glue>
+    <get-v-box>
+    \hrule
+    \halign
     \end
     \dump
-
-<h-mode-command>
-    <all-modes-command>
-    <horizontal-glue>
-    <leaders> <box-or-rule> <horizontal-glue>
-    \ 
-    <move-h-box> <dimen> <box>
-    <get-h-box> <8-bit-number>
-    <vertical-rule>
-    \valign <box-specification> { <alignment-material> }
-    <leave-h-mode-command>
-    <letter>
-    <otherchar>
-    \char <8-bit-number>
-    <chardef-token>
-    \accent <8-bit-number> <optional-assignments>
-    \/
-    \discretionary <general-text> <general-text> <general-text>
-    \-
-    $
-
