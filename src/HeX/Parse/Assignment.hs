@@ -4,8 +4,12 @@
 
 module HeX.Parse.Assignment where
 
-import           Data.Functor                   ( ($>) )
 import           Control.Monad                  ( when )
+import           Control.Monad.Except           ( runExceptT )
+import           Control.Monad.State.Lazy       ( runStateT
+                                                )
+import           Data.Functor                   ( ($>) )
+import qualified Data.Set                      as Set
 
 import           Path                           ( File
                                                 , Path
@@ -18,6 +22,7 @@ import           Text.Megaparsec                ( (<|>) )
 
 import qualified HeX.Lex                       as Lex
 
+import           HeX.Evaluate                   ( evaluateNumber )
 import           HeX.Parse.Helpers
 import           HeX.Parse.AST
 import           HeX.Parse.Common
@@ -214,11 +219,14 @@ parseSetParShape =
     -- In a ⟨shape assignment⟩ for which the ⟨number⟩ is n, the ⟨shape
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
-    -- TODO: Not sure how to handle this, we must be able to evaluate things
-    -- halfway through a command.
-    -- nrPairs <- parseNumber
-    -- let eNrPairs = evaluateNumber nrPairs
-    let eNrPairs = undefined
+    nrPairs <- parseNumber
+    stream <- P.stateInput <$> P.getParserState
+    (eNrPairs, conf') <-
+        runExceptT (runStateT (evaluateNumber nrPairs) (config stream))
+            >>= \case
+                Left _ -> P.failure Nothing Set.empty
+                Right v -> pure v
+    P.updateParserState (\state -> state{P.stateInput=stream{config=conf'}})
     SetParShape <$> P.count eNrPairs parseLengthPair
   where
     parseLengthPair = (,) <$> parseLength <*> parseLength

@@ -54,13 +54,13 @@ data Config = Config
     , fontInfos       :: V.Vector FontInfo
     , fontDirectories :: [Path Abs Dir]
     , params          :: ParamConfig
-    }
+    } deriving (Show)
 
-newConfig :: (MonadIO m, MonadError String m) => m Config
+newConfig :: IO Config
 newConfig =
     do
-    cwdRaw <- liftIO getCurrentDirectory
-    cwd <- liftThrow "Invalid current directory" $ parseAbsDir cwdRaw
+    cwdRaw <- getCurrentDirectory
+    cwd <- parseAbsDir cwdRaw
     pure Config
         { currentFontNr = Nothing
         , fontInfos = V.empty
@@ -76,7 +76,7 @@ data FontInfo = FontInfo
     { fontMetrics :: TexFont
     , hyphenChar
     , skewChar    :: IntVal
-    }
+    } deriving (Show)
 
 readFontInfo :: (MonadState Config m, MonadIO m) => Path Abs File -> m FontInfo
 readFontInfo fontPath =

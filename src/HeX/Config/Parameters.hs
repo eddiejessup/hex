@@ -271,7 +271,7 @@ data ParamConfig = ParamConfig
     , pageFilllStretch      :: LenParamVal PageFilllStretch
     , pageShrink            :: LenParamVal PageShrink
     , pageDepth             :: LenParamVal PageDepth
-    }
+    } deriving (Show)
 
 newParamConfig :: ParamConfig
 newParamConfig              = ParamConfig

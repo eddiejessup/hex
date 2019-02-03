@@ -25,7 +25,6 @@ import           HeX.Categorise
 import           HeX.Lex                        ( extractToken
                                                 , LexState(..)
                                                 )
-import           HeX.Config
 import           HeX.Parse                      ( defaultCSMap
                                                 , resolveToken
                                                 , ExpansionMode(..)
@@ -107,7 +106,7 @@ chopExpand' estream =
             pure ()
 
 runExpand :: [CharCode] -> IO ()
-runExpand xs = chopExpand' $ newExpandStream xs defaultCSMap
+runExpand xs = newExpandStream xs defaultCSMap >>= chopExpand'
 
 -- Command.
 
@@ -124,7 +123,7 @@ chopCommand' estream =
             ioError $ userError $ show errs
 
 runCommand :: [CharCode] -> IO ()
-runCommand xs = chopCommand' $ newExpandStream xs defaultCSMap
+runCommand xs = newExpandStream xs defaultCSMap >>= chopCommand'
 
 -- Generic.
 
@@ -139,13 +138,12 @@ buildEitherToIO (Right v)                     = pure v
 
 codesToSth
     :: [CharCode]
-    -> (ExpandedStream -> ExceptT BuildError (StateT Config IO) (a, ExpandedStream))
+    -> ExceptT BuildError (StateT ExpandedStream IO) a
     -> IO a
 codesToSth xs f =
     do
-    let stream = newExpandStream xs defaultCSMap
-    conf <- runExceptT newConfig >>= strEitherToIO
-    evalStateT (runExceptT (fst <$> f stream)) conf >>= buildEitherToIO
+    stream <- newExpandStream xs defaultCSMap
+    evalStateT (runExceptT f) stream >>= buildEitherToIO
 
 -- Paragraph list.
 

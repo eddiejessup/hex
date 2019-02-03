@@ -77,6 +77,7 @@ evaluateFontCharRef (AST.FontCharRef fChar fontRef) =
         T.HyphenChar -> hyphenChar fontInfo
         T.SkewChar   -> skewChar fontInfo
 
+
 evaluateFontRef :: (MonadState Config m, MonadError String m) => AST.FontRef -> m FontInfo
 evaluateFontRef = \case
     AST.FontTokenRef fNr -> lookupFontInfo fNr

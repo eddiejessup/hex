@@ -1,10 +1,17 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Stream where
 
+import           Control.Monad.State.Lazy       ( MonadState
+                                                , StateT
+                                                , gets
+                                                , modify
+                                                , runStateT
+                                                )
 import           Data.Char                      ( toLower
                                                 , toUpper
                                                 )
@@ -20,6 +27,7 @@ import qualified Text.Megaparsec               as P
 import           HeX.Concept
 import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
+import qualified HeX.Config                    as Conf
 import           HeX.Parse.Helpers
 import           HeX.Parse.AST
 import           HeX.Parse.Token
@@ -31,23 +39,36 @@ data ExpandedStream = ExpandedStream
     { codes         :: [Cat.CharCode]
     , lexTokens     :: [Lex.Token]
     , lexState      :: Lex.LexState
-    , ccMap         :: Cat.CharCatMap
     , csMap         :: CSMap
     , expansionMode :: ExpansionMode
+    , ccMap         :: Cat.CharCatMap
+    , config        :: Conf.Config
     } deriving (Show)
+
+runConfState :: MonadState ExpandedStream m => StateT Conf.Config m a -> m a
+runConfState f =
+    do
+    conf <- gets config
+    (v, conf') <- runStateT f conf
+    modify (\stream -> stream{config=conf'})
+    pure v
 
 type SimpExpandParser = SimpParser ExpandedStream
 type NullSimpExpandParser = SimpExpandParser ()
 
-newExpandStream :: [Cat.CharCode] -> CSMap -> ExpandedStream
-newExpandStream cs _csMap = ExpandedStream
-    { codes         = cs
-    , lexTokens     = []
-    , lexState      = Lex.LineBegin
-    , ccMap         = Cat.usableCharCatMap
-    , csMap         = _csMap
-    , expansionMode = Expanding
-    }
+newExpandStream :: [Cat.CharCode] -> CSMap -> IO ExpandedStream
+newExpandStream cs _csMap =
+    do
+    conf <- Conf.newConfig
+    pure $ ExpandedStream
+        { codes         = cs
+        , lexTokens     = []
+        , lexState      = Lex.LineBegin
+        , csMap         = _csMap
+        , expansionMode = Expanding
+        , ccMap         = Cat.usableCharCatMap
+        , config        = conf
+        }
 
 -- TODO: This use of reverse is pure sloth; fix later.
 insertLexTokens :: ExpandedStream -> [Lex.Token] -> ExpandedStream
@@ -209,20 +230,20 @@ instance P.Stream ExpandedStream where
 
     -- take1_ :: s -> Maybe (Token s, s)
     -- If we've no input, signal that we are done.
-    take1_ ExpandedStream{ codes = [] } = Nothing
-    take1_ stream@(ExpandedStream cs lexBuff _lexState _ccMap _csMap expMode) = do
+    take1_ ExpandedStream{codes = []} = Nothing
+    take1_ stream@ExpandedStream{..} = do
         -- Get the next lex token, and update our stream.
-        (lt, es') <- case lexBuff of
+        (lt, es') <- case lexTokens of
             -- If there is a lex token in the buffer, use that.
             (lt:lts) ->
-                pure (lt, stream { lexTokens = lts })
+                pure (lt, stream{ lexTokens = lts })
             -- If the lex token buffer is empty, extract a token and use it.
             [] ->
                 do
-                (lt, _lexState', cs') <- Lex.extractToken (Cat.catLookup _ccMap) _lexState cs
-                pure (lt, stream { codes = cs', lexState = _lexState' })
+                (lt, lexState', codes') <- Lex.extractToken (Cat.catLookup ccMap) lexState codes
+                pure (lt, stream { codes = codes', lexState = lexState' })
         -- Resolve the lex token, and inspect the result.
-        case resolveToken _csMap expMode lt of
+        case resolveToken csMap expansionMode lt of
             -- If it's a primitive token, provide that.
             PrimitiveToken pt   -> pure (pt, es')
             -- If it indicates the start of a syntax command.

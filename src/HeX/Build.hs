@@ -8,7 +8,9 @@ module HeX.Build where
 import           Control.Monad                  ( foldM )
 import           Control.Monad.IO.Class         ( MonadIO )
 import           Control.Monad.State.Lazy       ( MonadState
+                                                , get
                                                 , gets
+                                                , put
                                                 , liftIO
                                                 , modify
                                                 )
@@ -93,9 +95,9 @@ spaceGlue =
     pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
 assignVariable
-    :: (MonadState Config m, MonadIO m)
+    :: (MonadState Config m, MonadError String m)
     => HP.VariableAssignment
-    -> ExceptT String m ()
+    -> m ()
 assignVariable = \case
     HP.IntegerVariableAssignment v n ->
         do
@@ -130,137 +132,131 @@ showMsg (Lex.CharCatToken cc) = show cc
 showMsg (Lex.ControlSequenceToken (Lex.ControlSequence cs)) = "\\" ++ cs
 
 handleModeIndep
-    :: (MonadState Config m, MonadIO m)
-    => HP.ExpandedStream
-    -> HP.ModeIndependentCommand
-    -> ExceptT String m ([BL.BreakableVListElem], HP.ExpandedStream)
-handleModeIndep newStream com =
-    let
-        modAccum acc = pure (acc, newStream)
-        modStream mStream = pure ([], mStream)
-        continueUnchanged = pure ([], newStream)
-    in  case com of
-        HP.Message HP.Out (HP.BalancedText txt) ->
-            do
-            liftIO $ putStrLn $ concatMap showMsg txt
-            continueUnchanged
-        HP.Relax ->
-            continueUnchanged
-        HP.IgnoreSpaces ->
-            continueUnchanged
-        HP.AddPenalty n ->
-            do
-            p <- evaluatePenalty n
-            modAccum [BL.ListPenalty $ p]
-        HP.AddKern ln ->
-            do
-            k <- evaluateKern ln
-            modAccum [BL.VListBaseElem $ B.ElemKern $ k]
-        HP.AddGlue g ->
-            do
-            eG <- evaluateGlue g
-            modAccum [BL.ListGlue eG]
-        HP.Assign HP.Assignment{global = _, body = _body} ->
-            case _body of
-                HP.DefineControlSequence cs tgt ->
-                    do
-                    (acc, newCSTok) <- case tgt of
-                        HP.MacroTarget macro ->
-                            pure ([], HP.SyntaxCommandHeadToken $ HP.MacroTok macro)
-                        HP.ShortDefineTarget q n ->
-                            do
-                            en <- evaluateNumber n
-                            pure ([], HP.PrimitiveToken $ HP.IntRefTok q en)
-                        HP.FontTarget HP.NaturalFont fPath ->
-                            do
-                            fontDef@B.FontDefinition{fontNr=fNr} <- loadFont fPath
-                            let fontRefTok = HP.PrimitiveToken $ HP.FontRefToken fNr
-                                boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
-                            pure ([boxElem], fontRefTok)
-                    pure (acc, HP.insertControlSequence newStream cs newCSTok)
-                HP.SetVariable ass ->
-                    do
-                    assignVariable ass
-                    continueUnchanged
-                HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
-                    do
-                    eIdx <- evaluateNumber idx
-                    eVal <- evaluateNumber val
-                    case codeType of
-                        HP.CategoryCode ->
-                            do
-                            idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
-                            valCat <- liftMaybe ("Invalid category code value: " ++ show eVal) (toEnumMay eVal)
-                            modStream newStream{HP.ccMap=HMap.insert idxChar valCat $ HP.ccMap newStream}
-                        _ ->
-                            error $ "Code type not implemented: " ++ show codeType
-                HP.SelectFont fNr ->
-                    do
-                    fontSel <- selectFont fNr
-                    modAccum [BL.VListBaseElem $ B.ElemFontSelection fontSel]
+    :: (MonadState HP.ExpandedStream m, MonadIO m)
+    => HP.ModeIndependentCommand
+    -> ExceptT String m [BL.BreakableVListElem]
+handleModeIndep = \case
+    HP.Message HP.Out (HP.BalancedText txt) ->
+        do
+        liftIO $ putStrLn $ concatMap showMsg txt
+        pure []
+    HP.Relax ->
+        pure []
+    HP.IgnoreSpaces ->
+        pure []
+    HP.AddPenalty n ->
+        do
+        p <- HP.runConfState $ evaluatePenalty n
+        pure [BL.ListPenalty $ p]
+    HP.AddKern ln ->
+        do
+        k <- HP.runConfState $ evaluateKern ln
+        pure [BL.VListBaseElem $ B.ElemKern $ k]
+    HP.AddGlue g ->
+        do
+        eG <- HP.runConfState $ evaluateGlue g
+        pure [BL.ListGlue eG]
+    HP.Assign HP.Assignment{global = _, body = _body} ->
+        case _body of
+            HP.DefineControlSequence cs tgt ->
+                do
+                (acc, newCSTok) <- case tgt of
+                    HP.MacroTarget macro ->
+                        pure ([], HP.SyntaxCommandHeadToken $ HP.MacroTok macro)
+                    HP.ShortDefineTarget q n ->
+                        do
+                        en <- HP.runConfState $ evaluateNumber n
+                        pure ([], HP.PrimitiveToken $ HP.IntRefTok q en)
+                    HP.FontTarget HP.NaturalFont fPath ->
+                        do
+                        fontDef@B.FontDefinition{fontNr=fNr} <- HP.runConfState $ loadFont fPath
+                        let fontRefTok = HP.PrimitiveToken $ HP.FontRefToken fNr
+                            boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
+                        pure ([boxElem], fontRefTok)
+                modify (\strm -> HP.insertControlSequence strm cs newCSTok)
+                pure acc
+            HP.SetVariable ass ->
+                do
+                HP.runConfState $ assignVariable ass
+                pure []
+            HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
+                do
+                eIdx <- HP.runConfState $ evaluateNumber idx
+                eVal <- HP.runConfState $ evaluateNumber val
+                case codeType of
+                    HP.CategoryCode ->
+                        do
+                        idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
+                        valCat <- liftMaybe ("Invalid category code value: " ++ show eVal) (toEnumMay eVal)
+                        modify (\strm -> strm{HP.ccMap=HMap.insert idxChar valCat $ HP.ccMap strm})
+                        pure []
+                    _ ->
+                        error $ "Code type not implemented: " ++ show codeType
+            HP.SelectFont fNr ->
+                do
+                fontSel <- HP.runConfState $ selectFont fNr
+                pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
 
 processHCommand
-    :: (MonadState Config m, MonadIO m)
+    :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.ExpandedStream
-    -> HP.ExpandedStream
     -> [BL.BreakableHListElem]
     -> HP.HModeCommand
-    -> ExceptT String m ([BL.BreakableHListElem], HP.ExpandedStream, Bool)
-processHCommand oldStream newStream acc com =
-    let
-        modAccum newAcc = pure (newAcc, newStream, True)
-        modStream mStream = pure (acc, mStream, True)
-        continueUnchanged = pure (acc, newStream, True)
-    in  case com of
-        HP.LeaveHMode ->
+    -> ExceptT String m ([BL.BreakableHListElem], Bool)
+processHCommand oldStream acc = \case
+    HP.LeaveHMode ->
+        do
+        -- Inner mode: forbidden. TODO.
+        -- Outer mode: insert the rol sequence "\par" into the input. The control
+        -- sequence's current meaning will be used, which might no longer be the \par
+        -- primitive.
+        -- (Note that we use oldStream.)
+        let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
+        put $ HP.insertLexToken oldStream parToken
+        continueUnchanged
+    HP.AddCharacter c ->
+        do
+        charCode <- HP.runConfState $ evaluateCharCodeRef c
+        hCharBox <- BL.HListHBaseElem . B.ElemCharacter <$> (HP.runConfState $ characterBox charCode)
+        modAccum $ hCharBox : acc
+    HP.HAllModesCommand aCom -> case aCom of
+        -- \indent: An empty box of width \parindent is appended to the current
+        -- list, and the space factor is set to 1000.
+        -- TODO: Space factor.
+        HP.StartParagraph HP.DoNotIndent ->
+            continueUnchanged
+        HP.StartParagraph HP.Indent ->
             do
-            -- Inner mode: forbidden. TODO.
-            -- Outer mode: insert the rol sequence "\par" into the input. The control
-            -- sequence's current meaning will be used, which might no longer be the \par
-            -- primitive.
-            -- (Note that we pass oldStream, not newStream.)
-            let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
-            modStream $ HP.insertLexToken oldStream parToken
-        HP.AddCharacter c ->
+            indentBox <- HP.runConfState $ gets parIndentBox
+            modAccum (indentBox : acc)
+        -- \par: end the current paragraph.
+        HP.EndParagraph ->
+            pure (acc, False)
+        HP.AddSpace ->
             do
-            charCode <- evaluateCharCodeRef c
-            hCharBox <- BL.HListHBaseElem . B.ElemCharacter <$> characterBox charCode
-            modAccum $ hCharBox : acc
-        HP.HAllModesCommand aCom ->
-            case aCom of
-                -- \indent: An empty box of width \parindent is appended to the current
-                -- list, and the space factor is set to 1000.
-                -- TODO: Space factor.
-                HP.StartParagraph HP.DoNotIndent ->
-                    continueUnchanged
-                HP.StartParagraph HP.Indent ->
-                    do
-                    indentBox <- gets parIndentBox
-                    modAccum (indentBox : acc)
-                -- \par: end the current paragraph.
-                HP.EndParagraph ->
-                    pure (acc, newStream, False)
-                HP.AddSpace ->
-                    do
-                    hGlue <- (BL.HVListElem . BL.ListGlue) <$> spaceGlue
-                    modAccum $ hGlue : acc
-                HP.AddRule HP.Rule{..} ->
-                    do
-                    evalW <- case width of
-                        Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                        Just ln -> evaluateLength ln
-                    evalH <- case height of
-                        Nothing -> pure $ Unit.toScaledPointApprox (10 :: Int) Unit.Point
-                        Just ln -> evaluateLength ln
-                    evalD <- case depth of
-                        Nothing -> pure 0
-                        Just ln -> evaluateLength ln
-                    let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
-                    modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
-                HP.ModeIndependentCommand mcom ->
-                    do
-                    (extraAcc, mStream) <- handleModeIndep newStream mcom
-                    pure ((BL.HVListElem <$> extraAcc) ++ acc, mStream, True)
+            hGlue <- (BL.HVListElem . BL.ListGlue) <$> HP.runConfState spaceGlue
+            modAccum $ hGlue : acc
+        HP.AddRule HP.Rule{..} ->
+            do
+            evalW <- case width of
+                Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+                Just ln -> HP.runConfState $ evaluateLength ln
+            evalH <- case height of
+                Nothing -> pure $ Unit.toScaledPointApprox (10 :: Int) Unit.Point
+                Just ln -> HP.runConfState $ evaluateLength ln
+            evalD <- case depth of
+                Nothing -> pure 0
+                Just ln -> HP.runConfState $ evaluateLength ln
+            let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
+            modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
+        HP.ModeIndependentCommand mcom ->
+            do
+            extraAcc <- handleModeIndep mcom
+            modAccum $ (BL.HVListElem <$> extraAcc) ++ acc
+  where
+    modAccum newAcc = pure (newAcc, True)
+
+    continueUnchanged = pure (acc, True)
 
 data BuildError
   = ParseError (HP.ParseErrorBundle HP.ExpandedStream)
@@ -271,43 +267,36 @@ liftConfigError :: Monad m => ExceptT String m a -> ExceptT BuildError m a
 liftConfigError f = withExceptT ConfigError f
 
 extractParagraph
-    :: (MonadState Config m, MonadIO m)
+    :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.IndentFlag
-    -> HP.ExpandedStream
-    -> ExceptT BuildError m ([BL.BreakableHListElem], HP.ExpandedStream)
-extractParagraph indentFlag stream =
+    -> ExceptT BuildError m [BL.BreakableHListElem]
+extractParagraph indentFlag =
     do
-    indentBox <- gets parIndentBox
-    extractParagraphInner [indentBox | indentFlag == HP.Indent] stream
+    indentBox <- HP.runConfState $ gets parIndentBox
+    extractParagraphInner [indentBox | indentFlag == HP.Indent]
   where
     -- We build a paragraph list in reverse order.
-    extractParagraphInner
-        :: (MonadState Config m, MonadIO m)
-        => [BL.BreakableHListElem]
-        -> HP.ExpandedStream
-        -> ExceptT BuildError m ([BL.BreakableHListElem], HP.ExpandedStream)
-    extractParagraphInner acc oldStream =
+    extractParagraphInner acc =
         do
-        (PS.State {stateInput = newStream}, com) <-
-            liftEither $ ParseError `mapLeft` HP.extractHModeCommand oldStream
-        (procAcc, procStream, continue) <-
-            liftConfigError $ processHCommand oldStream newStream acc com
+        oldStream <- get
+        (PS.State{stateInput = newStream}, com) <- liftEither $ ParseError `mapLeft` HP.extractHModeCommand oldStream
+        put newStream
+        (procAcc, continue) <- liftConfigError $ processHCommand oldStream acc com
         if continue
-            then extractParagraphInner procAcc procStream
-            else pure (procAcc, procStream)
+            then extractParagraphInner procAcc
+            else pure procAcc
 
 extractParagraphLineBoxes
-    :: (MonadState Config m, MonadIO m)
+    :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.IndentFlag
-    -> HP.ExpandedStream
-    -> ExceptT BuildError m ([[B.HBoxElem]], HP.ExpandedStream)
-extractParagraphLineBoxes indentFlag stream =
+    -> ExceptT BuildError m [[B.HBoxElem]]
+extractParagraphLineBoxes indentFlag =
     do
-    (hList, stream') <- extractParagraph indentFlag stream
-    desiredW <- gets (hSize . params)
-    lineTol <- gets (tolerance . params)
-    linePen <- gets (linePenalty . params)
-    pure (setParagraph desiredW lineTol linePen hList, stream')
+    hList <- extractParagraph indentFlag
+    desiredW <- HP.runConfState $ gets (hSize . params)
+    lineTol <- HP.runConfState $ gets (tolerance . params)
+    linePen <- HP.runConfState $ gets (linePenalty . params)
+    pure $ setParagraph desiredW lineTol linePen hList
 
 data CurrentPage = CurrentPage
     { items :: [BL.BreakableVListElem]
@@ -419,98 +408,83 @@ addVListElem acc e = case e of
                         else skip
                 in  e : glue : acc
 
-addVListElems
-    :: MonadState Config m
-    => [BL.BreakableVListElem]
-    -> [BL.BreakableVListElem]
-    -> m [BL.BreakableVListElem]
-addVListElems = foldM addVListElem
-
 processVCommand
-    :: (MonadState Config m, MonadIO m)
+    :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.ExpandedStream
-    -> HP.ExpandedStream
     -> [B.Page]
     -> CurrentPage
     -> [BL.BreakableVListElem]
     -> HP.VModeCommand
-    -> ExceptT BuildError m ([B.Page], CurrentPage, [BL.BreakableVListElem], HP.ExpandedStream, Bool)
-processVCommand oldStream newStream pages curPage acc com =
-    let continueSamePage newAcc mStream  = pure (pages, curPage, newAcc, mStream, True)
-        modAccum newAcc = continueSamePage newAcc newStream
-        continueUnchanged = continueSamePage acc newStream
-
-        addParagraphToPage indentFlag =
+    -> ExceptT BuildError m ([B.Page], CurrentPage, [BL.BreakableVListElem], Bool)
+processVCommand oldStream pages curPage acc = \case
+    -- End recursion.
+    HP.End ->
+        do
+        lastPages <- HP.runConfState $ runPageBuilder curPage (reverse acc)
+        let pagesFinal = pages ++ lastPages
+        pure (pagesFinal, curPage, acc, False)
+    HP.EnterHMode ->
+        addParagraphToPage HP.Indent
+    HP.VAllModesCommand aCom -> case aCom of
+        HP.StartParagraph indentFlag ->
+            addParagraphToPage indentFlag
+        -- \par does nothing in vertical mode.
+        HP.EndParagraph ->
+            continueUnchanged
+        -- <space token> has no effect in vertical modes.
+        HP.AddSpace ->
+            continueUnchanged
+        HP.AddRule HP.Rule{..} ->
             do
-            -- If the command shifts to horizontal mode, run '\indent', and re-read the
-            -- stream as if the commands just seen hadn't been read.
-            -- (Note that we pass "oldStream", not "newStream".)
-            -- Paraboxes are returned in reading order.
-            (lineBoxes, mStream) <- extractParagraphLineBoxes indentFlag oldStream
-            desiredW <- gets (unLenParam . hSize . params)
-            let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
-            newAcc <- addVListElems acc $ BL.VListBaseElem . B.ElemBox . toBox <$> lineBoxes
-            continueSamePage newAcc mStream
-    in  case com of
-            -- End recursion.
-            HP.End ->
-                do
-                lastPages <- runPageBuilder curPage (reverse acc)
-                let pagesFinal = pages ++ lastPages
-                pure (pagesFinal, curPage, acc, newStream, False)
-            HP.EnterHMode ->
-                addParagraphToPage HP.Indent
-            HP.VAllModesCommand aCom ->
-                case aCom of
-                    HP.StartParagraph indentFlag ->
-                        addParagraphToPage indentFlag
-                    -- \par does nothing in vertical mode.
-                    HP.EndParagraph ->
-                        continueUnchanged
-                    -- <space token> has no effect in vertical modes.
-                    HP.AddSpace ->
-                        continueUnchanged
-                    HP.AddRule HP.Rule{..} ->
-                        do
-                        evalW <- case width of
-                            Nothing -> gets (unLenParam . hSize . params)
-                            Just ln -> liftConfigError $ evaluateLength ln
-                        evalH <- case height of
-                            -- TODO.
-                            Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                            Just ln -> liftConfigError $ evaluateLength ln
-                        evalD <- case depth of
-                            Nothing -> pure 0
-                            Just ln -> liftConfigError $ evaluateLength ln
-                        let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
-                        modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
-                    HP.ModeIndependentCommand mcom ->
-                        do
-                        (extraAcc, mStream) <- liftConfigError $ handleModeIndep newStream mcom
-                        continueSamePage (extraAcc ++ acc) mStream
+            evalW <- case width of
+                Nothing -> HP.runConfState $ gets (unLenParam . hSize . params)
+                Just ln -> liftConfigError $ HP.runConfState $ evaluateLength ln
+            evalH <- case height of
+                -- TODO.
+                Nothing -> HP.runConfState $ pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+                Just ln -> liftConfigError $ HP.runConfState $ evaluateLength ln
+            evalD <- case depth of
+                Nothing -> HP.runConfState $ pure 0
+                Just ln -> liftConfigError $ HP.runConfState $ evaluateLength ln
+            let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
+            modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
+        HP.ModeIndependentCommand mcom ->
+            do
+            extraAcc <- liftConfigError $ handleModeIndep mcom
+            modAccum (extraAcc ++ acc)
+  where
+    modAccum newAcc = pure (pages, curPage, newAcc, True)
+
+    continueUnchanged = pure (pages, curPage, acc, True)
+
+    addParagraphToPage indentFlag =
+        do
+        -- If the command shifts to horizontal mode, run '\indent', and re-read the
+        -- stream as if the commands just seen hadn't been read.
+        -- (Note that we set "oldStream", not "newStream".)
+        -- Paraboxes are returned in reading order.
+        put oldStream
+        lineBoxes <- extractParagraphLineBoxes indentFlag
+        desiredW <- HP.runConfState $ gets (unLenParam . hSize . params)
+        let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
+        newAcc <- HP.runConfState $ foldM addVListElem acc $ BL.VListBaseElem . B.ElemBox . toBox <$> lineBoxes
+        modAccum newAcc
 
 newCurrentPage :: CurrentPage
 newCurrentPage = CurrentPage [] Nothing
 
 extractPages
-    :: (MonadState Config m, MonadIO m)
-    => HP.ExpandedStream
-    -> ExceptT BuildError m ([B.Page], HP.ExpandedStream)
-extractPages = extractPagesInner [] newCurrentPage []
+    :: (MonadState HP.ExpandedStream m, MonadIO m)
+    => ExceptT BuildError m [B.Page]
+extractPages =
+    extractPagesInner [] newCurrentPage []
   where
-    extractPagesInner
-        :: (MonadState Config m, MonadIO m)
-        => [B.Page]
-        -> CurrentPage
-        -> [BL.BreakableVListElem]
-        -> HP.ExpandedStream
-        -> ExceptT BuildError m ([B.Page], HP.ExpandedStream)
-    extractPagesInner pages curPage acc oldStream =
+    extractPagesInner pages curPage acc =
         do
-        (PS.State {stateInput = newStream}, com) <-
-            liftEither $ ParseError `mapLeft` HP.extractVModeCommand oldStream
-        (procPages, procCurPage, procAcc, procStream, continue) <-
-            processVCommand oldStream newStream pages curPage acc com
+        oldStream <- get
+        (PS.State {stateInput = newStream}, com) <- liftEither $ ParseError `mapLeft` HP.extractVModeCommand oldStream
+        put newStream
+        (procPages, procCurPage, procAcc, continue) <- processVCommand oldStream pages curPage acc com
         if continue
-            then extractPagesInner procPages procCurPage procAcc procStream
-            else pure (procPages, procStream)
+            then extractPagesInner procPages procCurPage procAcc
+            else pure procPages
