@@ -41,7 +41,6 @@ data ExpandedStream = ExpandedStream
     , lexState      :: Lex.LexState
     , csMap         :: CSMap
     , expansionMode :: ExpansionMode
-    , ccMap         :: Cat.CharCatMap
     , config        :: Conf.Config
     } deriving (Show)
 
@@ -66,7 +65,6 @@ newExpandStream cs _csMap =
         , lexState      = Lex.LineBegin
         , csMap         = _csMap
         , expansionMode = Expanding
-        , ccMap         = Cat.usableCharCatMap
         , config        = conf
         }
 
@@ -240,7 +238,8 @@ instance P.Stream ExpandedStream where
             -- If the lex token buffer is empty, extract a token and use it.
             [] ->
                 do
-                (lt, lexState', codes') <- Lex.extractToken (Cat.catLookup ccMap) lexState codes
+                (lt, lexState', codes') <-
+                    Lex.extractToken (Cat.catLookup $ Conf.ccMap config) lexState codes
                 pure (lt, stream { codes = codes', lexState = lexState' })
         -- Resolve the lex token, and inspect the result.
         case resolveToken csMap expansionMode lt of

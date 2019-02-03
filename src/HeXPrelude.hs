@@ -4,9 +4,15 @@ module HeXPrelude
   ( Readable(..)
   , liftMaybe
   , liftThrow
+  , (>>>)
+  , (<&>)
+  , (&)
   )
 where
 
+import           Control.Arrow                  ( (>>>) )
+import           Data.Functor                   ( (<&>) )
+import           Data.Function                  ( (&) )
 import           Control.Monad.Except           ( liftIO
                                                 , MonadError
                                                 , throwError

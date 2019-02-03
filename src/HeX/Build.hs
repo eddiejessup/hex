@@ -19,8 +19,8 @@ import           Control.Monad.Except           ( ExceptT
                                                 , MonadError
                                                 , withExceptT
                                                 )
-import qualified Data.HashMap.Strict           as HMap
 import           Data.Either.Combinators        ( mapLeft )
+import qualified Data.HashMap.Strict           as HMap
 import           Path
 import           Safe                           ( headMay
                                                 , toEnumMay )
@@ -53,13 +53,10 @@ loadFont
     :: (MonadState Config m, MonadIO m, MonadError String m)
     => Path Rel File
     -> m B.FontDefinition
-loadFont fPath =
+loadFont relPath =
     do
-    theFontDirectories <- gets fontDirectories
-    fontPath <- liftThrow "Could not find font" $ findFilePath fPath theFontDirectories
-    fontInfo_ <- readFontInfo fontPath
-    nonExtName <- liftThrow "Could not strip font extension" $ Path.setFileExtension "" fPath
-    let fontName = Path.toFilePath $ Path.filename nonExtName
+    fontInfo_ <- readRelPath relPath
+    fontName <- extractFontName relPath
     fNr <- addFont fontInfo_
     pure B.FontDefinition
         { fontNr           = fNr
@@ -69,6 +66,20 @@ loadFont fPath =
         , fontInfo         = fontMetrics fontInfo_
         , scaleFactorRatio = 1.0
         }
+  where
+    readRelPath p =
+        searchDirectories
+        & gets
+        <&> findFilePath p
+        >>= liftThrow "Could not find font"
+        >>= readFontInfo
+
+    stripExtension p =
+        liftThrow "Could not strip font extension" $ Path.setFileExtension "" p
+
+    fileName = Path.filename >>> Path.toFilePath
+
+    extractFontName p = stripExtension p <&> fileName
 
 selectFont :: MonadState Config m => Int -> m B.FontSelection
 selectFont n =
@@ -91,7 +102,7 @@ spaceGlue =
     do
     fontMetrics@TexFont{spacing = d, spaceStretch = str, spaceShrink = shr} <- currentFontMetrics
     let toSP = TFM.designScaleSP fontMetrics
-        toFlex = BL.finiteFlex . fromIntegral . toSP
+        toFlex = toSP >>> fromIntegral >>> BL.finiteFlex
     pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
 assignVariable
@@ -188,7 +199,7 @@ handleModeIndep = \case
                         do
                         idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
                         valCat <- liftMaybe ("Invalid category code value: " ++ show eVal) (toEnumMay eVal)
-                        modify (\strm -> strm{HP.ccMap=HMap.insert idxChar valCat $ HP.ccMap strm})
+                        HP.runConfState $ modify (\conf -> conf{ccMap=HMap.insert idxChar valCat $ ccMap conf})
                         pure []
                     _ ->
                         error $ "Code type not implemented: " ++ show codeType
@@ -217,7 +228,7 @@ processHCommand oldStream acc = \case
     HP.AddCharacter c ->
         do
         charCode <- HP.runConfState $ evaluateCharCodeRef c
-        hCharBox <- BL.HListHBaseElem . B.ElemCharacter <$> (HP.runConfState $ characterBox charCode)
+        hCharBox <- charCode & characterBox & HP.runConfState <&> (B.ElemCharacter >>> BL.HListHBaseElem)
         modAccum $ hCharBox : acc
     HP.HAllModesCommand aCom -> case aCom of
         -- \indent: An empty box of width \parindent is appended to the current

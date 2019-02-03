@@ -43,6 +43,7 @@ import qualified TFM
 import           TFM                            ( TexFont )
 
 import           HeXPrelude
+import qualified HeX.Categorise                as Cat
 import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
@@ -50,10 +51,11 @@ import           HeX.Parse.Token
 import           HeX.Config.Parameters
 
 data Config = Config
-    { currentFontNr   :: Maybe Int
-    , fontInfos       :: V.Vector FontInfo
-    , fontDirectories :: [Path Abs Dir]
-    , params          :: ParamConfig
+    { currentFontNr     :: Maybe Int
+    , fontInfos         :: V.Vector FontInfo
+    , searchDirectories :: [Path Abs Dir]
+    , params            :: ParamConfig
+    , ccMap             :: Cat.CharCatMap
     } deriving (Show)
 
 newConfig :: IO Config
@@ -62,10 +64,12 @@ newConfig =
     cwdRaw <- getCurrentDirectory
     cwd <- parseAbsDir cwdRaw
     pure Config
-        { currentFontNr = Nothing
-        , fontInfos = V.empty
-        , fontDirectories = [cwd]
-        , params          = usableParamConfig }
+        { currentFontNr     = Nothing
+        , fontInfos         = V.empty
+        , searchDirectories = [cwd]
+        , params            = usableParamConfig
+        , ccMap             = Cat.usableCharCatMap
+        }
 
 type ConfStateT = StateT Config
 type ConfReaderT = ReaderT Config
