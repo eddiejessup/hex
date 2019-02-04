@@ -4,8 +4,6 @@
 
 module HeX.Config.Config where
 
-import           Control.Applicative            ( empty )
-import           Control.Monad                  ( guard )
 import           Control.Monad.IO.Class         ( MonadIO )
 import           Control.Monad.State.Lazy       ( StateT
                                                 , liftIO
@@ -15,13 +13,15 @@ import           Control.Monad.State.Lazy       ( StateT
 import           Control.Monad.Trans.Reader     ( ReaderT )
 import           Control.Monad.Except           ( MonadError
                                                 )
-import           Data.Bits                    ( (.&.)
-                                              , shiftR
-                                              )
-import           Data.Char                    ( chr
-                                              , toLower
-                                              , toUpper
-                                              )
+import           Data.Bits                      ( (.&.)
+                                                , shiftR
+                                                , shiftL
+                                                )
+import           Data.Char                      ( chr
+                                                , ord
+                                                , toLower
+                                                , toUpper
+                                                )
 import qualified Data.HashMap.Strict           as HMap
 import qualified Data.Vector                   as V
 import           Data.Vector                    ( (!?) )
@@ -33,28 +33,86 @@ import qualified TFM
 import           TFM                            ( TexFont )
 
 import           HeXPrelude
-import qualified HeX.Categorise                as Cat
+import           HeX.Concept
 import           HeX.Type
+import qualified HeX.Categorise                as Cat
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.Parse.Token
 import           HeX.Config.Parameters
 
-data FamilyCharRef = FamilyCharRef { family :: IntVal, position :: Cat.CharCode }
+-- The ⟨number⟩ at the end of a ⟨code assignment⟩ must not be negative, except
+-- in the case that a \delcode is being assigned.
+
+data FamilyCharRef = FamilyCharRef { family, position :: IntVal }
     deriving (Show)
+
+instance Bounded FamilyCharRef where
+    minBound = FamilyCharRef 0x0 0x00
+    maxBound = FamilyCharRef 0xF 0xFF
+
+instance Enum FamilyCharRef where
+    toEnum n
+        | n < 0 = error $ "Negative value: " ++ show n
+        | n > 0xFFF = error $ "Value too large: " ++ show n
+        | otherwise = FamilyCharRef (n `shiftR` 8) (n .&. 0xFF)
+
+    fromEnum (FamilyCharRef fam pos) =
+        (fam `shiftL` 8) + pos
 
 data DelimiterVar
     = PresentDelimiterVar FamilyCharRef
     | NullDelimiterVar
     deriving (Show)
 
+instance Bounded DelimiterVar where
+    minBound = NullDelimiterVar
+    maxBound = PresentDelimiterVar (maxBound :: FamilyCharRef)
+
+instance Enum DelimiterVar where
+    toEnum n
+        | n == 0 = NullDelimiterVar
+        | otherwise = PresentDelimiterVar $ toEnum n
+
+    fromEnum NullDelimiterVar = 0
+    fromEnum (PresentDelimiterVar f) = fromEnum f
+
 data DelimiterSpec = DelimiterSpec { smallVar, largeVar :: DelimiterVar }
     deriving (Show)
 
 data DelimiterCode
-    = NotADelimiter
+    = NotADelimiter IntVal
     | DelimiterSpecCode DelimiterSpec
     deriving (Show)
+
+-- a delcode is either negative, for characters that should not act as
+-- delimiters, or less than "1000000.
+-- In other words, non-negative delcodes consist of six hexadecimal digits.
+-- The first and last sets of three digits specify "small" and "large" variants
+-- of the delimiter, respectively.
+-- the code,
+--     "123456
+-- implies a small variant in position "23 of family "1, and a large variant in
+-- position "56 of family "4.
+-- If the small or large variant is given as "000, however (position 0 of
+-- family 0), that variant is ignored.
+
+instance Bounded DelimiterCode where
+    minBound = NotADelimiter (minBound :: IntVal)
+    maxBound = DelimiterSpecCode $ DelimiterSpec maxBound maxBound
+
+instance Enum DelimiterCode where
+    toEnum n
+        | n < 0 = NotADelimiter n
+        | n > 0xFFFFFF = error $ "Value too large: " ++ show n
+        | otherwise =
+            let smallVar = toEnum $ n `shiftR` 12
+                largeVar = toEnum $ n .&. 0xFFF
+            in  DelimiterSpecCode $ DelimiterSpec smallVar largeVar
+
+    fromEnum (NotADelimiter n) = n
+    fromEnum (DelimiterSpecCode DelimiterSpec{..}) =
+        (fromEnum largeVar `shiftL` 12) + (fromEnum smallVar)
 
 data MathClass
     = Ordinary        -- 0
@@ -79,24 +137,65 @@ data MathCode
 -- cc: character code position
 -- A mathcode can also have the special value "8000, which causes the character
 -- to behave as if it has catcode 13 (active).
-intToMathCode :: IntVal -> Maybe MathCode
-intToMathCode n
-    | n < 0 = empty
-    | n > 0x8000 = empty
-    | n == 0x8000 = pure ActiveMathCode
-    | otherwise =
-        do
-        guard $ n > 0
-        char <- toEnumMay $ n .&. 0xFF
-        let fam = (n `shiftR` 8) .&. 0xF
-        cls <- toEnumMay $ n `shiftR` 12
-        pure $ NormalMathCode cls $ FamilyCharRef fam char
 
+instance Bounded MathCode where
+    minBound = NormalMathCode minBound minBound
+    maxBound = ActiveMathCode
 
-data CaseChange
+instance Enum MathCode where
+    toEnum n
+        | n < 0 = error $ "Negative value: " ++ show n
+        | n > 0x8000 = error $ "Value too large: " ++ show n
+        | n == 0x8000 = ActiveMathCode
+        | otherwise =
+            let cls = toEnum $ n `shiftR` 12
+                fam = toEnum $ n .&. 0xFFF
+            in NormalMathCode cls fam
+
+    fromEnum ActiveMathCode = 0x8000
+    fromEnum (NormalMathCode cls famRef) =
+        fromEnum famRef + (fromEnum cls `shiftL` 12)
+
+data CaseChangeCode
     = NoCaseChange
     | ChangeToCode Cat.CharCode
     deriving (Show)
+
+instance Bounded CaseChangeCode where
+    minBound = NoCaseChange
+    maxBound = ChangeToCode maxBound
+
+-- Conversion to uppercase means that a character is replaced by its \uccode
+-- value, unless the \uccode value is zero, when no change is made. Conversion
+-- to lowercase is similar, using the \lccode.
+instance Enum CaseChangeCode where
+    toEnum n
+        | n < 0 = error $ "Negative value: " ++ show n
+        | n > 255 = error $ "Value too large: " ++ show n
+        | n == 0 = NoCaseChange
+        | otherwise = ChangeToCode $ toEnum n
+
+    fromEnum NoCaseChange = 0
+    fromEnum (ChangeToCode c) = fromEnum c
+
+newtype SpaceFactorCode = SpaceFactorCode IntVal
+    deriving (Show)
+
+instance Bounded SpaceFactorCode where
+    minBound = SpaceFactorCode 0
+    maxBound = SpaceFactorCode 0x7FFF
+
+instance Enum SpaceFactorCode where
+    toEnum n
+        | n < 0 = error $ "Negative value: " ++ show n
+        | n >= 0x8000 = error $ "Value too large: " ++ show n
+        | otherwise = SpaceFactorCode n
+
+    fromEnum (SpaceFactorCode n) = n
+
+ -- Furthermore, that ⟨number⟩
+-- should be at most 15 for \catcode, 32768 for \mathcode, 255 for \lccode or
+-- \uccode, 32767 for \sfcode, and 2^24 − 1 for \delcode.
 
 data Config = Config
     { currentFontNr     :: Maybe Int
@@ -107,13 +206,47 @@ data Config = Config
     , catCodeMap        :: Cat.CharCatMap
     , mathCodeMap       :: Cat.CharCodeMap MathCode
     , lowercaseMap
-    , uppercaseMap      :: Cat.CharCodeMap CaseChange
-    , spaceFactorMap    :: Cat.CharCodeMap IntVal
+    , uppercaseMap      :: Cat.CharCodeMap CaseChangeCode
+    , spaceFactorMap    :: Cat.CharCodeMap SpaceFactorCode
     , delimiterCodeMap  :: Cat.CharCodeMap DelimiterCode
     } deriving (Show)
 
 initialiseCharCodeMap :: (Cat.CharCode -> v) -> Cat.CharCodeMap v
 initialiseCharCodeMap val = HMap.fromList $ ((\c -> (c, val c)) . chr) <$> [0 .. 127]
+
+updateCharCodeMap
+    :: (MonadError String m, MonadState Config m)
+    => CodeType
+    -> Cat.CharCode
+    -> IntVal
+    -> m ()
+updateCharCodeMap t c n =
+    modify =<< case t of
+        CategoryCodeType ->
+            do
+            v <- liftMay $ toEnumMay n
+            pure (\cnf -> cnf{catCodeMap=insert v $ catCodeMap cnf})
+        MathCodeType ->
+            do
+            v <- liftMay $ toEnumMay n
+            pure (\cnf -> cnf{mathCodeMap=insert v $ mathCodeMap cnf})
+        ChangeCaseCodeType dir ->
+            do
+            v <- liftMay $ toEnumMay n
+            pure $ case dir of
+                Upward -> (\cnf -> cnf{uppercaseMap=insert v $ uppercaseMap cnf})
+                Downward -> (\cnf -> cnf{lowercaseMap=insert v $ lowercaseMap cnf})
+        SpaceFactorCodeType ->
+            do
+            v <- liftMay $ toEnumMay n
+            pure (\cnf -> cnf{spaceFactorMap=insert v $ spaceFactorMap cnf})
+        DelimiterCodeType ->
+            do
+            v <- liftMay $ toEnumMay n
+            pure (\cnf -> cnf{delimiterCodeMap=insert v $ delimiterCodeMap cnf})
+  where
+    insert = HMap.insert c
+    liftMay f = liftMaybe ("Invalid target for code type " ++ show t ++ ": " ++ show n) f
 
 digits :: [Char]
 digits = ['1'..'9']
@@ -135,21 +268,21 @@ newMathCodeMap :: Cat.CharCodeMap MathCode
 newMathCodeMap = initialiseCharCodeMap f
  where
     f c
-        | c `elem` digits  = NormalMathCode VariableFamily (FamilyCharRef 0 c)
-        | c `elem` letters = NormalMathCode VariableFamily (FamilyCharRef 1 c)
-        | otherwise        = NormalMathCode Ordinary       (FamilyCharRef 0 c)
+        | c `elem` digits  = NormalMathCode VariableFamily (FamilyCharRef 0 $ ord c)
+        | c `elem` letters = NormalMathCode VariableFamily (FamilyCharRef 1 $ ord c)
+        | otherwise        = NormalMathCode Ordinary       (FamilyCharRef 0 $ ord c)
 
 -- By default, all \uccode and \lccode values are zero except that the
 -- letters a to z and A to Z have \uccode values A to Z and \lccode values a to
 -- z.
-newLowercaseMap :: Cat.CharCodeMap CaseChange
+newLowercaseMap :: Cat.CharCodeMap CaseChangeCode
 newLowercaseMap = initialiseCharCodeMap f
  where
     f c
         | c `elem` letters = ChangeToCode $ toLower c
         | otherwise        = NoCaseChange
 
-newUppercaseMap :: Cat.CharCodeMap CaseChange
+newUppercaseMap :: Cat.CharCodeMap CaseChangeCode
 newUppercaseMap = initialiseCharCodeMap f
  where
     f c
@@ -158,8 +291,8 @@ newUppercaseMap = initialiseCharCodeMap f
 
 -- By default, all characters have a space factor code of 1000, except that the
 -- uppercase letters ‘A’ through ‘Z’ have code 999.
-newSpaceFactorMap :: Cat.CharCodeMap IntVal
-newSpaceFactorMap = initialiseCharCodeMap f
+newSpaceFactorMap :: Cat.CharCodeMap SpaceFactorCode
+newSpaceFactorMap = initialiseCharCodeMap $ SpaceFactorCode . f
   where
     f c
         | c `elem` ['A' .. 'Z'] = 999
@@ -167,7 +300,7 @@ newSpaceFactorMap = initialiseCharCodeMap f
 
 -- All delcodes are −1 until they are changed by a \delcode command.
 newDelimiterCodeMap :: Cat.CharCodeMap DelimiterCode
-newDelimiterCodeMap = initialiseCharCodeMap $ const NotADelimiter
+newDelimiterCodeMap = initialiseCharCodeMap $ const $ NotADelimiter (-1)
 
 newConfig :: IO Config
 newConfig =

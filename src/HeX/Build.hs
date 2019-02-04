@@ -196,24 +196,7 @@ handleModeIndep = \case
                 eVal <- HP.runConfState $ evaluateNumber val
                 idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
                 liftIO $ putStrLn $ "Setting " ++ show codeType ++ "@" ++ show eIdx ++ " (" ++ show idxChar ++ ") to " ++ show eVal
-
-                updateFunc <- case codeType of
-                    HP.CategoryCode ->
-                        do
-                        valCat <- liftMaybe ("Invalid category code value: " ++ show eVal) (toEnumMay eVal)
-                        liftIO $ putStrLn $ "parsed val to " ++ show valCat
-                        pure (\c -> c{catCodeMap=HMap.insert idxChar valCat $ catCodeMap c})
-                    HP.MathCode ->
-                        do
-                        valMathCode <- liftMaybe ("Invalid math code value: " ++ show eVal) $ intToMathCode eVal
-                        liftIO $ putStrLn $ "parsed val to " ++ show valMathCode
-                        pure (\c -> c{mathCodeMap=HMap.insert idxChar valMathCode $ mathCodeMap c})
-                    HP.SpaceFactorCode ->
-                        do
-                        pure (\c -> c{spaceFactorMap=HMap.insert idxChar eVal $ spaceFactorMap c})
-                    _ ->
-                        error $ "Code type not implemented: " ++ show codeType
-                HP.runConfState $ modify updateFunc
+                HP.runConfState $ updateCharCodeMap codeType idxChar eVal
                 pure []
             HP.SelectFont fNr ->
                 do

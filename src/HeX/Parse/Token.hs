@@ -136,10 +136,10 @@ data TokenListParameter
     deriving (Show, Eq)
 
 data SpecialInteger
-    = SpaceFactor
-    | PrevGraf
-    | DeadCycles
-    | InsertPenalties
+    = SpaceFactorInteger
+    | PrevGrafInteger
+    | DeadCyclesInteger
+    | InsertPenaltiesInteger
     deriving (Show, Eq)
 
 data SpecialLength
@@ -236,11 +236,11 @@ data SyntaxCommandArg
     deriving (Show, Eq)
 
 data CodeType
-    = CategoryCode
-    | MathCode
-    | ChangeCaseCode VDirection
-    | SpaceFactorCode
-    | DelimiterCode
+    = CategoryCodeType
+    | MathCodeType
+    | ChangeCaseCodeType VDirection
+    | SpaceFactorCodeType
+    | DelimiterCodeType
     deriving (Show, Eq)
 
 data QuantityType

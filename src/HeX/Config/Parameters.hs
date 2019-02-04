@@ -634,19 +634,19 @@ getSpecialInt :: SpecialInteger -> ParamConfig -> IntVal
 getSpecialInt p c = f c
   where
     f = case p of
-        SpaceFactor           -> unIntParam . spaceFactor
-        PrevGraf              -> unIntParam . prevGraf
-        DeadCycles            -> unIntParam . deadCycles
-        InsertPenalties       -> unIntParam . insertPenalties
+        SpaceFactorInteger     -> unIntParam . spaceFactor
+        PrevGrafInteger        -> unIntParam . prevGraf
+        DeadCyclesInteger      -> unIntParam . deadCycles
+        InsertPenaltiesInteger -> unIntParam . insertPenalties
 
 setSpecialInt :: SpecialInteger -> IntVal -> ParamConfig -> ParamConfig
 setSpecialInt p v c =
     let vp = IntParamVal v
     in case p of
-        SpaceFactor           -> c{spaceFactor=vp}
-        PrevGraf              -> c{prevGraf=vp}
-        DeadCycles            -> c{deadCycles=vp}
-        InsertPenalties       -> c{insertPenalties=vp}
+        SpaceFactorInteger     -> c{spaceFactor=vp}
+        PrevGrafInteger        -> c{prevGraf=vp}
+        DeadCyclesInteger      -> c{deadCycles=vp}
+        InsertPenaltiesInteger -> c{insertPenalties=vp}
 
 getSpecialLen :: SpecialLength -> ParamConfig -> LenVal
 getSpecialLen p c = f c

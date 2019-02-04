@@ -216,10 +216,10 @@ defaultCSMap = HMap.fromList
     , (_cs "everycr"              , _pt $ TokenListParamVarTok EveryCR)
     , (_cs "errhelp"              , _pt $ TokenListParamVarTok ErrHelp)
       -- Special integers.
-    , (_cs "spacefactor"          , _pt $ SpecialIntegerTok SpaceFactor)
-    , (_cs "prevgraf"             , _pt $ SpecialIntegerTok PrevGraf)
-    , (_cs "deadcycles"           , _pt $ SpecialIntegerTok DeadCycles)
-    , (_cs "insertpenalties"      , _pt $ SpecialIntegerTok InsertPenalties)
+    , (_cs "spacefactor"          , _pt $ SpecialIntegerTok SpaceFactorInteger)
+    , (_cs "prevgraf"             , _pt $ SpecialIntegerTok PrevGrafInteger)
+    , (_cs "deadcycles"           , _pt $ SpecialIntegerTok DeadCyclesInteger)
+    , (_cs "insertpenalties"      , _pt $ SpecialIntegerTok InsertPenaltiesInteger)
       -- Special lengths.
     , (_cs "prevdepth"            , _pt $ SpecialLengthTok PrevDepth)
     , (_cs "pagegoal"             , _pt $ SpecialLengthTok PageGoal)
@@ -249,12 +249,12 @@ defaultCSMap = HMap.fromList
     , (_cs "multiply"         , _pt $ ScaleVarTok Upward)
     , (_cs "divide"           , _pt $ ScaleVarTok Downward)
       -- Code types.
-    , (_cs "catcode"          , _pt $ CodeTypeTok CategoryCode)
-    , (_cs "mathcode"         , _pt $ CodeTypeTok MathCode)
-    , (_cs "lccode"           , _pt $ CodeTypeTok $ ChangeCaseCode Downward)
-    , (_cs "uccode"           , _pt $ CodeTypeTok $ ChangeCaseCode Upward)
-    , (_cs "sfcode"           , _pt $ CodeTypeTok SpaceFactorCode)
-    , (_cs "delcode"          , _pt $ CodeTypeTok DelimiterCode)
+    , (_cs "catcode"          , _pt $ CodeTypeTok CategoryCodeType)
+    , (_cs "mathcode"         , _pt $ CodeTypeTok MathCodeType)
+    , (_cs "lccode"           , _pt $ CodeTypeTok $ ChangeCaseCodeType Downward)
+    , (_cs "uccode"           , _pt $ CodeTypeTok $ ChangeCaseCodeType Upward)
+    , (_cs "sfcode"           , _pt $ CodeTypeTok SpaceFactorCodeType)
+    , (_cs "delcode"          , _pt $ CodeTypeTok DelimiterCodeType)
       -- Alias tokens.
     , (_cs "let"              , _pt $ LetTok)
     , (_cs "futurelet"        , _pt $ FutureLetTok)
