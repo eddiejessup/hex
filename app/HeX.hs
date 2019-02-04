@@ -63,7 +63,7 @@ usage = usageInfo header options
     header = "Usage: hex [OPTION...] [file]"
 
 preamble, postamble :: String
-preamble = "\\font\\thefont=cmr10 \\selectfont\n\n"
+preamble = "\\font\\thefont=cmr10 \\thefont\n\n"
 postamble = "\n\n\\end\n"
 
 parseArgs :: [String] -> IO ([Flag], [String])
