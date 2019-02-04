@@ -43,7 +43,7 @@ mChop' f xs =
         Just xs'' -> mChop' f xs''
 
 runCat :: [CharCode] -> IO ()
-runCat = mChop' (extractAndPrint usableCharToCat)
+runCat = mChop' (extractAndPrint (catLookup usableCharCatMap))
   where
     extractAndPrint f s = case extractCharCat f s of
         Just (cc, s') ->
@@ -62,7 +62,7 @@ chopLex' ls xs =
         Just (ls', xs') -> chopLex' ls' xs'
   where
     extractAndPrintLex =
-        case extractToken usableCharToCat ls xs of
+        case extractToken (catLookup usableCharCatMap) ls xs of
             Just (tok, ls', s') ->
                 do
                 print tok
@@ -82,7 +82,7 @@ chopResolved' ls xs =
         Just (ls', xs') -> chopResolved' ls' xs'
   where
       extractAndPrintResolved =
-            case extractToken usableCharToCat ls xs of
+            case extractToken (catLookup usableCharCatMap) ls xs of
                 Just (tok, lexState', s') ->
                     do
                     print $ resolveToken defaultCSMap Expanding tok

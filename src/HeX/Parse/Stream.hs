@@ -239,7 +239,7 @@ instance P.Stream ExpandedStream where
             [] ->
                 do
                 (lt, lexState', codes') <-
-                    Lex.extractToken (Cat.catLookup $ Conf.ccMap config) lexState codes
+                    Lex.extractToken (Cat.catLookup $ Conf.catCodeMap config) lexState codes
                 pure (lt, stream { codes = codes', lexState = lexState' })
         -- Resolve the lex token, and inspect the result.
         case resolveToken csMap expansionMode lt of

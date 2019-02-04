@@ -199,7 +199,7 @@ handleModeIndep = \case
                         do
                         idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
                         valCat <- liftMaybe ("Invalid category code value: " ++ show eVal) (toEnumMay eVal)
-                        HP.runConfState $ modify (\conf -> conf{ccMap=HMap.insert idxChar valCat $ ccMap conf})
+                        HP.runConfState $ modify (\conf -> conf{catCodeMap=HMap.insert idxChar valCat $ catCodeMap conf})
                         pure []
                     _ ->
                         error $ "Code type not implemented: " ++ show codeType

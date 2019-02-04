@@ -34,6 +34,11 @@ import           Control.Monad.State.Lazy       ( StateT
 import           Control.Monad.Trans.Reader     ( ReaderT )
 import           Control.Monad.Except           ( MonadError
                                                 )
+import           Data.Char                    ( chr
+                                              , toLower
+                                              , toUpper
+                                              )
+import qualified Data.HashMap.Strict           as HMap
 import qualified Data.Vector                   as V
 import           Data.Vector                    ( (!?) )
 import           Path
@@ -50,13 +55,113 @@ import qualified HeX.BreakList                 as BL
 import           HeX.Parse.Token
 import           HeX.Config.Parameters
 
+data FamilyCharRef = FamilyCharRef { family :: IntVal, position :: Cat.CharCode }
+    deriving (Show)
+
+data DelimiterVar
+    = PresentDelimiterVar FamilyCharRef
+    | NullDelimiterVar
+    deriving (Show)
+
+data DelimiterSpec = DelimiterSpec { smallVar, largeVar :: DelimiterVar }
+    deriving (Show)
+
+data DelimiterCode
+    = NotADelimiter
+    | DelimiterSpecCode DelimiterSpec
+    deriving (Show)
+
+data MathClass
+    = Ordinary        -- 0
+    | LargeOperator   -- 1
+    | BinaryRelation  -- 2
+    | Relation        -- 3
+    | Opening         -- 4
+    | Closing         -- 5
+    | Punctuation     -- 6
+    | VariableFamily  -- 7
+    deriving (Show)
+
+data MathCode
+    = NormalMathCode MathClass FamilyCharRef
+    | ActiveMathCode
+    deriving (Show)
+
+data CaseChange
+    = NoCaseChange
+    | ChangeToCode Cat.CharCode
+    deriving (Show)
+
 data Config = Config
     { currentFontNr     :: Maybe Int
     , fontInfos         :: V.Vector FontInfo
     , searchDirectories :: [Path Abs Dir]
     , params            :: ParamConfig
-    , ccMap             :: Cat.CharCatMap
+    -- Char-code attribute maps.
+    , catCodeMap        :: Cat.CharCatMap
+    , mathCodeMap       :: Cat.CharCodeMap MathCode
+    , lowercaseMap
+    , uppercaseMap      :: Cat.CharCodeMap CaseChange
+    , spaceFactorMap    :: Cat.CharCodeMap IntVal
+    , delimiterCodeMap  :: Cat.CharCodeMap DelimiterCode
     } deriving (Show)
+
+initialiseCharCodeMap :: (Cat.CharCode -> v) -> Cat.CharCodeMap v
+initialiseCharCodeMap val = HMap.fromList $ ((\c -> (c, val c)) . chr) <$> [0 .. 127]
+
+digits :: [Char]
+digits = ['1'..'9']
+
+lowerLetters :: [Char]
+lowerLetters = ['a'..'z']
+
+upperLetters :: [Char]
+upperLetters = ['A'..'Z']
+
+letters :: [Char]
+letters = lowerLetters ++ upperLetters
+
+-- The ten digits have \mathcode x = x + "7000.
+-- The 52 letters have \mathcode x = x + "7100.
+-- Otherwise,          \mathcode x = x
+-- Put otherwise: letters are class 7, family 1; digits are class 7, family 0.
+newMathCodeMap :: Cat.CharCodeMap MathCode
+newMathCodeMap = initialiseCharCodeMap f
+ where
+    f c
+        | c `elem` digits  = NormalMathCode VariableFamily (FamilyCharRef 0 c)
+        | c `elem` letters = NormalMathCode VariableFamily (FamilyCharRef 1 c)
+        | otherwise        = NormalMathCode Ordinary       (FamilyCharRef 0 c)
+
+-- By default, all \uccode and \lccode values are zero except that the
+-- letters a to z and A to Z have \uccode values A to Z and \lccode values a to
+-- z.
+newLowercaseMap :: Cat.CharCodeMap CaseChange
+newLowercaseMap = initialiseCharCodeMap f
+ where
+    f c
+        | c `elem` letters = ChangeToCode $ toLower c
+        | otherwise        = NoCaseChange
+
+newUppercaseMap :: Cat.CharCodeMap CaseChange
+newUppercaseMap = initialiseCharCodeMap f
+ where
+    f c
+        | c `elem` letters = ChangeToCode $ toUpper c
+        | otherwise        = NoCaseChange
+
+-- By default, all characters have a space factor code of 1000, except that the
+-- uppercase letters ‘A’ through ‘Z’ have code 999.
+newSpaceFactorMap :: Cat.CharCodeMap IntVal
+newSpaceFactorMap = initialiseCharCodeMap f
+  where
+    f c
+        | c `elem` ['A' .. 'Z'] = 999
+        | otherwise             = 1000
+
+-- All delcodes are −1 until they are changed by a \delcode command.
+newDelimiterCodeMap :: Cat.CharCodeMap DelimiterCode
+newDelimiterCodeMap = initialiseCharCodeMap $ const NotADelimiter
 
 newConfig :: IO Config
 newConfig =
@@ -68,7 +173,12 @@ newConfig =
         , fontInfos         = V.empty
         , searchDirectories = [cwd]
         , params            = usableParamConfig
-        , ccMap             = Cat.usableCharCatMap
+        , catCodeMap        = Cat.usableCharCatMap
+        , mathCodeMap       = newMathCodeMap
+        , lowercaseMap      = newLowercaseMap
+        , uppercaseMap      = newUppercaseMap
+        , spaceFactorMap    = newSpaceFactorMap
+        , delimiterCodeMap  = newDelimiterCodeMap
         }
 
 type ConfStateT = StateT Config
