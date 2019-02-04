@@ -25,8 +25,7 @@ import           DVI.Document                   ( FontDefinition(..)
 
 data DesiredLength
     = Natural
-    -- TODO: Implement Spread.
-    -- | Spread Int
+    | Spread LenVal
     | To LenVal
     deriving (Show)
 
@@ -65,9 +64,14 @@ instance Dimensioned Box where
     naturalLength dim b = case (dim, b) of
         (Width,  Box (HBoxContents _) (To to)) -> to
         (Height, Box (VBoxContents _) (To to)) -> to
+
+        (Width,  Box bc@(HBoxContents _) (Spread spread)) -> spread + (naturalLength Width bc)
+        (Height, Box bc@(VBoxContents _) (Spread spread)) -> spread + (naturalLength Height bc)
+
         -- TODO: Look up and implement specification.
-        (Depth,  Box (VBoxContents _) _      ) -> error "Not implemented: Depth of VBox"
-        (_    ,  Box bc               _) -> naturalLength dim bc
+        (Depth,  Box (VBoxContents _) _) -> error "Not implemented: Depth of VBox"
+
+        (_,      Box bc _) -> naturalLength dim bc
 
 data BaseElem
     = ElemBox Box
