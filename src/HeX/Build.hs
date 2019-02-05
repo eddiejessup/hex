@@ -194,6 +194,8 @@ handleModeIndep = \case
                 do
                 eIdx <- HP.runConfState $ evaluateNumber idx
                 eVal <- HP.runConfState $ evaluateNumber val
+                liftIO $ putStrLn $ "Evaluated code table index " ++ show idx ++ " to " ++ show eIdx
+                liftIO $ putStrLn $ "Evaluated code table value " ++ show val ++ " to " ++ show eVal
                 idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
                 liftIO $ putStrLn $ "Setting " ++ show codeType ++ "@" ++ show eIdx ++ " (" ++ show idxChar ++ ") to " ++ show eVal
                 HP.runConfState $ updateCharCodeMap codeType idxChar eVal

@@ -184,4 +184,4 @@ updateCharCodeMap t c n =
             pure (\cnf -> cnf{delimiterCodeMap=insert v $ delimiterCodeMap cnf})
   where
     insert = HMap.insert c
-    liftMay f = liftMaybe ("Invalid target for code type " ++ show t ++ ": " ++ show n) f
+    liftMay f = liftMaybe ("Invalid target value for code type " ++ show t ++ ": " ++ show n) f

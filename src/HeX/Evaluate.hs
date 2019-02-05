@@ -10,9 +10,12 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 , gets
                                                 )
 import           Data.Char                      ( chr )
+import qualified Data.HashMap.Strict           as HMap
 
 import qualified TFM
 
+import           HeXPrelude
+import           HeX.Concept
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.Categorise                 ( CharCode )
@@ -64,10 +67,19 @@ evaluateSpecialInteger :: (MonadState Config m, MonadError String m) => T.Specia
 evaluateSpecialInteger p = gets (getSpecialInt p . params)
 
 evaluateCodeTableRef :: (MonadState Config m, MonadError String m) => AST.CodeTableRef -> m Int
-evaluateCodeTableRef (AST.CodeTableRef _ n) =
+evaluateCodeTableRef (AST.CodeTableRef q n) =
     do
-    _ <- evaluateNumber n
-    undefined
+    idx <- chr <$> evaluateNumber n
+    let lookupFrom getMap =
+            gets getMap >>= (\m -> liftMaybe "err" $ HMap.lookup idx m)
+    case q of
+        T.CategoryCodeType       -> fromEnum <$> lookupFrom catCodeMap
+        T.MathCodeType           -> fromEnum <$> lookupFrom mathCodeMap
+        T.ChangeCaseCodeType dir -> fromEnum <$> lookupFrom (case dir of
+            Upward   -> uppercaseMap
+            Downward -> lowercaseMap)
+        T.SpaceFactorCodeType    -> fromEnum <$> lookupFrom spaceFactorMap
+        T.DelimiterCodeType      -> fromEnum <$> lookupFrom delimiterCodeMap
 
 evaluateFontCharRef :: (MonadState Config m, MonadError String m) => AST.FontCharRef -> m Int
 evaluateFontCharRef (AST.FontCharRef fChar fontRef) =
