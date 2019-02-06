@@ -205,3 +205,17 @@ updateCharCodeMap t c n =
   where
     insert = HMap.insert c
     liftMay f = liftMaybe ("Invalid target value for code type " ++ show t ++ ": " ++ show n) f
+
+-- Registers.
+
+setIntegerRegister :: MonadState Config m => EightBitInt -> IntVal -> m ()
+setIntegerRegister idx v =
+    modify (\c -> c{integerRegister=HMap.insert idx v $ integerRegister c})
+
+setLengthRegister :: MonadState Config m => EightBitInt -> LenVal -> m ()
+setLengthRegister idx v =
+    modify (\c -> c{lengthRegister=HMap.insert idx v $ lengthRegister c})
+
+setGlueRegister :: MonadState Config m => EightBitInt -> BL.Glue -> m ()
+setGlueRegister idx v =
+    modify (\c -> c{glueRegister=HMap.insert idx v $ glueRegister c})

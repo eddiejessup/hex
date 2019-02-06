@@ -173,7 +173,6 @@ data QuantVariable a
 type IntegerVariable = QuantVariable T.IntegerParameter
 type LengthVariable = QuantVariable T.LengthParameter
 type GlueVariable = QuantVariable T.GlueParameter
--- TODO: What does a MathGlue evaluate to? Maybe not a BreakList Glue.
 type MathGlueVariable = QuantVariable T.MathGlueParameter
 type TokenListVariable = QuantVariable T.TokenListParameter
 

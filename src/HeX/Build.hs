@@ -110,24 +110,24 @@ assignVariable
     => HP.VariableAssignment
     -> m ()
 assignVariable = \case
-    HP.IntegerVariableAssignment v n ->
+    HP.IntegerVariableAssignment v tgt ->
         do
-        en <- evaluateNumber n
+        eTgt <- evaluateNumber tgt
         case v of
-            (HP.ParamVar p)    -> setConfIntParam p en
-            (HP.RegisterVar _) -> error "int registers not implemented"
-    HP.LengthVariableAssignment v d ->
+            HP.ParamVar p       -> setConfIntParam p eTgt
+            HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setIntegerRegister i eTgt)
+    HP.LengthVariableAssignment v tgt ->
         do
-        ed <- evaluateLength d
+        eTgt <- evaluateLength tgt
         case v of
-            (HP.ParamVar p)    -> setConfLenParam p ed
-            (HP.RegisterVar _) -> error "length registers not implemented"
-    HP.GlueVariableAssignment v g ->
+            HP.ParamVar p       -> setConfLenParam p eTgt
+            HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setLengthRegister i eTgt)
+    HP.GlueVariableAssignment v tgt ->
         do
-        eg <- evaluateGlue g
+        eTgt <- evaluateGlue tgt
         case v of
-            (HP.ParamVar p)    -> setConfGlueParam p eg
-            (HP.RegisterVar _) -> error "glue registers not implemented"
+            HP.ParamVar p       -> setConfGlueParam p eTgt
+            HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setGlueRegister i eTgt)
     HP.MathGlueVariableAssignment _ _ ->
         error "math-glue assignment not implemented"
     HP.TokenListVariableAssignmentVar _ _ ->
