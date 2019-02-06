@@ -392,6 +392,11 @@ data PrimitiveToken
     | SpecialLengthTok SpecialLength -- \example: \pagestretch
     -- Tokens storing integers defined by short-hand definitions.
     | IntRefTok QuantityType IntVal
+    -- A char-cat pair defined by a 'let' assignment. This differs from a
+    -- \chardef target, because \chardef maps to a character number, which is
+    -- categorised at the time of use, while a \let maps to a static char-cat
+    -- pair.
+    | LetCharCat Lex.CharCat
     -- A control sequence representing a particular font, such as defined through
     -- \font.
     | FontRefToken IntVal

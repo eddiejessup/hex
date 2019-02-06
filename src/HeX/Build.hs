@@ -178,6 +178,17 @@ handleModeIndep = \case
                 (acc, newCSTok) <- case tgt of
                     HP.MacroTarget macro ->
                         pure ([], HP.SyntaxCommandHeadToken $ HP.MacroTok macro)
+                    -- TODO: If a \let target is an active character, should we
+                    -- treat it as a control sequence, or a char-cat pair?
+                    HP.LetTarget (Lex.CharCatToken cc) ->
+                        pure ([], HP.PrimitiveToken $ HP.LetCharCat cc)
+                    HP.LetTarget (Lex.ControlSequenceToken cs) ->
+                        do
+                        csMap <- gets HP.csMap
+                        resTok <- liftMaybe
+                            ("Unknown control sequence: " ++ show cs)
+                            $ HMap.lookup (Lex.ControlSequenceProper cs) csMap
+                        pure ([], resTok)
                     HP.ShortDefineTarget q n ->
                         do
                         en <- HP.runConfState $ evaluateNumber n
