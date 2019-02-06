@@ -3,6 +3,7 @@ module HeX.BreakList.Glue where
 import           HeXPrelude
 
 import qualified HeX.Unit                      as UN
+import           HeX.Type
 
 -- Flex.
 
@@ -25,6 +26,12 @@ instance Semigroup GlueFlex where
 
 instance Monoid GlueFlex where
     mempty = GlueFlex 0 0
+
+multiplyFlex :: GlueFlex -> IntVal -> GlueFlex
+multiplyFlex (GlueFlex f o) i = GlueFlex (f * (fromIntegral i)) o
+
+divFlex :: GlueFlex -> IntVal -> GlueFlex
+divFlex (GlueFlex f o) i = GlueFlex (f / (fromIntegral i)) o
 
 noFlex :: GlueFlex
 noFlex = mempty
@@ -55,6 +62,15 @@ instance Semigroup Glue where
 
 instance Monoid Glue where
     mempty = Glue 0 mempty mempty
+
+multiplyGlue :: Glue -> Int -> Glue
+multiplyGlue (Glue dim str shr) i =
+    Glue (dim * i) (multiplyFlex str i) (multiplyFlex shr i)
+
+-- \divide <glue> by 2’ halves all three components of <glue>.
+divGlue :: Glue -> Int -> Glue
+divGlue (Glue dim str shr) i =
+    Glue (dim * i) (divFlex str i) (divFlex shr i)
 
 negateGlue :: Glue -> Glue
 negateGlue (Glue d str shr) = Glue (-d) str shr

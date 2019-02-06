@@ -147,8 +147,8 @@ evaluateUnit = \case
     AST.PhysicalUnit AST.TrueFrame u -> pure $ Unit.inScaledPoint u
     AST.PhysicalUnit AST.MagnifiedFrame u ->
         do
-        _mag <- gets (mag . params)
-        eU <- evaluateUnit (AST.PhysicalUnit AST.TrueFrame u)
+        _mag <- gets $ mag . params
+        eU <- evaluateUnit $ AST.PhysicalUnit AST.TrueFrame u
         pure $ eU * 1000 / fromIntegral _mag
 
 evaluateInternalUnit :: (MonadState Config m, MonadError String m) => AST.InternalUnit -> m Rational

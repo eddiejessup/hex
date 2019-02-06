@@ -227,6 +227,35 @@ handleModeIndep = \case
                         do
                         newVarVal <- mappend <$> evaluateGlueVariable var <*> evaluateGlue plusVal
                         setGlueVariable var newVarVal
+                    -- Division of a positive integer by a positive integer
+                    -- discards the remainder, and the sign of the result
+                    -- changes if you change the sign of either operand.
+                    HP.ScaleVariable vDir numVar scaleVal ->
+                        do
+                        eScaleVal <- evaluateNumber scaleVal
+                        case numVar of
+                            HP.IntegerNumericVariable var ->
+                                do
+                                eVar <- evaluateIntegerVariable var
+                                let op = case vDir of
+                                        Upward -> (*)
+                                        Downward -> quot
+                                setIntegerVariable var $ op eVar eScaleVal
+                            HP.LengthNumericVariable var ->
+                                do
+                                eVar <- evaluateLengthVariable var
+                                let op = case vDir of
+                                        Upward -> (*)
+                                        Downward -> quot
+                                setLengthVariable var $ op eVar eScaleVal
+                            HP.GlueNumericVariable var ->
+                                do
+                                eVar <- evaluateGlueVariable var
+                                let op = case vDir of
+                                        Upward -> BL.multiplyGlue
+                                        Downward -> BL.divGlue
+                                setGlueVariable var $ op eVar eScaleVal
+                pure []
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
                 eIdx <- HP.runConfState $ evaluateNumber idx
