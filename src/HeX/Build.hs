@@ -105,39 +105,33 @@ spaceGlue =
         toFlex = toSP >>> fromIntegral >>> BL.finiteFlex
     pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
-assignVariable
+setIntegerVariable
     :: (MonadState Config m, MonadError String m)
-    => HP.VariableAssignment
-    -> m ()
-assignVariable = \case
-    HP.IntegerVariableAssignment v tgt ->
-        do
-        eTgt <- evaluateNumber tgt
-        case v of
-            HP.ParamVar p       -> setConfIntParam p eTgt
-            HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setIntegerRegister i eTgt)
-    HP.LengthVariableAssignment v tgt ->
-        do
-        eTgt <- evaluateLength tgt
-        case v of
-            HP.ParamVar p       -> setConfLenParam p eTgt
-            HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setLengthRegister i eTgt)
-    HP.GlueVariableAssignment v tgt ->
-        do
-        eTgt <- evaluateGlue tgt
-        case v of
-            HP.ParamVar p       -> setConfGlueParam p eTgt
-            HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setGlueRegister i eTgt)
-    HP.MathGlueVariableAssignment _ _ ->
-        error "math-glue assignment not implemented"
-    HP.TokenListVariableAssignment v tgt ->
-        do
-        eTgt <- case tgt of
-            HP.TokenListAssignmentVar tgtVar   -> evaluateTokenListVariable tgtVar
-            HP.TokenListAssignmentText tgtText -> pure tgtText
-        case v of
-            HP.ParamVar p       -> setConfTokenListParam p eTgt
-            HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setTokenListRegister i eTgt)
+    => HP.IntegerVariable -> IntVal -> m ()
+setIntegerVariable v tgt = case v of
+    HP.ParamVar p       -> setConfIntParam p tgt
+    HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setIntegerRegister i tgt)
+
+setLengthVariable
+    :: (MonadState Config m, MonadError String m)
+    => HP.LengthVariable -> LenVal -> m ()
+setLengthVariable v tgt = case v of
+    HP.ParamVar p       -> setConfLenParam p tgt
+    HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setLengthRegister i tgt)
+
+setGlueVariable
+    :: (MonadState Config m, MonadError String m)
+    => HP.GlueVariable -> BL.Glue -> m ()
+setGlueVariable v tgt = case v of
+    HP.ParamVar p       -> setConfGlueParam p tgt
+    HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setGlueRegister i tgt)
+
+setTokenListVariable
+    :: (MonadState Config m, MonadError String m)
+    => HP.TokenListVariable -> HP.BalancedText -> m ()
+setTokenListVariable v tgt = case v of
+    HP.ParamVar p       -> setConfTokenListParam p tgt
+    HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setTokenListRegister i tgt)
 
 showMsg :: Lex.Token -> [CharCode]
 showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Letter})) = [c]
@@ -148,8 +142,7 @@ showMsg (Lex.ControlSequenceToken (Lex.ControlSequence cs)) = "\\" ++ cs
 
 handleModeIndep
     :: (MonadState HP.ExpandedStream m, MonadIO m)
-    => HP.ModeIndependentCommand
-    -> ExceptT String m [BL.BreakableVListElem]
+    => HP.ModeIndependentCommand -> ExceptT String m [BL.BreakableVListElem]
 handleModeIndep = \case
     HP.Message HP.Out (HP.BalancedText txt) ->
         do
@@ -180,14 +173,14 @@ handleModeIndep = \case
                         pure ([], HP.SyntaxCommandHeadToken $ HP.MacroTok macro)
                     -- TODO: If a \let target is an active character, should we
                     -- treat it as a control sequence, or a char-cat pair?
-                    HP.LetTarget (Lex.CharCatToken cc) ->
-                        pure ([], HP.PrimitiveToken $ HP.LetCharCat cc)
-                    HP.LetTarget (Lex.ControlSequenceToken cs) ->
+                    HP.LetTarget (Lex.CharCatToken tgtCC) ->
+                        pure ([], HP.PrimitiveToken $ HP.LetCharCat tgtCC)
+                    HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                         do
                         csMap <- gets HP.csMap
                         resTok <- liftMaybe
-                            ("Unknown control sequence: " ++ show cs)
-                            $ HMap.lookup (Lex.ControlSequenceProper cs) csMap
+                            ("Unknown control sequence: " ++ show tgtCS)
+                            $ HMap.lookup (Lex.ControlSequenceProper tgtCS) csMap
                         pure ([], resTok)
                     HP.ShortDefineTarget q n ->
                         do
@@ -203,8 +196,37 @@ handleModeIndep = \case
                 pure acc
             HP.SetVariable ass ->
                 do
-                HP.runConfState $ assignVariable ass
+                HP.runConfState $ case ass of
+                    HP.IntegerVariableAssignment v tgt ->
+                        evaluateNumber tgt >>= setIntegerVariable v
+                    HP.LengthVariableAssignment v tgt  ->
+                        evaluateLength tgt >>= setLengthVariable v
+                    HP.GlueVariableAssignment v tgt    ->
+                        evaluateGlue tgt >>= setGlueVariable v
+                    HP.MathGlueVariableAssignment _ _  ->
+                        error "math-glue assignment not implemented"
+                    HP.TokenListVariableAssignment v tgt ->
+                        do
+                        eTgt <- case tgt of
+                            HP.TokenListAssignmentVar tgtVar   -> evaluateTokenListVariable tgtVar
+                            HP.TokenListAssignmentText tgtText -> pure tgtText
+                        setTokenListVariable v eTgt
                 pure []
+            HP.ModifyVariable modCommand ->
+                do
+                HP.runConfState $ case modCommand of
+                    HP.AdvanceIntegerVariable var plusVal ->
+                        do
+                        newVarVal <- (+) <$> evaluateIntegerVariable var <*> evaluateNumber plusVal
+                        setIntegerVariable var newVarVal
+                    HP.AdvanceLengthVariable var plusVal ->
+                        do
+                        newVarVal <- (+) <$> evaluateLengthVariable var <*> evaluateLength plusVal
+                        setLengthVariable var newVarVal
+                    HP.AdvanceGlueVariable var plusVal ->
+                        do
+                        newVarVal <- mappend <$> evaluateGlueVariable var <*> evaluateGlue plusVal
+                        setGlueVariable var newVarVal
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
                 eIdx <- HP.runConfState $ evaluateNumber idx
