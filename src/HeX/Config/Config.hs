@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 
 module HeX.Config.Config where
 
@@ -14,6 +15,7 @@ import           Control.Monad.Trans.Reader     ( ReaderT )
 import           Control.Monad.Except           ( MonadError
                                                 )
 
+import           Data.Hashable
 import qualified Data.HashMap.Strict           as HMap
 import qualified Data.Vector                   as V
 import           Data.Vector                    ( (!?) )
@@ -25,14 +27,16 @@ import qualified TFM
 import           TFM                            ( TexFont )
 
 import           HeXPrelude
-import           HeX.Concept
 import           HeX.Type
 import qualified HeX.Categorise                as Cat
+import qualified HeX.Lex                       as Lex
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.Parse.Token
 import           HeX.Config.Parameters
 import           HeX.Config.Codes
+
+type RegisterMap v = HMap.HashMap EightBitInt v
 
 data Config = Config
     { currentFontNr     :: Maybe Int
@@ -46,6 +50,13 @@ data Config = Config
     , uppercaseMap      :: Cat.CharCodeMap CaseChangeCode
     , spaceFactorMap    :: Cat.CharCodeMap SpaceFactorCode
     , delimiterCodeMap  :: Cat.CharCodeMap DelimiterCode
+    -- Registers.
+    , integerRegister   :: RegisterMap IntVal
+    , lengthRegister    :: RegisterMap LenVal
+    , glueRegister      :: RegisterMap BL.Glue
+    -- , mathGlueRegister  :: RegisterMap MathGlue
+    , tokenListRegister :: RegisterMap [Lex.Token]
+    -- , boxRegister       :: RegisterMap (Maybe Box)
     } deriving (Show)
 
 newConfig :: IO Config
@@ -64,7 +75,16 @@ newConfig =
         , uppercaseMap      = newUppercaseMap
         , spaceFactorMap    = newSpaceFactorMap
         , delimiterCodeMap  = newDelimiterCodeMap
+        , integerRegister   = HMap.empty
+        , lengthRegister    = HMap.empty
+        , glueRegister      = HMap.empty
+        -- , mathGlueRegister  = HMap.empty
+        , tokenListRegister = HMap.empty
+        -- , boxRegister       = HMap.empty
         }
+
+fillMap :: (Hashable k, Enum k, Bounded k, Eq k) => v -> HMap.HashMap k v
+fillMap v = HMap.fromList $ (, v) <$> [minBound..]
 
 type ConfStateT = StateT Config
 type ConfReaderT = ReaderT Config

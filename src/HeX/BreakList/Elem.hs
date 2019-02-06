@@ -4,7 +4,7 @@ module HeX.BreakList.Elem where
 
 import           Data.Adjacent
 
-import           HeX.Concept
+import           HeX.Type
 import           HeX.Box
 import           HeX.BreakList.Glue
 import           HeX.BreakList.BreakList        ( BreakableListElem(..), Penalty, BreakItem(..) )

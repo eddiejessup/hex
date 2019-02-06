@@ -43,14 +43,14 @@ newtype MacroArgument = MacroArgument [Lex.Token]
 nrExpressions :: (a -> Ordering) -> [a] -> Maybe (Int, Int)
 nrExpressions f = foldM next (0, 0)
   where
-    next v@(depth, nrExprs) (f -> cmp) =
+    next v@(dpth, nrExprs) (f -> cmp) =
         case cmp of
             EQ -> Just v
-            GT -> Just (succ depth, nrExprs)
+            GT -> Just (succ dpth, nrExprs)
             LT
-                | depth < 1  -> Nothing
-                | depth == 1 -> Just (pred depth, succ nrExprs)
-                | otherwise  -> Just (pred depth, nrExprs)
+                | dpth < 1  -> Nothing
+                | dpth == 1 -> Just (pred dpth, succ nrExprs)
+                | otherwise  -> Just (pred dpth, nrExprs)
 
 hasValidGrouping :: (a -> Ordering) -> [a] -> Bool
 hasValidGrouping f xs =

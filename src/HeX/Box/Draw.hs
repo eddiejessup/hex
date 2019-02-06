@@ -5,7 +5,7 @@ module HeX.Box.Draw where
 
 import qualified DVI.Document                  as D
 
-import           HeX.Concept
+import           HeX.Type
 import           HeX.Box.Elem
 
 ruleToDVI :: Axis -> Rule -> [D.Instruction]

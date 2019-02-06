@@ -34,7 +34,7 @@ import           TFM                            ( TexFont(..) )
 import qualified TFM.Character                 as TFMC
 
 import           HeXPrelude
-import           HeX.Concept
+import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.BreakList.Line             ( setParagraph )

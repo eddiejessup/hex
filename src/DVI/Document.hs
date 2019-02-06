@@ -7,7 +7,6 @@ import           Control.Monad
 import           Data.Char                      ( ord )
 import           Safe                           ( lastDef )
 
-import           HeX.Concept
 import           HeX.Type
 
 import           TFM

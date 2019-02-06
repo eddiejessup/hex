@@ -7,7 +7,7 @@ import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
 import           Data.Functor                   ( ($>) )
 
-import           HeX.Concept
+import           HeX.Type
 import qualified HeX.Lex                       as Lex
 
 import           HeX.Parse.Helpers

@@ -15,7 +15,7 @@ import qualified Data.HashMap.Strict           as HMap
 import qualified TFM
 
 import           HeXPrelude
-import           HeX.Concept
+import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.Categorise                 ( CharCode )
@@ -55,13 +55,21 @@ evaluateInternalInteger = \case
     AST.InputLineNr               -> undefined
     AST.Badness                   -> undefined
 
+evaluateEightBitInt :: (MonadState Config m,  MonadError String m) => AST.Number -> m EightBitInt
+evaluateEightBitInt n = evaluateNumber n >>= (\i -> liftMaybe ("Number not in range: " ++ show i) $ newEightBitInt i)
+
+getRegisterIdx
+    :: (MonadState Config m, MonadError String m)
+    => AST.Number
+    -> a
+    -> (Config -> HMap.HashMap EightBitInt a)
+    -> m a
+getRegisterIdx n z f = HMap.lookupDefault z <$> evaluateEightBitInt n <*> gets f
+
 evaluateIntegerVariable :: (MonadState Config m, MonadError String m) => AST.IntegerVariable -> m Int
 evaluateIntegerVariable = \case
     AST.ParamVar p -> gets (getIntParam p . params)
-    AST.RegisterVar n ->
-        do
-        _ <- evaluateNumber n
-        undefined
+    AST.RegisterVar n -> getRegisterIdx n 0 integerRegister
 
 evaluateSpecialInteger :: (MonadState Config m, MonadError String m) => T.SpecialInteger -> m Int
 evaluateSpecialInteger p = gets (getSpecialInt p . params)
@@ -162,10 +170,7 @@ evaluateInternalLength = \case
 evaluateLengthVariable :: (MonadState Config m, MonadError String m) => AST.LengthVariable -> m Int
 evaluateLengthVariable = \case
     AST.ParamVar p -> gets (getLenParam p . params)
-    AST.RegisterVar n ->
-        do
-        _ <- evaluateNumber n
-        undefined
+    AST.RegisterVar n -> getRegisterIdx n 0 lengthRegister
 
 evaluateSpecialLength :: (MonadState Config m, MonadError String m) => T.SpecialLength -> m Int
 evaluateSpecialLength p = gets (getSpecialLen p . params)
@@ -219,10 +224,7 @@ evaluateInternalGlue = \case
 evaluateGlueVariable :: (MonadState Config m, MonadError String m) => AST.GlueVariable -> m BL.Glue
 evaluateGlueVariable = \case
     AST.ParamVar p -> gets (getGlueParam p . params)
-    AST.RegisterVar n ->
-        do
-        _ <- evaluateNumber n
-        undefined
+    AST.RegisterVar n -> getRegisterIdx n mempty glueRegister
 
 -- Other.
 

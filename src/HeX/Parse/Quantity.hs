@@ -10,7 +10,6 @@ import           Data.Functor                   ( ($>) )
 
 import qualified Text.Megaparsec               as P
 
-import           HeX.Concept
 import           HeX.Type
 import qualified HeX.Lex                       as Lex
 import           HeX.Unit                       ( PhysicalUnit(..) )

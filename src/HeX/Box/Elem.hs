@@ -14,7 +14,6 @@ import           Safe.Foldable                  ( maximumDef )
 
 import           HeXPrelude
 import           HeX.Type
-import           HeX.Concept
 import qualified HeX.Unit                      as Unit
 
 import           DVI.Document                   ( FontDefinition(..)

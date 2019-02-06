@@ -10,7 +10,7 @@ import           System.FilePath                ( splitFileName )
 
 import           Data.Byte
 
-import           HeX.Concept
+import           HeX.Type
 
 import           DVI.Encode
 import           DVI.Operation

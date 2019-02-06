@@ -7,7 +7,6 @@ import           Path                           ( File
                                                 , Rel
                                                 )
 
-import           HeX.Concept
 import           HeX.Type
 import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
