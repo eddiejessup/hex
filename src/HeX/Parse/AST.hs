@@ -256,12 +256,17 @@ data AssignmentBody
     -- -- Global assignments.
     | SetFontDimension FontDimensionRef Length
     | SetFontChar FontCharRef Number
-    | SetHyphenation BalancedText
-    | SetHyphenationPatterns BalancedText
+    | SetHyphenation T.BalancedText
+    | SetHyphenationPatterns T.BalancedText
     | SetBoxDimension BoxDimensionRef Length
     | SetInteractionMode T.InteractionMode
     | SetSpecialInteger T.SpecialInteger Number
     | SetSpecialLength T.SpecialLength Length
+    deriving (Show)
+
+data TokenListAssignmentTarget
+    = TokenListAssignmentVar TokenListVariable
+    | TokenListAssignmentText T.BalancedText
     deriving (Show)
 
 data VariableAssignment
@@ -269,8 +274,7 @@ data VariableAssignment
     | LengthVariableAssignment LengthVariable Length
     | GlueVariableAssignment GlueVariable Glue
     | MathGlueVariableAssignment MathGlueVariable MathGlue
-    | TokenListVariableAssignmentVar TokenListVariable TokenListVariable
-    | TokenListVariableAssignmentText TokenListVariable BalancedText
+    | TokenListVariableAssignment TokenListVariable TokenListAssignmentTarget
     deriving (Show)
 
 data VariableModification
@@ -343,7 +347,7 @@ data AllModesCommand
     | ShipOut Box
     | SetAfterAssignmentToken Lex.Token
     | AddToAfterGroupTokens Lex.Token
-    | AddMark BalancedText
+    | AddMark T.BalancedText
     -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
     -- -- then can 'migrate' out.
     -- \| AddInsertion Number VModeMaterial
@@ -368,10 +372,10 @@ data ModeIndependentCommand
     | AddMathKern MathLength
     | RemoveItem T.RemovableItem
     | AddGlue Glue
-    | Message T.MessageStream BalancedText
+    | Message T.MessageStream T.BalancedText
     | ModifyFileStream FileStreamType FileStreamAction Number
-    | WriteToStream Number BalancedText WritePolicy
-    | DoSpecial BalancedText
+    | WriteToStream Number T.BalancedText WritePolicy
+    | DoSpecial T.BalancedText
     deriving (Show)
 
 data VModeCommand
@@ -387,7 +391,7 @@ data HModeCommand
     | AddCharacter CharCodeRef
     | AddAccentedCharacter Number [Assignment] (Maybe CharCodeRef)
     | AddItalicCorrection
-    | AddDiscretionaryText { preBreak, postBreak, noBreak :: BalancedText }
+    | AddDiscretionaryText { preBreak, postBreak, noBreak :: T.BalancedText }
     | AddDiscretionaryHyphen
     | EnterMathMode
     | LeaveHMode
@@ -397,9 +401,6 @@ data WritePolicy
     = Immediate
     | Deferred
     deriving (Show)
-
-newtype BalancedText = BalancedText [Lex.Token]
-    deriving (Show, Eq)
 
 data Rule = Rule
     { width, height, depth :: Maybe Length }

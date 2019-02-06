@@ -74,6 +74,9 @@ skipSatisfiedEqualsLex lt = skipSatisfiedEquals (T.UnexpandedTok lt)
 skipSatisfiedLexChunk :: (P.Stream s, P.Token s ~ PrimitiveToken) => [Lex.Token] -> NullSimpParser s
 skipSatisfiedLexChunk ts = skipSatisfiedChunk (T.UnexpandedTok <$> ts)
 
+skipBalancedText :: (P.Stream s, P.Token s ~ PrimitiveToken) => T.BalancedText -> NullSimpParser s
+skipBalancedText (T.BalancedText toks) = skipSatisfiedLexChunk toks
+
 liftLexPred :: (Lex.Token -> Bool) -> PrimitiveToken -> Bool
 liftLexPred f (T.UnexpandedTok lt) = f lt
 liftLexPred _ _ = False

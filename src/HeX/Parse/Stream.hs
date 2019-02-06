@@ -29,7 +29,6 @@ import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import qualified HeX.Config                    as Conf
 import           HeX.Parse.Helpers
-import           HeX.Parse.AST
 import           HeX.Parse.Token
 import           HeX.Parse.Common
 import           HeX.Parse.Inhibited
@@ -117,7 +116,7 @@ parseCharLike = parseInhibited unsafeParseCharLike
 parseCSName :: SimpExpandParser Lex.ControlSequenceLike
 parseCSName = parseInhibited unsafeParseCSName
 
-parseParamText :: SimpExpandParser ([Lex.Token], MacroParameters)
+parseParamText :: SimpExpandParser (BalancedText, MacroParameters)
 parseParamText = parseInhibited unsafeParseParamText
 
 parseMacroText :: SimpExpandParser MacroText

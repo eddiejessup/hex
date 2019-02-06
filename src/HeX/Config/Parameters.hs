@@ -3,7 +3,6 @@
 module HeX.Config.Parameters where
 
 import           HeX.Type
-import qualified HeX.Lex                       as Lex
 import           HeX.BreakList                  ( Glue(..), noFlex )
 import qualified HeX.Unit                      as Unit
 import           HeX.Parse.Token
@@ -20,7 +19,7 @@ newtype GlueParamVal a = GlueParamVal {unGlueParam :: Glue}
 newtype MathGlueParamVal a = MathGlueParamVal {unMathGlueParam :: Glue}
     deriving (Show)
 
-newtype TokenListParamVal a = TokenListParamVal {unTokenListParam :: [Lex.Token]}
+newtype TokenListParamVal a = TokenListParamVal {unTokenListParam :: BalancedText}
     deriving (Show)
 
 data PreTolerance
@@ -627,8 +626,33 @@ setGlueParam p v c =
 -- setMathGlueParam :: MathGlueParameter -> MathGlue -> ParamConfig -> ParamConfig
 -- setMathGlueParam p v c = let vp = MathGlueParamVal v in case p of
 
--- setTokenListParam :: TokenListParameter -> [Token] -> ParamConfig -> ParamConfig
--- setTokenListParam p v c = let vp = TokenListParamVal v in case p of
+getTokenListParam :: TokenListParameter -> ParamConfig -> BalancedText
+getTokenListParam p c = f c
+  where
+    f = case p of
+        Output       -> unTokenListParam . output
+        EveryPar     -> unTokenListParam . everyPar
+        EveryMath    -> unTokenListParam . everyMath
+        EveryDisplay -> unTokenListParam . everyDisplay
+        EveryHBox    -> unTokenListParam . everyHBox
+        EveryVBox    -> unTokenListParam . everyVBox
+        EveryJob     -> unTokenListParam . everyJob
+        EveryCR      -> unTokenListParam . everyCR
+        ErrHelp      -> unTokenListParam . errHelp
+
+setTokenListParam :: TokenListParameter -> BalancedText -> ParamConfig -> ParamConfig
+setTokenListParam p v c =
+    let vp = TokenListParamVal v
+    in case p of
+        Output       -> c{output=vp}
+        EveryPar     -> c{everyPar=vp}
+        EveryMath    -> c{everyMath=vp}
+        EveryDisplay -> c{everyDisplay=vp}
+        EveryHBox    -> c{everyHBox=vp}
+        EveryVBox    -> c{everyVBox=vp}
+        EveryJob     -> c{everyJob=vp}
+        EveryCR      -> c{everyCR=vp}
+        ErrHelp      -> c{errHelp=vp}
 
 getSpecialInt :: SpecialInteger -> ParamConfig -> IntVal
 getSpecialInt p c = f c

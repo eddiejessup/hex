@@ -19,7 +19,6 @@ import           Data.Maybe                     ( fromMaybe )
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Helpers
-import           HeX.Parse.AST
 import           HeX.Parse.Token
 import           HeX.Parse.Common
 
@@ -68,12 +67,12 @@ splitLastMay xs =
 unsafeParseMacroArgs :: (P.Stream s, P.Token s ~ PrimitiveToken) => MacroContents -> SimpParser s (Map.Map Digit MacroArgument)
 unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
     do
-    skipSatisfiedLexChunk pre
+    skipBalancedText pre
     parseArgs params
   where
     parseArgs
         :: (P.Stream s, P.Token s ~ PrimitiveToken)
-        => Map.Map Digit [Lex.Token]
+        => MacroParameters
         -> SimpParser s (Map.Map Digit MacroArgument)
     parseArgs ps =
         case Map.minViewWithKey ps of
@@ -82,8 +81,8 @@ unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
             Just ((dig, p), rest) ->
                 do
                 argRaw <- case p of
-                  [] -> parseUndelimitedArgs
-                  delims -> parseDelimitedArgs [] delims
+                    BalancedText [] -> parseUndelimitedArgs
+                    BalancedText delims -> parseDelimitedArgs [] delims
                 -- If the argument has the form ‘{⟨nested tokens⟩}’, where ⟨nested
                 -- tokens⟩ stands for any properly nested token sequence, the outermost
                 -- braces are removed.
@@ -170,12 +169,14 @@ unsafeAnySingleLex = satisfyThen tokToLex
 
 parseParamDelims
     :: (P.Stream s, P.Token s ~ PrimitiveToken)
-    => SimpParser s [Lex.Token]
-parseParamDelims = manySatisfiedThen (\t -> tokToDelimTok t)
+    => SimpParser s BalancedText
+-- Trivially balanced, because no braces are allowed at all.
+parseParamDelims = BalancedText <$> manySatisfiedThen (\t -> tokToDelimTok t)
   where
     tokToDelimTok (UnexpandedTok lt)
         | lexTokHasCategory Lex.Parameter lt  = Nothing
         | lexTokHasCategory Lex.BeginGroup lt = Nothing
+        | lexTokHasCategory Lex.EndGroup lt   = Nothing
         | otherwise                           = Just lt
     tokToDelimTok _                           = Nothing
 
@@ -212,7 +213,7 @@ maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
 
 unsafeParseParamText
     :: (P.Stream s, P.Token s ~ PrimitiveToken)
-    => SimpParser s ([Lex.Token], MacroParameters)
+    => SimpParser s (BalancedText, MacroParameters)
 unsafeParseParamText =
     do
     -- Pre-parameter text tokens.

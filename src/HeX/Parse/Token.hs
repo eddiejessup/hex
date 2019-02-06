@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module HeX.Parse.Token where
 
 import qualified Data.Map.Strict               as Map
@@ -298,8 +300,11 @@ charToDigit '8' = Just Eight
 charToDigit '9' = Just Nine
 charToDigit _   = Nothing
 
+newtype BalancedText = BalancedText [Lex.Token]
+    deriving (Show, Eq, Semigroup, Monoid)
+
 -- We use a map to restrict our parameter keys' domain to [1..9].
-type MacroParameters = Map.Map Digit [Lex.Token]
+type MacroParameters = Map.Map Digit BalancedText
 
 -- A token in a macro template.
 -- TODO: Technically, we could narrow the domain of a MacroTextLexToken,
@@ -317,7 +322,7 @@ newtype MacroText = MacroText [MacroTextToken]
 
 data MacroContents = MacroContents
     { -- Tokens to expect before the first argument.
-      preParamTokens :: [Lex.Token]
+      preParamTokens :: BalancedText
     , parameters :: MacroParameters
     , replacementTokens :: MacroText
     , long, outer :: Bool

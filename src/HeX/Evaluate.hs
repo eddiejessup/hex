@@ -223,8 +223,15 @@ evaluateInternalGlue = \case
 
 evaluateGlueVariable :: (MonadState Config m, MonadError String m) => AST.GlueVariable -> m BL.Glue
 evaluateGlueVariable = \case
-    AST.ParamVar p -> gets (getGlueParam p . params)
+    AST.ParamVar p    -> gets (getGlueParam p . params)
     AST.RegisterVar n -> getRegisterIdx n mempty glueRegister
+
+-- Token list.
+
+evaluateTokenListVariable :: (MonadState Config m, MonadError String m) => AST.TokenListVariable -> m T.BalancedText
+evaluateTokenListVariable = \case
+    AST.ParamVar p    -> gets (getTokenListParam p . params)
+    AST.RegisterVar n -> getRegisterIdx n mempty tokenListRegister
 
 -- Other.
 

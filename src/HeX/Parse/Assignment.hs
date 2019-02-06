@@ -126,8 +126,8 @@ glueVarValPair = (parseGlueVariable, parseGlue)
 mathGlueVarValPair :: (SimpExpandParser MathGlueVariable, SimpExpandParser MathGlue)
 mathGlueVarValPair = (parseMathGlueVariable, parseMathGlue)
 
-tokenListVarValPair :: (SimpExpandParser TokenListVariable, SimpExpandParser BalancedText)
-tokenListVarValPair = (parseTokenListVariable, parseGeneralText)
+tokenListVarValPair :: (SimpExpandParser TokenListVariable, SimpExpandParser TokenListAssignmentTarget)
+tokenListVarValPair = (parseTokenListVariable, TokenListAssignmentText <$> parseGeneralText)
 
 parseVarEqVal :: (SimpExpandParser a, SimpExpandParser b)
               -> (a -> b -> c)
@@ -141,8 +141,8 @@ parseVariableAssignment =
              , parseVarEqVal lenVarValPair LengthVariableAssignment
              , parseVarEqVal glueVarValPair GlueVariableAssignment
              , parseVarEqVal mathGlueVarValPair MathGlueVariableAssignment
-             , parseVarEqVal tokenListVarValPair TokenListVariableAssignmentText
-             , TokenListVariableAssignmentVar <$> parseTokenListVariable <* skipFiller <*> parseTokenListVariable
+             , parseVarEqVal tokenListVarValPair TokenListVariableAssignment
+             , TokenListVariableAssignment <$> parseTokenListVariable <* skipFiller <*> (TokenListAssignmentVar <$> parseTokenListVariable)
              ]
 
 parseVariableModification :: SimpExpandParser VariableModification

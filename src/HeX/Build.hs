@@ -130,10 +130,14 @@ assignVariable = \case
             HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setGlueRegister i eTgt)
     HP.MathGlueVariableAssignment _ _ ->
         error "math-glue assignment not implemented"
-    HP.TokenListVariableAssignmentVar _ _ ->
-        error "token-list-to-variable assignment not implemented"
-    HP.TokenListVariableAssignmentText _ _ ->
-        error "token-list-to-text assignment not implemented"
+    HP.TokenListVariableAssignment v tgt ->
+        do
+        eTgt <- case tgt of
+            HP.TokenListAssignmentVar tgtVar   -> evaluateTokenListVariable tgtVar
+            HP.TokenListAssignmentText tgtText -> pure tgtText
+        case v of
+            HP.ParamVar p       -> setConfTokenListParam p eTgt
+            HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setTokenListRegister i eTgt)
 
 showMsg :: Lex.Token -> [CharCode]
 showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Letter})) = [c]

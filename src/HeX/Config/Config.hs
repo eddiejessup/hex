@@ -29,7 +29,6 @@ import           TFM                            ( TexFont )
 import           HeXPrelude
 import           HeX.Type
 import qualified HeX.Categorise                as Cat
-import qualified HeX.Lex                       as Lex
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.Parse.Token
@@ -55,7 +54,7 @@ data Config = Config
     , lengthRegister    :: RegisterMap LenVal
     , glueRegister      :: RegisterMap BL.Glue
     -- , mathGlueRegister  :: RegisterMap MathGlue
-    , tokenListRegister :: RegisterMap [Lex.Token]
+    , tokenListRegister :: RegisterMap BalancedText
     -- , boxRegister       :: RegisterMap (Maybe Box)
     } deriving (Show)
 
@@ -154,8 +153,8 @@ setConfGlueParam = liftSetParam setGlueParam
 -- setConfMathGlueParam :: MonadState Config m => MathGlueParameter -> BL.MathGlue -> m ()
 -- setConfMathGlueParam = liftSetParam setMathGlueParam
 
--- setConfTokenListParam :: MonadState Config m => TokenListParameter -> [Token] -> m ()
--- setConfTokenListParam = liftSetParam setTokenListParam
+setConfTokenListParam :: MonadState Config m => TokenListParameter -> BalancedText -> m ()
+setConfTokenListParam = liftSetParam setTokenListParam
 
 setConfSpecialInt :: MonadState Config m => SpecialInteger -> IntVal -> m ()
 setConfSpecialInt = liftSetParam setSpecialInt
@@ -219,3 +218,7 @@ setLengthRegister idx v =
 setGlueRegister :: MonadState Config m => EightBitInt -> BL.Glue -> m ()
 setGlueRegister idx v =
     modify (\c -> c{glueRegister=HMap.insert idx v $ glueRegister c})
+
+setTokenListRegister :: MonadState Config m => EightBitInt -> BalancedText -> m ()
+setTokenListRegister idx v =
+    modify (\c -> c{tokenListRegister=HMap.insert idx v $ tokenListRegister c})
