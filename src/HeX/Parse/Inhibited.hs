@@ -18,9 +18,30 @@ import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
 
 import qualified HeX.Lex                       as Lex
+import           HeX.Config                     ( Config )
 import           HeX.Parse.Helpers
+import           HeX.Parse.Resolve
 import           HeX.Parse.Token
 import           HeX.Parse.Common
+
+class (P.Stream s, Show s) => Inhibitable s where
+    setExpansion :: Ord e => ExpansionMode -> P.Parsec e s ()
+
+    getConfig :: s -> Config
+
+    insertLexToken :: s -> Lex.Token -> s
+
+inhibitExpansion, enableExpansion :: Ord e => Inhibitable s => P.Parsec e s ()
+inhibitExpansion = setExpansion NotExpanding
+enableExpansion  = setExpansion Expanding
+
+parseInhibited :: Inhibitable s => SimpParser s a -> SimpParser s a
+parseInhibited p =
+    do
+    inhibitExpansion
+    v <- p
+    enableExpansion
+    pure v
 
 -- Cases where expansion is inhibited:
 -- 1.  While deleting tokens during error recovery
@@ -310,3 +331,39 @@ unsafeParseCharLike = ord <$> handleLex tokToCharLike
     tokToCharLike (Lex.CharCatToken Lex.CharCat{char = c}) = Just c
     tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence [c])) = Just c
     tokToCharLike _ = Nothing
+
+-- Interface.
+
+parseBalancedText :: (Inhibitable s, P.Token s ~ PrimitiveToken) => TerminusPolicy -> SimpParser s BalancedText
+parseBalancedText = parseInhibited . unsafeParseBalancedText
+
+parseMacroArgs :: (Inhibitable s, P.Token s ~ PrimitiveToken) => MacroContents -> SimpParser s (Map.Map Digit MacroArgument)
+parseMacroArgs = parseInhibited . unsafeParseMacroArgs
+
+parseCharLike :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s Int
+parseCharLike = parseInhibited unsafeParseCharLike
+
+parseCSName :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s Lex.ControlSequenceLike
+parseCSName = parseInhibited unsafeParseCSName
+
+parseParamText :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s (BalancedText, MacroParameters)
+parseParamText = parseInhibited unsafeParseParamText
+
+parseMacroText :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s MacroText
+parseMacroText = parseInhibited unsafeParseMacroText
+
+parseToken :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s Lex.Token
+parseToken = parseInhibited unsafeAnySingleLex
+
+-- Derived related parsers.
+
+skipFiller :: (Inhibitable s, P.Token s ~ PrimitiveToken) => NullSimpParser s
+skipFiller = skipManySatisfied isFillerItem
+
+parseGeneralText :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s BalancedText
+parseGeneralText =
+    do
+    skipFiller
+    -- TODO: Maybe other things can act as left braces.
+    skipSatisfied $ primTokHasCategory Lex.BeginGroup
+    parseBalancedText Discard

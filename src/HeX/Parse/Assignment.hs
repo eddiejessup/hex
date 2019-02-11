@@ -1,12 +1,13 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Assignment where
 
 import           Control.Monad                  ( when )
 import           Control.Monad.Except           ( runExceptT )
-import           Control.Monad.State.Lazy       ( runStateT
+import           Control.Monad.Reader           ( runReaderT
                                                 )
 import           Data.Functor                   ( ($>) )
 import qualified Data.Set                      as Set
@@ -26,19 +27,17 @@ import           HeX.Evaluate                   ( evaluateNumber )
 import           HeX.Parse.Helpers
 import           HeX.Parse.AST
 import           HeX.Parse.Common
+import           HeX.Parse.Inhibited
 import           HeX.Parse.Quantity
-import           HeX.Parse.Stream
 import qualified HeX.Parse.Token               as T
 
-type AssignmentParser = SimpExpandParser Assignment
-
-parseAssignment :: AssignmentParser
+parseAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Assignment
 -- 'Try' because both can start with 'global'.
 parseAssignment = (P.try parseDefineMacro) <|> parseNonMacroAssignment
 
 -- Parse Macro.
 
-parseDefineMacro :: AssignmentParser
+parseDefineMacro :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Assignment
 parseDefineMacro =
     do
     -- Macro prefixes.
@@ -74,7 +73,7 @@ parseDefineMacro =
     tokToDef (T.DefineMacroTok _global expand) = Just (_global, expand)
     tokToDef _ = Nothing
 
-parseNonMacroAssignment :: AssignmentParser
+parseNonMacroAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Assignment
 parseNonMacroAssignment =
     do
     _global <- parseGlobal
@@ -114,28 +113,28 @@ parseNonMacroAssignment =
     tokToInteractionMode (T.InteractionModeTok m) = Just m
     tokToInteractionMode _                        = Nothing
 
-numVarValPair :: (SimpExpandParser IntegerVariable, SimpExpandParser Number)
+numVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s IntegerVariable, SimpParser s Number)
 numVarValPair = (parseIntegerVariable, parseNumber)
 
-lenVarValPair :: (SimpExpandParser LengthVariable, SimpExpandParser Length)
+lenVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s LengthVariable, SimpParser s Length)
 lenVarValPair = (parseLengthVariable, parseLength)
 
-glueVarValPair :: (SimpExpandParser GlueVariable, SimpExpandParser Glue)
+glueVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s GlueVariable, SimpParser s Glue)
 glueVarValPair = (parseGlueVariable, parseGlue)
 
-mathGlueVarValPair :: (SimpExpandParser MathGlueVariable, SimpExpandParser MathGlue)
+mathGlueVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s MathGlueVariable, SimpParser s MathGlue)
 mathGlueVarValPair = (parseMathGlueVariable, parseMathGlue)
 
-tokenListVarValPair :: (SimpExpandParser TokenListVariable, SimpExpandParser TokenListAssignmentTarget)
+tokenListVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s TokenListVariable, SimpParser s TokenListAssignmentTarget)
 tokenListVarValPair = (parseTokenListVariable, TokenListAssignmentText <$> parseGeneralText)
 
-parseVarEqVal :: (SimpExpandParser a, SimpExpandParser b)
+parseVarEqVal :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s a, SimpParser s b)
               -> (a -> b -> c)
-              -> SimpExpandParser c
+              -> SimpParser s c
 parseVarEqVal (varParser, valParser) f =
     f <$> varParser <* skipOptionalEquals <*> valParser
 
-parseVariableAssignment :: SimpExpandParser VariableAssignment
+parseVariableAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s VariableAssignment
 parseVariableAssignment =
     P.choice [ parseVarEqVal numVarValPair IntegerVariableAssignment
              , parseVarEqVal lenVarValPair LengthVariableAssignment
@@ -145,7 +144,7 @@ parseVariableAssignment =
              , TokenListVariableAssignment <$> parseTokenListVariable <* skipFiller <*> (TokenListAssignmentVar <$> parseTokenListVariable)
              ]
 
-parseVariableModification :: SimpExpandParser VariableModification
+parseVariableModification :: forall s. (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s VariableModification
 parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceIntegerVariable
                                      , parseAdvanceVar lenVarValPair AdvanceLengthVariable
                                      , parseAdvanceVar glueVarValPair AdvanceGlueVariable
@@ -153,7 +152,7 @@ parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceInte
                                      , parseScaleVar
                                      ]
   where
-    parseAdvanceVar :: (SimpExpandParser a, SimpExpandParser b) -> (a -> b -> VariableModification) -> SimpExpandParser VariableModification
+    parseAdvanceVar :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s a, SimpParser s b) -> (a -> b -> VariableModification) -> SimpParser s VariableModification
     parseAdvanceVar (varParser, valParser) f =
         do
         skipSatisfiedEquals T.AdvanceVarTok
@@ -178,18 +177,18 @@ parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceInte
                                     , MathGlueNumericVariable <$> parseMathGlueVariable
                                     ]
 
-parseCodeAssignment :: SimpExpandParser CodeAssignment
+parseCodeAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s CodeAssignment
 parseCodeAssignment =
     parseVarEqVal (parseCodeTableRef, parseNumber) CodeAssignment
 
-parseLet :: SimpExpandParser AssignmentBody
+parseLet :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseLet =
     do
     skipSatisfiedEquals T.LetTok
     (cs, tok) <- parseVarEqVal (parseCSName, skipOneOptionalSpace >> parseToken) (,)
     pure $ DefineControlSequence cs (LetTarget tok)
 
-parseFutureLet :: SimpExpandParser AssignmentBody
+parseFutureLet :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseFutureLet =
     do
     skipSatisfiedEquals T.FutureLetTok
@@ -198,7 +197,7 @@ parseFutureLet =
     tok2 <- parseToken
     pure $ DefineControlSequence cs (FutureLetTarget tok1 tok2)
 
-parseShortMacroAssignment :: SimpExpandParser AssignmentBody
+parseShortMacroAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseShortMacroAssignment =
     do
     quant <- satisfyThen (\case
@@ -207,11 +206,11 @@ parseShortMacroAssignment =
     (cs, n) <- parseVarEqVal (parseCSName, parseNumber) (,)
     pure $ DefineControlSequence cs (ShortDefineTarget quant n)
 
-parseSetFamilyMember :: SimpExpandParser AssignmentBody
+parseSetFamilyMember :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseSetFamilyMember =
     parseVarEqVal (parseFamilyMember, parseFontRef) SetFamilyMember
 
-parseSetParShape :: SimpExpandParser AssignmentBody
+parseSetParShape :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseSetParShape =
     do
     skipSatisfiedEquals T.ParagraphShapeTok
@@ -221,17 +220,16 @@ parseSetParShape =
     -- consecutive occurrences of ⟨dimen⟩
     nrPairs <- parseNumber
     stream <- P.stateInput <$> P.getParserState
-    (eNrPairs, conf') <-
-        runExceptT (runStateT (evaluateNumber nrPairs) (config stream))
+    eNrPairs <-
+        runExceptT (runReaderT (evaluateNumber nrPairs) (getConfig stream))
             >>= \case
                 Left _ -> P.failure Nothing Set.empty
                 Right v -> pure v
-    P.updateParserState (\state -> state{P.stateInput=stream{config=conf'}})
     SetParShape <$> P.count eNrPairs parseLengthPair
   where
     parseLengthPair = (,) <$> parseLength <*> parseLength
 
-parseReadToControlSequence :: SimpExpandParser AssignmentBody
+parseReadToControlSequence :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseReadToControlSequence =
     do
     skipSatisfiedEquals T.ReadTok
@@ -241,14 +239,14 @@ parseReadToControlSequence =
     cs <- parseCSName
     pure $ DefineControlSequence cs (ReadTarget nr)
 
-parseSetBoxRegister :: SimpExpandParser AssignmentBody
+parseSetBoxRegister :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseSetBoxRegister =
     do
     skipSatisfiedEquals T.SetBoxRegisterTok
     parseVarEqVal (parseNumber, skipFiller >> parseBox) SetBoxRegister
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-parseFileName :: SimpExpandParser (Path Rel File)
+parseFileName :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s (Path Rel File)
 parseFileName =
     do
     skipOptionalSpaces
@@ -280,7 +278,7 @@ parseFileName =
     tokToPathChar _ = Nothing
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
-parseNewFontAssignment :: SimpExpandParser AssignmentBody
+parseNewFontAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseNewFontAssignment =
     do
     skipSatisfiedEquals T.FontTok
@@ -297,22 +295,22 @@ parseNewFontAssignment =
     parseFontSpecAt = skipKeyword "at" >> (FontAt <$> parseLength)
     parseFontSpecScaled = skipKeyword "scaled" >> (FontScaled <$> parseNumber)
 
-parseSetFontDimension :: SimpExpandParser AssignmentBody
+parseSetFontDimension :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseSetFontDimension =
     parseVarEqVal (parseFontDimensionRef, parseLength) SetFontDimension
 
-parseSetFontChar :: SimpExpandParser AssignmentBody
+parseSetFontChar :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseSetFontChar =
     parseVarEqVal (parseFontCharRef, parseNumber) SetFontChar
 
-parseSetBoxDimension :: SimpExpandParser AssignmentBody
+parseSetBoxDimension :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseSetBoxDimension =
     parseVarEqVal (parseBoxDimensionRef, parseLength) SetBoxDimension
 
-parseSetSpecialInteger :: SimpExpandParser AssignmentBody
+parseSetSpecialInteger :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseSetSpecialInteger =
     parseVarEqVal (parseSpecialInteger, parseNumber) SetSpecialInteger
 
-parseSetSpecialLength :: SimpExpandParser AssignmentBody
+parseSetSpecialLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
 parseSetSpecialLength =
     parseVarEqVal (parseSpecialLength, parseLength) SetSpecialLength

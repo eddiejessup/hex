@@ -1,5 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Command where
 
@@ -15,31 +16,31 @@ import           HeX.Parse.AST
 import qualified HeX.Parse.Token               as T
 import           HeX.Parse.Common
 import           HeX.Parse.Quantity
-import           HeX.Parse.Stream
+import           HeX.Parse.Inhibited
 import           HeX.Parse.Assignment
 
 -- Entry-points.
 
-type ExtractResult c = Either (ParseErrorBundle ExpandedStream) (P.State ExpandedStream, c)
+type ExtractResult s c = Either (ParseErrorBundle s) (P.State s, c)
 
-extractResult :: SimpExpandParser c -> ExpandedStream -> ExtractResult c
+extractResult :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s c -> s -> ExtractResult s c
 extractResult p stream =
     do
     let (state, eCom) = easyRunParser p stream
     com <- eCom
     pure (state, com)
 
-extractHModeCommand :: ExpandedStream -> ExtractResult HModeCommand
+extractHModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => s -> ExtractResult s HModeCommand
 extractHModeCommand = extractResult parseHModeCommand
 
-extractVModeCommand :: ExpandedStream -> ExtractResult VModeCommand
+extractVModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => s -> ExtractResult s VModeCommand
 extractVModeCommand = extractResult parseVModeCommand
 
 -- Parse.
 
 -- All-mode Commands.
 
-parseAllModeCommand :: Axis -> SimpExpandParser AllModesCommand
+parseAllModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s AllModesCommand
 parseAllModeCommand mode =
     P.choice [ parseChangeScope
              , parseShowToken
@@ -66,7 +67,7 @@ parseAllModeCommand mode =
              , ModeIndependentCommand <$> parseModeIndependentCommand mode
              ]
 
-parseChangeScope :: SimpExpandParser AllModesCommand
+parseChangeScope :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AllModesCommand
 parseChangeScope = satisfyThen tokToChangeScope
   where
     tokToChangeScope t
@@ -75,15 +76,15 @@ parseChangeScope = satisfyThen tokToChangeScope
         | (T.ChangeScopeCSTok sign) <- t      = Just $ ChangeScope sign CSCommandTrigger
         | otherwise                           = Nothing
 
-parseShowToken :: SimpExpandParser AllModesCommand
+parseShowToken :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AllModesCommand
 parseShowToken = skipSatisfiedEquals T.ShowTokenTok >> (ShowToken <$> parseToken)
 
-parseStartParagraph :: SimpExpandParser AllModesCommand
+parseStartParagraph :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AllModesCommand
 parseStartParagraph = satisfyThen (\case
     (T.StartParagraphTok _indent) -> Just $ StartParagraph _indent
     _                             -> Nothing)
 
-parseAddLeaders :: Axis -> SimpExpandParser AllModesCommand
+parseAddLeaders :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s AllModesCommand
 parseAddLeaders mode =
     AddLeaders <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue mode
   where
@@ -91,7 +92,7 @@ parseAddLeaders mode =
         T.LeadersTok t -> Just t
         _                 -> Nothing)
 
-parseAddShiftedBox :: Axis -> SimpExpandParser AllModesCommand
+parseAddShiftedBox :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s AllModesCommand
 parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
   where
     parseDirection = satisfyThen (\case
@@ -100,7 +101,7 @@ parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
 
     parsePlacement = ShiftedPlacement <$> parseDirection <*> parseLength
 
-parseAddUnwrappedFetchedBox :: Axis -> SimpExpandParser AllModesCommand
+parseAddUnwrappedFetchedBox :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s AllModesCommand
 parseAddUnwrappedFetchedBox mode =
     do
     fetchMode <- satisfyThen (\case
@@ -109,14 +110,14 @@ parseAddUnwrappedFetchedBox mode =
     n <- parseNumber
     pure $ AddUnwrappedFetchedBox n fetchMode
 
-parseBoxOrRule :: SimpExpandParser BoxOrRule
+parseBoxOrRule :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s BoxOrRule
 parseBoxOrRule = P.choice [ BoxOrRuleBox <$> parseBox
                           , BoxOrRuleRule <$> parseRule Vertical
                           , BoxOrRuleRule <$> parseRule Horizontal
                           ]
 
 -- \hrule and such.
-parseRule :: Axis -> SimpExpandParser Rule
+parseRule :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s Rule
 parseRule mode =
     do
     skipSatisfied $ checkModeAndToken mode T.RuleTok
@@ -148,7 +149,7 @@ parseRule mode =
         ln <- parseLength
         pure rule { depth = Just ln }
 
-parseModeIndependentCommand :: Axis -> SimpExpandParser ModeIndependentCommand
+parseModeIndependentCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s ModeIndependentCommand
 parseModeIndependentCommand mode =
     P.choice [ skipSatisfiedEquals T.RelaxTok $> Relax
              , skipSatisfiedEquals T.IgnoreSpacesTok >> skipOptionalSpaces $> IgnoreSpaces
@@ -175,12 +176,12 @@ checkModeAndToken
 checkModeAndToken m1 tok1 (T.ModedCommand m2 tok2) = (m1 == m2) && (tok1 == tok2)
 checkModeAndToken _  _   _                       = False
 
-parseRemoveItem :: SimpExpandParser ModeIndependentCommand
+parseRemoveItem :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
 parseRemoveItem = RemoveItem <$> satisfyThen (\case
     T.RemoveItemTok i -> Just i
     _                   -> Nothing)
 
-parseModedGlue :: Axis -> SimpExpandParser Glue
+parseModedGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s Glue
 parseModedGlue mode = P.choice [ parseSpecifiedGlue mode
                                , parsePresetGlue mode T.Fil
                                , parsePresetGlue mode T.Fill
@@ -189,7 +190,7 @@ parseModedGlue mode = P.choice [ parseSpecifiedGlue mode
                                ]
 
 -- \hskip 10pt and such.
-parseSpecifiedGlue :: Axis -> SimpExpandParser Glue
+parseSpecifiedGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s Glue
 parseSpecifiedGlue mode =
     do
     skipSatisfied $ checkModeAndToken mode T.SpecifiedGlueTok
@@ -208,20 +209,20 @@ presetToSpecifiedGlue = \case
   where
     f = ExplicitGlue zeroLength
 
-parsePresetGlue :: Axis -> T.PresetGlueType -> SimpExpandParser Glue
+parsePresetGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> T.PresetGlueType -> SimpParser s Glue
 parsePresetGlue mode t =
     do
     skipSatisfied $ checkModeAndToken mode (T.PresetGlueTok t)
     pure $ presetToSpecifiedGlue t
 
-parseMessage :: SimpExpandParser ModeIndependentCommand
+parseMessage :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
 parseMessage = Message <$> parseMsgStream <*> parseGeneralText
   where
     parseMsgStream = satisfyThen (\case
         T.MessageTok str -> Just str
         _                -> Nothing)
 
-parseOpenInput :: SimpExpandParser ModeIndependentCommand
+parseOpenInput :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
 parseOpenInput =
     do
     skipSatisfiedEquals T.OpenInputTok
@@ -230,10 +231,10 @@ parseOpenInput =
     fn <- parseFileName
     pure $ ModifyFileStream FileInput (Open fn) n
 
-parseOptionalImmediate :: SimpExpandParser WritePolicy
+parseOptionalImmediate :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s WritePolicy
 parseOptionalImmediate = P.option Deferred $ skipSatisfiedEquals T.ImmediateTok $> Immediate
 
-parseOpenOutput :: SimpExpandParser ModeIndependentCommand
+parseOpenOutput :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
 parseOpenOutput =
     do
     writePolicy <- parseOptionalImmediate
@@ -243,13 +244,13 @@ parseOpenOutput =
     fn <- parseFileName
     pure $ ModifyFileStream (FileOutput writePolicy) (Open fn) n
 
-parseCloseOutput :: SimpExpandParser ModeIndependentCommand
+parseCloseOutput :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
 parseCloseOutput =
     do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.CloseOutputTok >> (ModifyFileStream (FileOutput writePolicy) Close <$> parseNumber)
 
-parseWriteToStream :: SimpExpandParser ModeIndependentCommand
+parseWriteToStream :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
 parseWriteToStream =
     do
     writePolicy <- parseOptionalImmediate
@@ -260,14 +261,14 @@ parseWriteToStream =
 
 -- VMode.
 
-parseVModeCommand :: SimpExpandParser VModeCommand
+parseVModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s VModeCommand
 parseVModeCommand =
     P.choice [ skipSatisfiedEquals T.EndTok $> End
              , skipSatisfiedEquals T.DumpTok $> Dump
              , parseEnterHMode
              ] <|> (VAllModesCommand <$> parseAllModeCommand Vertical)
 
-parseEnterHMode :: SimpExpandParser VModeCommand
+parseEnterHMode :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s VModeCommand
 parseEnterHMode = skipSatisfied startsHMode $> EnterHMode
   where
     startsHMode t = case t of
@@ -285,7 +286,7 @@ parseEnterHMode = skipSatisfied startsHMode $> EnterHMode
 
 -- HMode.
 
-parseHModeCommand :: SimpExpandParser HModeCommand
+parseHModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s HModeCommand
 parseHModeCommand =
     P.choice [ skipSatisfiedEquals T.ControlSpaceTok $> AddControlSpace
              , AddCharacter <$> parseCharCodeRef
@@ -297,7 +298,7 @@ parseHModeCommand =
              , parseLeaveHMode
              ] <|> (HAllModesCommand <$> parseAllModeCommand Horizontal)
 
-parseCharCodeRef :: SimpExpandParser CharCodeRef
+parseCharCodeRef :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s CharCodeRef
 parseCharCodeRef =
     P.choice [ parseAddCharacterCharOrTok
              , parseAddControlCharacter
@@ -316,7 +317,7 @@ parseCharCodeRef =
     parseAddControlCharacter =
         skipSatisfiedEquals T.ControlCharTok >> (CharCodeNrRef <$> parseNumber)
 
-parseAddAccentedCharacter :: SimpExpandParser HModeCommand
+parseAddAccentedCharacter :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s HModeCommand
 parseAddAccentedCharacter =
     do
     skipSatisfiedEquals T.AccentTok
@@ -332,13 +333,13 @@ parseAddAccentedCharacter =
             Assignment (SetBoxRegister _ _) _ -> P.empty
             a -> pure a
 
-parseAddDiscretionaryText :: SimpExpandParser HModeCommand
+parseAddDiscretionaryText :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s HModeCommand
 parseAddDiscretionaryText =
     do
     skipSatisfiedEquals T.DiscretionaryTextTok
     AddDiscretionaryText <$> parseGeneralText <*> parseGeneralText <*> parseGeneralText
 
-parseLeaveHMode :: SimpExpandParser HModeCommand
+parseLeaveHMode :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s HModeCommand
 parseLeaveHMode = skipSatisfied endsHMode $> LeaveHMode
   where
     endsHMode = \case

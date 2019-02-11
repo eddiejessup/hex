@@ -1,16 +1,20 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Stream where
 
+import           Control.Monad.Except           ( runExceptT )
 import           Control.Monad.State.Lazy       ( MonadState
                                                 , StateT
                                                 , gets
                                                 , modify
                                                 , runStateT
+                                                )
+import           Control.Monad.Reader           ( runReaderT
                                                 )
 import           Data.Char                      ( toLower
                                                 , toUpper
@@ -18,7 +22,6 @@ import           Data.Char                      ( toLower
 import           Data.Proxy
 import qualified Data.Map.Strict               as Map
 import           Data.Map.Strict                ( (!?) )
-import qualified Data.HashMap.Strict           as HMap
 import qualified Data.Set                      as Set
 import qualified Data.List.NonEmpty            as NE
 import qualified Data.Foldable                 as Fold
@@ -27,20 +30,32 @@ import qualified Text.Megaparsec               as P
 import           HeX.Type
 import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
+import           HeX.Evaluate
 import qualified HeX.Config                    as Conf
 import           HeX.Parse.Helpers
 import           HeX.Parse.Token
-import           HeX.Parse.Common
+import           HeX.Parse.Condition
 import           HeX.Parse.Inhibited
+import           HeX.Parse.SyntaxCommand
 import           HeX.Parse.Resolve
+
+skipping :: ExpandedStream -> Bool
+skipping (ExpandedStream{..}) = case skipState of
+    [] -> False
+    blockState:_ -> shouldSkip blockState
+  where
+    shouldSkip = \case
+        ConditionBlockState cur (IfBlockTarget tgt) -> cur /= tgt
+        ConditionBlockState PreElse (CaseBlockTarget cur tgt) -> cur /= tgt
+        ConditionBlockState PostElse (CaseBlockTarget cur tgt) -> cur > tgt
 
 data ExpandedStream = ExpandedStream
     { codes         :: [Cat.CharCode]
     , lexTokens     :: [Lex.Token]
     , lexState      :: Lex.LexState
-    , csMap         :: CSMap
     , expansionMode :: ExpansionMode
     , config        :: Conf.Config
+    , skipState     :: [ConditionBlockState]
     } deriving (Show)
 
 runConfState :: MonadState ExpandedStream m => StateT Conf.Config m a -> m a
@@ -51,101 +66,32 @@ runConfState f =
     modify (\stream -> stream{config=conf'})
     pure v
 
-type SimpExpandParser = SimpParser ExpandedStream
-type NullSimpExpandParser = SimpExpandParser ()
-
 newExpandStream :: [Cat.CharCode] -> CSMap -> IO ExpandedStream
 newExpandStream cs _csMap =
     do
-    conf <- Conf.newConfig
+    conf <- Conf.newConfig _csMap
     pure $ ExpandedStream
         { codes         = cs
         , lexTokens     = []
         , lexState      = Lex.LineBegin
-        , csMap         = _csMap
         , expansionMode = Expanding
         , config        = conf
+        , skipState     = []
         }
 
 -- TODO: This use of reverse is pure sloth; fix later.
-insertLexTokens :: ExpandedStream -> [Lex.Token] -> ExpandedStream
+insertLexTokens :: Inhibitable s => s -> [Lex.Token] -> s
 insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
-
-insertLexToken :: ExpandedStream -> Lex.Token -> ExpandedStream
-insertLexToken s t = s{lexTokens = t : lexTokens s}
 
 insertControlSequence
     :: ExpandedStream
     -> Lex.ControlSequenceLike
     -> ResolvedToken
     -> ExpandedStream
-insertControlSequence es@ExpandedStream{..} cs t =
-    es{csMap = HMap.insert cs t csMap}
-
--- Inhibition.
-
-setExpansion :: ExpansionMode -> NullSimpExpandParser
-setExpansion m = P.updateParserState $ setStateExpansion
-  where
-    setStateExpansion est@P.State{stateInput=es} =
-      est{P.stateInput = es{expansionMode = m}}
-
-inhibitExpansion, enableExpansion :: NullSimpExpandParser
-inhibitExpansion = setExpansion NotExpanding
-enableExpansion  = setExpansion Expanding
-
-parseInhibited :: SimpExpandParser a -> SimpExpandParser a
-parseInhibited p =
-    do
-    inhibitExpansion
-    v <- p
-    enableExpansion
-    pure v
-
--- Interface.
-
-parseBalancedText :: TerminusPolicy -> SimpExpandParser BalancedText
-parseBalancedText = parseInhibited . unsafeParseBalancedText
-
-parseMacroArgs :: MacroContents -> SimpExpandParser (Map.Map Digit MacroArgument)
-parseMacroArgs = parseInhibited . unsafeParseMacroArgs
-
-parseCharLike :: SimpExpandParser Int
-parseCharLike = parseInhibited unsafeParseCharLike
-
-parseCSName :: SimpExpandParser Lex.ControlSequenceLike
-parseCSName = parseInhibited unsafeParseCSName
-
-parseParamText :: SimpExpandParser (BalancedText, MacroParameters)
-parseParamText = parseInhibited unsafeParseParamText
-
-parseMacroText :: SimpExpandParser MacroText
-parseMacroText = parseInhibited unsafeParseMacroText
-
-parseToken :: SimpExpandParser Lex.Token
-parseToken = parseInhibited unsafeAnySingleLex
+insertControlSequence es@ExpandedStream{config=c} cs t =
+    es{config=Conf.insertControlSequence c cs t}
 
 -- Expanding syntax commands.
-
--- TODO: Move these parsers outside the module.
-
-skipFiller :: NullSimpParser ExpandedStream
-skipFiller = skipManySatisfied isFillerItem
-
-parseGeneralText :: SimpExpandParser BalancedText
-parseGeneralText =
-    do
-    skipFiller
-    -- TODO: Maybe other things can act as left braces.
-    skipSatisfied $ primTokHasCategory Lex.BeginGroup
-    parseBalancedText Discard
-
-parseCSNameArgs :: SimpExpandParser [Cat.CharCode]
-parseCSNameArgs =
-    do
-    chars <- parseManyChars
-    skipSatisfiedEquals (SyntaxCommandArg EndCSNameTok)
-    pure chars
 
 expandCSName :: () -> String -> [Lex.Token]
 expandCSName _ charToks =
@@ -183,20 +129,30 @@ expandChangeCase direction (BalancedText caseToks) =
     switch Downward = toLower
 
 runSyntaxCommand
-  :: a
-  -> SimpExpandParser b
-  -> ExpandedStream
-  -> (a -> b -> [Lex.Token])
-  -> Maybe (PrimitiveToken, ExpandedStream)
-runSyntaxCommand com parser inputStream f =
+  :: (Inhibitable s, P.Token s ~ PrimitiveToken)
+  => s -- The input stream
+  -> a -- Any information from the command head.
+  -> SimpParser s b -- A parser for the command's arguments, if any.
+  -> (s -> a -> b -> s) -- Modify the stream with the above information.
+  -> Maybe (PrimitiveToken, s)
+runSyntaxCommand inputStream com parser f =
     case easyRunParser parser inputStream of
-      (P.State resultStream _ _, Left err) ->
-          pure (SubParserError $ show err, resultStream)
-      (P.State resultStream _ _, Right a)  ->
-          -- Expand the command, using the command and the result of the parse,
-          -- insert the result into the remaining stream, then try again to get a
-          -- primitive token.
-          (P.take1_ . insertLexTokens resultStream) $ f com a
+        (P.State resultStream _ _, Left err) ->
+            pure (SubParserError $ show err, resultStream)
+        (P.State resultStream _ _, Right a)  ->
+            P.take1_ $ f resultStream com a
+
+runExpandCommand
+  :: (Inhibitable s, P.Token s ~ PrimitiveToken)
+  => s -- The input stream
+  -> a -- Any information from the command head.
+  -> SimpParser s b -- A parser for the command's arguments, if any.
+  -> (a -> b -> [Lex.Token]) -- Combine the above information into the expansion result.
+  -> Maybe (PrimitiveToken, s)
+runExpandCommand inputStream com parser f =
+    runSyntaxCommand inputStream com parser insrt
+  where
+    insrt strm com_ args = insertLexTokens strm $ f com_ args
 
 instance P.Stream ExpandedStream where
     type Token ExpandedStream = PrimitiveToken
@@ -228,31 +184,71 @@ instance P.Stream ExpandedStream where
     -- take1_ :: s -> Maybe (Token s, s)
     -- If we've no input, signal that we are done.
     take1_ ExpandedStream{codes = []} = Nothing
-    take1_ stream@ExpandedStream{..} = do
+    take1_ stream =
+        do
         -- Get the next lex token, and update our stream.
-        (lt, es') <- case lexTokens of
+        (lt, stream') <- case lexTokens stream of
             -- If there is a lex token in the buffer, use that.
             (lt:lts) ->
-                pure (lt, stream{ lexTokens = lts })
+                pure (lt, stream{lexTokens = lts})
             -- If the lex token buffer is empty, extract a token and use it.
             [] ->
                 do
                 (lt, lexState', codes') <-
-                    Lex.extractToken (Cat.catLookup $ Conf.catCodeMap config) lexState codes
-                pure (lt, stream { codes = codes', lexState = lexState' })
+                    Lex.extractToken (Cat.catLookup $ Conf.catCodeMap $ config stream) (lexState stream) (codes stream)
+                pure (lt, stream{codes = codes', lexState = lexState'})
         -- Resolve the lex token, and inspect the result.
-        case resolveToken csMap expansionMode lt of
-            -- If it's a primitive token, provide that.
-            PrimitiveToken pt   -> pure (pt, es')
-            -- If it indicates the start of a syntax command.
-            -- Parse the remainder of the syntax command.
-            SyntaxCommandHeadToken c -> case c of
-                (ChangeCaseTok direction) ->
-                    runSyntaxCommand direction parseGeneralText es' expandChangeCase
-                (MacroTok m) ->
-                    runSyntaxCommand m (parseMacroArgs m) es' expandMacro
-                CSNameTok ->
-                    runSyntaxCommand () parseCSNameArgs es' expandCSName
+        case resolveToken (Conf.csMap $ config stream') (expansionMode stream') lt of
+            ConditionBlockToken ct -> case (ct, skipState stream') of
+                -- Shouldn't see any condition token outside a condition block.
+                (_, []) ->
+                    pure (SubParserError "not in condition-block", stream')
+                -- Shouldn't see an 'or' in an if-block.
+                (OrTok, (ConditionBlockState _ (IfBlockTarget _)):_) ->
+                    pure (SubParserError "in an if-block, not case-block, but saw 'or'", stream')
+                -- If we see an 'or' in the proper context, set the current
+                -- block to the next block number and continue.
+                (OrTok, (ConditionBlockState PreElse (CaseBlockTarget cur tgt)):condRest) ->
+                    P.take1_ stream'{skipState = (ConditionBlockState PreElse (CaseBlockTarget (succ cur) tgt)):condRest}
+                (OrTok, (ConditionBlockState PostElse (CaseBlockTarget _ _)):_) ->
+                    pure (SubParserError "should not see 'or' in case-block after seeing  'else'", stream')
+                -- If we see an 'else' in the proper context, set the current
+                -- block to 'saw else' and continue.
+                (ElseTok, (ConditionBlockState PreElse v):condRest) ->
+                    P.take1_ stream'{skipState = (ConditionBlockState PostElse v):condRest}
+                -- Shouldn't see an else after we already saw an else.
+                (ElseTok, (ConditionBlockState PostElse _):_) ->
+                    pure (SubParserError "already saw else in this condition-block", stream')
+                -- If we see an end-if ('\fi') while in a condition block,
+                -- pop the block and continue.
+                (EndIfTok, _:condRest) ->
+                    P.take1_ stream'{skipState = condRest}
+            -- If we see a non-condition-token while skipping, just continue
+            -- unchanged.
+            NonConditionBlockToken _ | skipping stream' -> P.take1_ stream'
+            NonConditionBlockToken nt -> case nt of
+                -- If it's a primitive token, provide that.
+                PrimitiveToken pt -> pure (pt, stream')
+                -- If it indicates the start of a syntax command, parse the
+                -- remainder of the syntax command.
+                SyntaxCommandHeadToken c -> case c of
+                    ChangeCaseTok direction ->
+                        runExpandCommand stream' direction parseGeneralText expandChangeCase
+                    MacroTok m ->
+                        runExpandCommand stream' m (parseMacroArgs m) expandMacro
+                    CSNameTok ->
+                        runExpandCommand stream' () parseCSNameArgs expandCSName
+                    IfTok ifTok -> case easyRunParser (conditionHeadParser ifTok) stream' of
+                        (P.State resultStream _ _, Left err) ->
+                            pure (SubParserError $ show err, resultStream)
+                        (P.State resultStream _ _, Right a)  ->
+                            do
+                            mayBlockTarget <- runExceptT $ runReaderT (evaluateConditionHead a) (config resultStream)
+                            case mayBlockTarget of
+                                Left err ->
+                                    pure (SubParserError $ show err, resultStream)
+                                Right blockTarget -> 
+                                    P.take1_ resultStream{skipState = ConditionBlockState PreElse blockTarget:(skipState resultStream)}
 
     takeN_ = undefined
 
@@ -261,6 +257,16 @@ instance P.Stream ExpandedStream where
     showTokens Proxy = show
 
     reachOffset _ _freshState = (freshSourcePos, "", _freshState)
+
+instance Inhibitable ExpandedStream where
+    setExpansion mode = P.updateParserState $ setStateExpansion
+      where
+        setStateExpansion est@P.State{stateInput=es} =
+          est{P.stateInput = es{expansionMode = mode}}
+
+    getConfig = config
+
+    insertLexToken s t = s{lexTokens = t : lexTokens s}
 
 instance Eq ExpandedStream where
     _ == _ = True

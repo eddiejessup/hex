@@ -200,10 +200,10 @@ data LeadersType
     deriving (Show, Eq)
 
 data ModeAttribute
-    = IsVertical
-    | IsHorizontal
-    | IsMath
-    | IsInner
+    = VerticalMode
+    | HorizontalMode
+    | MathMode
+    | InnerMode
     deriving (Show, Eq)
 
 data BoxRegisterAttribute
@@ -444,22 +444,6 @@ data PrimitiveToken
     | HyphenationPatternsTok -- \patterns
     -- > Setting interaction mode.
     | InteractionModeTok InteractionMode
-    -- Conditions.
-    -- \| CompareIntegers -- \ifnum
-    -- \| CompareDistances -- \ifdim
-    -- \| IfIntegerOdd -- \ifodd
-    -- \| IfInMode ModeAttribute -- \ifvmode, \ifhmode, \ifmmode, \ifinner
-    -- \| IfCharacterCodesEqual -- \if
-    -- \| IfCategoryCodesEqual -- \ifcat
-    -- \| IfTokensEqual -- \ifx
-    -- \| IfBoxRegisterIs BoxRegisterAttribute -- \ifvoid, \ifhbox, \ifvbox
-    -- \| IfInputEnded -- \ifeof
-    -- \| IfConst Bool -- \iftrue, \iffalse
-    -- \| IfCase Bool -- \ifcase
-    -- -- Parts of conditions.
-    -- \| Else -- \else
-    -- \| EndIf -- \fi
-    -- \| Or -- \or
 
     | ResolutionError Lex.ControlSequenceLike
     | SubParserError String
@@ -470,15 +454,45 @@ data PrimitiveToken
 instance Ord PrimitiveToken where
     compare _ _ = EQ
 
+data TokenAttribute
+    = CharCodeAttribute  -- \if
+    | CatCodeAttribute  -- \ifcat
+    deriving (Show, Eq)
+
+data IfTok
+    = IfIntegerPairTestTok -- \ifnum
+    | IfLengthPairTestTok -- \ifdim
+    | IfIntegerOddTok -- \ifodd
+    | IfInModeTok ModeAttribute -- \ifvmode, \ifhmode, \ifmmode, \ifinner
+    | IfTokenAttributesEqualTok TokenAttribute
+    | IfTokensEqualTok -- \ifx
+    | IfBoxRegisterIsTok BoxRegisterAttribute -- \ifvoid, \ifhbox, \ifvbox
+    | IfInputEndedTok -- \ifeof
+    | IfConstTok Bool -- \iftrue, \iffalse
+    | CaseTok -- \ifcase
+    deriving (Show, Eq)
+
 data SyntaxCommandHeadToken
     = ChangeCaseTok VDirection -- \uppercase, \lowercase
     | CSNameTok
     | MacroTok MacroContents
+    | IfTok IfTok
+    deriving (Show, Eq)
+
+data ConditionBlockToken
+    = ElseTok -- \else
+    | OrTok -- \or
+    | EndIfTok -- \fi
+    deriving (Show, Eq)
+
+data NonConditionBlockToken
+    = SyntaxCommandHeadToken SyntaxCommandHeadToken
+    | PrimitiveToken PrimitiveToken
     deriving (Show, Eq)
 
 data ResolvedToken
-    = SyntaxCommandHeadToken SyntaxCommandHeadToken
-    | PrimitiveToken PrimitiveToken
+    = ConditionBlockToken ConditionBlockToken
+    | NonConditionBlockToken NonConditionBlockToken
     deriving (Show, Eq)
 
 instance Ord ResolvedToken where

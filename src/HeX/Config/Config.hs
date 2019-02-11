@@ -6,12 +6,12 @@
 module HeX.Config.Config where
 
 import           Control.Monad.IO.Class         ( MonadIO )
-import           Control.Monad.State.Lazy       ( StateT
-                                                , liftIO
+import           Control.Monad.State.Lazy       ( liftIO
                                                 , modify
                                                 , MonadState
                                                 , gets )
-import           Control.Monad.Trans.Reader     ( ReaderT )
+import           Control.Monad.Reader           ( MonadReader
+                                                , asks )
 import           Control.Monad.Except           ( MonadError
                                                 )
 
@@ -29,11 +29,13 @@ import           TFM                            ( TexFont )
 import           HeXPrelude
 import           HeX.Type
 import qualified HeX.Categorise                as Cat
+import qualified HeX.Lex                       as Lex
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.Parse.Token
 import           HeX.Config.Parameters
 import           HeX.Config.Codes
+import           HeX.Parse.Resolve
 
 type RegisterMap v = HMap.HashMap EightBitInt v
 
@@ -42,6 +44,7 @@ data Config = Config
     , fontInfos         :: V.Vector FontInfo
     , searchDirectories :: [Path Abs Dir]
     , params            :: ParamConfig
+    , csMap             :: CSMap
     -- Char-code attribute maps.
     , catCodeMap        :: Cat.CharCatMap
     , mathCodeMap       :: Cat.CharCodeMap MathCode
@@ -58,8 +61,8 @@ data Config = Config
     -- , boxRegister       :: RegisterMap (Maybe Box)
     } deriving (Show)
 
-newConfig :: IO Config
-newConfig =
+newConfig :: CSMap -> IO Config
+newConfig _csMap =
     do
     cwdRaw <- getCurrentDirectory
     cwd <- parseAbsDir cwdRaw
@@ -68,6 +71,7 @@ newConfig =
         , fontInfos         = V.empty
         , searchDirectories = [cwd]
         , params            = usableParamConfig
+        , csMap             = _csMap
         , catCodeMap        = Cat.usableCharCatMap
         , mathCodeMap       = newMathCodeMap
         , lowercaseMap      = newLowercaseMap
@@ -85,9 +89,6 @@ newConfig =
 fillMap :: (Hashable k, Enum k, Bounded k, Eq k) => v -> HMap.HashMap k v
 fillMap v = HMap.fromList $ (, v) <$> [minBound..]
 
-type ConfStateT = StateT Config
-type ConfReaderT = ReaderT Config
-
 -- Fonts.
 
 data FontInfo = FontInfo
@@ -104,16 +105,16 @@ readFontInfo fontPath =
     skewChar <- unIntParam <$> gets (defaultSkewChar . params)
     pure FontInfo{..}
 
-lookupFontInfo :: (MonadState Config m, MonadError String m) => Int -> m FontInfo
+lookupFontInfo :: (MonadReader Config m, MonadError String m) => Int -> m FontInfo
 lookupFontInfo fNr =
     do
-    infos <- gets fontInfos
+    infos <- asks fontInfos
     liftMaybe "No such font number" $ infos !? fNr
 
-currentFontInfo :: (MonadState Config m, MonadError String m) => m FontInfo
-currentFontInfo = gets currentFontNr >>= liftMaybe "Font number isn't set" >>= lookupFontInfo
+currentFontInfo :: (MonadReader Config m, MonadError String m) => m FontInfo
+currentFontInfo = asks currentFontNr >>= liftMaybe "Font number isn't set" >>= lookupFontInfo
 
-currentFontMetrics :: (MonadState Config m, MonadError String m) => m TexFont
+currentFontMetrics :: (MonadReader Config m, MonadError String m) => m TexFont
 currentFontMetrics = fontMetrics <$> currentFontInfo
 
 addFont :: MonadState Config m => FontInfo -> m Int
@@ -168,6 +169,16 @@ parIndentBox conf =
         { contents      = B.HBoxContents []
         , desiredLength = B.To . unLenParam . parIndent . params $ conf
         }
+
+-- Control sequences.
+
+insertControlSequence
+    :: Config
+    -> Lex.ControlSequenceLike
+    -> ResolvedToken
+    -> Config
+insertControlSequence c@Config{csMap = _csMap} cs t =
+    c{csMap = HMap.insert cs t _csMap}
 
 -- Codes.
 

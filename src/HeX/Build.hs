@@ -7,7 +7,12 @@ module HeX.Build where
 
 import           Control.Monad                  ( foldM )
 import           Control.Monad.IO.Class         ( MonadIO )
+import           Control.Monad.Reader           ( MonadReader
+                                                , ReaderT
+                                                , runReaderT
+                                                )
 import           Control.Monad.State.Lazy       ( MonadState
+                                                , StateT
                                                 , get
                                                 , gets
                                                 , put
@@ -87,7 +92,7 @@ selectFont n =
     modify (\conf -> conf{currentFontNr = Just n})
     pure $ B.FontSelection n
 
-characterBox :: (MonadState Config m, MonadError String m) => CharCode -> m B.Character
+characterBox :: (MonadReader Config m, MonadError String m) => CharCode -> m B.Character
 characterBox char =
     do
     fontMetrics <- currentFontMetrics
@@ -97,7 +102,7 @@ characterBox char =
     pure
         B.Character {char = char, width = toSP w, height = toSP h, depth = toSP d}
 
-spaceGlue :: (MonadState Config m, MonadError String m) => m BL.Glue
+spaceGlue :: (MonadReader Config m, MonadError String m) => m BL.Glue
 spaceGlue =
     do
     fontMetrics@TexFont{spacing = d, spaceStretch = str, spaceShrink = shr} <- currentFontMetrics
@@ -105,33 +110,42 @@ spaceGlue =
         toFlex = toSP >>> fromIntegral >>> BL.finiteFlex
     pure BL.Glue {dimen = toSP d, stretch = toFlex str, shrink = toFlex shr}
 
+readOnState :: MonadState r m => ReaderT r m b -> m b
+readOnState f = get >>= runReaderT f
+
+readOnConfState
+    :: (MonadState HP.ExpandedStream m)
+    => ReaderT Config (StateT Config m) a
+    -> m a
+readOnConfState f = HP.runConfState $ readOnState f
+
 setIntegerVariable
     :: (MonadState Config m, MonadError String m)
     => HP.IntegerVariable -> IntVal -> m ()
 setIntegerVariable v tgt = case v of
     HP.ParamVar p       -> setConfIntParam p tgt
-    HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setIntegerRegister i tgt)
+    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setIntegerRegister i tgt)
 
 setLengthVariable
     :: (MonadState Config m, MonadError String m)
     => HP.LengthVariable -> LenVal -> m ()
 setLengthVariable v tgt = case v of
     HP.ParamVar p       -> setConfLenParam p tgt
-    HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setLengthRegister i tgt)
+    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setLengthRegister i tgt)
 
 setGlueVariable
     :: (MonadState Config m, MonadError String m)
     => HP.GlueVariable -> BL.Glue -> m ()
 setGlueVariable v tgt = case v of
     HP.ParamVar p       -> setConfGlueParam p tgt
-    HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setGlueRegister i tgt)
+    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setGlueRegister i tgt)
 
 setTokenListVariable
     :: (MonadState Config m, MonadError String m)
     => HP.TokenListVariable -> HP.BalancedText -> m ()
 setTokenListVariable v tgt = case v of
     HP.ParamVar p       -> setConfTokenListParam p tgt
-    HP.RegisterVar iRaw -> evaluateEightBitInt iRaw >>= (\i -> setTokenListRegister i tgt)
+    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setTokenListRegister i tgt)
 
 showMsg :: Lex.Token -> [CharCode]
 showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Letter})) = [c]
@@ -154,42 +168,42 @@ handleModeIndep = \case
         pure []
     HP.AddPenalty n ->
         do
-        p <- HP.runConfState $ evaluatePenalty n
+        p <- readOnConfState $ evaluatePenalty n
         pure [BL.ListPenalty $ p]
     HP.AddKern ln ->
         do
-        k <- HP.runConfState $ evaluateKern ln
+        k <- readOnConfState $ evaluateKern ln
         pure [BL.VListBaseElem $ B.ElemKern $ k]
     HP.AddGlue g ->
         do
-        eG <- HP.runConfState $ evaluateGlue g
+        eG <- readOnConfState $ evaluateGlue g
         pure [BL.ListGlue eG]
     HP.Assign HP.Assignment{global = _, body = _body} ->
         case _body of
             HP.DefineControlSequence cs tgt ->
                 do
-                (acc, newCSTok) <- case tgt of
+                (acc, newCSTok) <- readOnConfState $ case tgt of
                     HP.MacroTarget macro ->
-                        pure ([], HP.SyntaxCommandHeadToken $ HP.MacroTok macro)
+                        pure ([], HP.syntaxTok $ HP.MacroTok macro)
                     -- TODO: If a \let target is an active character, should we
                     -- treat it as a control sequence, or a char-cat pair?
                     HP.LetTarget (Lex.CharCatToken tgtCC) ->
-                        pure ([], HP.PrimitiveToken $ HP.LetCharCat tgtCC)
+                        pure ([], HP.primTok $ HP.LetCharCat tgtCC)
                     HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                         do
-                        csMap <- gets HP.csMap
+                        csMap <- gets csMap
                         resTok <- liftMaybe
                             ("Unknown control sequence: " ++ show tgtCS)
                             $ HMap.lookup (Lex.ControlSequenceProper tgtCS) csMap
                         pure ([], resTok)
                     HP.ShortDefineTarget q n ->
                         do
-                        en <- HP.runConfState $ evaluateNumber n
-                        pure ([], HP.PrimitiveToken $ HP.IntRefTok q en)
+                        en <- evaluateNumber n
+                        pure ([], HP.primTok $ HP.IntRefTok q en)
                     HP.FontTarget HP.NaturalFont fPath ->
                         do
-                        fontDef@B.FontDefinition{fontNr=fNr} <- HP.runConfState $ loadFont fPath
-                        let fontRefTok = HP.PrimitiveToken $ HP.FontRefToken fNr
+                        fontDef@B.FontDefinition{fontNr=fNr} <- loadFont fPath
+                        let fontRefTok = HP.primTok $ HP.FontRefToken fNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure ([boxElem], fontRefTok)
                 modify (\strm -> HP.insertControlSequence strm cs newCSTok)
@@ -198,16 +212,16 @@ handleModeIndep = \case
                 do
                 HP.runConfState $ case ass of
                     HP.IntegerVariableAssignment v tgt ->
-                        evaluateNumber tgt >>= setIntegerVariable v
+                        readOnState (evaluateNumber tgt) >>= setIntegerVariable v
                     HP.LengthVariableAssignment v tgt  ->
-                        evaluateLength tgt >>= setLengthVariable v
+                        readOnState (evaluateLength tgt) >>= setLengthVariable v
                     HP.GlueVariableAssignment v tgt    ->
-                        evaluateGlue tgt >>= setGlueVariable v
+                        readOnState (evaluateGlue tgt) >>= setGlueVariable v
                     HP.MathGlueVariableAssignment _ _  ->
                         error "math-glue assignment not implemented"
                     HP.TokenListVariableAssignment v tgt ->
                         do
-                        eTgt <- case tgt of
+                        eTgt <- readOnState $ case tgt of
                             HP.TokenListAssignmentVar tgtVar   -> evaluateTokenListVariable tgtVar
                             HP.TokenListAssignmentText tgtText -> pure tgtText
                         setTokenListVariable v eTgt
@@ -217,40 +231,40 @@ handleModeIndep = \case
                 HP.runConfState $ case modCommand of
                     HP.AdvanceIntegerVariable var plusVal ->
                         do
-                        newVarVal <- (+) <$> evaluateIntegerVariable var <*> evaluateNumber plusVal
+                        newVarVal <- readOnState $ (+) <$> evaluateIntegerVariable var <*> evaluateNumber plusVal
                         setIntegerVariable var newVarVal
                     HP.AdvanceLengthVariable var plusVal ->
                         do
-                        newVarVal <- (+) <$> evaluateLengthVariable var <*> evaluateLength plusVal
+                        newVarVal <- readOnState $ (+) <$> evaluateLengthVariable var <*> evaluateLength plusVal
                         setLengthVariable var newVarVal
                     HP.AdvanceGlueVariable var plusVal ->
                         do
-                        newVarVal <- mappend <$> evaluateGlueVariable var <*> evaluateGlue plusVal
+                        newVarVal <- readOnState $ mappend <$> evaluateGlueVariable var <*> evaluateGlue plusVal
                         setGlueVariable var newVarVal
                     -- Division of a positive integer by a positive integer
                     -- discards the remainder, and the sign of the result
                     -- changes if you change the sign of either operand.
                     HP.ScaleVariable vDir numVar scaleVal ->
                         do
-                        eScaleVal <- evaluateNumber scaleVal
+                        eScaleVal <- readOnState $ evaluateNumber scaleVal
                         case numVar of
                             HP.IntegerNumericVariable var ->
                                 do
-                                eVar <- evaluateIntegerVariable var
+                                eVar <- readOnState $ evaluateIntegerVariable var
                                 let op = case vDir of
                                         Upward -> (*)
                                         Downward -> quot
                                 setIntegerVariable var $ op eVar eScaleVal
                             HP.LengthNumericVariable var ->
                                 do
-                                eVar <- evaluateLengthVariable var
+                                eVar <- readOnState $ evaluateLengthVariable var
                                 let op = case vDir of
                                         Upward -> (*)
                                         Downward -> quot
                                 setLengthVariable var $ op eVar eScaleVal
                             HP.GlueNumericVariable var ->
                                 do
-                                eVar <- evaluateGlueVariable var
+                                eVar <- readOnState $ evaluateGlueVariable var
                                 let op = case vDir of
                                         Upward -> BL.multiplyGlue
                                         Downward -> BL.divGlue
@@ -258,8 +272,8 @@ handleModeIndep = \case
                 pure []
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
-                eIdx <- HP.runConfState $ evaluateNumber idx
-                eVal <- HP.runConfState $ evaluateNumber val
+                eIdx <- readOnConfState $ evaluateNumber idx
+                eVal <- readOnConfState $ evaluateNumber val
                 liftIO $ putStrLn $ "Evaluated code table index " ++ show idx ++ " to " ++ show eIdx
                 liftIO $ putStrLn $ "Evaluated code table value " ++ show val ++ " to " ++ show eVal
                 idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
@@ -290,8 +304,8 @@ processHCommand oldStream acc = \case
         continueUnchanged
     HP.AddCharacter c ->
         do
-        charCode <- HP.runConfState $ evaluateCharCodeRef c
-        hCharBox <- charCode & characterBox & HP.runConfState <&> (B.ElemCharacter >>> BL.HListHBaseElem)
+        charCode <- readOnConfState $ evaluateCharCodeRef c
+        hCharBox <- (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ characterBox charCode)
         modAccum $ hCharBox : acc
     HP.HAllModesCommand aCom -> case aCom of
         -- \indent: An empty box of width \parindent is appended to the current
@@ -308,19 +322,19 @@ processHCommand oldStream acc = \case
             pure (acc, False)
         HP.AddSpace ->
             do
-            hGlue <- (BL.HVListElem . BL.ListGlue) <$> HP.runConfState spaceGlue
+            hGlue <- (BL.HVListElem . BL.ListGlue) <$> readOnConfState spaceGlue
             modAccum $ hGlue : acc
         HP.AddRule HP.Rule{..} ->
-            do
+            readOnConfState $ do
             evalW <- case width of
                 Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> HP.runConfState $ evaluateLength ln
+                Just ln -> evaluateLength ln
             evalH <- case height of
                 Nothing -> pure $ Unit.toScaledPointApprox (10 :: Int) Unit.Point
-                Just ln -> HP.runConfState $ evaluateLength ln
+                Just ln -> evaluateLength ln
             evalD <- case depth of
                 Nothing -> pure 0
-                Just ln -> HP.runConfState $ evaluateLength ln
+                Just ln -> evaluateLength ln
             let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
             modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
         HP.ModeIndependentCommand mcom ->
@@ -511,15 +525,15 @@ processVCommand oldStream pages curPage acc = \case
         HP.AddRule HP.Rule{..} ->
             do
             evalW <- case width of
-                Nothing -> HP.runConfState $ gets (unLenParam . hSize . params)
-                Just ln -> liftConfigError $ HP.runConfState $ evaluateLength ln
+                Nothing -> readOnConfState $ gets (unLenParam . hSize . params)
+                Just ln -> liftConfigError $ readOnConfState $ evaluateLength ln
             evalH <- case height of
                 -- TODO.
-                Nothing -> HP.runConfState $ pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> liftConfigError $ HP.runConfState $ evaluateLength ln
+                Nothing -> readOnConfState $ pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+                Just ln -> liftConfigError $ readOnConfState $ evaluateLength ln
             evalD <- case depth of
-                Nothing -> HP.runConfState $ pure 0
-                Just ln -> liftConfigError $ HP.runConfState $ evaluateLength ln
+                Nothing -> readOnConfState $ pure 0
+                Just ln -> liftConfigError $ readOnConfState $ evaluateLength ln
             let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
             modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
         HP.ModeIndependentCommand mcom ->

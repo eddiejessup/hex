@@ -592,3 +592,44 @@
     \halign
     \end
     \dump
+
+## Conditions
+
+<condition>
+    <if-condition> <text> \else <text> \fi
+    \ifcase <number> <text> \or <text> \or ... \or <text> \else <text> \fi
+
+<if-condition>
+    \ifnum <number> <relation> <number>
+    \ifdim <dimen> <relation> <dimen>
+    \ifodd <number>
+    <if-mode-attribute>
+    <if-token-attribute> <token> <token>
+    <if-box-attribute> <number>
+    \ifeof <number>
+    <if-const>
+
+<relation>
+    (<_12)
+    (=_12)
+    (>_12)
+
+<if-mode-attribute>
+    \ifvmode
+    \ifhmode
+    \ifmmode
+    \ifinner
+
+<if-token-attribute>
+    \if
+    \ifcat
+    \ifx
+
+<if-box-attribute>
+    \ifvoid
+    \ifhbox
+    \ifvbox
+
+<if-const>
+    \iftrue
+    \iffalse

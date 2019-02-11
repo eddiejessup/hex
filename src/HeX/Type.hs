@@ -27,6 +27,12 @@ newEightBitInt n
     | n > 255 = empty
     | otherwise = pure $ EightBitInt n
 
+newtype ScaledPointNumber = ScaledPointNumber Int
+
+newScaledPointNumber n
+    | n < 0 = empty
+    | otherwise = pure $ ScaledPointNumber n
+
 data HDirection
     = Leftward
     | Rightward

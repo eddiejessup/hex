@@ -42,9 +42,12 @@ isFillerItem :: PrimitiveToken -> Bool
 isFillerItem T.RelaxTok = True
 isFillerItem t          = isSpace t
 
+matchOtherToken :: CharCode -> PrimitiveToken -> Bool
+matchOtherToken c2 (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat{cat = Lex.Other, char = c1})) = c1 == c2
+matchOtherToken _ _ = False
+
 isEquals :: PrimitiveToken -> Bool
-isEquals (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat{cat = Lex.Other, char = '='})) = True
-isEquals _ = False
+isEquals = matchOtherToken '='
 
 matchNonActiveCharacterUncased :: Char -> PrimitiveToken -> Bool
 matchNonActiveCharacterUncased a (T.UnexpandedTok (Lex.CharCatToken Lex.CharCat{char = c, cat=cat})) =

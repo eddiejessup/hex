@@ -5,6 +5,7 @@ module HeX.Parse
     , module HeX.Parse.AST
     , module HeX.Parse.Quantity
     , module HeX.Parse.Resolve
+    , module HeX.Parse.Inhibited
     , module HeX.Parse.Stream
     , module HeX.Parse.Token
     )
@@ -16,5 +17,6 @@ import           HeX.Parse.Helpers
 import           HeX.Parse.AST
 import           HeX.Parse.Quantity
 import           HeX.Parse.Resolve
+import           HeX.Parse.Inhibited
 import           HeX.Parse.Stream
 import           HeX.Parse.Token

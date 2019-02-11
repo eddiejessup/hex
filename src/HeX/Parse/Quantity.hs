@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Quantity where
 
@@ -17,27 +18,25 @@ import           HeX.Parse.Helpers
 import           HeX.Parse.AST
 import qualified HeX.Parse.Token               as T
 import           HeX.Parse.Common
-import           HeX.Parse.Stream
+import           HeX.Parse.Inhibited
 
 -- Number.
 
-parseNumber :: SimpExpandParser Number
+parseNumber :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Number
 parseNumber = Number <$> parseSigns <*> parseUnsignedNumber
 
-parseSigns :: SimpExpandParser T.Sign
+parseSigns :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s T.Sign
 parseSigns = mconcat <$> parseOptionalSigns
   where
     parseOptionalSigns =
         skipOptionalSpaces *> P.sepEndBy (satisfyThen signToPos) skipOptionalSpaces
 
-    signToPos (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '+' Lex.Other))) =
-        Just $ T.Sign True
-    signToPos (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '-' Lex.Other))) =
-        Just $ T.Sign False
-    signToPos _ =
-        Nothing
+    signToPos t
+        | matchOtherToken '+' t = Just $ T.Sign True
+        | matchOtherToken '-' t = Just $ T.Sign False
+        | otherwise = Nothing
 
-parseUnsignedNumber :: SimpExpandParser UnsignedNumber
+parseUnsignedNumber :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s UnsignedNumber
 parseUnsignedNumber = P.choice [ NormalIntegerAsUNumber <$> parseNormalInteger
                                , CoercedInteger <$> parseCoercedInteger
                                ]
@@ -47,7 +46,7 @@ parseUnsignedNumber = P.choice [ NormalIntegerAsUNumber <$> parseNormalInteger
 digitsToInteger :: Integral n => n -> [n] -> Integer
 digitsToInteger base = foldl' (\a b -> a * fromIntegral base + fromIntegral b) 0
 
-parseNormalInteger :: SimpExpandParser NormalInteger
+parseNormalInteger :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s NormalInteger
 parseNormalInteger =
     P.choice [ InternalInteger <$> parseInternalInteger
              , IntegerConstant <$> parseConstantInt <* skipOneOptionalSpace
@@ -65,12 +64,9 @@ parseNormalInteger =
                                    ]
         pure $ fromIntegral $ digitsToInteger base digits
 
-    parseCharacter = skipSatisfied isBacktick *> parseCharLike
+    parseCharacter = skipSatisfied (matchOtherToken '`') *> parseCharLike
 
-    isBacktick (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '`' Lex.Other))) = True
-    isBacktick _ = False
-
-parseDecimalIntegerDigit :: SimpExpandParser Int
+parseDecimalIntegerDigit :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Int
 parseDecimalIntegerDigit = satisfyThen decCharToInt
   where
     decCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
@@ -88,13 +84,10 @@ parseDecimalIntegerDigit = satisfyThen decCharToInt
             _   -> Nothing
     decCharToInt _ = Nothing
 
-parseHexadecimalIntegerDigits :: SimpExpandParser [Int]
+parseHexadecimalIntegerDigits :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s [Int]
 parseHexadecimalIntegerDigits =
-    skipSatisfied isDoubleQuote *> P.some (satisfyThen hexCharToInt)
+    skipSatisfied (matchOtherToken '"') *> P.some (satisfyThen hexCharToInt)
   where
-    isDoubleQuote (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '"' Lex.Other))) = True
-    isDoubleQuote _ = False
-
     hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
         case c of
             '0' -> Just 0
@@ -125,13 +118,10 @@ parseHexadecimalIntegerDigits =
             _   -> Nothing
     hexCharToInt _ = Nothing
 
-parseOctalIntegerDigits :: SimpExpandParser [Int]
+parseOctalIntegerDigits :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s [Int]
 parseOctalIntegerDigits =
-    skipSatisfied isSingleQuote *> P.some (satisfyThen octCharToInt)
+    skipSatisfied (matchOtherToken '\'') *> P.some (satisfyThen octCharToInt)
   where
-    isSingleQuote (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '\'' Lex.Other))) = True
-    isSingleQuote _ = False
-
     octCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
         case c of
             '0' -> Just 0
@@ -145,27 +135,27 @@ parseOctalIntegerDigits =
             _   -> Nothing
     octCharToInt _ = Nothing
 
-parseCoercedInteger :: SimpExpandParser CoercedInteger
+parseCoercedInteger :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s CoercedInteger
 parseCoercedInteger = P.choice [ InternalLengthAsInt <$> parseInternalLength
                                , InternalGlueAsInt <$> parseInternalGlue
                                ]
 
 -- Length.
 
-parseLength :: SimpExpandParser Length
+parseLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Length
 parseLength = Length <$> parseSigns <*> parseUnsignedLength
 
-parseUnsignedLength :: SimpExpandParser UnsignedLength
+parseUnsignedLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s UnsignedLength
 parseUnsignedLength = P.choice [ NormalLengthAsULength <$> parseNormalLength
                                , CoercedLength <$> parseCoercedLength
                                ]
 
-parseNormalLength :: SimpExpandParser NormalLength
+parseNormalLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s NormalLength
 parseNormalLength = P.choice [ LengthSemiConstant <$> parseFactor <*> parseUnit
                              , InternalLength <$> parseInternalLength
                              ]
 
-parseFactor :: SimpExpandParser Factor
+parseFactor :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Factor
 -- NOTE: The parser order matters because TeX's grammar is ambiguous: '2.2'
 -- could be parsed as an integer constant, '2', followed by '.2'. We break the
 -- ambiguity by prioritising the rational constant parser.
@@ -173,11 +163,11 @@ parseFactor = P.choice $ P.try <$> [ RationalConstant <$> parseRationalConstant
                                    , NormalIntegerFactor <$> parseNormalInteger
                                    ]
 
-parseRationalConstant :: SimpExpandParser Rational
+parseRationalConstant :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Rational
 parseRationalConstant =
     do
     wholeNr <- decDigitsToInteger <$> P.many parseDecimalIntegerDigit
-    skipSatisfied isDotOrComma
+    skipSatisfied (\t -> (matchOtherToken ',' t) || (matchOtherToken '.' t))
     -- The fractional part represents its integer interpretation, divided by
     -- the next largest power of 10.
     -- TODO: If performance matters, maybe we can infer the denominator
@@ -190,11 +180,7 @@ parseRationalConstant =
   where
     decDigitsToInteger = digitsToInteger 10
 
-    isDotOrComma (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat ',' Lex.Other))) = True
-    isDotOrComma (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat '.' Lex.Other))) = True
-    isDotOrComma _ = False
-
-parseUnit :: SimpExpandParser Unit
+parseUnit :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Unit
 parseUnit = P.choice [ P.try $ skipOptionalSpaces *> (InternalUnit <$> parseInternalUnit)
                      , (PhysicalUnit <$> parseFrame <*> parsePhysicalUnitLit) <* skipOneOptionalSpace
                      ]
@@ -231,38 +217,38 @@ parseUnit = P.choice [ P.try $ skipOptionalSpaces *> (InternalUnit <$> parseInte
                                                 , parseKeywordToValue "sp" ScaledPoint
                                                 ]
 
-parseCoercedLength :: SimpExpandParser CoercedLength
+parseCoercedLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s CoercedLength
 parseCoercedLength = InternalGlueAsLength <$> parseInternalGlue
 
 -- Math length.
 
-parseMathLength :: SimpExpandParser MathLength
+parseMathLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s MathLength
 parseMathLength = MathLength <$> parseSigns <*> parseUnsignedMathLength
 
-parseUnsignedMathLength :: SimpExpandParser UnsignedMathLength
+parseUnsignedMathLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s UnsignedMathLength
 parseUnsignedMathLength = P.choice [ NormalMathLengthAsUMathLength <$> parseNormalMathLength
                                    , CoercedMathLength <$> parseCoercedMathLength
                                    ]
 
-parseNormalMathLength :: SimpExpandParser NormalMathLength
+parseNormalMathLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s NormalMathLength
 parseNormalMathLength = MathLengthSemiConstant <$> parseFactor <*> parseMathUnit
 
-parseMathUnit :: SimpExpandParser MathUnit
+parseMathUnit :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s MathUnit
 parseMathUnit = P.choice [ skipKeyword "mu" >> skipOneOptionalSpace $> Mu
                          , skipOptionalSpaces *> (InternalMathGlueAsUnit <$> parseInternalMathGlue)
                          ]
 
-parseCoercedMathLength :: SimpExpandParser CoercedMathLength
+parseCoercedMathLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s CoercedMathLength
 parseCoercedMathLength = InternalMathGlueAsMathLength <$> parseInternalMathGlue
 
 -- Glue.
 
-parseGlue :: SimpExpandParser Glue
+parseGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Glue
 parseGlue = P.choice [ ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> parseFlex "minus"
                      , InternalGlue <$> parseSigns <*> parseInternalGlue
                      ]
 
-parseFlex :: String -> SimpExpandParser (Maybe Flex)
+parseFlex :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => String -> SimpParser s (Maybe Flex)
 parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
                        , const Nothing <$> skipOptionalSpaces
                        ]
@@ -271,7 +257,7 @@ parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
                                                               , FilFlex <$> parseFilLength
                                                               ])
 
-parseFilLength :: SimpExpandParser FilLength
+parseFilLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s FilLength
 parseFilLength =
     (FilLength <$> parseSigns <*> parseFactor <*> parseOrder) <* skipOptionalSpaces
   where
@@ -281,12 +267,12 @@ parseFilLength =
 
 -- Math glue.
 
-parseMathGlue :: SimpExpandParser MathGlue
+parseMathGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s MathGlue
 parseMathGlue = P.choice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFlex "plus" <*> parseMathFlex "minus"
                          , InternalMathGlue <$> parseSigns <*> parseInternalMathGlue
                          ]
 
-parseMathFlex :: String -> SimpExpandParser (Maybe MathFlex)
+parseMathFlex :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => String -> SimpParser s (Maybe MathFlex)
 parseMathFlex s = P.choice [ Just <$> P.try parsePresentFlex
                            , const Nothing <$> skipOptionalSpaces
                            ]
@@ -298,9 +284,10 @@ parseMathFlex s = P.choice [ Just <$> P.try parsePresentFlex
 -- Internal quantities.
 
 parseQuantityVariable
-    :: (T.PrimitiveToken -> Maybe p) -- Try to extract a parameter from a token.
+    :: (Inhibitable s, P.Token s ~ T.PrimitiveToken)
+    => (T.PrimitiveToken -> Maybe p) -- Try to extract a parameter from a token.
     -> T.RegisterType
-    -> SimpExpandParser (QuantVariable p)
+    -> SimpParser s (QuantVariable p)
 parseQuantityVariable getParam rTyp =
     P.choice [ ParamVar <$> satisfyThen getParam
              , RegisterVar <$> parseShortRegRef
@@ -313,42 +300,42 @@ parseQuantityVariable getParam rTyp =
 
     parseRegRef = skipSatisfied (== T.RegisterVariableTok rTyp) >> parseNumber
 
-parseIntegerVariable :: SimpExpandParser IntegerVariable
+parseIntegerVariable :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s IntegerVariable
 parseIntegerVariable =
     parseQuantityVariable getParam T.RegInt
   where
     getParam (T.IntParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseLengthVariable :: SimpExpandParser LengthVariable
+parseLengthVariable :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s LengthVariable
 parseLengthVariable =
     parseQuantityVariable getParam T.RegLen
   where
     getParam (T.LenParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseGlueVariable :: SimpExpandParser GlueVariable
+parseGlueVariable :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s GlueVariable
 parseGlueVariable =
     parseQuantityVariable getParam T.RegGlue
   where
     getParam (T.GlueParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseMathGlueVariable :: SimpExpandParser MathGlueVariable
+parseMathGlueVariable :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s MathGlueVariable
 parseMathGlueVariable =
     parseQuantityVariable getParam T.RegMathGlue
   where
     getParam (T.MathGlueParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseTokenListVariable :: SimpExpandParser TokenListVariable
+parseTokenListVariable :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s TokenListVariable
 parseTokenListVariable =
     parseQuantityVariable getParam T.RegTokenList
   where
     getParam (T.TokenListParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseInternalInteger :: SimpExpandParser InternalInteger
+parseInternalInteger :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s InternalInteger
 parseInternalInteger = P.choice [ InternalIntegerVariable <$> parseIntegerVariable
                                 , InternalSpecialInteger <$> parseSpecialInteger
                                 , InternalCodeTableRef <$> parseCodeTableRef
@@ -361,51 +348,51 @@ parseInternalInteger = P.choice [ InternalIntegerVariable <$> parseIntegerVariab
                                 , skipSatisfiedEquals T.BadnessTok $> Badness
                                 ]
 
-parseCharToken :: SimpExpandParser IntVal
+parseCharToken :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s IntVal
 parseCharToken = satisfyThen (\case
     T.IntRefTok T.CharQuantity c -> Just c
     _                            -> Nothing)
 
-parseMathCharToken :: SimpExpandParser IntVal
+parseMathCharToken :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s IntVal
 parseMathCharToken = satisfyThen (\case
     T.IntRefTok T.MathCharQuantity c -> Just c
     _                                -> Nothing)
 
-parseSpecialInteger :: SimpExpandParser T.SpecialInteger
+parseSpecialInteger :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s T.SpecialInteger
 parseSpecialInteger = satisfyThen (\case
     T.SpecialIntegerTok p -> Just p
     _                     -> Nothing)
 
-parseCodeTableRef :: SimpExpandParser CodeTableRef
+parseCodeTableRef :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s CodeTableRef
 parseCodeTableRef = CodeTableRef <$> satisfyThen tokToCodeType <*> parseNumber
   where
     tokToCodeType (T.CodeTypeTok c) = Just c
     tokToCodeType _               = Nothing
 
-parseFontCharRef :: SimpExpandParser FontCharRef
+parseFontCharRef :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s FontCharRef
 parseFontCharRef = FontCharRef <$> satisfyThen tokToFontChar <*> parseFontRef
   where
     tokToFontChar (T.FontCharTok c) = Just c
     tokToFontChar _                 = Nothing
 
-parseFontRef :: SimpExpandParser FontRef
+parseFontRef :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s FontRef
 parseFontRef = P.choice [ FontTokenRef <$> parseFontRefToken
                         , skipSatisfiedEquals T.FontTok $> CurrentFontRef
                         , FamilyMemberFontRef <$> parseFamilyMember
                         ]
 
-parseFontRefToken :: SimpExpandParser IntVal
+parseFontRefToken :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s IntVal
 parseFontRefToken = satisfyThen (\case
     T.FontRefToken n -> Just n
     _                -> Nothing)
 
-parseFamilyMember :: SimpExpandParser FamilyMember
+parseFamilyMember :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s FamilyMember
 parseFamilyMember = FamilyMember <$> (satisfyThen tokToFontRange) <*> parseNumber
   where
     tokToFontRange (T.FontRangeTok r) = Just r
     tokToFontRange _                  = Nothing
 
-parseInternalLength :: SimpExpandParser InternalLength
+parseInternalLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s InternalLength
 parseInternalLength = P.choice [ InternalLengthVariable <$> parseLengthVariable
                                , InternalSpecialLength <$> parseSpecialLength
                                , InternalFontDimensionRef <$> parseFontDimensionRef
@@ -413,36 +400,36 @@ parseInternalLength = P.choice [ InternalLengthVariable <$> parseLengthVariable
                                , skipSatisfiedEquals T.LastKernTok $> LastKern
                                ]
 
-parseSpecialLength :: SimpExpandParser T.SpecialLength
+parseSpecialLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s T.SpecialLength
 parseSpecialLength = satisfyThen (\case
     T.SpecialLengthTok p -> Just p
     _                    -> Nothing)
 
-parseFontDimensionRef :: SimpExpandParser FontDimensionRef
+parseFontDimensionRef :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s FontDimensionRef
 parseFontDimensionRef = skipSatisfiedEquals T.FontDimensionTok >> (FontDimensionRef <$> parseNumber <*> parseFontRef)
 
-parseBoxDimensionRef :: SimpExpandParser BoxDimensionRef
+parseBoxDimensionRef :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s BoxDimensionRef
 parseBoxDimensionRef = do
     dim <- parseBoxDimension
     boxNr <- parseNumber
     pure $ BoxDimensionRef boxNr dim
 
-parseBoxDimension :: SimpExpandParser TypoDim
+parseBoxDimension :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s TypoDim
 parseBoxDimension = satisfyThen (\case
     T.BoxDimensionTok d -> Just d
     _                   -> Nothing)
 
-parseInternalGlue :: SimpExpandParser InternalGlue
+parseInternalGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s InternalGlue
 parseInternalGlue = P.choice [ InternalGlueVariable <$> parseGlueVariable
                              , skipSatisfiedEquals T.LastGlueTok $> LastGlue
                              ]
 
-parseInternalMathGlue :: SimpExpandParser InternalMathGlue
+parseInternalMathGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s InternalMathGlue
 parseInternalMathGlue = P.choice [ InternalMathGlueVariable <$> parseMathGlueVariable
                                  , skipSatisfiedEquals T.LastGlueTok $> LastMathGlue
                                  ]
 
-parseBox :: SimpExpandParser Box
+parseBox :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Box
 parseBox = P.choice [ parseRegisterBox
                     , skipSatisfiedEquals T.LastBoxTok $> LastBox
                     , parseVSplitBox
@@ -450,14 +437,14 @@ parseBox = P.choice [ parseRegisterBox
                     -- , parseExplicitBox
                     ]
 
-parseRegisterBox :: SimpExpandParser Box
+parseRegisterBox :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Box
 parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseNumber
   where
     parseFetchMode = satisfyThen (\case
         T.FetchedBoxTok m -> Just m
         _                 -> Nothing)
 
-parseVSplitBox :: SimpExpandParser Box
+parseVSplitBox :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Box
 parseVSplitBox =
     do
     skipSatisfiedEquals T.SplitVBoxTok

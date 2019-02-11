@@ -426,3 +426,22 @@ data CharCodeRef
     | CharTokenRef IntVal
     | CharCodeNrRef Number
     deriving (Show)
+
+-- Condition heads.
+
+data IfConditionHead
+    = IfIntegerPairTest Number Ordering Number -- \ifnum
+    | IfLengthPairTest Length Ordering Length -- \ifdim
+    | IfIntegerOdd Number -- \ifodd
+    | IfInMode T.ModeAttribute -- \ifvmode, \ifhmode, \ifmmode, \ifinner
+    | IfTokenAttributesEqual T.TokenAttribute T.PrimitiveToken T.PrimitiveToken -- \if, \ifcat
+    | IfTokensEqual Lex.Token Lex.Token -- \ifx
+    | IfBoxRegisterIs T.BoxRegisterAttribute Number -- \ifvoid, \ifhbox, \ifvbox
+    | IfInputEnded Number -- \ifeof
+    | IfConst Bool -- \iftrue, \iffalse
+    deriving (Show)
+
+data ConditionHead
+    = IfConditionHead IfConditionHead
+    | CaseConditionHead Number
+    deriving (Show)
