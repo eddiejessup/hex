@@ -97,12 +97,12 @@ data FontInfo = FontInfo
     , skewChar    :: IntVal
     } deriving (Show)
 
-readFontInfo :: (MonadState Config m, MonadIO m) => Path Abs File -> m FontInfo
+readFontInfo :: (MonadReader Config m, MonadIO m) => Path Abs File -> m FontInfo
 readFontInfo fontPath =
     do
     fontMetrics <- liftIO $ TFM.readTFMFancy fontPath
-    hyphenChar <- unIntParam <$> gets (defaultHyphenChar . params)
-    skewChar <- unIntParam <$> gets (defaultSkewChar . params)
+    hyphenChar <- unIntParam <$> asks (defaultHyphenChar . params)
+    skewChar <- unIntParam <$> asks (defaultSkewChar . params)
     pure FontInfo{..}
 
 lookupFontInfo :: (MonadReader Config m, MonadError String m) => Int -> m FontInfo

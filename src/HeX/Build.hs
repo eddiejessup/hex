@@ -9,6 +9,7 @@ import           Control.Monad                  ( foldM )
 import           Control.Monad.IO.Class         ( MonadIO )
 import           Control.Monad.Reader           ( MonadReader
                                                 , ReaderT
+                                                , asks
                                                 , runReaderT
                                                 )
 import           Control.Monad.State.Lazy       ( MonadState
@@ -60,7 +61,7 @@ loadFont
     -> m B.FontDefinition
 loadFont relPath =
     do
-    fontInfo_ <- readRelPath relPath
+    fontInfo_ <- readOnState $ readRelPath relPath
     fontName <- extractFontName relPath
     fNr <- addFont fontInfo_
     pure B.FontDefinition
@@ -73,9 +74,7 @@ loadFont relPath =
         }
   where
     readRelPath p =
-        searchDirectories
-        & gets
-        <&> findFilePath p
+        findFilePath p <$> asks searchDirectories
         >>= liftThrow "Could not find font"
         >>= readFontInfo
 
