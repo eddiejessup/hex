@@ -23,24 +23,24 @@ import           HeX.Parse.Assignment
 
 type ExtractResult s c = Either (ParseErrorBundle s) (P.State s, c)
 
-extractResult :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s c -> s -> ExtractResult s c
+extractResult :: InhibitableStream s => SimpParser s c -> s -> ExtractResult s c
 extractResult p stream =
     do
     let (state, eCom) = easyRunParser p stream
     com <- eCom
     pure (state, com)
 
-extractHModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => s -> ExtractResult s HModeCommand
+extractHModeCommand :: InhibitableStream s => s -> ExtractResult s HModeCommand
 extractHModeCommand = extractResult parseHModeCommand
 
-extractVModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => s -> ExtractResult s VModeCommand
+extractVModeCommand :: InhibitableStream s => s -> ExtractResult s VModeCommand
 extractVModeCommand = extractResult parseVModeCommand
 
 -- Parse.
 
 -- All-mode Commands.
 
-parseAllModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s AllModesCommand
+parseAllModeCommand :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAllModeCommand mode =
     P.choice [ parseChangeScope
              , parseShowToken
@@ -67,7 +67,7 @@ parseAllModeCommand mode =
              , ModeIndependentCommand <$> parseModeIndependentCommand mode
              ]
 
-parseChangeScope :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AllModesCommand
+parseChangeScope :: InhibitableStream s => SimpParser s AllModesCommand
 parseChangeScope = satisfyThen tokToChangeScope
   where
     tokToChangeScope t
@@ -76,15 +76,15 @@ parseChangeScope = satisfyThen tokToChangeScope
         | (T.ChangeScopeCSTok sign) <- t      = Just $ ChangeScope sign CSCommandTrigger
         | otherwise                           = Nothing
 
-parseShowToken :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AllModesCommand
+parseShowToken :: InhibitableStream s => SimpParser s AllModesCommand
 parseShowToken = skipSatisfiedEquals T.ShowTokenTok >> (ShowToken <$> parseToken)
 
-parseStartParagraph :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AllModesCommand
+parseStartParagraph :: InhibitableStream s => SimpParser s AllModesCommand
 parseStartParagraph = satisfyThen (\case
     (T.StartParagraphTok _indent) -> Just $ StartParagraph _indent
     _                             -> Nothing)
 
-parseAddLeaders :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s AllModesCommand
+parseAddLeaders :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAddLeaders mode =
     AddLeaders <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue mode
   where
@@ -92,7 +92,7 @@ parseAddLeaders mode =
         T.LeadersTok t -> Just t
         _                 -> Nothing)
 
-parseAddShiftedBox :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s AllModesCommand
+parseAddShiftedBox :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
   where
     parseDirection = satisfyThen (\case
@@ -101,7 +101,7 @@ parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
 
     parsePlacement = ShiftedPlacement <$> parseDirection <*> parseLength
 
-parseAddUnwrappedFetchedBox :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s AllModesCommand
+parseAddUnwrappedFetchedBox :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAddUnwrappedFetchedBox mode =
     do
     fetchMode <- satisfyThen (\case
@@ -110,14 +110,14 @@ parseAddUnwrappedFetchedBox mode =
     n <- parseNumber
     pure $ AddUnwrappedFetchedBox n fetchMode
 
-parseBoxOrRule :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s BoxOrRule
+parseBoxOrRule :: InhibitableStream s => SimpParser s BoxOrRule
 parseBoxOrRule = P.choice [ BoxOrRuleBox <$> parseBox
                           , BoxOrRuleRule <$> parseRule Vertical
                           , BoxOrRuleRule <$> parseRule Horizontal
                           ]
 
 -- \hrule and such.
-parseRule :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s Rule
+parseRule :: InhibitableStream s => Axis -> SimpParser s Rule
 parseRule mode =
     do
     skipSatisfied $ checkModeAndToken mode T.RuleTok
@@ -149,7 +149,7 @@ parseRule mode =
         ln <- parseLength
         pure rule { depth = Just ln }
 
-parseModeIndependentCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s ModeIndependentCommand
+parseModeIndependentCommand :: InhibitableStream s => Axis -> SimpParser s ModeIndependentCommand
 parseModeIndependentCommand mode =
     P.choice [ skipSatisfiedEquals T.RelaxTok $> Relax
              , skipSatisfiedEquals T.IgnoreSpacesTok >> skipOptionalSpaces $> IgnoreSpaces
@@ -162,9 +162,10 @@ parseModeIndependentCommand mode =
              , parseMessage
              , parseOpenInput
              , skipSatisfiedEquals T.CloseInputTok >> (ModifyFileStream FileInput Close <$> parseNumber)
-             , parseOpenOutput
-             , parseCloseOutput
-             , parseWriteToStream
+             -- Need a 'try' because all these can start with '\immediate'.
+             , P.try parseOpenOutput
+             , P.try parseCloseOutput
+             , P.try parseWriteToStream
              , skipSatisfiedEquals T.DoSpecialTok >> (DoSpecial <$> parseGeneralText)
              ]
 
@@ -176,12 +177,12 @@ checkModeAndToken
 checkModeAndToken m1 tok1 (T.ModedCommand m2 tok2) = (m1 == m2) && (tok1 == tok2)
 checkModeAndToken _  _   _                       = False
 
-parseRemoveItem :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
+parseRemoveItem :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseRemoveItem = RemoveItem <$> satisfyThen (\case
     T.RemoveItemTok i -> Just i
     _                   -> Nothing)
 
-parseModedGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s Glue
+parseModedGlue :: InhibitableStream s => Axis -> SimpParser s Glue
 parseModedGlue mode = P.choice [ parseSpecifiedGlue mode
                                , parsePresetGlue mode T.Fil
                                , parsePresetGlue mode T.Fill
@@ -190,7 +191,7 @@ parseModedGlue mode = P.choice [ parseSpecifiedGlue mode
                                ]
 
 -- \hskip 10pt and such.
-parseSpecifiedGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> SimpParser s Glue
+parseSpecifiedGlue :: InhibitableStream s => Axis -> SimpParser s Glue
 parseSpecifiedGlue mode =
     do
     skipSatisfied $ checkModeAndToken mode T.SpecifiedGlueTok
@@ -209,20 +210,20 @@ presetToSpecifiedGlue = \case
   where
     f = ExplicitGlue zeroLength
 
-parsePresetGlue :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => Axis -> T.PresetGlueType -> SimpParser s Glue
+parsePresetGlue :: InhibitableStream s => Axis -> T.PresetGlueType -> SimpParser s Glue
 parsePresetGlue mode t =
     do
     skipSatisfied $ checkModeAndToken mode (T.PresetGlueTok t)
     pure $ presetToSpecifiedGlue t
 
-parseMessage :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
+parseMessage :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseMessage = Message <$> parseMsgStream <*> parseGeneralText
   where
     parseMsgStream = satisfyThen (\case
         T.MessageTok str -> Just str
         _                -> Nothing)
 
-parseOpenInput :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
+parseOpenInput :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseOpenInput =
     do
     skipSatisfiedEquals T.OpenInputTok
@@ -231,10 +232,10 @@ parseOpenInput =
     fn <- parseFileName
     pure $ ModifyFileStream FileInput (Open fn) n
 
-parseOptionalImmediate :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s WritePolicy
+parseOptionalImmediate :: InhibitableStream s => SimpParser s WritePolicy
 parseOptionalImmediate = P.option Deferred $ skipSatisfiedEquals T.ImmediateTok $> Immediate
 
-parseOpenOutput :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
+parseOpenOutput :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseOpenOutput =
     do
     writePolicy <- parseOptionalImmediate
@@ -244,13 +245,13 @@ parseOpenOutput =
     fn <- parseFileName
     pure $ ModifyFileStream (FileOutput writePolicy) (Open fn) n
 
-parseCloseOutput :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
+parseCloseOutput :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseCloseOutput =
     do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.CloseOutputTok >> (ModifyFileStream (FileOutput writePolicy) Close <$> parseNumber)
 
-parseWriteToStream :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s ModeIndependentCommand
+parseWriteToStream :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseWriteToStream =
     do
     writePolicy <- parseOptionalImmediate
@@ -261,14 +262,14 @@ parseWriteToStream =
 
 -- VMode.
 
-parseVModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s VModeCommand
+parseVModeCommand :: InhibitableStream s => SimpParser s VModeCommand
 parseVModeCommand =
     P.choice [ skipSatisfiedEquals T.EndTok $> End
              , skipSatisfiedEquals T.DumpTok $> Dump
              , parseEnterHMode
              ] <|> (VAllModesCommand <$> parseAllModeCommand Vertical)
 
-parseEnterHMode :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s VModeCommand
+parseEnterHMode :: InhibitableStream s => SimpParser s VModeCommand
 parseEnterHMode = skipSatisfied startsHMode $> EnterHMode
   where
     startsHMode t = case t of
@@ -286,7 +287,7 @@ parseEnterHMode = skipSatisfied startsHMode $> EnterHMode
 
 -- HMode.
 
-parseHModeCommand :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s HModeCommand
+parseHModeCommand :: InhibitableStream s => SimpParser s HModeCommand
 parseHModeCommand =
     P.choice [ skipSatisfiedEquals T.ControlSpaceTok $> AddControlSpace
              , AddCharacter <$> parseCharCodeRef
@@ -298,7 +299,7 @@ parseHModeCommand =
              , parseLeaveHMode
              ] <|> (HAllModesCommand <$> parseAllModeCommand Horizontal)
 
-parseCharCodeRef :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s CharCodeRef
+parseCharCodeRef :: InhibitableStream s => SimpParser s CharCodeRef
 parseCharCodeRef =
     P.choice [ parseAddCharacterCharOrTok
              , parseAddControlCharacter
@@ -317,7 +318,7 @@ parseCharCodeRef =
     parseAddControlCharacter =
         skipSatisfiedEquals T.ControlCharTok >> (CharCodeNrRef <$> parseNumber)
 
-parseAddAccentedCharacter :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s HModeCommand
+parseAddAccentedCharacter :: InhibitableStream s => SimpParser s HModeCommand
 parseAddAccentedCharacter =
     do
     skipSatisfiedEquals T.AccentTok
@@ -333,13 +334,13 @@ parseAddAccentedCharacter =
             Assignment (SetBoxRegister _ _) _ -> P.empty
             a -> pure a
 
-parseAddDiscretionaryText :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s HModeCommand
+parseAddDiscretionaryText :: InhibitableStream s => SimpParser s HModeCommand
 parseAddDiscretionaryText =
     do
     skipSatisfiedEquals T.DiscretionaryTextTok
     AddDiscretionaryText <$> parseGeneralText <*> parseGeneralText <*> parseGeneralText
 
-parseLeaveHMode :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s HModeCommand
+parseLeaveHMode :: InhibitableStream s => SimpParser s HModeCommand
 parseLeaveHMode = skipSatisfied endsHMode $> LeaveHMode
   where
     endsHMode = \case

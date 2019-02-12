@@ -7,7 +7,7 @@ import qualified HeX.Lex                       as Lex
 import           HeX.Parse.Token
 
 data ExpansionMode = Expanding | NotExpanding
-    deriving (Show)
+    deriving (Show, Eq)
 
 type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
 

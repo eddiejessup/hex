@@ -31,13 +31,13 @@ import           HeX.Parse.Inhibited
 import           HeX.Parse.Quantity
 import qualified HeX.Parse.Token               as T
 
-parseAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Assignment
+parseAssignment :: InhibitableStream s => SimpParser s Assignment
 -- 'Try' because both can start with 'global'.
 parseAssignment = (P.try parseDefineMacro) <|> parseNonMacroAssignment
 
 -- Parse Macro.
 
-parseDefineMacro :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Assignment
+parseDefineMacro :: InhibitableStream s => SimpParser s Assignment
 parseDefineMacro =
     do
     -- Macro prefixes.
@@ -73,7 +73,7 @@ parseDefineMacro =
     tokToDef (T.DefineMacroTok _global expand) = Just (_global, expand)
     tokToDef _ = Nothing
 
-parseNonMacroAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s Assignment
+parseNonMacroAssignment :: InhibitableStream s => SimpParser s Assignment
 parseNonMacroAssignment =
     do
     _global <- parseGlobal
@@ -113,28 +113,28 @@ parseNonMacroAssignment =
     tokToInteractionMode (T.InteractionModeTok m) = Just m
     tokToInteractionMode _                        = Nothing
 
-numVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s IntegerVariable, SimpParser s Number)
+numVarValPair :: InhibitableStream s => (SimpParser s IntegerVariable, SimpParser s Number)
 numVarValPair = (parseIntegerVariable, parseNumber)
 
-lenVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s LengthVariable, SimpParser s Length)
+lenVarValPair :: InhibitableStream s => (SimpParser s LengthVariable, SimpParser s Length)
 lenVarValPair = (parseLengthVariable, parseLength)
 
-glueVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s GlueVariable, SimpParser s Glue)
+glueVarValPair :: InhibitableStream s => (SimpParser s GlueVariable, SimpParser s Glue)
 glueVarValPair = (parseGlueVariable, parseGlue)
 
-mathGlueVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s MathGlueVariable, SimpParser s MathGlue)
+mathGlueVarValPair :: InhibitableStream s => (SimpParser s MathGlueVariable, SimpParser s MathGlue)
 mathGlueVarValPair = (parseMathGlueVariable, parseMathGlue)
 
-tokenListVarValPair :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s TokenListVariable, SimpParser s TokenListAssignmentTarget)
+tokenListVarValPair :: InhibitableStream s => (SimpParser s TokenListVariable, SimpParser s TokenListAssignmentTarget)
 tokenListVarValPair = (parseTokenListVariable, TokenListAssignmentText <$> parseGeneralText)
 
-parseVarEqVal :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s a, SimpParser s b)
+parseVarEqVal :: InhibitableStream s => (SimpParser s a, SimpParser s b)
               -> (a -> b -> c)
               -> SimpParser s c
 parseVarEqVal (varParser, valParser) f =
     f <$> varParser <* skipOptionalEquals <*> valParser
 
-parseVariableAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s VariableAssignment
+parseVariableAssignment :: InhibitableStream s => SimpParser s VariableAssignment
 parseVariableAssignment =
     P.choice [ parseVarEqVal numVarValPair IntegerVariableAssignment
              , parseVarEqVal lenVarValPair LengthVariableAssignment
@@ -144,7 +144,7 @@ parseVariableAssignment =
              , TokenListVariableAssignment <$> parseTokenListVariable <* skipFiller <*> (TokenListAssignmentVar <$> parseTokenListVariable)
              ]
 
-parseVariableModification :: forall s. (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s VariableModification
+parseVariableModification :: forall s. InhibitableStream s => SimpParser s VariableModification
 parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceIntegerVariable
                                      , parseAdvanceVar lenVarValPair AdvanceLengthVariable
                                      , parseAdvanceVar glueVarValPair AdvanceGlueVariable
@@ -152,7 +152,7 @@ parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceInte
                                      , parseScaleVar
                                      ]
   where
-    parseAdvanceVar :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => (SimpParser s a, SimpParser s b) -> (a -> b -> VariableModification) -> SimpParser s VariableModification
+    parseAdvanceVar :: InhibitableStream s => (SimpParser s a, SimpParser s b) -> (a -> b -> VariableModification) -> SimpParser s VariableModification
     parseAdvanceVar (varParser, valParser) f =
         do
         skipSatisfiedEquals T.AdvanceVarTok
@@ -177,18 +177,18 @@ parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceInte
                                     , MathGlueNumericVariable <$> parseMathGlueVariable
                                     ]
 
-parseCodeAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s CodeAssignment
+parseCodeAssignment :: InhibitableStream s => SimpParser s CodeAssignment
 parseCodeAssignment =
     parseVarEqVal (parseCodeTableRef, parseNumber) CodeAssignment
 
-parseLet :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseLet :: InhibitableStream s => SimpParser s AssignmentBody
 parseLet =
     do
     skipSatisfiedEquals T.LetTok
     (cs, tok) <- parseVarEqVal (parseCSName, skipOneOptionalSpace >> parseToken) (,)
     pure $ DefineControlSequence cs (LetTarget tok)
 
-parseFutureLet :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseFutureLet :: InhibitableStream s => SimpParser s AssignmentBody
 parseFutureLet =
     do
     skipSatisfiedEquals T.FutureLetTok
@@ -197,7 +197,7 @@ parseFutureLet =
     tok2 <- parseToken
     pure $ DefineControlSequence cs (FutureLetTarget tok1 tok2)
 
-parseShortMacroAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseShortMacroAssignment :: InhibitableStream s => SimpParser s AssignmentBody
 parseShortMacroAssignment =
     do
     quant <- satisfyThen (\case
@@ -206,11 +206,11 @@ parseShortMacroAssignment =
     (cs, n) <- parseVarEqVal (parseCSName, parseNumber) (,)
     pure $ DefineControlSequence cs (ShortDefineTarget quant n)
 
-parseSetFamilyMember :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseSetFamilyMember :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetFamilyMember =
     parseVarEqVal (parseFamilyMember, parseFontRef) SetFamilyMember
 
-parseSetParShape :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseSetParShape :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetParShape =
     do
     skipSatisfiedEquals T.ParagraphShapeTok
@@ -229,7 +229,7 @@ parseSetParShape =
   where
     parseLengthPair = (,) <$> parseLength <*> parseLength
 
-parseReadToControlSequence :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseReadToControlSequence :: InhibitableStream s => SimpParser s AssignmentBody
 parseReadToControlSequence =
     do
     skipSatisfiedEquals T.ReadTok
@@ -239,14 +239,14 @@ parseReadToControlSequence =
     cs <- parseCSName
     pure $ DefineControlSequence cs (ReadTarget nr)
 
-parseSetBoxRegister :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseSetBoxRegister :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetBoxRegister =
     do
     skipSatisfiedEquals T.SetBoxRegisterTok
     parseVarEqVal (parseNumber, skipFiller >> parseBox) SetBoxRegister
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-parseFileName :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s (Path Rel File)
+parseFileName :: InhibitableStream s => SimpParser s (Path Rel File)
 parseFileName =
     do
     skipOptionalSpaces
@@ -278,7 +278,7 @@ parseFileName =
     tokToPathChar _ = Nothing
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
-parseNewFontAssignment :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseNewFontAssignment :: InhibitableStream s => SimpParser s AssignmentBody
 parseNewFontAssignment =
     do
     skipSatisfiedEquals T.FontTok
@@ -295,22 +295,22 @@ parseNewFontAssignment =
     parseFontSpecAt = skipKeyword "at" >> (FontAt <$> parseLength)
     parseFontSpecScaled = skipKeyword "scaled" >> (FontScaled <$> parseNumber)
 
-parseSetFontDimension :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseSetFontDimension :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetFontDimension =
     parseVarEqVal (parseFontDimensionRef, parseLength) SetFontDimension
 
-parseSetFontChar :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseSetFontChar :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetFontChar =
     parseVarEqVal (parseFontCharRef, parseNumber) SetFontChar
 
-parseSetBoxDimension :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseSetBoxDimension :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetBoxDimension =
     parseVarEqVal (parseBoxDimensionRef, parseLength) SetBoxDimension
 
-parseSetSpecialInteger :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseSetSpecialInteger :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetSpecialInteger =
     parseVarEqVal (parseSpecialInteger, parseNumber) SetSpecialInteger
 
-parseSetSpecialLength :: (Inhibitable s, P.Token s ~ T.PrimitiveToken) => SimpParser s AssignmentBody
+parseSetSpecialLength :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetSpecialLength =
     parseVarEqVal (parseSpecialLength, parseLength) SetSpecialLength

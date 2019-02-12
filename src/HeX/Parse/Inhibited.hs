@@ -7,15 +7,16 @@ module HeX.Parse.Inhibited where
 
 import           Control.Monad                  ( guard
                                                 , foldM )
-import           Safe                           ( lastMay
-                                                , initMay
-                                                )
 import           Data.Char                      ( ord )
-import qualified Text.Megaparsec               as P
-import           Text.Megaparsec                ( (<|>) )
+import qualified Data.Foldable                 as Fold
 import           Data.Functor                   ( ($>) )
 import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
+import           Safe                           ( lastMay
+                                                , initMay
+                                                )
+import qualified Text.Megaparsec               as P
+import           Text.Megaparsec                ( (<|>) )
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Config                     ( Config )
@@ -24,18 +25,23 @@ import           HeX.Parse.Resolve
 import           HeX.Parse.Token
 import           HeX.Parse.Common
 
-class (P.Stream s, Show s) => Inhibitable s where
+class (P.Stream s, Show s, P.Token s ~ PrimitiveToken) => InhibitableStream s where
     setExpansion :: Ord e => ExpansionMode -> P.Parsec e s ()
 
     getConfig :: s -> Config
 
     insertLexToken :: s -> Lex.Token -> s
 
-inhibitExpansion, enableExpansion :: Ord e => Inhibitable s => P.Parsec e s ()
+    insertLexTokens :: s -> [Lex.Token] -> s
+    insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
+
+inhibitExpansion, enableExpansion
+    :: Ord e
+    => InhibitableStream s => P.Parsec e s ()
 inhibitExpansion = setExpansion NotExpanding
 enableExpansion  = setExpansion Expanding
 
-parseInhibited :: Inhibitable s => SimpParser s a -> SimpParser s a
+parseInhibited :: InhibitableStream s => SimpParser s a -> SimpParser s a
 parseInhibited p =
     do
     inhibitExpansion
@@ -47,12 +53,20 @@ parseInhibited p =
 -- 1.  While deleting tokens during error recovery
 -- 2.  While skipping tokens because conditional text is being ignored
 -- 3.  While reading macro arguments
--- 4.  While reading a control sequence to be defined by \let, \futurelet, \def, \gdef, \edef, \xdef, \chardef, \mathchardef, \countdef, \dimendef, \skipdef, \muskipdef, \toksdef, \read or \font
--- 5.  While reading argument tokens for \expandafter, \noexpand, \string, \meaning, \let, \futurelet, \ifx, \show, \afterassignment or \aftergroup
+-- 4.  While reading a control sequence to be defined by \let, \futurelet,
+--     \def, \gdef, \edef, \xdef, \chardef, \mathchardef, \countdef, \dimendef,
+--     \skipdef, \muskipdef, \toksdef, \read or \font
+-- 5.  While reading argument tokens for \expandafter, \noexpand, \string,
+--     \meaning, \let, \futurelet, \ifx, \show, \afterassignment or \aftergroup
 -- 6.  While absorbing the parameter text of a \def, \gdef, \edef or \xdef
--- 7.  While absorbing the replacement text of a \def, \gdef or \read; or the text of a token variable like \everypar or \toks0; or the token list for \uppercase or \lowercase or \write. (The token list for \write will be expanded later, when it is actually output to a file.)
--- 8.  While reading the preamble of an alignment, except after a token for the primitive command \span or when reading the ⟨glue⟩ after \tabskip
--- 9.  Just after a <$,3> token that begins math mode, to see if another $3 follows
+-- 7.  While absorbing the replacement text of a \def, \gdef or \read; or the
+--     text of a token variable like \everypar or \toks0; or the token list for
+--     \uppercase or \lowercase or \write. (The token list for \write will be
+--     expanded later, when it is actually output to a file.)
+-- 8.  While reading the preamble of an alignment, except after a token for the
+--     primitive command \span or when reading the ⟨glue⟩ after \tabskip
+-- 9.  Just after a <$,3> token that begins math mode, to see if another $3
+--     follows
 -- 10.  Just after a <‘,12> token that begins an alphabetic constant
 
 -- Case 3, macro arguments.
@@ -85,16 +99,17 @@ splitLastMay xs =
     ini <- initMay xs
     pure (ini, z)
 
-unsafeParseMacroArgs :: (P.Stream s, P.Token s ~ PrimitiveToken) => MacroContents -> SimpParser s (Map.Map Digit MacroArgument)
+unsafeParseMacroArgs
+    :: InhibitableStream s
+    => MacroContents -> SimpParser s (Map.Map Digit MacroArgument)
 unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
     do
     skipBalancedText pre
     parseArgs params
   where
     parseArgs
-        :: (P.Stream s, P.Token s ~ PrimitiveToken)
-        => MacroParameters
-        -> SimpParser s (Map.Map Digit MacroArgument)
+        :: InhibitableStream s
+        => MacroParameters -> SimpParser s (Map.Map Digit MacroArgument)
     parseArgs ps =
         case Map.minViewWithKey ps of
             -- If there are no parameters, expect no arguments.
@@ -115,9 +130,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
     -- If the parameter is undelimited, the argument is the next non-blank
     -- token, unless that token is ‘{’, when the argument will be the entire
     -- following {...} group.
-    parseUndelimitedArgs
-        :: (P.Stream s, P.Token s ~ PrimitiveToken)
-        => SimpParser s [Lex.Token]
+    parseUndelimitedArgs :: InhibitableStream s => SimpParser s [Lex.Token]
     parseUndelimitedArgs =
         do
         -- Skip blank tokens (assumed to mean spaces).
@@ -134,7 +147,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
     -- followed by the delimiter tokens. In the delimiter, category codes,
     -- character codes and control sequence names must match.
     parseDelimitedArgs
-        :: (P.Stream s, P.Token s ~ PrimitiveToken)
+        :: InhibitableStream s
         => [Lex.Token]
         -> [Lex.Token]
         -> SimpParser s [Lex.Token]
@@ -169,7 +182,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
 
 -- Case 4, for things like 'macroName' in '\def\macroName'.
 
-unsafeParseCSName :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s Lex.ControlSequenceLike
+unsafeParseCSName :: InhibitableStream s => SimpParser s Lex.ControlSequenceLike
 unsafeParseCSName = handleLex tokToCSLike
   where
     tokToCSLike (Lex.CharCatToken Lex.CharCat{cat = Lex.Active, char = c}) =
@@ -182,14 +195,14 @@ unsafeParseCSName = handleLex tokToCSLike
 -- Case 5, arbitrary tokens such as for \let\foo=<token>.
 
 unsafeAnySingleLex
-    :: (P.Stream s, P.Token s ~ PrimitiveToken)
+    :: InhibitableStream s
     => SimpParser s Lex.Token
 unsafeAnySingleLex = satisfyThen tokToLex
 
 -- Case 6, macro parameter text.
 
 parseParamDelims
-    :: (P.Stream s, P.Token s ~ PrimitiveToken)
+    :: InhibitableStream s
     => SimpParser s BalancedText
 -- Trivially balanced, because no braces are allowed at all.
 parseParamDelims = BalancedText <$> manySatisfiedThen (\t -> tokToDelimTok t)
@@ -202,7 +215,7 @@ parseParamDelims = BalancedText <$> manySatisfiedThen (\t -> tokToDelimTok t)
     tokToDelimTok _                           = Nothing
 
 maybeParseParametersFrom
-    :: (P.Stream s, P.Token s ~ PrimitiveToken)
+    :: InhibitableStream s
     => Digit
     -> SimpParser s MacroParameters
 maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
@@ -233,7 +246,7 @@ maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
         = False
 
 unsafeParseParamText
-    :: (P.Stream s, P.Token s ~ PrimitiveToken)
+    :: InhibitableStream s
     => SimpParser s (BalancedText, MacroParameters)
 unsafeParseParamText =
     do
@@ -289,7 +302,7 @@ tokToChange t
 
 -- This assumes we just parsed the '{' that starts the balanced text.
 unsafeParseBalancedText
-    :: (P.Stream s, P.Token s ~ PrimitiveToken)
+    :: InhibitableStream s
     => TerminusPolicy
     -> SimpParser s BalancedText
 unsafeParseBalancedText policy = BalancedText <$> parseNestedExpr 1 parseNext policy
@@ -303,7 +316,7 @@ unsafeParseBalancedText policy = BalancedText <$> parseNestedExpr 1 parseNext po
 
 -- This assumes we just parsed the '{' that starts the macro text.
 -- This function is like unsafeParseBalancedText, but extracts argument calls.
-unsafeParseMacroText :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s MacroText
+unsafeParseMacroText :: InhibitableStream s => SimpParser s MacroText
 unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
   where
     parseNext =
@@ -325,7 +338,7 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
 
 -- Case 10, character constant like "`c".
 
-unsafeParseCharLike :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s Int
+unsafeParseCharLike :: InhibitableStream s => SimpParser s Int
 unsafeParseCharLike = ord <$> handleLex tokToCharLike
   where
     tokToCharLike (Lex.CharCatToken Lex.CharCat{char = c}) = Just c
@@ -334,33 +347,33 @@ unsafeParseCharLike = ord <$> handleLex tokToCharLike
 
 -- Interface.
 
-parseBalancedText :: (Inhibitable s, P.Token s ~ PrimitiveToken) => TerminusPolicy -> SimpParser s BalancedText
+parseBalancedText :: InhibitableStream s => TerminusPolicy -> SimpParser s BalancedText
 parseBalancedText = parseInhibited . unsafeParseBalancedText
 
-parseMacroArgs :: (Inhibitable s, P.Token s ~ PrimitiveToken) => MacroContents -> SimpParser s (Map.Map Digit MacroArgument)
+parseMacroArgs :: InhibitableStream s => MacroContents -> SimpParser s (Map.Map Digit MacroArgument)
 parseMacroArgs = parseInhibited . unsafeParseMacroArgs
 
-parseCharLike :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s Int
+parseCharLike :: InhibitableStream s => SimpParser s Int
 parseCharLike = parseInhibited unsafeParseCharLike
 
-parseCSName :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s Lex.ControlSequenceLike
+parseCSName :: InhibitableStream s => SimpParser s Lex.ControlSequenceLike
 parseCSName = parseInhibited unsafeParseCSName
 
-parseParamText :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s (BalancedText, MacroParameters)
+parseParamText :: InhibitableStream s => SimpParser s (BalancedText, MacroParameters)
 parseParamText = parseInhibited unsafeParseParamText
 
-parseMacroText :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s MacroText
+parseMacroText :: InhibitableStream s => SimpParser s MacroText
 parseMacroText = parseInhibited unsafeParseMacroText
 
-parseToken :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s Lex.Token
+parseToken :: InhibitableStream s => SimpParser s Lex.Token
 parseToken = parseInhibited unsafeAnySingleLex
 
 -- Derived related parsers.
 
-skipFiller :: (Inhibitable s, P.Token s ~ PrimitiveToken) => NullSimpParser s
+skipFiller :: InhibitableStream s => NullSimpParser s
 skipFiller = skipManySatisfied isFillerItem
 
-parseGeneralText :: (Inhibitable s, P.Token s ~ PrimitiveToken) => SimpParser s BalancedText
+parseGeneralText :: InhibitableStream s => SimpParser s BalancedText
 parseGeneralText =
     do
     skipFiller

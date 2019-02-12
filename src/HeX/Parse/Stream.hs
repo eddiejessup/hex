@@ -79,10 +79,6 @@ newExpandStream cs _csMap =
         , skipState     = []
         }
 
--- TODO: This use of reverse is pure sloth; fix later.
-insertLexTokens :: Inhibitable s => s -> [Lex.Token] -> s
-insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
-
 insertControlSequence
     :: ExpandedStream
     -> Lex.ControlSequenceLike
@@ -129,7 +125,7 @@ expandChangeCase direction (BalancedText caseToks) =
     switch Downward = toLower
 
 runSyntaxCommand
-  :: (Inhibitable s, P.Token s ~ PrimitiveToken)
+  :: InhibitableStream s
   => s -- The input stream
   -> a -- Any information from the command head.
   -> SimpParser s b -- A parser for the command's arguments, if any.
@@ -143,7 +139,7 @@ runSyntaxCommand inputStream com parser f =
             P.take1_ $ f resultStream com a
 
 runExpandCommand
-  :: (Inhibitable s, P.Token s ~ PrimitiveToken)
+  :: InhibitableStream s
   => s -- The input stream
   -> a -- Any information from the command head.
   -> SimpParser s b -- A parser for the command's arguments, if any.
@@ -258,7 +254,7 @@ instance P.Stream ExpandedStream where
 
     reachOffset _ _freshState = (freshSourcePos, "", _freshState)
 
-instance Inhibitable ExpandedStream where
+instance InhibitableStream ExpandedStream where
     setExpansion mode = P.updateParserState $ setStateExpansion
       where
         setStateExpansion est@P.State{stateInput=es} =
