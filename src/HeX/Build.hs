@@ -30,6 +30,10 @@ import qualified Data.HashMap.Strict           as HMap
 import           Path
 import           Safe                           ( headMay
                                                 , toEnumMay )
+import           System.IO                      ( Handle
+                                                , hPutStr
+                                                -- , hFlush
+                                                )
 import qualified Text.Megaparsec               as PS
 
 import           Data.Adjacent                  ( Adj(..) )
@@ -153,13 +157,16 @@ showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Space})) = [c]
 showMsg (Lex.CharCatToken cc) = show cc
 showMsg (Lex.ControlSequenceToken (Lex.ControlSequence cs)) = "\\" ++ cs
 
+showBalancedText :: HP.BalancedText -> String
+showBalancedText (HP.BalancedText txt) = concatMap showMsg txt
+
 handleModeIndep
     :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.ModeIndependentCommand -> ExceptT String m [BL.BreakableVListElem]
 handleModeIndep = \case
-    HP.Message HP.Out (HP.BalancedText txt) ->
+    HP.Message HP.Out bText ->
         do
-        liftIO $ putStrLn $ concatMap showMsg txt
+        liftIO $ putStrLn $ showBalancedText bText
         pure []
     HP.Relax ->
         pure []
@@ -283,6 +290,39 @@ handleModeIndep = \case
                 do
                 fontSel <- HP.runConfState $ selectFont fNr
                 pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
+    -- if stream number corresponds to existing, open file:
+    --     File
+    -- otherwise:
+    --     Log
+    --     unless stream number is negative: Terminal
+    HP.WriteToStream n txt policy ->
+        readOnConfState $ do
+        en <- evaluateNumber n
+        let txtStr = showBalancedText txt
+        case policy of
+            HP.Immediate ->
+                do
+                fStreams <- asks outFileStreams
+                case getStream fStreams en of
+                    Just fStream ->
+                         liftIO $ hPutStr fStream txtStr
+                    Nothing ->
+                        do
+                        if en >= 0
+                            -- Write to terminal.
+                            then liftIO $ putStrLn txtStr
+                            else pure ()
+                        -- -- Write to log
+                        -- logHandle <- asks logStream
+                        -- liftIO $ hPutStr logHandle txtStr
+                pure []
+            HP.Deferred -> undefined
+
+getStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
+getStream strms n =
+    do
+    fourBitn <- newFourBitInt n
+    HMap.lookup fourBitn strms
 
 processHCommand
     :: (MonadState HP.ExpandedStream m, MonadIO m)
@@ -509,6 +549,7 @@ processVCommand oldStream pages curPage acc = \case
         do
         lastPages <- HP.runConfState $ runPageBuilder curPage (reverse acc)
         let pagesFinal = pages ++ lastPages
+        -- readOnConfState $ asks logStream >>= liftIO . hFlush
         pure (pagesFinal, curPage, acc, False)
     HP.EnterHMode ->
         addParagraphToPage HP.Indent

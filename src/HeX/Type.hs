@@ -12,6 +12,14 @@ import           GHC.Generics (Generic)
 type IntVal = Int
 type LenVal = Int
 
+newNBitInt :: Alternative f => (Int -> a) -> Int ->  Int -> f a
+newNBitInt f nBits n
+    | n < 0 = empty
+    | n >= (2 ^ nBits) = empty
+    | otherwise = pure $ f n
+
+-- 8-bit.
+
 newtype EightBitInt = EightBitInt IntVal
     deriving (Show, Eq, Generic, Enum)
 
@@ -19,19 +27,26 @@ instance Hashable EightBitInt
 
 instance Bounded EightBitInt where
     minBound = EightBitInt 0
-    maxBound = EightBitInt 255
+    maxBound = EightBitInt (2 ^ (8 :: Int) - 1)
 
-newEightBitInt :: Alternative f => IntVal -> f EightBitInt
-newEightBitInt n
-    | n < 0 = empty
-    | n > 255 = empty
-    | otherwise = pure $ EightBitInt n
+newEightBitInt :: Alternative f => Int -> f EightBitInt
+newEightBitInt = newNBitInt EightBitInt 8
 
-newtype ScaledPointNumber = ScaledPointNumber Int
+-- 4-bit.
 
-newScaledPointNumber n
-    | n < 0 = empty
-    | otherwise = pure $ ScaledPointNumber n
+newtype FourBitInt = FourBitInt IntVal
+    deriving (Show, Eq, Generic, Enum)
+
+instance Hashable FourBitInt
+
+instance Bounded FourBitInt where
+    minBound = FourBitInt 0
+    maxBound = FourBitInt (2 ^ (4 :: Int) - 1)
+
+newFourBitInt :: Alternative f => Int -> f FourBitInt
+newFourBitInt = newNBitInt FourBitInt 4
+
+-- Concepts.
 
 data HDirection
     = Leftward

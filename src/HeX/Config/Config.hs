@@ -22,6 +22,10 @@ import           Data.Vector                    ( (!?) )
 import           Path
 import           Safe                           ( toEnumMay )
 import           System.Directory
+import           System.IO                      ( Handle
+                                                , IOMode(..)
+                                                , openFile
+                                                )
 
 import qualified TFM
 import           TFM                            ( TexFont )
@@ -59,6 +63,9 @@ data Config = Config
     -- , mathGlueRegister  :: RegisterMap MathGlue
     , tokenListRegister :: RegisterMap BalancedText
     -- , boxRegister       :: RegisterMap (Maybe Box)
+    -- File streams.
+    -- , logStream         :: Handle
+    , outFileStreams    :: HMap.HashMap FourBitInt Handle
     } deriving (Show)
 
 newConfig :: CSMap -> IO Config
@@ -66,6 +73,7 @@ newConfig _csMap =
     do
     cwdRaw <- getCurrentDirectory
     cwd <- parseAbsDir cwdRaw
+    -- logHandle <- openFile "hex.log" WriteMode
     pure Config
         { currentFontNr     = Nothing
         , fontInfos         = V.empty
@@ -84,6 +92,8 @@ newConfig _csMap =
         -- , mathGlueRegister  = HMap.empty
         , tokenListRegister = HMap.empty
         -- , boxRegister       = HMap.empty
+        -- , logStream         = logHandle
+        , outFileStreams    = HMap.empty
         }
 
 fillMap :: (Hashable k, Enum k, Bounded k, Eq k) => v -> HMap.HashMap k v
