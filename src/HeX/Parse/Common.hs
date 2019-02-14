@@ -35,7 +35,6 @@ primTokHasCategory _ _                    = False
 isSpace :: PrimitiveToken -> Bool
 isSpace = primTokHasCategory Lex.Space
 
-
 -- Match particular tokens.
 
 isFillerItem :: PrimitiveToken -> Bool

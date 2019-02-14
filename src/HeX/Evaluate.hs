@@ -233,6 +233,45 @@ evaluateTokenListVariable = \case
     AST.ParamVar p    -> asks (getTokenListParam p . params)
     AST.RegisterVar n -> getRegisterIdx n mempty tokenListRegister
 
+-- Showing internal quantities.
+
+-- For \number, \romannumeral, \string. \meaning, \jobname, and \fontname:
+-- Each character code gets category "other" , except that 32 is gets "space".
+asMadeToken :: CharCode -> Lex.Token
+asMadeToken c =
+    let cat = if c == ' ' then Lex.Space else Lex.Other
+    in Lex.CharCatToken $ Lex.CharCat c cat
+
+stringAsMadeTokens :: [CharCode] -> [Lex.Token]
+stringAsMadeTokens = fmap asMadeToken
+
+showInternalQuantity :: (MonadReader Config m, MonadError String m) => AST.InternalQuantity -> m String
+showInternalQuantity = \case
+    AST.InternalIntegerQuantity n ->
+        do
+        en <- evaluateInternalInteger n
+        pure $ show en
+    AST.InternalLengthQuantity d ->
+        do
+        ed <- evaluateInternalLength d
+        undefined
+    AST.InternalGlueQuantity g ->
+        do
+        eg <- evaluateInternalGlue g
+        undefined
+    AST.InternalMathGlueQuantity mg ->
+        do
+        undefined
+        -- emg <- evaluateInternalMathGlue mg
+    AST.FontQuantity f ->
+        do
+        ef <- evaluateFontRef f
+        undefined
+    AST.TokenListVariableQuantity tl ->
+        do
+        etl <- evaluateTokenListVariable tl
+        undefined
+
 -- Condition
 
 data ElseState

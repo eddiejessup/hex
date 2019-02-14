@@ -303,6 +303,9 @@ charToDigit _   = Nothing
 newtype BalancedText = BalancedText [Lex.Token]
     deriving (Show, Eq, Semigroup, Monoid)
 
+newtype ExpandedBalancedText = ExpandedBalancedText [PrimitiveToken]
+    deriving (Show, Eq, Semigroup, Monoid)
+
 -- We use a map to restrict our parameter keys' domain to [1..9].
 type MacroParameters = Map.Map Digit BalancedText
 
@@ -342,7 +345,7 @@ data PrimitiveToken
     | ShowTokenTok -- \show
     | ShowBoxTok -- \showbox
     | ShowListsTok -- \showlists
-    | ShowInternalQuantityTok -- \showthe
+    | ShowTheInternalQuantityTok -- \showthe
     | ShipOutTok -- \shipout
     | IgnoreSpacesTok -- \ignorespaces
     | SetAfterAssignmentTokenTok -- \afterassignment
@@ -474,9 +477,11 @@ data IfTok
 
 data SyntaxCommandHeadToken
     = ChangeCaseTok VDirection -- \uppercase, \lowercase
-    | CSNameTok
+    | CSNameTok  -- \csname
     | MacroTok MacroContents
     | IfTok IfTok
+    | StringTok  -- \string
+    | TheTok  -- \the
     deriving (Show, Eq)
 
 data ConditionBlockToken

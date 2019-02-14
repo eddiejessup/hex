@@ -189,12 +189,21 @@
 <internal-integer>
     <integer-variable>
     <special-integer>
-    <codename> <8-bit-number>
+    <code-reference>
     <chardef-token>
     <mathchardef-token>
+    <fontchar-reference>
+    \lastpenalty
+    <extra-special-integer>
+
+<code-reference>
+    <codename> <8-bit-number>
+
+<fontchar-reference>
     \hyphenchar <font>
     \skewchar <font>
-    \lastpenalty
+
+<extra-special-integer>
     \parshape
     \inputlineno
     \badness
@@ -223,9 +232,12 @@
 <internal-dimen>
     <dimen-variable>
     <special-dimen>
-    \fontdimen <number> <font>
+    <fontdimen-reference>
     <box-dimension> <8-bit-number>
     \lastkern
+
+<fontdimen-reference>
+    \fontdimen <number> <font>
 
 <box-dimension>
     \ht
@@ -352,7 +364,7 @@
     <muglue-variable>
 
 <code-assignment>
-    <codename> <8-bit-number> <equals> <number>
+    <code-reference> <equals> <number>
 
 <let-assignment>
     \let <control-sequence> <equals> <one-optional-space> <token>
@@ -360,7 +372,7 @@
 
 <shorthand-definition>
     \chardef <control-sequence> <equals> <8-bit-number>
-    \mathchardef <control-sequence> <equals> <15-bit number>
+    \mathchardef <control-sequence> <equals> <15-bit-number>
     <registerdef> <control-sequence> <equals> <8-bit-number>
 
 <registerdef>
@@ -391,9 +403,8 @@
     <intimate-assignment>
 
 <font-assignment>
-    \fontdimen <number> <font> <equals> <dimen>
-    \hyphenchar <font> <equals> <number>
-    \skewchar <font> <equals> <number>
+    <fontdimen-reference> <equals> <dimen>
+    <fontchar-reference> <equals> <number>
 
 <hyphenation-assignment>
     \hyphenation <general-text>
@@ -532,7 +543,7 @@
     <get-h-box>
     \vrule
     \valign
-    \ 
+    \
     <letter>
     <otherchar>
     \char
@@ -558,7 +569,7 @@
     <vertical-rule>
     \valign <box-specification> { <alignment-material> }
     % Non mode-parametrisable.
-    \ 
+    \
     <letter>
     <otherchar>
     \char <8-bit-number>
@@ -592,6 +603,38 @@
     \halign
     \end
     \dump
+
+## Syntax ('expansion') commands
+
+<macro>
+<conditional>
+\number <number>
+\romannumeral <number>
+\string <token>
+\jobname
+\fontname <font>
+\meaning <token>
+\csname .. \endcsname
+\expandafter <token>
+\noexpand <token>
+<mark-register>
+\input <file-name>
+\endinput
+\the <internal-quantity>
+
+<internal-quantity>
+    <internal-integer>
+    <internal-dimen>
+    <internal-glue>
+    <internal-muglue>
+    <font>
+    <token-variable>
+
+<mark-register>
+    \topmark
+    \firstmark
+    \botmark
+    \splitfirstmark
 
 ## Conditions
 

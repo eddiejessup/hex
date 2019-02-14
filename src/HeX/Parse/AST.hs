@@ -331,11 +331,6 @@ data BoxOrRule
     | BoxOrRuleRule Rule
     deriving (Show)
 
-data CommandTrigger
-    = CharCommandTrigger
-    | CSCommandTrigger
-    deriving (Show)
-
 -- Commands.
 
 data AllModesCommand
@@ -343,7 +338,7 @@ data AllModesCommand
     | ShowToken Lex.Token
     | ShowBox Number
     | ShowLists
-    -- \| ShowInternalQuantity InternalQuantity
+    | ShowTheInternalQuantity InternalQuantity
     | ShipOut Box
     | SetAfterAssignmentToken Lex.Token
     | AddToAfterGroupTokens Lex.Token
@@ -372,10 +367,10 @@ data ModeIndependentCommand
     | AddMathKern MathLength
     | RemoveItem T.RemovableItem
     | AddGlue Glue
-    | Message T.MessageStream T.BalancedText
+    | Message T.MessageStream T.ExpandedBalancedText
     | ModifyFileStream FileStreamType FileStreamAction Number
-    | WriteToStream Number T.BalancedText WritePolicy
-    | DoSpecial T.BalancedText
+    | WriteToStream Number WriteText
+    | DoSpecial T.ExpandedBalancedText
     deriving (Show)
 
 data VModeCommand
@@ -395,6 +390,25 @@ data HModeCommand
     | AddDiscretionaryHyphen
     | EnterMathMode
     | LeaveHMode
+    deriving (Show)
+
+data CommandTrigger
+    = CharCommandTrigger
+    | CSCommandTrigger
+    deriving (Show)
+
+data InternalQuantity
+    = InternalIntegerQuantity InternalInteger
+    | InternalLengthQuantity InternalLength
+    | InternalGlueQuantity InternalGlue
+    | InternalMathGlueQuantity InternalMathGlue
+    | FontQuantity FontRef
+    | TokenListVariableQuantity TokenListVariable
+    deriving (Show)
+
+data WriteText
+    = ImmediateWriteText T.ExpandedBalancedText
+    | DeferredWriteText T.BalancedText
     deriving (Show)
 
 data WritePolicy

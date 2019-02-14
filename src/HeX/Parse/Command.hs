@@ -43,9 +43,10 @@ extractVModeCommand = extractResult parseVModeCommand
 parseAllModeCommand :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAllModeCommand mode =
     P.choice [ parseChangeScope
-             , parseShowToken
+             , skipSatisfiedEquals T.ShowTokenTok >> (ShowToken <$> parseToken)
              , skipSatisfiedEquals T.ShowBoxTok >> (ShowBox <$> parseNumber)
              , skipSatisfiedEquals T.ShowListsTok $> ShowLists
+             , skipSatisfiedEquals T.ShowTheInternalQuantityTok >> (ShowTheInternalQuantity <$> parseInternalQuantity)
              , skipSatisfiedEquals T.ShipOutTok >> (ShipOut <$> parseBox)
              , skipSatisfiedEquals T.SetAfterAssignmentTokenTok >> (SetAfterAssignmentToken <$> parseToken)
              , skipSatisfiedEquals T.ToAfterGroupTokensTok >> (AddToAfterGroupTokens <$> parseToken)
@@ -76,8 +77,14 @@ parseChangeScope = satisfyThen tokToChangeScope
         | (T.ChangeScopeCSTok sign) <- t      = Just $ ChangeScope sign CSCommandTrigger
         | otherwise                           = Nothing
 
-parseShowToken :: InhibitableStream s => SimpParser s AllModesCommand
-parseShowToken = skipSatisfiedEquals T.ShowTokenTok >> (ShowToken <$> parseToken)
+parseInternalQuantity :: InhibitableStream s => SimpParser s InternalQuantity
+parseInternalQuantity = P.choice [ InternalIntegerQuantity <$> parseInternalInteger
+                                 , InternalLengthQuantity <$> parseInternalLength
+                                 , InternalGlueQuantity <$> parseInternalGlue
+                                 , InternalMathGlueQuantity <$> parseInternalMathGlue
+                                 , FontQuantity <$> parseFontRef
+                                 , TokenListVariableQuantity <$> parseTokenListVariable
+                                 ]
 
 parseStartParagraph :: InhibitableStream s => SimpParser s AllModesCommand
 parseStartParagraph = satisfyThen (\case
@@ -166,7 +173,7 @@ parseModeIndependentCommand mode =
              , P.try parseOpenOutput
              , P.try parseCloseOutput
              , P.try parseWriteToStream
-             , skipSatisfiedEquals T.DoSpecialTok >> (DoSpecial <$> parseGeneralText)
+             , skipSatisfiedEquals T.DoSpecialTok >> (DoSpecial <$> parseExpandedGeneralText)
              ]
 
 checkModeAndToken
@@ -217,7 +224,7 @@ parsePresetGlue mode t =
     pure $ presetToSpecifiedGlue t
 
 parseMessage :: InhibitableStream s => SimpParser s ModeIndependentCommand
-parseMessage = Message <$> parseMsgStream <*> parseGeneralText
+parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
   where
     parseMsgStream = satisfyThen (\case
         T.MessageTok str -> Just str
@@ -257,8 +264,10 @@ parseWriteToStream =
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.WriteTok
     n <- parseNumber
-    txt <- parseGeneralText
-    pure $ WriteToStream n txt writePolicy
+    txt <- case writePolicy of
+        Immediate -> ImmediateWriteText <$> parseExpandedGeneralText
+        Deferred -> DeferredWriteText <$> parseGeneralText
+    pure $ WriteToStream n txt
 
 -- VMode.
 

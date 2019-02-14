@@ -43,6 +43,8 @@ defaultCSMap = HMap.fromList
     , (_cs "uppercase"   , syntaxTok $ ChangeCaseTok Upward)
     , (_cs "lowercase"   , syntaxTok $ ChangeCaseTok Downward)
     , (_cs "csname"      , syntaxTok CSNameTok)
+    , (_cs "string"      , syntaxTok StringTok)
+    , (_cs "the"         , syntaxTok TheTok)
     -- Heads of conditions.
     , (_cs "ifnum"       , syntaxTok $ IfTok IfIntegerPairTestTok)
     , (_cs "ifdim"       , syntaxTok $ IfTok IfLengthPairTestTok)
@@ -65,6 +67,13 @@ defaultCSMap = HMap.fromList
     , (_cs "endcsname"   , primTok $ SyntaxCommandArg EndCSNameTok)
       -- Nothing special.
     , (_cs "relax"       , primTok RelaxTok)
+    , (_cs "begingroup"  , primTok $ ChangeScopeCSTok (Sign True))
+    , (_cs "endgroup"    , primTok $ ChangeScopeCSTok (Sign False))
+    , (_cs "show"        , primTok ShowTokenTok)
+    , (_cs "showbox"     , primTok ShowBoxTok)
+    , (_cs "showlists"   , primTok ShowListsTok)
+    , (_cs "showthe"     , primTok ShowTheInternalQuantityTok)
+    , (_cs "shipout"     , primTok ShipOutTok)
     , (_cs "ignorespaces", primTok IgnoreSpacesTok)
     , (_cs "afterassignment", primTok SetAfterAssignmentTokenTok)
     , (_cs "aftergroup"  , primTok ToAfterGroupTokensTok)

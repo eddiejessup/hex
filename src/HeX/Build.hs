@@ -31,8 +31,8 @@ import           Path
 import           Safe                           ( headMay
                                                 , toEnumMay )
 import           System.IO                      ( Handle
-                                                , hPutStr
-                                                -- , hFlush
+                                                , hPutStrLn
+                                                , hFlush
                                                 )
 import qualified Text.Megaparsec               as PS
 
@@ -150,23 +150,32 @@ setTokenListVariable v tgt = case v of
     HP.ParamVar p       -> setConfTokenListParam p tgt
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setTokenListRegister i tgt)
 
-showMsg :: Lex.Token -> [CharCode]
-showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Letter})) = [c]
-showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Other})) = [c]
-showMsg (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Space})) = [c]
-showMsg (Lex.CharCatToken cc) = show cc
-showMsg (Lex.ControlSequenceToken (Lex.ControlSequence cs)) = "\\" ++ cs
+showLexTok :: Lex.Token -> String
+showLexTok (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Letter})) = [c]
+showLexTok (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Other})) = [c]
+showLexTok (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Space})) = [c]
+showLexTok (Lex.CharCatToken cc) = show cc
+showLexTok (Lex.ControlSequenceToken (Lex.ControlSequence cs)) = "\\" ++ cs
+
+showPrimTok :: HP.PrimitiveToken -> String
+showPrimTok (HP.UnexpandedTok t) = showLexTok t
+showPrimTok (HP.SubParserError err) = err
+showPrimTok (HP.ResolutionError cs) = "Unknown control sequence: " ++ show cs
+showPrimTok pt = show pt
 
 showBalancedText :: HP.BalancedText -> String
-showBalancedText (HP.BalancedText txt) = concatMap showMsg txt
+showBalancedText (HP.BalancedText txt) = concatMap showLexTok txt
+
+showExpandedBalancedText :: HP.ExpandedBalancedText -> String
+showExpandedBalancedText (HP.ExpandedBalancedText txt) = concatMap showPrimTok txt
 
 handleModeIndep
     :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.ModeIndependentCommand -> ExceptT String m [BL.BreakableVListElem]
 handleModeIndep = \case
-    HP.Message HP.Out bText ->
+    HP.Message HP.Out eTxt ->
         do
-        liftIO $ putStrLn $ showBalancedText bText
+        liftIO $ putStrLn $ showExpandedBalancedText eTxt
         pure []
     HP.Relax ->
         pure []
@@ -290,33 +299,30 @@ handleModeIndep = \case
                 do
                 fontSel <- HP.runConfState $ selectFont fNr
                 pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
-    -- if stream number corresponds to existing, open file:
-    --     File
-    -- otherwise:
-    --     Log
-    --     unless stream number is negative: Terminal
-    HP.WriteToStream n txt policy ->
+    HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
         readOnConfState $ do
         en <- evaluateNumber n
-        let txtStr = showBalancedText txt
-        case policy of
-            HP.Immediate ->
+        fStreams <- asks outFileStreams
+        let txtStr = showExpandedBalancedText eTxt
+        -- Write to:
+        -- if stream number corresponds to existing, open file:
+        --     file
+        -- otherwise:
+        --     log
+        --     unless stream number is negative: terminal
+        case getStream fStreams en of
+            Just fStream ->
+                 liftIO $ hPutStrLn fStream txtStr
+            Nothing ->
                 do
-                fStreams <- asks outFileStreams
-                case getStream fStreams en of
-                    Just fStream ->
-                         liftIO $ hPutStr fStream txtStr
-                    Nothing ->
-                        do
-                        if en >= 0
-                            -- Write to terminal.
-                            then liftIO $ putStrLn txtStr
-                            else pure ()
-                        -- -- Write to log
-                        -- logHandle <- asks logStream
-                        -- liftIO $ hPutStr logHandle txtStr
-                pure []
-            HP.Deferred -> undefined
+                if en >= 0
+                    -- Write to terminal.
+                    then liftIO $ putStrLn txtStr
+                    else pure ()
+                -- Write to log
+                logHandle <- asks logStream
+                liftIO $ hPutStrLn logHandle txtStr
+        pure []
 
 getStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
 getStream strms n =
@@ -549,7 +555,7 @@ processVCommand oldStream pages curPage acc = \case
         do
         lastPages <- HP.runConfState $ runPageBuilder curPage (reverse acc)
         let pagesFinal = pages ++ lastPages
-        -- readOnConfState $ asks logStream >>= liftIO . hFlush
+        readOnConfState $ asks logStream >>= liftIO . hFlush
         pure (pagesFinal, curPage, acc, False)
     HP.EnterHMode ->
         addParagraphToPage HP.Indent

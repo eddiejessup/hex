@@ -64,7 +64,7 @@ data Config = Config
     , tokenListRegister :: RegisterMap BalancedText
     -- , boxRegister       :: RegisterMap (Maybe Box)
     -- File streams.
-    -- , logStream         :: Handle
+    , logStream         :: Handle
     , outFileStreams    :: HMap.HashMap FourBitInt Handle
     } deriving (Show)
 
@@ -73,7 +73,7 @@ newConfig _csMap =
     do
     cwdRaw <- getCurrentDirectory
     cwd <- parseAbsDir cwdRaw
-    -- logHandle <- openFile "hex.log" WriteMode
+    logHandle <- openFile "hex.log" WriteMode
     pure Config
         { currentFontNr     = Nothing
         , fontInfos         = V.empty
@@ -92,7 +92,7 @@ newConfig _csMap =
         -- , mathGlueRegister  = HMap.empty
         , tokenListRegister = HMap.empty
         -- , boxRegister       = HMap.empty
-        -- , logStream         = logHandle
+        , logStream         = logHandle
         , outFileStreams    = HMap.empty
         }
 

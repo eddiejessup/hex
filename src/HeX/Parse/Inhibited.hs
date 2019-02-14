@@ -373,10 +373,29 @@ parseToken = parseInhibited unsafeAnySingleLex
 skipFiller :: InhibitableStream s => NullSimpParser s
 skipFiller = skipManySatisfied isFillerItem
 
-parseGeneralText :: InhibitableStream s => SimpParser s BalancedText
-parseGeneralText =
+parseExpandedBalancedText
+    :: InhibitableStream s
+    => TerminusPolicy
+    -> SimpParser s ExpandedBalancedText
+parseExpandedBalancedText policy = ExpandedBalancedText <$> parseNestedExpr 1 parseNext policy
+  where
+    parseNext = satisfyThen tokToX
+
+    tokToX pt@(UnexpandedTok lt) = Just (pt, tokToChange lt)
+    tokToX pt = Just (pt, EQ)
+
+_parseDelimitedText
+    :: InhibitableStream s
+    => (TerminusPolicy -> SimpParser s a) ->  SimpParser s a
+_parseDelimitedText parser =
     do
     skipFiller
     -- TODO: Maybe other things can act as left braces.
     skipSatisfied $ primTokHasCategory Lex.BeginGroup
-    parseBalancedText Discard
+    parser Discard
+
+parseGeneralText :: InhibitableStream s => SimpParser s BalancedText
+parseGeneralText = _parseDelimitedText parseBalancedText
+
+parseExpandedGeneralText :: InhibitableStream s => SimpParser s ExpandedBalancedText
+parseExpandedGeneralText = _parseDelimitedText parseExpandedBalancedText

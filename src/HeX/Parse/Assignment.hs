@@ -219,7 +219,7 @@ parseSetParShape =
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
     nrPairs <- parseNumber
-    stream <- P.stateInput <$> P.getParserState
+    stream <- P.getInput
     eNrPairs <-
         runExceptT (runReaderT (evaluateNumber nrPairs) (getConfig stream))
             >>= \case

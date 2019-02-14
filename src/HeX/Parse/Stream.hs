@@ -16,7 +16,8 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 )
 import           Control.Monad.Reader           ( runReaderT
                                                 )
-import           Data.Char                      ( toLower
+import           Data.Char                      ( chr
+                                                , toLower
                                                 , toUpper
                                                 )
 import           Data.Proxy
@@ -34,6 +35,7 @@ import           HeX.Evaluate
 import qualified HeX.Config                    as Conf
 import           HeX.Parse.Helpers
 import           HeX.Parse.Token
+import           HeX.Parse.Command
 import           HeX.Parse.Condition
 import           HeX.Parse.Inhibited
 import           HeX.Parse.SyntaxCommand
@@ -94,6 +96,17 @@ expandCSName _ charToks =
     -- TODO: if control sequence doesn't exist, define one that holds
     -- '\relax'.
     [Lex.ControlSequenceToken $ Lex.ControlSequence charToks]
+
+expandString :: Conf.IntParamVal Conf.EscapeChar -> Lex.Token -> [Lex.Token]
+expandString (Conf.IntParamVal escapeCharCode) tok = case tok of
+    Lex.CharCatToken _ -> [tok]
+    Lex.ControlSequenceToken (Lex.ControlSequence s) ->
+        stringAsMadeTokens $ escape ++ s
+  where
+
+    escape = if (escapeCharCode < 0) || (escapeCharCode > 255)
+        then []
+        else [chr escapeCharCode]
 
 expandMacro :: MacroContents -> Map.Map Digit MacroArgument -> [Lex.Token]
 expandMacro MacroContents{replacementTokens=(MacroText replaceToks)} args =
@@ -227,24 +240,41 @@ instance P.Stream ExpandedStream where
                 PrimitiveToken pt -> pure (pt, stream')
                 -- If it indicates the start of a syntax command, parse the
                 -- remainder of the syntax command.
-                SyntaxCommandHeadToken c -> case c of
-                    ChangeCaseTok direction ->
-                        runExpandCommand stream' direction parseGeneralText expandChangeCase
-                    MacroTok m ->
-                        runExpandCommand stream' m (parseMacroArgs m) expandMacro
-                    CSNameTok ->
-                        runExpandCommand stream' () parseCSNameArgs expandCSName
-                    IfTok ifTok -> case easyRunParser (conditionHeadParser ifTok) stream' of
-                        (P.State resultStream _ _, Left err) ->
-                            pure (SubParserError $ show err, resultStream)
-                        (P.State resultStream _ _, Right a)  ->
-                            do
-                            mayBlockTarget <- runExceptT $ runReaderT (evaluateConditionHead a) (config resultStream)
-                            case mayBlockTarget of
-                                Left err ->
-                                    pure (SubParserError $ show err, resultStream)
-                                Right blockTarget -> 
-                                    P.take1_ resultStream{skipState = ConditionBlockState PreElse blockTarget:(skipState resultStream)}
+                SyntaxCommandHeadToken c ->
+                    let
+                        runRead strm f = runExceptT $ runReaderT f (config strm)
+                    in case c of
+                        ChangeCaseTok direction ->
+                            runExpandCommand stream' direction parseGeneralText expandChangeCase
+                        MacroTok m ->
+                            runExpandCommand stream' m (parseMacroArgs m) expandMacro
+                        CSNameTok ->
+                            runExpandCommand stream' () parseCSNameArgs expandCSName
+                        StringTok ->
+                            let escapeChar = (Conf.escapeChar . Conf.params . config) stream'
+                            in runExpandCommand stream' escapeChar parseToken expandString
+                        TheTok -> case easyRunParser parseInternalQuantity stream' of
+                            (P.State resultStream _ _, Left err) ->
+                                pure (SubParserError $ show err, resultStream)
+                            (P.State resultStream _ _, Right q)  ->
+                                do
+                                mayShowS <- runRead resultStream (showInternalQuantity q)
+                                case mayShowS of
+                                    Left err ->
+                                        pure (SubParserError $ show err, resultStream)
+                                    Right showS ->
+                                        P.take1_ $ insertLexTokens resultStream $ stringAsMadeTokens showS
+                        IfTok ifTok -> case easyRunParser (conditionHeadParser ifTok) stream' of
+                            (P.State resultStream _ _, Left err) ->
+                                pure (SubParserError $ show err, resultStream)
+                            (P.State resultStream _ _, Right a)  ->
+                                do
+                                mayBlockTarget <- runRead resultStream (evaluateConditionHead a)
+                                case mayBlockTarget of
+                                    Left err ->
+                                        pure (SubParserError $ show err, resultStream)
+                                    Right blockTarget ->
+                                        P.take1_ resultStream{skipState = ConditionBlockState PreElse blockTarget:(skipState resultStream)}
 
     takeN_ = undefined
 
