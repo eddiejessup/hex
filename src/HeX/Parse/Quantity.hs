@@ -67,9 +67,8 @@ parseNormalInteger =
     parseCharacter = skipSatisfied (matchOtherToken '`') *> parseCharLike
 
 parseDecimalIntegerDigit :: InhibitableStream s => SimpParser s Int
-parseDecimalIntegerDigit = satisfyThen decCharToInt
-  where
-    decCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
+parseDecimalIntegerDigit = satisfyThen $ \case
+    T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
         case c of
             '0' -> Just 0
             '1' -> Just 1
@@ -82,7 +81,7 @@ parseDecimalIntegerDigit = satisfyThen decCharToInt
             '8' -> Just 8
             '9' -> Just 9
             _   -> Nothing
-    decCharToInt _ = Nothing
+    _ -> Nothing
 
 parseHexadecimalIntegerDigits :: InhibitableStream s => SimpParser s [Int]
 parseHexadecimalIntegerDigits =
@@ -294,9 +293,9 @@ parseQuantityVariable getParam rTyp =
              , RegisterVar <$> parseRegRef
              ]
   where
-    parseShortRegRef = satisfyThen (\case
+    parseShortRegRef = satisfyThen $ \case
         T.IntRefTok (T.RegQuantity typ) n | typ == rTyp -> Just $ constNumber n
-        _ -> Nothing)
+        _ -> Nothing
 
     parseRegRef = skipSatisfied (== T.RegisterVariableTok rTyp) >> parseNumber
 
@@ -349,19 +348,19 @@ parseInternalInteger = P.choice [ InternalIntegerVariable <$> parseIntegerVariab
                                 ]
 
 parseCharToken :: InhibitableStream s => SimpParser s IntVal
-parseCharToken = satisfyThen (\case
+parseCharToken = satisfyThen $ \case
     T.IntRefTok T.CharQuantity c -> Just c
-    _                            -> Nothing)
+    _                            -> Nothing
 
 parseMathCharToken :: InhibitableStream s => SimpParser s IntVal
-parseMathCharToken = satisfyThen (\case
+parseMathCharToken = satisfyThen $ \case
     T.IntRefTok T.MathCharQuantity c -> Just c
-    _                                -> Nothing)
+    _                                -> Nothing
 
 parseSpecialInteger :: InhibitableStream s => SimpParser s T.SpecialInteger
-parseSpecialInteger = satisfyThen (\case
+parseSpecialInteger = satisfyThen $ \case
     T.SpecialIntegerTok p -> Just p
-    _                     -> Nothing)
+    _                     -> Nothing
 
 parseCodeTableRef :: InhibitableStream s => SimpParser s CodeTableRef
 parseCodeTableRef = CodeTableRef <$> satisfyThen tokToCodeType <*> parseNumber
@@ -382,9 +381,9 @@ parseFontRef = P.choice [ FontTokenRef <$> parseFontRefToken
                         ]
 
 parseFontRefToken :: InhibitableStream s => SimpParser s IntVal
-parseFontRefToken = satisfyThen (\case
+parseFontRefToken = satisfyThen $ \case
     T.FontRefToken n -> Just n
-    _                -> Nothing)
+    _                -> Nothing
 
 parseFamilyMember :: InhibitableStream s => SimpParser s FamilyMember
 parseFamilyMember = FamilyMember <$> (satisfyThen tokToFontRange) <*> parseNumber
@@ -401,9 +400,9 @@ parseInternalLength = P.choice [ InternalLengthVariable <$> parseLengthVariable
                                ]
 
 parseSpecialLength :: InhibitableStream s => SimpParser s T.SpecialLength
-parseSpecialLength = satisfyThen (\case
+parseSpecialLength = satisfyThen $ \case
     T.SpecialLengthTok p -> Just p
-    _                    -> Nothing)
+    _                    -> Nothing
 
 parseFontDimensionRef :: InhibitableStream s => SimpParser s FontDimensionRef
 parseFontDimensionRef = skipSatisfiedEquals T.FontDimensionTok >> (FontDimensionRef <$> parseNumber <*> parseFontRef)
@@ -415,9 +414,9 @@ parseBoxDimensionRef = do
     pure $ BoxDimensionRef boxNr dim
 
 parseBoxDimension :: InhibitableStream s => SimpParser s TypoDim
-parseBoxDimension = satisfyThen (\case
+parseBoxDimension = satisfyThen $ \case
     T.BoxDimensionTok d -> Just d
-    _                   -> Nothing)
+    _                   -> Nothing
 
 parseInternalGlue :: InhibitableStream s => SimpParser s InternalGlue
 parseInternalGlue = P.choice [ InternalGlueVariable <$> parseGlueVariable
@@ -440,9 +439,9 @@ parseBox = P.choice [ parseRegisterBox
 parseRegisterBox :: InhibitableStream s => SimpParser s Box
 parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseNumber
   where
-    parseFetchMode = satisfyThen (\case
+    parseFetchMode = satisfyThen $ \case
         T.FetchedBoxTok m -> Just m
-        _                 -> Nothing)
+        _                 -> Nothing
 
 parseVSplitBox :: InhibitableStream s => SimpParser s Box
 parseVSplitBox =

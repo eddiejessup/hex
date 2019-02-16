@@ -379,10 +379,11 @@ parseExpandedBalancedText
     -> SimpParser s ExpandedBalancedText
 parseExpandedBalancedText policy = ExpandedBalancedText <$> parseNestedExpr 1 parseNext policy
   where
-    parseNext = satisfyThen tokToX
+    parseNext = satisfyThen $ \pt -> Just (pt, primTokToChange pt)
 
-    tokToX pt@(UnexpandedTok lt) = Just (pt, tokToChange lt)
-    tokToX pt = Just (pt, EQ)
+    primTokToChange = \case
+        UnexpandedTok lt -> tokToChange lt
+        _                -> EQ
 
 _parseDelimitedText
     :: InhibitableStream s

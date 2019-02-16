@@ -59,9 +59,7 @@ manySatisfiedThen f = P.many $ satisfyThen f
 -- Skipping.
 
 skipSatisfied :: P.Stream s => MatchToken s -> NullSimpParser s
-skipSatisfied f = satisfyThen testTok
-  where
-      testTok x = if f x then Just () else Nothing
+skipSatisfied f = satisfyThen $ \x -> if f x then Just () else Nothing
 
 skipSatisfiedEquals :: P.Stream s => P.Token s -> NullSimpParser s
 skipSatisfiedEquals t = skipSatisfied (== t)

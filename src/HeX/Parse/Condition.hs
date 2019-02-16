@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Condition where
@@ -13,13 +14,11 @@ import           HeX.Parse.Common
 import           HeX.Parse.Inhibited
 
 parseRelation :: InhibitableStream s => SimpParser s Ordering
-parseRelation = satisfyThen tokToOrdering
-  where
-    tokToOrdering t
-        | matchOtherToken '<' t = Just LT
-        | matchOtherToken '>' t = Just GT
-        | isEquals t            = Just EQ
-        | otherwise             = Nothing
+parseRelation = satisfyThen $ \t -> if
+    | matchOtherToken '<' t -> Just LT
+    | matchOtherToken '>' t -> Just GT
+    | isEquals t            -> Just EQ
+    | otherwise             -> Nothing
 
 conditionHeadParser :: InhibitableStream s => T.IfTok -> SimpParser s ConditionHead
 conditionHeadParser = \case

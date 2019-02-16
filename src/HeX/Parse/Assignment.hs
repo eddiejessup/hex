@@ -41,9 +41,14 @@ parseDefineMacro :: InhibitableStream s => SimpParser s Assignment
 parseDefineMacro =
     do
     -- Macro prefixes.
-    prefixes <- P.many $ satisfyThen tokToPrefix
+    prefixes <- P.many $ satisfyThen $ \case
+        T.AssignPrefixTok t -> Just t
+        _                   -> Nothing
     -- \def-like thing.
-    (defGlobalType, defExpandType) <- satisfyThen tokToDef
+    (defGlobalType, defExpandType) <- satisfyThen $ \case
+        T.DefineMacroTok _global expand -> Just (_global, expand)
+        _                               -> Nothing
+
     -- Macro's name.
     cs <- parseCSName
     -- Parameter text.
@@ -66,12 +71,6 @@ parseDefineMacro =
             T.Local | T.GlobalTok `elem` prefixes -> T.Global
             _                                     -> T.Local
         }
-  where
-    tokToPrefix (T.AssignPrefixTok t) = Just t
-    tokToPrefix _ = Nothing
-
-    tokToDef (T.DefineMacroTok _global expand) = Just (_global, expand)
-    tokToDef _ = Nothing
 
 parseNonMacroAssignment :: InhibitableStream s => SimpParser s Assignment
 parseNonMacroAssignment =
@@ -162,9 +161,9 @@ parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceInte
 
     parseScaleVar =
         do
-        d <- satisfyThen (\case
+        d <- satisfyThen $ \case
             T.ScaleVarTok d -> Just d
-            _               -> Nothing)
+            _               -> Nothing
         var <- parseNumericVariable
         skipOptionalBy
         ScaleVariable d var <$> parseNumber
@@ -200,9 +199,9 @@ parseFutureLet =
 parseShortMacroAssignment :: InhibitableStream s => SimpParser s AssignmentBody
 parseShortMacroAssignment =
     do
-    quant <- satisfyThen (\case
+    quant <- satisfyThen $ \case
         T.ShortDefHeadTok t -> Just t
-        _                   -> Nothing)
+        _                   -> Nothing
     (cs, n) <- parseVarEqVal (parseCSName, parseNumber) (,)
     pure $ DefineControlSequence cs (ShortDefineTarget quant n)
 
@@ -250,32 +249,31 @@ parseFileName :: InhibitableStream s => SimpParser s (Path Rel File)
 parseFileName =
     do
     skipOptionalSpaces
-    fileName <- P.some $ satisfyThen tokToPathChar
+    fileName <- P.some $ satisfyThen $ \case
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter)) ->
+            Just c
+        -- 'Other' Characters for decimal digits are OK.
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
+            case c of
+                '0' -> Just c
+                '1' -> Just c
+                '2' -> Just c
+                '3' -> Just c
+                '4' -> Just c
+                '5' -> Just c
+                '6' -> Just c
+                '7' -> Just c
+                '8' -> Just c
+                '9' -> Just c
+                -- Not in the spec, but let's say "/" and "." are OK.
+                '/' -> Just c
+                '.' -> Just c
+                _ -> Nothing
+        _ -> Nothing
     skipSatisfied isSpace
     case parseRelFile (fileName ++ ".tfm") of
       Just p -> pure p
       Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
-  where
-    tokToPathChar (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) =
-        Just c
-    -- 'Other' Characters for decimal digits are OK.
-    tokToPathChar (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
-        case c of
-            '0' -> Just c
-            '1' -> Just c
-            '2' -> Just c
-            '3' -> Just c
-            '4' -> Just c
-            '5' -> Just c
-            '6' -> Just c
-            '7' -> Just c
-            '8' -> Just c
-            '9' -> Just c
-            -- Not in the spec, but let's say "/" and "." are OK.
-            '/' -> Just c
-            '.' -> Just c
-            _ -> Nothing
-    tokToPathChar _ = Nothing
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
 parseNewFontAssignment :: InhibitableStream s => SimpParser s AssignmentBody

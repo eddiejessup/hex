@@ -1,5 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Command where
@@ -69,13 +70,11 @@ parseAllModeCommand mode =
              ]
 
 parseChangeScope :: InhibitableStream s => SimpParser s AllModesCommand
-parseChangeScope = satisfyThen tokToChangeScope
-  where
-    tokToChangeScope t
-        | primTokHasCategory Lex.BeginGroup t = Just $ ChangeScope (T.Sign True) CharCommandTrigger
-        | primTokHasCategory Lex.EndGroup t   = Just $ ChangeScope (T.Sign False) CharCommandTrigger
-        | (T.ChangeScopeCSTok sign) <- t      = Just $ ChangeScope sign CSCommandTrigger
-        | otherwise                           = Nothing
+parseChangeScope = satisfyThen $ \t -> if
+    | primTokHasCategory Lex.BeginGroup t -> Just $ ChangeScope (T.Sign True) CharCommandTrigger
+    | primTokHasCategory Lex.EndGroup t   -> Just $ ChangeScope (T.Sign False) CharCommandTrigger
+    | (T.ChangeScopeCSTok sign) <- t      -> Just $ ChangeScope sign CSCommandTrigger
+    | otherwise                           -> Nothing
 
 parseInternalQuantity :: InhibitableStream s => SimpParser s InternalQuantity
 parseInternalQuantity = P.choice [ InternalIntegerQuantity <$> parseInternalInteger
@@ -87,33 +86,33 @@ parseInternalQuantity = P.choice [ InternalIntegerQuantity <$> parseInternalInte
                                  ]
 
 parseStartParagraph :: InhibitableStream s => SimpParser s AllModesCommand
-parseStartParagraph = satisfyThen (\case
+parseStartParagraph = satisfyThen $ \case
     (T.StartParagraphTok _indent) -> Just $ StartParagraph _indent
-    _                             -> Nothing)
+    _                             -> Nothing
 
 parseAddLeaders :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAddLeaders mode =
     AddLeaders <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue mode
   where
-    parseLeaders = satisfyThen (\case
+    parseLeaders = satisfyThen $ \case
         T.LeadersTok t -> Just t
-        _                 -> Nothing)
+        _                 -> Nothing
 
 parseAddShiftedBox :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
   where
-    parseDirection = satisfyThen (\case
+    parseDirection = satisfyThen $ \case
         T.ModedCommand mode2 (T.ShiftedBoxTok d) | (mode == mode2) -> Just d
-        _ -> Nothing)
+        _ -> Nothing
 
     parsePlacement = ShiftedPlacement <$> parseDirection <*> parseLength
 
 parseAddUnwrappedFetchedBox :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAddUnwrappedFetchedBox mode =
     do
-    fetchMode <- satisfyThen (\case
+    fetchMode <- satisfyThen $ \case
         T.ModedCommand mode2 (T.UnwrappedFetchedBoxTok fm) | (mode == mode2) -> Just fm
-        _ -> Nothing)
+        _ -> Nothing
     n <- parseNumber
     pure $ AddUnwrappedFetchedBox n fetchMode
 
@@ -185,7 +184,7 @@ checkModeAndToken m1 tok1 (T.ModedCommand m2 tok2) = (m1 == m2) && (tok1 == tok2
 checkModeAndToken _  _   _                       = False
 
 parseRemoveItem :: InhibitableStream s => SimpParser s ModeIndependentCommand
-parseRemoveItem = RemoveItem <$> satisfyThen (\case
+parseRemoveItem = RemoveItem <$> (satisfyThen $ \case
     T.RemoveItemTok i -> Just i
     _                   -> Nothing)
 
@@ -226,9 +225,9 @@ parsePresetGlue mode t =
 parseMessage :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
   where
-    parseMsgStream = satisfyThen (\case
+    parseMsgStream = satisfyThen $ \case
         T.MessageTok str -> Just str
-        _                -> Nothing)
+        _                -> Nothing
 
 parseOpenInput :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseOpenInput =
@@ -314,7 +313,7 @@ parseCharCodeRef =
              , parseAddControlCharacter
              ]
   where
-    parseAddCharacterCharOrTok = satisfyThen (\case
+    parseAddCharacterCharOrTok = satisfyThen $ \case
         T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter)) ->
             Just $ CharRef c
         T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
@@ -322,7 +321,7 @@ parseCharCodeRef =
         T.IntRefTok T.CharQuantity i ->
             Just $ CharTokenRef i
         _ ->
-          Nothing)
+          Nothing
 
     parseAddControlCharacter =
         skipSatisfiedEquals T.ControlCharTok >> (CharCodeNrRef <$> parseNumber)
