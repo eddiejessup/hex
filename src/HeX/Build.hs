@@ -21,8 +21,9 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 , modify
                                                 )
 import           Control.Monad.Except           ( ExceptT
-                                                , liftEither
                                                 , MonadError
+                                                , liftEither
+                                                , throwError
                                                 , withExceptT
                                                 )
 import           Data.Either.Combinators        ( mapLeft )
@@ -173,6 +174,16 @@ handleModeIndep
     :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.ModeIndependentCommand -> ExceptT String m [BL.BreakableVListElem]
 handleModeIndep = \case
+    HP.ChangeScope (HP.Sign isPos) trig ->
+        do
+        HP.runConfState $ if isPos
+            then
+                modify $ pushScope trig
+            else
+                gets (popScope trig) >>= (\case
+                    Left err -> throwError err
+                    Right conf' -> put conf')
+        pure []
     HP.Message HP.Out eTxt ->
         do
         liftIO $ putStrLn $ showExpandedBalancedText eTxt
@@ -184,16 +195,16 @@ handleModeIndep = \case
     HP.AddPenalty n ->
         do
         p <- readOnConfState $ evaluatePenalty n
-        pure [BL.ListPenalty $ p]
+        pure [BL.ListPenalty p]
     HP.AddKern ln ->
         do
         k <- readOnConfState $ evaluateKern ln
-        pure [BL.VListBaseElem $ B.ElemKern $ k]
+        pure [BL.VListBaseElem $ B.ElemKern k]
     HP.AddGlue g ->
         do
         eG <- readOnConfState $ evaluateGlue g
         pure [BL.ListGlue eG]
-    HP.Assign HP.Assignment{global = _, body = _body} ->
+    HP.Assign HP.Assignment{global = globalFlag, body = _body} ->
         case _body of
             HP.DefineControlSequence cs tgt ->
                 do
@@ -206,10 +217,9 @@ handleModeIndep = \case
                         pure ([], HP.primTok $ HP.LetCharCat tgtCC)
                     HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                         do
-                        csMap <- gets csMap
-                        resTok <- liftMaybe
-                            ("Unknown control sequence: " ++ show tgtCS)
-                            $ HMap.lookup (Lex.ControlSequenceProper tgtCS) csMap
+                        resTok <-
+                            asks (lookupCSProper tgtCS)
+                            >>= liftMaybe ("Unknown control sequence: " ++ show tgtCS)
                         pure ([], resTok)
                     HP.ShortDefineTarget q n ->
                         do
@@ -221,7 +231,7 @@ handleModeIndep = \case
                         let fontRefTok = HP.primTok $ HP.FontRefToken fNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure ([boxElem], fontRefTok)
-                modify (\strm -> HP.insertControlSequence strm cs newCSTok)
+                modify (\strm -> HP.insertControlSequence strm cs newCSTok globalFlag)
                 pure acc
             HP.SetVariable ass ->
                 do
@@ -586,6 +596,7 @@ processVCommand oldStream pages curPage acc = \case
             do
             extraAcc <- liftConfigError $ handleModeIndep mcom
             modAccum (extraAcc ++ acc)
+        oth -> error $ show oth
   where
     modAccum newAcc = pure (pages, curPage, newAcc, True)
 

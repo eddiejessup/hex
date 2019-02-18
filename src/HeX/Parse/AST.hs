@@ -334,8 +334,7 @@ data BoxOrRule
 -- Commands.
 
 data AllModesCommand
-    = ChangeScope T.Sign CommandTrigger
-    | ShowToken Lex.Token
+    = ShowToken Lex.Token
     | ShowBox Number
     | ShowLists
     | ShowTheInternalQuantity InternalQuantity
@@ -360,6 +359,7 @@ data AllModesCommand
 
 data ModeIndependentCommand
     = Assign Assignment
+    | ChangeScope T.Sign CommandTrigger
     | Relax
     | IgnoreSpaces
     | AddPenalty Number
@@ -395,7 +395,7 @@ data HModeCommand
 data CommandTrigger
     = CharCommandTrigger
     | CSCommandTrigger
-    deriving (Show)
+    deriving (Show, Eq)
 
 data InternalQuantity
     = InternalIntegerQuantity InternalInteger

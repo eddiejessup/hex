@@ -5,11 +5,12 @@ module HeX.Run where
 
 import           Prelude                 hiding ( writeFile )
 
+import           Control.Monad.Except           ( ExceptT, runExceptT )
 import           Control.Monad.State.Lazy       ( evalStateT
                                                 , StateT
                                                 )
-import           Control.Monad.Except           ( ExceptT, runExceptT )
 import           Data.ByteString.Lazy           ( ByteString )
+import qualified Data.HashMap.Strict           as HMap
 import           Data.List                      ( intercalate )
 import           Data.List.NonEmpty             ( NonEmpty(..) )
 import qualified Text.Megaparsec               as P
@@ -81,11 +82,13 @@ chopResolved' ls xs =
         Nothing -> pure ()
         Just (ls', xs') -> chopResolved' ls' xs'
   where
+      lookupCS cs = HMap.lookup cs defaultCSMap
+
       extractAndPrintResolved =
             case extractToken (catLookup usableCharCatMap) ls xs of
                 Just (tok, lexState', s') ->
                     do
-                    print $ resolveToken defaultCSMap Expanding tok
+                    print $ resolveToken lookupCS Expanding tok
                     pure $ Just (lexState', s')
                 Nothing ->
                     pure Nothing
@@ -106,7 +109,7 @@ chopExpand' estream =
             pure ()
 
 runExpand :: [CharCode] -> IO ()
-runExpand xs = newExpandStream xs defaultCSMap >>= chopExpand'
+runExpand xs = newExpandStream xs >>= chopExpand'
 
 -- Command.
 
@@ -123,7 +126,7 @@ chopCommand' estream =
             ioError $ userError $ show errs
 
 runCommand :: [CharCode] -> IO ()
-runCommand xs = newExpandStream xs defaultCSMap >>= chopCommand'
+runCommand xs = newExpandStream xs >>= chopCommand'
 
 -- Generic.
 
@@ -142,7 +145,7 @@ codesToSth
     -> IO a
 codesToSth xs f =
     do
-    stream <- newExpandStream xs defaultCSMap
+    stream <- newExpandStream xs
     evalStateT (runExceptT f) stream >>= buildEitherToIO
 
 -- Paragraph list.

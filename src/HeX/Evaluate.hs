@@ -8,6 +8,7 @@ import           Control.Monad.Except           ( MonadError
                                                 )
 import           Control.Monad.Reader           ( MonadReader
                                                 , asks
+                                                , ask
                                                 )
 import           Data.Char                      ( chr )
 import qualified Data.HashMap.Strict           as HMap
@@ -336,8 +337,8 @@ evaluateIfConditionHead = \case
     AST.IfTokensEqual (Lex.CharCatToken cc1) (Lex.CharCatToken cc2) -> pure $ cc1 == cc2
     AST.IfTokensEqual (Lex.ControlSequenceToken cs1) (Lex.ControlSequenceToken cs2) ->
         do
-        _csMap <- asks csMap
-        let lkp cs = HMap.lookup (Lex.ControlSequenceProper cs) _csMap
+        conf <- ask
+        let lkp cs = lookupCSProper cs conf
         -- Surprisingly, two undefined control sequences are considered equal,
         -- so we may compare the Maybe types.
         -- The 'Just' values are arranged so that I think their naïve

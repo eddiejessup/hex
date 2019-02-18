@@ -37,18 +37,32 @@ import qualified HeX.Lex                       as Lex
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
 import           HeX.Parse.Token
+import qualified HeX.Parse.AST                 as AST
 import           HeX.Config.Parameters
 import           HeX.Config.Codes
 import           HeX.Parse.Resolve
 
 type RegisterMap v = HMap.HashMap EightBitInt v
 
+data ScopedConfig = ScopedConfig
+    { csMap :: CSMap
+    } deriving (Show)
+
+newGlobalScopedConfig :: ScopedConfig
+newGlobalScopedConfig = ScopedConfig
+    { csMap = defaultCSMap
+    }
+
+newLocalScopedConfig :: ScopedConfig
+newLocalScopedConfig = ScopedConfig
+    { csMap = HMap.empty
+    }
+
 data Config = Config
     { currentFontNr     :: Maybe Int
     , fontInfos         :: V.Vector FontInfo
     , searchDirectories :: [Path Abs Dir]
     , params            :: ParamConfig
-    , csMap             :: CSMap
     -- Char-code attribute maps.
     , catCodeMap        :: Cat.CharCatMap
     , mathCodeMap       :: Cat.CharCodeMap MathCode
@@ -66,10 +80,11 @@ data Config = Config
     -- File streams.
     , logStream         :: Handle
     , outFileStreams    :: HMap.HashMap FourBitInt Handle
+    , scopedConfig      :: (ScopedConfig, [(AST.CommandTrigger, ScopedConfig)])
     } deriving (Show)
 
-newConfig :: CSMap -> IO Config
-newConfig _csMap =
+newConfig :: IO Config
+newConfig =
     do
     cwdRaw <- getCurrentDirectory
     cwd <- parseAbsDir cwdRaw
@@ -79,7 +94,6 @@ newConfig _csMap =
         , fontInfos         = V.empty
         , searchDirectories = [cwd]
         , params            = usableParamConfig
-        , csMap             = _csMap
         , catCodeMap        = Cat.usableCharCatMap
         , mathCodeMap       = newMathCodeMap
         , lowercaseMap      = newLowercaseMap
@@ -94,6 +108,7 @@ newConfig _csMap =
         -- , boxRegister       = HMap.empty
         , logStream         = logHandle
         , outFileStreams    = HMap.empty
+        , scopedConfig      = (newGlobalScopedConfig, [])
         }
 
 fillMap :: (Hashable k, Enum k, Bounded k, Eq k) => v -> HMap.HashMap k v
@@ -180,15 +195,59 @@ parIndentBox conf =
         , desiredLength = B.To . unLenParam . parIndent . params $ conf
         }
 
--- Control sequences.
+-- Scopes.
+
+modLocalScope :: (s, [(t, s)]) -> (s -> s) -> (s, [(t, s)])
+modLocalScope (gS, (t, lS):tLS) f = (gS, (t, f lS):tLS)
+modLocalScope (gS, []) f = (f gS, [])
 
 insertControlSequence
     :: Config
     -> Lex.ControlSequenceLike
     -> ResolvedToken
+    -> GlobalFlag
     -> Config
-insertControlSequence c@Config{csMap = _csMap} cs t =
-    c{csMap = HMap.insert cs t _csMap}
+insertControlSequence conf cs t globalFlag =
+    conf{scopedConfig = insertToScopes $ scopedConfig conf}
+  where
+    insertToScopes scopes@(g, locs) =
+        case globalFlag of
+            Global ->
+                (insertCSToScope g, deleteCSFromScope <$> locs)
+            Local ->
+                modLocalScope scopes insertCSToScope
+
+    insertCSToScope c@ScopedConfig{csMap = _csMap} =
+        c{csMap = HMap.insert cs t _csMap}
+
+    deleteCSFromScope (trig, c@ScopedConfig{csMap = _csMap}) =
+        (trig, c{csMap = HMap.delete cs _csMap})
+
+
+scopedLookup :: (k -> Maybe v) -> (k, [(a, k)]) -> Maybe v
+scopedLookup f (g, []) = f g
+scopedLookup f (g, (_, loc):locs) = case f loc of
+    Nothing -> scopedLookup f (g, locs)
+    Just v -> Just v
+
+lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
+lookupCS cs = scopedLookupCS . scopedConfig
+  where
+    scopedLookupCS = scopedLookup ((HMap.lookup cs) . csMap)
+
+
+lookupCSProper :: Lex.ControlSequence -> Config -> Maybe ResolvedToken
+lookupCSProper cs = lookupCS (Lex.ControlSequenceProper cs)
+
+pushScope :: AST.CommandTrigger -> Config -> Config
+pushScope trig c@Config{scopedConfig = (g, locs)} =
+    c{scopedConfig = (g, (trig, newLocalScopedConfig):locs)}
+
+popScope :: AST.CommandTrigger -> Config -> Either String Config
+popScope _       Config{scopedConfig = (_, [])} = Left "Cannot pop from global scope"
+popScope trigA c@Config{scopedConfig = (g, (trigB, _):locs)}
+    | trigA /= trigB = Left $ "Entry and exit scope triggers differ: " ++ show (trigA, trigB)
+    | otherwise      = Right c{scopedConfig = (g, locs)}
 
 -- Codes.
 

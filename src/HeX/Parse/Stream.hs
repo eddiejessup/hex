@@ -68,10 +68,10 @@ runConfState f =
     modify (\stream -> stream{config=conf'})
     pure v
 
-newExpandStream :: [Cat.CharCode] -> CSMap -> IO ExpandedStream
-newExpandStream cs _csMap =
+newExpandStream :: [Cat.CharCode] -> IO ExpandedStream
+newExpandStream cs =
     do
-    conf <- Conf.newConfig _csMap
+    conf <- Conf.newConfig
     pure $ ExpandedStream
         { codes         = cs
         , lexTokens     = []
@@ -85,9 +85,10 @@ insertControlSequence
     :: ExpandedStream
     -> Lex.ControlSequenceLike
     -> ResolvedToken
+    -> GlobalFlag
     -> ExpandedStream
-insertControlSequence es@ExpandedStream{config=c} cs t =
-    es{config=Conf.insertControlSequence c cs t}
+insertControlSequence es@ExpandedStream{config=c} cs t globalFlag =
+    es{config=Conf.insertControlSequence c cs t globalFlag}
 
 -- Expanding syntax commands.
 
@@ -207,7 +208,8 @@ instance P.Stream ExpandedStream where
                     Lex.extractToken (Cat.catLookup $ Conf.catCodeMap $ config stream) (lexState stream) (codes stream)
                 pure (lt, stream{codes = codes', lexState = lexState'})
         -- Resolve the lex token, and inspect the result.
-        case resolveToken (Conf.csMap $ config stream') (expansionMode stream') lt of
+        let lkp cs = Conf.lookupCS cs $ config stream'
+        case resolveToken lkp (expansionMode stream') lt of
             ConditionBlockToken ct -> case (ct, skipState stream') of
                 -- Shouldn't see any condition token outside a condition block.
                 (_, []) ->

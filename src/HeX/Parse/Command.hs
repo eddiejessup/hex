@@ -43,8 +43,7 @@ extractVModeCommand = extractResult parseVModeCommand
 
 parseAllModeCommand :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAllModeCommand mode =
-    P.choice [ parseChangeScope
-             , skipSatisfiedEquals T.ShowTokenTok >> (ShowToken <$> parseToken)
+    P.choice [ skipSatisfiedEquals T.ShowTokenTok >> (ShowToken <$> parseToken)
              , skipSatisfiedEquals T.ShowBoxTok >> (ShowBox <$> parseNumber)
              , skipSatisfiedEquals T.ShowListsTok $> ShowLists
              , skipSatisfiedEquals T.ShowTheInternalQuantityTok >> (ShowTheInternalQuantity <$> parseInternalQuantity)
@@ -68,13 +67,6 @@ parseAllModeCommand mode =
 
              , ModeIndependentCommand <$> parseModeIndependentCommand mode
              ]
-
-parseChangeScope :: InhibitableStream s => SimpParser s AllModesCommand
-parseChangeScope = satisfyThen $ \t -> if
-    | primTokHasCategory Lex.BeginGroup t -> Just $ ChangeScope (T.Sign True) CharCommandTrigger
-    | primTokHasCategory Lex.EndGroup t   -> Just $ ChangeScope (T.Sign False) CharCommandTrigger
-    | (T.ChangeScopeCSTok sign) <- t      -> Just $ ChangeScope sign CSCommandTrigger
-    | otherwise                           -> Nothing
 
 parseInternalQuantity :: InhibitableStream s => SimpParser s InternalQuantity
 parseInternalQuantity = P.choice [ InternalIntegerQuantity <$> parseInternalInteger
@@ -157,7 +149,8 @@ parseRule mode =
 
 parseModeIndependentCommand :: InhibitableStream s => Axis -> SimpParser s ModeIndependentCommand
 parseModeIndependentCommand mode =
-    P.choice [ skipSatisfiedEquals T.RelaxTok $> Relax
+    P.choice [ parseChangeScope
+             , skipSatisfiedEquals T.RelaxTok $> Relax
              , skipSatisfiedEquals T.IgnoreSpacesTok >> skipOptionalSpaces $> IgnoreSpaces
              , skipSatisfiedEquals T.PenaltyTok >> (AddPenalty <$> parseNumber)
              , skipSatisfiedEquals T.KernTok >> (AddKern <$> parseLength)
@@ -174,6 +167,13 @@ parseModeIndependentCommand mode =
              , P.try parseWriteToStream
              , skipSatisfiedEquals T.DoSpecialTok >> (DoSpecial <$> parseExpandedGeneralText)
              ]
+
+parseChangeScope :: InhibitableStream s => SimpParser s ModeIndependentCommand
+parseChangeScope = satisfyThen $ \t -> if
+    | primTokHasCategory Lex.BeginGroup t -> Just $ ChangeScope (T.Sign True) CharCommandTrigger
+    | primTokHasCategory Lex.EndGroup t   -> Just $ ChangeScope (T.Sign False) CharCommandTrigger
+    | (T.ChangeScopeCSTok sign) <- t      -> Just $ ChangeScope sign CSCommandTrigger
+    | otherwise                           -> Nothing
 
 checkModeAndToken
     :: Axis

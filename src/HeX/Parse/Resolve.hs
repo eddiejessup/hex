@@ -11,11 +11,13 @@ data ExpansionMode = Expanding | NotExpanding
 
 type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
 
-resolveToken :: CSMap -> ExpansionMode -> Lex.Token -> ResolvedToken
-resolveToken _csMap Expanding (Lex.ControlSequenceToken cs) =
+resolveToken :: (Lex.ControlSequenceLike -> Maybe ResolvedToken) -> ExpansionMode -> Lex.Token -> ResolvedToken
+resolveToken csLookup Expanding (Lex.ControlSequenceToken cs) =
     let key = Lex.ControlSequenceProper cs
-    in HMap.lookupDefault (primTok $ ResolutionError key) key _csMap
-resolveToken _csMap NotExpanding t@(Lex.ControlSequenceToken _) =
+    in case csLookup key of
+        Nothing -> (primTok $ ResolutionError key)
+        Just rt -> rt
+resolveToken _ NotExpanding t@(Lex.ControlSequenceToken _) =
     primTok $ UnexpandedTok t
 -- TODO: Active characters.
 resolveToken _ _ t@(Lex.CharCatToken _) =
