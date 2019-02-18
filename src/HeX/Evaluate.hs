@@ -80,8 +80,7 @@ evaluateCodeTableRef :: (MonadReader Config m, MonadError String m) => AST.CodeT
 evaluateCodeTableRef (AST.CodeTableRef q n) =
     do
     idx <- chr <$> evaluateNumber n
-    let lookupFrom getMap =
-            asks getMap >>= (\m -> liftMaybe "err" $ HMap.lookup idx m)
+    let lookupFrom getMap = asks (scopedMapLookup idx getMap) >>= liftMaybe "err"
     case q of
         T.CategoryCodeType       -> fromEnum <$> lookupFrom catCodeMap
         T.MathCodeType           -> fromEnum <$> lookupFrom mathCodeMap

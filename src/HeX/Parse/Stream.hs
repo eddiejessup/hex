@@ -88,7 +88,7 @@ insertControlSequence
     -> GlobalFlag
     -> ExpandedStream
 insertControlSequence es@ExpandedStream{config=c} cs t globalFlag =
-    es{config=Conf.insertControlSequence c cs t globalFlag}
+    es{config=Conf.insertControlSequence cs t globalFlag c}
 
 -- Expanding syntax commands.
 
@@ -204,8 +204,9 @@ instance P.Stream ExpandedStream where
             -- If the lex token buffer is empty, extract a token and use it.
             [] ->
                 do
+                let lkpCatCode t = Conf.lookupCatCode t $ config stream
                 (lt, lexState', codes') <-
-                    Lex.extractToken (Cat.catLookup $ Conf.catCodeMap $ config stream) (lexState stream) (codes stream)
+                    Lex.extractToken lkpCatCode (lexState stream) (codes stream)
                 pure (lt, stream{codes = codes', lexState = lexState'})
         -- Resolve the lex token, and inspect the result.
         let lkp cs = Conf.lookupCS cs $ config stream'

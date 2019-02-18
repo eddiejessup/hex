@@ -69,8 +69,12 @@ usableCharCatMap :: CharCatMap
 usableCharCatMap =
     foldl' (\m (k, v) -> HMap.insert k v m) newCharCatMap extras
 
+catDefault :: Maybe CatCode -> CatCode
+catDefault Nothing = Invalid
+catDefault (Just _cat) = _cat
+
 catLookup :: CharCatMap -> CharCode -> CatCode
-catLookup m n = HMap.lookupDefault Invalid n m
+catLookup m n = catDefault $ HMap.lookup n m
 
 extractCharCat
     :: (CharCode -> CatCode)

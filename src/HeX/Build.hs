@@ -303,7 +303,7 @@ handleModeIndep = \case
                 liftIO $ putStrLn $ "Evaluated code table value " ++ show val ++ " to " ++ show eVal
                 idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
                 liftIO $ putStrLn $ "Setting " ++ show codeType ++ "@" ++ show eIdx ++ " (" ++ show idxChar ++ ") to " ++ show eVal
-                HP.runConfState $ updateCharCodeMap codeType idxChar eVal
+                HP.runConfState $ updateCharCodeMap codeType idxChar eVal globalFlag
                 pure []
             HP.SelectFont fNr ->
                 do
@@ -563,6 +563,9 @@ processVCommand oldStream pages curPage acc = \case
     -- End recursion.
     HP.End ->
         do
+        readOnConfState $ asks scopedConfig >>= \case
+            (_, []) -> pure ()
+            _ -> throwError $ ConfigError "Cannot end: not in global scope"
         lastPages <- HP.runConfState $ runPageBuilder curPage (reverse acc)
         let pagesFinal = pages ++ lastPages
         readOnConfState $ asks logStream >>= liftIO . hFlush

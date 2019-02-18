@@ -44,25 +44,8 @@ import           HeX.Parse.Resolve
 
 type RegisterMap v = HMap.HashMap EightBitInt v
 
-data ScopedConfig = ScopedConfig
-    { csMap :: CSMap
-    } deriving (Show)
-
-newGlobalScopedConfig :: ScopedConfig
-newGlobalScopedConfig = ScopedConfig
-    { csMap = defaultCSMap
-    }
-
-newLocalScopedConfig :: ScopedConfig
-newLocalScopedConfig = ScopedConfig
-    { csMap = HMap.empty
-    }
-
-data Config = Config
-    { currentFontNr     :: Maybe Int
-    , fontInfos         :: V.Vector FontInfo
-    , searchDirectories :: [Path Abs Dir]
-    , params            :: ParamConfig
+data Scope = Scope
+    { csMap             :: CSMap
     -- Char-code attribute maps.
     , catCodeMap        :: Cat.CharCatMap
     , mathCodeMap       :: Cat.CharCodeMap MathCode
@@ -70,6 +53,35 @@ data Config = Config
     , uppercaseMap      :: Cat.CharCodeMap CaseChangeCode
     , spaceFactorMap    :: Cat.CharCodeMap SpaceFactorCode
     , delimiterCodeMap  :: Cat.CharCodeMap DelimiterCode
+    } deriving (Show)
+
+newGlobalScope :: Scope
+newGlobalScope = Scope
+    { csMap      = defaultCSMap
+    , catCodeMap        = Cat.usableCharCatMap
+    , mathCodeMap       = newMathCodeMap
+    , lowercaseMap      = newLowercaseMap
+    , uppercaseMap      = newUppercaseMap
+    , spaceFactorMap    = newSpaceFactorMap
+    , delimiterCodeMap  = newDelimiterCodeMap
+    }
+
+newLocalScope :: Scope
+newLocalScope = Scope
+    { csMap             = HMap.empty
+    , catCodeMap        = HMap.empty
+    , mathCodeMap       = HMap.empty
+    , lowercaseMap      = HMap.empty
+    , uppercaseMap      = HMap.empty
+    , spaceFactorMap    = HMap.empty
+    , delimiterCodeMap  = HMap.empty
+    }
+
+data Config = Config
+    { currentFontNr     :: Maybe Int
+    , fontInfos         :: V.Vector FontInfo
+    , searchDirectories :: [Path Abs Dir]
+    , params            :: ParamConfig
     -- Registers.
     , integerRegister   :: RegisterMap IntVal
     , lengthRegister    :: RegisterMap LenVal
@@ -80,7 +92,7 @@ data Config = Config
     -- File streams.
     , logStream         :: Handle
     , outFileStreams    :: HMap.HashMap FourBitInt Handle
-    , scopedConfig      :: (ScopedConfig, [(AST.CommandTrigger, ScopedConfig)])
+    , scopedConfig      :: (Scope, [(AST.CommandTrigger, Scope)])
     } deriving (Show)
 
 newConfig :: IO Config
@@ -94,12 +106,6 @@ newConfig =
         , fontInfos         = V.empty
         , searchDirectories = [cwd]
         , params            = usableParamConfig
-        , catCodeMap        = Cat.usableCharCatMap
-        , mathCodeMap       = newMathCodeMap
-        , lowercaseMap      = newLowercaseMap
-        , uppercaseMap      = newUppercaseMap
-        , spaceFactorMap    = newSpaceFactorMap
-        , delimiterCodeMap  = newDelimiterCodeMap
         , integerRegister   = HMap.empty
         , lengthRegister    = HMap.empty
         , glueRegister      = HMap.empty
@@ -108,7 +114,7 @@ newConfig =
         -- , boxRegister       = HMap.empty
         , logStream         = logHandle
         , outFileStreams    = HMap.empty
-        , scopedConfig      = (newGlobalScopedConfig, [])
+        , scopedConfig      = (newGlobalScope, [])
         }
 
 fillMap :: (Hashable k, Enum k, Bounded k, Eq k) => v -> HMap.HashMap k v
@@ -201,28 +207,38 @@ modLocalScope :: (s, [(t, s)]) -> (s -> s) -> (s, [(t, s)])
 modLocalScope (gS, (t, lS):tLS) f = (gS, (t, f lS):tLS)
 modLocalScope (gS, []) f = (f gS, [])
 
-insertControlSequence
-    :: Config
-    -> Lex.ControlSequenceLike
-    -> ResolvedToken
+insertKey
+    :: (Eq k, Hashable k)
+    => (Scope -> HMap.HashMap k v)
+    -> (Scope -> HMap.HashMap k v -> Scope)
+    -> k
+    -> v
     -> GlobalFlag
     -> Config
-insertControlSequence conf cs t globalFlag =
+    -> Config
+insertKey getMap upD k v globalFlag conf =
     conf{scopedConfig = insertToScopes $ scopedConfig conf}
   where
     insertToScopes scopes@(g, locs) =
         case globalFlag of
             Global ->
-                (insertCSToScope g, deleteCSFromScope <$> locs)
+                (insertKeyToScope g, deleteKeyFromScope <$> locs)
             Local ->
-                modLocalScope scopes insertCSToScope
+                modLocalScope scopes insertKeyToScope
 
-    insertCSToScope c@ScopedConfig{csMap = _csMap} =
-        c{csMap = HMap.insert cs t _csMap}
+    insertKeyToScope c =
+        upD c $ HMap.insert k v $ getMap c
 
-    deleteCSFromScope (trig, c@ScopedConfig{csMap = _csMap}) =
-        (trig, c{csMap = HMap.delete cs _csMap})
+    deleteKeyFromScope (trig, c) =
+        (trig, upD c $ HMap.delete k $ getMap c)
 
+insertControlSequence
+    :: Lex.ControlSequenceLike
+    -> ResolvedToken
+    -> GlobalFlag
+    -> Config
+    -> Config
+insertControlSequence = insertKey csMap $ \c _map -> c{csMap = _map}
 
 scopedLookup :: (k -> Maybe v) -> (k, [(a, k)]) -> Maybe v
 scopedLookup f (g, []) = f g
@@ -230,18 +246,24 @@ scopedLookup f (g, (_, loc):locs) = case f loc of
     Nothing -> scopedLookup f (g, locs)
     Just v -> Just v
 
-lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
-lookupCS cs = scopedLookupCS . scopedConfig
+scopedMapLookup
+    :: (Eq k, Hashable k)
+    => k -> (Scope -> HMap.HashMap k v) -> Config -> Maybe v
+scopedMapLookup k getMap = lkp . scopedConfig
   where
-    scopedLookupCS = scopedLookup ((HMap.lookup cs) . csMap)
+    lkp = scopedLookup ((HMap.lookup k) . getMap)
 
+lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
+lookupCS cs = scopedMapLookup cs csMap
 
 lookupCSProper :: Lex.ControlSequence -> Config -> Maybe ResolvedToken
 lookupCSProper cs = lookupCS (Lex.ControlSequenceProper cs)
 
+lookupCatCode t conf = Cat.catDefault $ scopedMapLookup t catCodeMap conf
+
 pushScope :: AST.CommandTrigger -> Config -> Config
 pushScope trig c@Config{scopedConfig = (g, locs)} =
-    c{scopedConfig = (g, (trig, newLocalScopedConfig):locs)}
+    c{scopedConfig = (g, (trig, newLocalScope):locs)}
 
 popScope :: AST.CommandTrigger -> Config -> Either String Config
 popScope _       Config{scopedConfig = (_, [])} = Left "Cannot pop from global scope"
@@ -256,33 +278,35 @@ updateCharCodeMap
     => CodeType
     -> Cat.CharCode
     -> IntVal
+    -> GlobalFlag
     -> m ()
-updateCharCodeMap t c n =
-    modify =<< case t of
+updateCharCodeMap t c n globalFlag =
+    do
+    insert <- case t of
         CategoryCodeType ->
             do
             v <- liftMay $ toEnumMay n
-            pure (\cnf -> cnf{catCodeMap=insert v $ catCodeMap cnf})
+            pure $ insertKey catCodeMap (\cnf m -> cnf{catCodeMap = m}) c v
         MathCodeType ->
             do
             v <- liftMay $ toEnumMay n
-            pure (\cnf -> cnf{mathCodeMap=insert v $ mathCodeMap cnf})
+            pure $ insertKey mathCodeMap (\cnf m -> cnf{mathCodeMap = m}) c v
         ChangeCaseCodeType dir ->
             do
             v <- liftMay $ toEnumMay n
             pure $ case dir of
-                Upward -> (\cnf -> cnf{uppercaseMap=insert v $ uppercaseMap cnf})
-                Downward -> (\cnf -> cnf{lowercaseMap=insert v $ lowercaseMap cnf})
+                Upward -> insertKey uppercaseMap (\cnf m -> cnf{uppercaseMap = m}) c v
+                Downward -> insertKey lowercaseMap (\cnf m -> cnf{lowercaseMap = m}) c v
         SpaceFactorCodeType ->
             do
             v <- liftMay $ toEnumMay n
-            pure (\cnf -> cnf{spaceFactorMap=insert v $ spaceFactorMap cnf})
+            pure $ insertKey spaceFactorMap (\cnf m -> cnf{spaceFactorMap = m}) c v
         DelimiterCodeType ->
             do
             v <- liftMay $ toEnumMay n
-            pure (\cnf -> cnf{delimiterCodeMap=insert v $ delimiterCodeMap cnf})
+            pure $ insertKey delimiterCodeMap (\cnf m -> cnf{delimiterCodeMap = m}) c v
+    modify $ insert globalFlag
   where
-    insert = HMap.insert c
     liftMay f = liftMaybe ("Invalid target value for code type " ++ show t ++ ": " ++ show n) f
 
 -- Registers.
