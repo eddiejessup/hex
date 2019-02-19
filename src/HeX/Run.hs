@@ -5,9 +5,10 @@ module HeX.Run where
 
 import           Prelude                 hiding ( writeFile )
 
-import           Control.Monad.Except           ( ExceptT, runExceptT )
-import           Control.Monad.State.Lazy       ( evalStateT
-                                                , StateT
+import           Control.Monad.Except           ( ExceptT
+                                                , runExceptT )
+import           Control.Monad.State.Lazy       ( StateT
+                                                , evalStateT
                                                 )
 import           Data.ByteString.Lazy           ( ByteString )
 import qualified Data.HashMap.Strict           as HMap
@@ -23,110 +24,92 @@ import           HeX.BreakList
 import           HeX.Box
 import           HeX.Build
 import           HeX.Categorise
-import           HeX.Lex                        ( extractToken
-                                                , LexState(..)
+import           HeX.Lex                        ( LexState(..)
+                                                , extractToken
                                                 )
-import           HeX.Parse                      ( defaultCSMap
-                                                , resolveToken
+import           HeX.Parse                      ( ExpandedStream
                                                 , ExpansionMode(..)
-                                                , ExpandedStream
-                                                , newExpandStream
-                                                , extractHModeCommand
                                                 , IndentFlag(..)
+                                                , defaultCSMap
+                                                , extractHModeCommand
+                                                , newExpandStream
+                                                , resolveToken
                                                 )
+
+usableCatLookup :: CharCode -> CatCode
+usableCatLookup = catLookup usableCharCatMap
 
 -- Cat
 
-mChop' :: ([a] -> IO (Maybe [a])) -> [a] -> IO ()
-mChop' f xs =
-    f xs >>= \case
-        Nothing -> pure ()
-        Just xs'' -> mChop' f xs''
-
 runCat :: [CharCode] -> IO ()
-runCat = mChop' (extractAndPrint (catLookup usableCharCatMap))
+runCat _xs = extractAndPrint _xs
   where
-    extractAndPrint f s = case extractCharCat f s of
-        Just (cc, s') ->
+    extractAndPrint xs = case extractCharCat usableCatLookup xs of
+        Just (cc, xs') ->
             do
             print cc
-            pure $ Just s'
-        Nothing ->
-            pure Nothing
-
--- Lex.
-
-chopLex' :: LexState -> [CharCode] -> IO ()
-chopLex' ls xs =
-    extractAndPrintLex >>= \case
-        Nothing         -> pure ()
-        Just (ls', xs') -> chopLex' ls' xs'
-  where
-    extractAndPrintLex =
-        case extractToken (catLookup usableCharCatMap) ls xs of
-            Just (tok, ls', s') ->
-                do
-                print tok
-                pure $ Just (ls', s')
-            Nothing ->
-                pure Nothing
-
-runLex :: [CharCode] -> IO ()
-runLex = chopLex' LineBegin
-
--- Resolve.
-
-chopResolved' :: LexState -> [CharCode] -> IO ()
-chopResolved' ls xs =
-    extractAndPrintResolved >>= \case
-        Nothing -> pure ()
-        Just (ls', xs') -> chopResolved' ls' xs'
-  where
-      lookupCS cs = HMap.lookup cs defaultCSMap
-
-      extractAndPrintResolved =
-            case extractToken (catLookup usableCharCatMap) ls xs of
-                Just (tok, lexState', s') ->
-                    do
-                    print $ resolveToken lookupCS Expanding tok
-                    pure $ Just (lexState', s')
-                Nothing ->
-                    pure Nothing
-
-runResolved :: [CharCode] -> IO ()
-runResolved = chopResolved' LineBegin
-
--- Expand.
-
-chopExpand' :: ExpandedStream -> IO ()
-chopExpand' estream =
-    case P.take1_ estream of
-        Just (tok, estream') ->
-            do
-            print tok
-            chopExpand' estream'
+            extractAndPrint xs'
         Nothing ->
             pure ()
 
+-- Lex.
+
+runLex :: [CharCode] -> IO ()
+runLex _xs = extractAndPrint (LineBegin, _xs)
+  where
+    extractAndPrint (lexState, xs) =
+        case extractToken usableCatLookup lexState xs of
+            Just (tok, lexState', s') ->
+                do
+                print tok
+                extractAndPrint (lexState', s')
+            Nothing ->
+                pure ()
+
+-- Resolve.
+
+runResolved :: [CharCode] -> IO ()
+runResolved _xs = extractAndPrint (LineBegin, _xs)
+  where
+    extractAndPrint (lexState, xs) =
+        case extractToken usableCatLookup lexState xs of
+            Just (tok, lexState', s') ->
+                do
+                print $ resolveToken lookupCS Expanding tok
+                extractAndPrint (lexState', s')
+            Nothing ->
+                pure ()
+
+    lookupCS cs = HMap.lookup cs defaultCSMap
+
+-- Expand.
+
 runExpand :: [CharCode] -> IO ()
-runExpand xs = newExpandStream xs >>= chopExpand'
+runExpand xs = newExpandStream xs >>= extractAndPrint
+  where
+    extractAndPrint estream = case P.take1_ estream of
+        Just (tok, estream') ->
+            do
+            print tok
+            extractAndPrint estream'
+        Nothing ->
+            pure ()
 
 -- Command.
 
-chopCommand' :: ExpandedStream -> IO ()
-chopCommand' estream =
-    case extractHModeCommand estream of
+runCommand :: [CharCode] -> IO ()
+runCommand xs = newExpandStream xs >>= extractAndPrint
+  where
+    extractAndPrint estream = case extractHModeCommand estream of
         Right (P.State {P.stateInput = estream'}, com) ->
             do
             print com
-            chopCommand' estream'
+            extractAndPrint estream'
         Left (P.ParseErrorBundle ((P.TrivialError _ (Just P.EndOfInput) _) :| []) _) ->
             pure ()
         Left errs ->
             ioError $ userError $ show errs
 
-runCommand :: [CharCode] -> IO ()
-runCommand xs = newExpandStream xs >>= chopCommand'
 
 -- Generic.
 
@@ -144,9 +127,7 @@ codesToSth
     -> ExceptT BuildError (StateT ExpandedStream IO) a
     -> IO a
 codesToSth xs f =
-    do
-    stream <- newExpandStream xs
-    evalStateT (runExceptT f) stream >>= buildEitherToIO
+    newExpandStream xs >>= evalStateT (runExceptT f) >>= buildEitherToIO
 
 -- Paragraph list.
 
@@ -155,8 +136,7 @@ codesToParaList xs =
     reverse <$> codesToSth xs (extractParagraph Indent)
 
 runPara :: [CharCode] -> IO ()
-runPara xs =
-    codesToParaList xs >>= putStrLn . intercalate "\n" . fmap show
+runPara xs = codesToParaList xs >>= putStrLn . intercalate "\n" . fmap show
 
 -- Paragraph boxes.
 
@@ -179,25 +159,23 @@ printList :: Show a => [a] -> IO ()
 printList = putStrLn . intercalate "\n" . fmap show
 
 runPages :: [CharCode] -> IO ()
-runPages xs =
-  codesToPages xs >>= printList
+runPages xs = codesToPages xs >>= printList
 
 -- DVI instructions.
 
 runDVI :: [CharCode] -> IO ()
-runDVI xs =
-  pagesToDVI <$> codesToPages xs >>= printList
+runDVI xs = pagesToDVI <$> codesToPages xs >>= printList
 
 -- Raw DVI instructions.
 
 codesToDVIRaw :: [CharCode] -> IO [EncodableInstruction]
 codesToDVIRaw xs = do
-  pages <- codesToPages xs
-  -- Who cares, it's for debugging
-  let _mag = 1000
-  let instrs = pagesToDVI pages
-  encInstrs <- strEitherToIO $ parseInstructions instrs _mag
-  pure $ reverse encInstrs
+    pages <- codesToPages xs
+    -- Who cares, it's for debugging
+    let _mag = 1000
+        instrs = pagesToDVI pages
+    encInstrs <- strEitherToIO $ parseInstructions instrs _mag
+    pure $ reverse encInstrs
 
 runDVIRaw :: [CharCode] -> IO ()
 runDVIRaw xs = codesToDVIRaw xs >>= printList
