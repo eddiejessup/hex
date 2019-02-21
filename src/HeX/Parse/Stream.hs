@@ -254,7 +254,7 @@ instance P.Stream ExpandedStream where
                         CSNameTok ->
                             runExpandCommand stream' () parseCSNameArgs expandCSName
                         StringTok ->
-                            let escapeChar = (Conf.escapeChar . Conf.params . config) stream'
+                            let escapeChar = (Conf.IntParamVal . Conf.lookupIntegerParameter EscapeChar . config) stream'
                             in runExpandCommand stream' escapeChar parseToken expandString
                         TheTok -> case easyRunParser parseInternalQuantity stream' of
                             (P.State resultStream _ _, Left err) ->

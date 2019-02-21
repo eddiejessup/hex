@@ -7,7 +7,7 @@ import           Control.Applicative           ( Alternative
                                                , empty
                                                )
 import           Data.Hashable
-import           GHC.Generics (Generic)
+import           GHC.Generics                  ( Generic )
 
 type IntVal = Int
 type LenVal = Int

@@ -45,7 +45,7 @@ filFlex = GlueFlex 1 1
 -- Glue.
 
 data Glue = Glue
-    { dimen :: !Int
+    { dimen :: !IntVal
     , stretch :: !GlueFlex
     , shrink :: !GlueFlex
     } deriving (Show, Eq)
@@ -77,3 +77,6 @@ negateGlue (Glue d str shr) = Glue (-d) str shr
 
 filGlue :: Glue
 filGlue = Glue {dimen = 0, stretch = filFlex, shrink = noFlex}
+
+fixedGlue :: IntVal -> Glue
+fixedGlue d = Glue d noFlex noFlex

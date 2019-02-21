@@ -1,7 +1,10 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module HeX.Parse.Token where
 
+import           GHC.Generics                   (Generic)
+import           Data.Hashable                  ( Hashable )
 import qualified Data.Map.Strict               as Map
 
 import           HeX.Type
@@ -74,7 +77,9 @@ data IntegerParameter
     | ShowBoxBreadth         -- Maximum items per level when boxes are shown
     | ShowBoxDepth           -- Maximum level when boxes are shown
     | ErrorContextLines      -- Maximum extra context shown when errors occur
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic, Enum, Bounded)
+
+instance Hashable IntegerParameter
 
 data LengthParameter
     = HFuzz                  -- Maximum overrun before overfull hbox messages occur
@@ -98,7 +103,9 @@ data LengthParameter
     | HangIndent             -- Amount of hanging indentation
     | HOffset                -- Horizontal offset in \shipout
     | VOffset                -- Vertical offset in \shipout
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic, Enum, Bounded)
+
+instance Hashable LengthParameter
 
 data GlueParameter
     = BaselineSkip           -- Desired glue between baselines
@@ -116,13 +123,17 @@ data GlueParameter
     | SpaceSkip              -- Glue between words, if nonzero
     | XSpaceSkip             -- Glue between sentences, if nonzero
     | ParFillSkip            -- Additional \rightskip at end of paragraphs
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic, Enum, Bounded)
+
+instance Hashable GlueParameter
 
 data MathGlueParameter
     = ThinMuSkip             -- Thin space in math formulas
     | MedMuSkip              -- Medium space in math formulas
     | ThickMuSkip            -- Thick space in math formulas
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic, Enum, Bounded)
+
+instance Hashable MathGlueParameter
 
 data TokenListParameter
     = Output                 -- The user's output routine
@@ -134,14 +145,18 @@ data TokenListParameter
     | EveryJob               -- Tokens to insert when the job begins
     | EveryCR                -- Tokens to insert after every \cr or nonredundant \crcr
     | ErrHelp                -- Tokens that supplement an \errmessage
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic, Enum, Bounded)
+
+instance Hashable TokenListParameter
 
 data SpecialInteger
     = SpaceFactorInteger
     | PrevGrafInteger
     | DeadCyclesInteger
     | InsertPenaltiesInteger
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic, Enum, Bounded)
+
+instance Hashable SpecialInteger
 
 data SpecialLength
     = PrevDepth
@@ -153,7 +168,9 @@ data SpecialLength
     | PageFilllStretch
     | PageShrink
     | PageDepth
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic, Enum, Bounded)
+
+instance Hashable SpecialLength
 
 data AssignPrefixTok
     = LongTok

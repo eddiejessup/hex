@@ -70,17 +70,17 @@ getRegisterIdx n z f = HMap.lookupDefault z <$> evaluateEightBitInt n <*> asks f
 
 evaluateIntegerVariable :: (MonadReader Config m, MonadError String m) => AST.IntegerVariable -> m Int
 evaluateIntegerVariable = \case
-    AST.ParamVar p -> asks (getIntParam p . params)
+    AST.ParamVar p -> asks $ lookupIntegerParameter p
     AST.RegisterVar n -> getRegisterIdx n 0 integerRegister
 
 evaluateSpecialInteger :: (MonadReader Config m, MonadError String m) => T.SpecialInteger -> m Int
-evaluateSpecialInteger p = asks (getSpecialInt p . params)
+evaluateSpecialInteger p = asks $ lookupSpecialInteger p
 
 evaluateCodeTableRef :: (MonadReader Config m, MonadError String m) => AST.CodeTableRef -> m Int
 evaluateCodeTableRef (AST.CodeTableRef q n) =
     do
     idx <- chr <$> evaluateNumber n
-    let lookupFrom getMap = asks (scopedMapLookup idx getMap) >>= liftMaybe "err"
+    let lookupFrom getMap = asks (scopedMapLookup getMap idx) >>= liftMaybe "err"
     case q of
         T.CategoryCodeType       -> fromEnum <$> lookupFrom catCodeMap
         T.MathCodeType           -> fromEnum <$> lookupFrom mathCodeMap
@@ -147,7 +147,7 @@ evaluateUnit = \case
     AST.PhysicalUnit AST.TrueFrame u -> pure $ Unit.inScaledPoint u
     AST.PhysicalUnit AST.MagnifiedFrame u ->
         do
-        _mag <- asks $ mag . params
+        _mag <- asks $ lookupIntegerParameter T.Mag
         eU <- evaluateUnit $ AST.PhysicalUnit AST.TrueFrame u
         pure $ eU * 1000 / fromIntegral _mag
 
@@ -169,11 +169,11 @@ evaluateInternalLength = \case
 
 evaluateLengthVariable :: (MonadReader Config m, MonadError String m) => AST.LengthVariable -> m Int
 evaluateLengthVariable = \case
-    AST.ParamVar p -> asks (getLenParam p . params)
+    AST.ParamVar p -> asks $ lookupLengthParameter p
     AST.RegisterVar n -> getRegisterIdx n 0 lengthRegister
 
 evaluateSpecialLength :: (MonadReader Config m, MonadError String m) => T.SpecialLength -> m Int
-evaluateSpecialLength p = asks (getSpecialLen p . params)
+evaluateSpecialLength p = asks $ lookupSpecialLength p
 
 evaluateFontDimensionRef :: (MonadReader Config m, MonadError String m) => AST.FontDimensionRef -> m Int
 evaluateFontDimensionRef (AST.FontDimensionRef n _) =
@@ -223,14 +223,14 @@ evaluateInternalGlue = \case
 
 evaluateGlueVariable :: (MonadReader Config m, MonadError String m) => AST.GlueVariable -> m BL.Glue
 evaluateGlueVariable = \case
-    AST.ParamVar p    -> asks (getGlueParam p . params)
+    AST.ParamVar p    -> asks $ lookupGlueParameter p
     AST.RegisterVar n -> getRegisterIdx n mempty glueRegister
 
 -- Token list.
 
 evaluateTokenListVariable :: (MonadReader Config m, MonadError String m) => AST.TokenListVariable -> m T.BalancedText
 evaluateTokenListVariable = \case
-    AST.ParamVar p    -> asks (getTokenListParam p . params)
+    AST.ParamVar p    -> asks $ lookupTokenListParameter p
     AST.RegisterVar n -> getRegisterIdx n mempty tokenListRegister
 
 -- Showing internal quantities.

@@ -3,6 +3,7 @@ module HeX.Categorise where
 import HeXPrelude
 
 import           Data.Foldable                  ( foldl' )
+import           Data.Maybe                     ( fromMaybe )
 
 import qualified Data.HashMap.Strict           as HMap
 
@@ -70,8 +71,7 @@ usableCharCatMap =
     foldl' (\m (k, v) -> HMap.insert k v m) newCharCatMap extras
 
 catDefault :: Maybe CatCode -> CatCode
-catDefault Nothing = Invalid
-catDefault (Just _cat) = _cat
+catDefault = fromMaybe Invalid
 
 catLookup :: CharCatMap -> CharCode -> CatCode
 catLookup m n = catDefault $ HMap.lookup n m

@@ -17,6 +17,7 @@ import           Control.Monad.Except           ( MonadError
 
 import           Data.Hashable
 import qualified Data.HashMap.Strict           as HMap
+import           Data.Maybe                     ( fromMaybe )
 import qualified Data.Vector                   as V
 import           Data.Vector                    ( (!?) )
 import           Path
@@ -45,43 +46,62 @@ import           HeX.Parse.Resolve
 type RegisterMap v = HMap.HashMap EightBitInt v
 
 data Scope = Scope
-    { csMap             :: CSMap
+    { csMap                   :: CSMap
     -- Char-code attribute maps.
-    , catCodeMap        :: Cat.CharCatMap
-    , mathCodeMap       :: Cat.CharCodeMap MathCode
+    , catCodeMap              :: Cat.CharCatMap
+    , mathCodeMap             :: Cat.CharCodeMap MathCode
     , lowercaseMap
-    , uppercaseMap      :: Cat.CharCodeMap CaseChangeCode
-    , spaceFactorMap    :: Cat.CharCodeMap SpaceFactorCode
-    , delimiterCodeMap  :: Cat.CharCodeMap DelimiterCode
+    , uppercaseMap            :: Cat.CharCodeMap CaseChangeCode
+    , spaceFactorMap          :: Cat.CharCodeMap SpaceFactorCode
+    , delimiterCodeMap        :: Cat.CharCodeMap DelimiterCode
+    -- Parameters.
+    , integerParameterMap     :: HMap.HashMap IntegerParameter IntVal
+    , lengthParameterMap      :: HMap.HashMap LengthParameter LenVal
+    , glueParameterMap        :: HMap.HashMap GlueParameter BL.Glue
+    -- , mathGlueParameterMap :: HMap.HashMap MathGlueParameter MathGlue
+    , tokenListParameterMap   :: HMap.HashMap TokenListParameter BalancedText
     } deriving (Show)
 
 newGlobalScope :: Scope
 newGlobalScope = Scope
     { csMap      = defaultCSMap
-    , catCodeMap        = Cat.usableCharCatMap
-    , mathCodeMap       = newMathCodeMap
-    , lowercaseMap      = newLowercaseMap
-    , uppercaseMap      = newUppercaseMap
-    , spaceFactorMap    = newSpaceFactorMap
-    , delimiterCodeMap  = newDelimiterCodeMap
+
+    , catCodeMap              = Cat.usableCharCatMap
+    , mathCodeMap             = newMathCodeMap
+    , lowercaseMap            = newLowercaseMap
+    , uppercaseMap            = newUppercaseMap
+    , spaceFactorMap          = newSpaceFactorMap
+    , delimiterCodeMap        = newDelimiterCodeMap
+
+    , integerParameterMap     = usableIntegerParameterMap
+    , lengthParameterMap      = usableLengthParameterMap
+    , glueParameterMap        = usableGlueParameterMap
+    -- , mathGlueParameterMap = newMathGlueParameterMap
+    , tokenListParameterMap   = newTokenListParameterMap
     }
 
 newLocalScope :: Scope
 newLocalScope = Scope
-    { csMap             = HMap.empty
-    , catCodeMap        = HMap.empty
-    , mathCodeMap       = HMap.empty
-    , lowercaseMap      = HMap.empty
-    , uppercaseMap      = HMap.empty
-    , spaceFactorMap    = HMap.empty
-    , delimiterCodeMap  = HMap.empty
+    { csMap                   = HMap.empty
+
+    , catCodeMap              = HMap.empty
+    , mathCodeMap             = HMap.empty
+    , lowercaseMap            = HMap.empty
+    , uppercaseMap            = HMap.empty
+    , spaceFactorMap          = HMap.empty
+    , delimiterCodeMap        = HMap.empty
+
+    , integerParameterMap     = HMap.empty
+    , lengthParameterMap      = HMap.empty
+    , glueParameterMap        = HMap.empty
+    -- , mathGlueParameterMap = HMap.empty
+    , tokenListParameterMap   = HMap.empty
     }
 
 data Config = Config
     { currentFontNr     :: Maybe Int
     , fontInfos         :: V.Vector FontInfo
     , searchDirectories :: [Path Abs Dir]
-    , params            :: ParamConfig
     -- Registers.
     , integerRegister   :: RegisterMap IntVal
     , lengthRegister    :: RegisterMap LenVal
@@ -89,6 +109,8 @@ data Config = Config
     -- , mathGlueRegister  :: RegisterMap MathGlue
     , tokenListRegister :: RegisterMap BalancedText
     -- , boxRegister       :: RegisterMap (Maybe Box)
+    , specialIntegerMap       :: HMap.HashMap SpecialInteger IntVal
+    , specialLengthMap        :: HMap.HashMap SpecialLength IntVal
     -- File streams.
     , logStream         :: Handle
     , outFileStreams    :: HMap.HashMap FourBitInt Handle
@@ -105,20 +127,18 @@ newConfig =
         { currentFontNr     = Nothing
         , fontInfos         = V.empty
         , searchDirectories = [cwd]
-        , params            = usableParamConfig
         , integerRegister   = HMap.empty
         , lengthRegister    = HMap.empty
         , glueRegister      = HMap.empty
         -- , mathGlueRegister  = HMap.empty
         , tokenListRegister = HMap.empty
         -- , boxRegister       = HMap.empty
+        , specialIntegerMap = newSpecialIntegerMap
+        , specialLengthMap  = newSpecialLengthMap
         , logStream         = logHandle
         , outFileStreams    = HMap.empty
         , scopedConfig      = (newGlobalScope, [])
         }
-
-fillMap :: (Hashable k, Enum k, Bounded k, Eq k) => v -> HMap.HashMap k v
-fillMap v = HMap.fromList $ (, v) <$> [minBound..]
 
 -- Fonts.
 
@@ -132,8 +152,8 @@ readFontInfo :: (MonadReader Config m, MonadIO m) => Path Abs File -> m FontInfo
 readFontInfo fontPath =
     do
     fontMetrics <- liftIO $ TFM.readTFMFancy fontPath
-    hyphenChar <- unIntParam <$> asks (defaultHyphenChar . params)
-    skewChar <- unIntParam <$> asks (defaultSkewChar . params)
+    hyphenChar <- asks $ lookupIntegerParameter DefaultHyphenChar
+    skewChar <- asks $ lookupIntegerParameter DefaultSkewChar
     pure FontInfo{..}
 
 lookupFontInfo :: (MonadReader Config m, MonadError String m) => Int -> m FontInfo
@@ -156,49 +176,11 @@ addFont newInfo =
     modify (\conf -> conf{fontInfos = newInfos})
     pure $ V.length newInfos - 1
 
--- Parameters.
-
-modifyParams :: MonadState Config m => (ParamConfig -> ParamConfig) -> m ()
-modifyParams f =
-    do
-    pConf <- gets params
-    let modConf _params conf = conf{params=_params}
-    modify $ modConf $ f pConf
-
-liftSetParam
-    :: MonadState Config m
-    => (p -> v -> ParamConfig -> ParamConfig)
-    -> p
-    -> v
-    -> m ()
-liftSetParam g p v = modifyParams $ g p v
-
-setConfIntParam :: MonadState Config m => IntegerParameter -> IntVal -> m ()
-setConfIntParam = liftSetParam setIntParam
-
-setConfLenParam :: MonadState Config m => LengthParameter -> LenVal -> m ()
-setConfLenParam = liftSetParam setLenParam
-
-setConfGlueParam :: MonadState Config m => GlueParameter -> BL.Glue -> m ()
-setConfGlueParam = liftSetParam setGlueParam
-
--- setConfMathGlueParam :: MonadState Config m => MathGlueParameter -> BL.MathGlue -> m ()
--- setConfMathGlueParam = liftSetParam setMathGlueParam
-
-setConfTokenListParam :: MonadState Config m => TokenListParameter -> BalancedText -> m ()
-setConfTokenListParam = liftSetParam setTokenListParam
-
-setConfSpecialInt :: MonadState Config m => SpecialInteger -> IntVal -> m ()
-setConfSpecialInt = liftSetParam setSpecialInt
-
-setConfSpecialLen :: MonadState Config m => SpecialLength -> LenVal -> m ()
-setConfSpecialLen = liftSetParam setSpecialLen
-
 parIndentBox :: Config -> BL.BreakableHListElem
 parIndentBox conf =
     BL.HVListElem $ BL.VListBaseElem $ B.ElemBox $ B.Box
         { contents      = B.HBoxContents []
-        , desiredLength = B.To . unLenParam . parIndent . params $ conf
+        , desiredLength = B.To . (lookupLengthParameter ParIndent) $ conf
         }
 
 -- Scopes.
@@ -248,18 +230,61 @@ scopedLookup f (g, (_, loc):locs) = case f loc of
 
 scopedMapLookup
     :: (Eq k, Hashable k)
-    => k -> (Scope -> HMap.HashMap k v) -> Config -> Maybe v
-scopedMapLookup k getMap = lkp . scopedConfig
+    => (Scope -> HMap.HashMap k v) -> k -> Config -> Maybe v
+scopedMapLookup getMap k = lkp . scopedConfig
   where
     lkp = scopedLookup ((HMap.lookup k) . getMap)
 
 lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
-lookupCS cs = scopedMapLookup cs csMap
+lookupCS = scopedMapLookup csMap
 
 lookupCSProper :: Lex.ControlSequence -> Config -> Maybe ResolvedToken
 lookupCSProper cs = lookupCS (Lex.ControlSequenceProper cs)
 
-lookupCatCode t conf = Cat.catDefault $ scopedMapLookup t catCodeMap conf
+lookupCatCode :: Cat.CharCode -> Config -> Cat.CatCode
+lookupCatCode t conf = Cat.catDefault $ scopedMapLookup catCodeMap t conf
+
+lookupIntegerParameter :: IntegerParameter -> Config -> IntVal
+lookupIntegerParameter p conf = fromMaybe 0 $ scopedMapLookup integerParameterMap p conf
+
+lookupLengthParameter :: LengthParameter -> Config -> LenVal
+lookupLengthParameter p conf = fromMaybe 0 $ scopedMapLookup lengthParameterMap p conf
+
+lookupGlueParameter :: GlueParameter -> Config -> BL.Glue
+lookupGlueParameter p conf = fromMaybe mempty $ scopedMapLookup glueParameterMap p conf
+
+-- lookupMathGlueParameter :: MathGlueParameter -> Config -> MathGlue
+-- lookupMathGlueParameter p conf = fromMaybe 0 $ scopedMapLookup mathGlueParameterMap p conf
+
+lookupTokenListParameter :: TokenListParameter -> Config -> BalancedText
+lookupTokenListParameter p conf = fromMaybe mempty $ scopedMapLookup tokenListParameterMap p conf
+
+lookupSpecialInteger :: SpecialInteger -> Config -> IntVal
+lookupSpecialInteger p conf = HMap.lookupDefault 0 p (specialIntegerMap conf)
+
+lookupSpecialLength :: SpecialLength -> Config -> IntVal
+lookupSpecialLength p conf = HMap.lookupDefault 0 p (specialLengthMap conf)
+
+setIntegerParameter :: IntegerParameter -> IntVal -> GlobalFlag -> Config -> Config
+setIntegerParameter = insertKey integerParameterMap $ \c _map -> c{integerParameterMap = _map}
+
+setLengthParameter :: LengthParameter -> LenVal -> GlobalFlag -> Config -> Config
+setLengthParameter = insertKey lengthParameterMap $ \c _map -> c{lengthParameterMap = _map}
+
+setGlueParameter :: GlueParameter -> BL.Glue -> GlobalFlag -> Config -> Config
+setGlueParameter = insertKey glueParameterMap $ \c _map -> c{glueParameterMap = _map}
+
+-- setMathGlueParameter :: MathGlueParameter -> MathGlue -> GlobalFlag -> Config -> Config
+-- setMathGlueParameter = insertKey mathGlueParameterMap $ \c _map -> c{mathGlueParameterMap = _map}
+
+setTokenListParameter :: TokenListParameter -> BalancedText -> GlobalFlag -> Config -> Config
+setTokenListParameter = insertKey tokenListParameterMap $ \c _map -> c{tokenListParameterMap = _map}
+
+setSpecialInteger :: SpecialInteger -> IntVal -> Config -> Config
+setSpecialInteger p v conf = conf{specialIntegerMap=HMap.insert p v $ specialIntegerMap conf}
+
+setSpecialLength :: SpecialLength -> IntVal -> Config -> Config
+setSpecialLength p v conf = conf{specialLengthMap=HMap.insert p v $ specialLengthMap conf}
 
 pushScope :: AST.CommandTrigger -> Config -> Config
 pushScope trig c@Config{scopedConfig = (g, locs)} =

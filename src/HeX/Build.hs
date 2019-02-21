@@ -125,30 +125,30 @@ readOnConfState f = HP.runConfState $ readOnState f
 
 setIntegerVariable
     :: (MonadState Config m, MonadError String m)
-    => HP.IntegerVariable -> IntVal -> m ()
-setIntegerVariable v tgt = case v of
-    HP.ParamVar p       -> setConfIntParam p tgt
+    => HP.IntegerVariable -> HP.GlobalFlag -> IntVal -> m ()
+setIntegerVariable v globalFlag tgt = case v of
+    HP.ParamVar p       -> modify $ setIntegerParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setIntegerRegister i tgt)
 
 setLengthVariable
     :: (MonadState Config m, MonadError String m)
-    => HP.LengthVariable -> LenVal -> m ()
-setLengthVariable v tgt = case v of
-    HP.ParamVar p       -> setConfLenParam p tgt
+    => HP.LengthVariable -> HP.GlobalFlag -> LenVal -> m ()
+setLengthVariable v globalFlag tgt = case v of
+    HP.ParamVar p       -> modify $ setLengthParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setLengthRegister i tgt)
 
 setGlueVariable
     :: (MonadState Config m, MonadError String m)
-    => HP.GlueVariable -> BL.Glue -> m ()
-setGlueVariable v tgt = case v of
-    HP.ParamVar p       -> setConfGlueParam p tgt
+    => HP.GlueVariable -> HP.GlobalFlag -> BL.Glue -> m ()
+setGlueVariable v globalFlag tgt = case v of
+    HP.ParamVar p       -> modify $ setGlueParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setGlueRegister i tgt)
 
 setTokenListVariable
     :: (MonadState Config m, MonadError String m)
-    => HP.TokenListVariable -> HP.BalancedText -> m ()
-setTokenListVariable v tgt = case v of
-    HP.ParamVar p       -> setConfTokenListParam p tgt
+    => HP.TokenListVariable -> HP.GlobalFlag -> HP.BalancedText -> m ()
+setTokenListVariable v globalFlag tgt = case v of
+    HP.ParamVar p       -> modify $ setTokenListParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setTokenListRegister i tgt)
 
 showLexTok :: Lex.Token -> String
@@ -237,11 +237,11 @@ handleModeIndep = \case
                 do
                 HP.runConfState $ case ass of
                     HP.IntegerVariableAssignment v tgt ->
-                        readOnState (evaluateNumber tgt) >>= setIntegerVariable v
+                        readOnState (evaluateNumber tgt) >>= setIntegerVariable v globalFlag
                     HP.LengthVariableAssignment v tgt  ->
-                        readOnState (evaluateLength tgt) >>= setLengthVariable v
+                        readOnState (evaluateLength tgt) >>= setLengthVariable v globalFlag
                     HP.GlueVariableAssignment v tgt    ->
-                        readOnState (evaluateGlue tgt) >>= setGlueVariable v
+                        readOnState (evaluateGlue tgt) >>= setGlueVariable v globalFlag
                     HP.MathGlueVariableAssignment _ _  ->
                         error "math-glue assignment not implemented"
                     HP.TokenListVariableAssignment v tgt ->
@@ -249,7 +249,7 @@ handleModeIndep = \case
                         eTgt <- readOnState $ case tgt of
                             HP.TokenListAssignmentVar tgtVar   -> evaluateTokenListVariable tgtVar
                             HP.TokenListAssignmentText tgtText -> pure tgtText
-                        setTokenListVariable v eTgt
+                        setTokenListVariable v globalFlag eTgt
                 pure []
             HP.ModifyVariable modCommand ->
                 do
@@ -257,15 +257,15 @@ handleModeIndep = \case
                     HP.AdvanceIntegerVariable var plusVal ->
                         do
                         newVarVal <- readOnState $ (+) <$> evaluateIntegerVariable var <*> evaluateNumber plusVal
-                        setIntegerVariable var newVarVal
+                        setIntegerVariable var globalFlag newVarVal
                     HP.AdvanceLengthVariable var plusVal ->
                         do
                         newVarVal <- readOnState $ (+) <$> evaluateLengthVariable var <*> evaluateLength plusVal
-                        setLengthVariable var newVarVal
+                        setLengthVariable var globalFlag newVarVal
                     HP.AdvanceGlueVariable var plusVal ->
                         do
                         newVarVal <- readOnState $ mappend <$> evaluateGlueVariable var <*> evaluateGlue plusVal
-                        setGlueVariable var newVarVal
+                        setGlueVariable var globalFlag newVarVal
                     -- Division of a positive integer by a positive integer
                     -- discards the remainder, and the sign of the result
                     -- changes if you change the sign of either operand.
@@ -279,21 +279,21 @@ handleModeIndep = \case
                                 let op = case vDir of
                                         Upward -> (*)
                                         Downward -> quot
-                                setIntegerVariable var $ op eVar eScaleVal
+                                setIntegerVariable var globalFlag $ op eVar eScaleVal
                             HP.LengthNumericVariable var ->
                                 do
                                 eVar <- readOnState $ evaluateLengthVariable var
                                 let op = case vDir of
                                         Upward -> (*)
                                         Downward -> quot
-                                setLengthVariable var $ op eVar eScaleVal
+                                setLengthVariable var globalFlag $ op eVar eScaleVal
                             HP.GlueNumericVariable var ->
                                 do
                                 eVar <- readOnState $ evaluateGlueVariable var
                                 let op = case vDir of
                                         Upward -> BL.multiplyGlue
                                         Downward -> BL.divGlue
-                                setGlueVariable var $ op eVar eScaleVal
+                                setGlueVariable var globalFlag $ op eVar eScaleVal
                 pure []
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
@@ -370,7 +370,7 @@ processHCommand oldStream acc = \case
             continueUnchanged
         HP.StartParagraph HP.Indent ->
             do
-            indentBox <- HP.runConfState $ gets parIndentBox
+            indentBox <- readOnConfState $ asks parIndentBox
             modAccum (indentBox : acc)
         -- \par: end the current paragraph.
         HP.EndParagraph ->
@@ -415,7 +415,7 @@ extractParagraph
     -> ExceptT BuildError m [BL.BreakableHListElem]
 extractParagraph indentFlag =
     do
-    indentBox <- HP.runConfState $ gets parIndentBox
+    indentBox <- readOnConfState $ asks parIndentBox
     extractParagraphInner [indentBox | indentFlag == HP.Indent]
   where
     -- We build a paragraph list in reverse order.
@@ -436,10 +436,11 @@ extractParagraphLineBoxes
 extractParagraphLineBoxes indentFlag =
     do
     hList <- extractParagraph indentFlag
-    desiredW <- HP.runConfState $ gets (hSize . params)
-    lineTol <- HP.runConfState $ gets (tolerance . params)
-    linePen <- HP.runConfState $ gets (linePenalty . params)
-    pure $ setParagraph desiredW lineTol linePen hList
+    readOnConfState $ do
+        desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
+        lineTol <- asks $ IntParamVal . lookupIntegerParameter HP.Tolerance
+        linePen <- asks $ IntParamVal . lookupIntegerParameter HP.LinePenalty
+        pure $ setParagraph desiredW lineTol linePen hList
 
 data CurrentPage = CurrentPage
     { items :: [BL.BreakableVListElem]
@@ -453,7 +454,7 @@ runPageBuilder
     -> m [B.Page]
 runPageBuilder (CurrentPage cur _) [] =
     do
-    desiredH <- gets (vSize . params)
+    desiredH <- gets $ LenParamVal . lookupLengthParameter HP.VSize
     pure [setPage desiredH $ reverse cur]
 runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
     -- If the current vlist has no boxes, we discard a discardable item.
@@ -464,7 +465,7 @@ runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
     -- the cost c of breaking at this point.
     | BL.isDiscardable x =
         do
-        desiredH <- gets (vSize . params)
+        desiredH <- gets $ LenParamVal . lookupLengthParameter HP.VSize
         case BL.toBreakItem Adj{pre = headMay cur, val = x, post = headMay xs} of
             -- If we can't break here, just add it to the list and continue.
             Nothing ->
@@ -534,11 +535,11 @@ addVListElem acc e = case e of
     addVListBox :: MonadState Config m => B.Box -> m [BL.BreakableVListElem]
     addVListBox b =
         do
-        _prevDepth <- gets (unLenParam . prevDepth . params)
-        BL.Glue blineLength blineStretch blineShrink <- gets (unGlueParam . baselineSkip . params)
-        skipLimit <- gets (unLenParam . lineSkipLimit . params)
-        skip <- gets (unGlueParam . lineSkip . params)
-        setConfSpecialLen HP.PrevDepth $ naturalDepth e
+        _prevDepth <- gets $ lookupSpecialLength HP.PrevDepth
+        BL.Glue blineLength blineStretch blineShrink <- gets $ lookupGlueParameter HP.BaselineSkip
+        skipLimit <- gets $ lookupLengthParameter HP.LineSkipLimit
+        skip <- gets $ lookupGlueParameter HP.LineSkip
+        modify $ setSpecialLength HP.PrevDepth $ naturalDepth e
         pure $ if _prevDepth <= -Unit.oneKPt
             then e : acc
             else
@@ -584,7 +585,7 @@ processVCommand oldStream pages curPage acc = \case
         HP.AddRule HP.Rule{..} ->
             do
             evalW <- case width of
-                Nothing -> readOnConfState $ gets (unLenParam . hSize . params)
+                Nothing -> readOnConfState $ gets $ lookupLengthParameter HP.HSize
                 Just ln -> liftConfigError $ readOnConfState $ evaluateLength ln
             evalH <- case height of
                 -- TODO.
@@ -613,7 +614,7 @@ processVCommand oldStream pages curPage acc = \case
         -- Paraboxes are returned in reading order.
         put oldStream
         lineBoxes <- extractParagraphLineBoxes indentFlag
-        desiredW <- HP.runConfState $ gets (unLenParam . hSize . params)
+        desiredW <- readOnConfState $ asks $ lookupLengthParameter HP.HSize
         let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
         newAcc <- HP.runConfState $ foldM addVListElem acc $ BL.VListBaseElem . B.ElemBox . toBox <$> lineBoxes
         modAccum newAcc
