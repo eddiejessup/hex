@@ -37,7 +37,7 @@ import           HeX.Parse                      ( ExpandedStream
                                                 )
 
 usableCatLookup :: CharCode -> CatCode
-usableCatLookup = catLookup usableCharCatMap
+usableCatLookup = catLookup usableCatCodes
 
 -- Cat
 

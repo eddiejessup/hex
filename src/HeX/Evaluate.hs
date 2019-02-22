@@ -11,7 +11,6 @@ import           Control.Monad.Reader           ( MonadReader
                                                 , ask
                                                 )
 import           Data.Char                      ( chr )
-import qualified Data.HashMap.Strict           as HMap
 
 import qualified TFM
 
@@ -63,15 +62,17 @@ evaluateEightBitInt n = evaluateNumber n >>= (\i -> liftMaybe ("Number not in ra
 getRegisterIdx
     :: (MonadReader Config m, MonadError String m)
     => AST.Number
-    -> a
-    -> (Config -> HMap.HashMap EightBitInt a)
+    -> (EightBitInt -> Config -> a)
     -> m a
-getRegisterIdx n z f = HMap.lookupDefault z <$> evaluateEightBitInt n <*> asks f
+getRegisterIdx n f =
+    do
+    en <- evaluateEightBitInt n
+    asks $ f en
 
 evaluateIntegerVariable :: (MonadReader Config m, MonadError String m) => AST.IntegerVariable -> m Int
 evaluateIntegerVariable = \case
     AST.ParamVar p -> asks $ lookupIntegerParameter p
-    AST.RegisterVar n -> getRegisterIdx n 0 integerRegister
+    AST.RegisterVar n -> getRegisterIdx n lookupIntegerRegister
 
 evaluateSpecialInteger :: (MonadReader Config m, MonadError String m) => T.SpecialInteger -> m Int
 evaluateSpecialInteger p = asks $ lookupSpecialInteger p
@@ -82,13 +83,13 @@ evaluateCodeTableRef (AST.CodeTableRef q n) =
     idx <- chr <$> evaluateNumber n
     let lookupFrom getMap = asks (scopedMapLookup getMap idx) >>= liftMaybe "err"
     case q of
-        T.CategoryCodeType       -> fromEnum <$> lookupFrom catCodeMap
-        T.MathCodeType           -> fromEnum <$> lookupFrom mathCodeMap
+        T.CategoryCodeType       -> fromEnum <$> lookupFrom catCodes
+        T.MathCodeType           -> fromEnum <$> lookupFrom mathCodes
         T.ChangeCaseCodeType dir -> fromEnum <$> lookupFrom (case dir of
-            Upward   -> uppercaseMap
-            Downward -> lowercaseMap)
-        T.SpaceFactorCodeType    -> fromEnum <$> lookupFrom spaceFactorMap
-        T.DelimiterCodeType      -> fromEnum <$> lookupFrom delimiterCodeMap
+            Upward   -> uppercaseCodes
+            Downward -> lowercaseCodes)
+        T.SpaceFactorCodeType    -> fromEnum <$> lookupFrom spaceFactors
+        T.DelimiterCodeType      -> fromEnum <$> lookupFrom delimiterCodes
 
 evaluateFontCharRef :: (MonadReader Config m, MonadError String m) => AST.FontCharRef -> m Int
 evaluateFontCharRef (AST.FontCharRef fChar fontRef) =
@@ -170,7 +171,7 @@ evaluateInternalLength = \case
 evaluateLengthVariable :: (MonadReader Config m, MonadError String m) => AST.LengthVariable -> m Int
 evaluateLengthVariable = \case
     AST.ParamVar p -> asks $ lookupLengthParameter p
-    AST.RegisterVar n -> getRegisterIdx n 0 lengthRegister
+    AST.RegisterVar n -> getRegisterIdx n lookupLengthRegister
 
 evaluateSpecialLength :: (MonadReader Config m, MonadError String m) => T.SpecialLength -> m Int
 evaluateSpecialLength p = asks $ lookupSpecialLength p
@@ -224,14 +225,14 @@ evaluateInternalGlue = \case
 evaluateGlueVariable :: (MonadReader Config m, MonadError String m) => AST.GlueVariable -> m BL.Glue
 evaluateGlueVariable = \case
     AST.ParamVar p    -> asks $ lookupGlueParameter p
-    AST.RegisterVar n -> getRegisterIdx n mempty glueRegister
+    AST.RegisterVar n -> getRegisterIdx n lookupGlueRegister
 
 -- Token list.
 
 evaluateTokenListVariable :: (MonadReader Config m, MonadError String m) => AST.TokenListVariable -> m T.BalancedText
 evaluateTokenListVariable = \case
     AST.ParamVar p    -> asks $ lookupTokenListParameter p
-    AST.RegisterVar n -> getRegisterIdx n mempty tokenListRegister
+    AST.RegisterVar n -> getRegisterIdx n lookupTokenListRegister
 
 -- Showing internal quantities.
 

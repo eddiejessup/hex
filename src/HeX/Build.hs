@@ -127,28 +127,28 @@ setIntegerVariable
     => HP.IntegerVariable -> HP.GlobalFlag -> IntVal -> m ()
 setIntegerVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setIntegerParameter p tgt globalFlag
-    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setIntegerRegister i tgt)
+    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setIntegerRegister i tgt globalFlag)
 
 setLengthVariable
     :: (MonadState Config m, MonadError String m)
     => HP.LengthVariable -> HP.GlobalFlag -> LenVal -> m ()
 setLengthVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setLengthParameter p tgt globalFlag
-    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setLengthRegister i tgt)
+    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setLengthRegister i tgt globalFlag)
 
 setGlueVariable
     :: (MonadState Config m, MonadError String m)
     => HP.GlueVariable -> HP.GlobalFlag -> BL.Glue -> m ()
 setGlueVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setGlueParameter p tgt globalFlag
-    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setGlueRegister i tgt)
+    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setGlueRegister i tgt globalFlag)
 
 setTokenListVariable
     :: (MonadState Config m, MonadError String m)
     => HP.TokenListVariable -> HP.GlobalFlag -> HP.BalancedText -> m ()
 setTokenListVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setTokenListParameter p tgt globalFlag
-    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> setTokenListRegister i tgt)
+    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setTokenListRegister i tgt globalFlag)
 
 showLexTok :: Lex.Token -> String
 showLexTok (Lex.CharCatToken (Lex.CharCat {char = c, cat = Lex.Letter})) = [c]

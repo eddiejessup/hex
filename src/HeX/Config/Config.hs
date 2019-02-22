@@ -49,69 +49,84 @@ type RegisterMap v = HMap.HashMap EightBitInt v
 data Scope = Scope
     { csMap                   :: CSMap
     -- Char-code attribute maps.
-    , catCodeMap              :: Cat.CharCatMap
-    , mathCodeMap             :: Cat.CharCodeMap MathCode
-    , lowercaseMap
-    , uppercaseMap            :: Cat.CharCodeMap CaseChangeCode
-    , spaceFactorMap          :: Cat.CharCodeMap SpaceFactorCode
-    , delimiterCodeMap        :: Cat.CharCodeMap DelimiterCode
+    , catCodes              :: Cat.CatCodes
+    , mathCodes             :: Cat.CharCodeMap MathCode
+    , lowercaseCodes
+    , uppercaseCodes            :: Cat.CharCodeMap CaseChangeCode
+    , spaceFactors          :: Cat.CharCodeMap SpaceFactorCode
+    , delimiterCodes        :: Cat.CharCodeMap DelimiterCode
     -- Parameters.
-    , integerParameterMap     :: HMap.HashMap IntegerParameter IntVal
-    , lengthParameterMap      :: HMap.HashMap LengthParameter LenVal
-    , glueParameterMap        :: HMap.HashMap GlueParameter BL.Glue
-    -- , mathGlueParameterMap :: HMap.HashMap MathGlueParameter MathGlue
-    , tokenListParameterMap   :: HMap.HashMap TokenListParameter BalancedText
+    , integerParameters     :: HMap.HashMap IntegerParameter IntVal
+    , lengthParameters      :: HMap.HashMap LengthParameter LenVal
+    , glueParameters        :: HMap.HashMap GlueParameter BL.Glue
+    -- , mathGlueParameters :: HMap.HashMap MathGlueParameter MathGlue
+    , tokenListParameters   :: HMap.HashMap TokenListParameter BalancedText
+    -- Registers.
+    , integerRegister         :: RegisterMap IntVal
+    , lengthRegister          :: RegisterMap LenVal
+    , glueRegister            :: RegisterMap BL.Glue
+    -- , mathGlueRegister        :: RegisterMap MathGlue
+    , tokenListRegister       :: RegisterMap BalancedText
+    -- , boxRegister             :: RegisterMap (Maybe Box)
+
     } deriving (Show)
 
 newGlobalScope :: Scope
 newGlobalScope = Scope
-    { csMap      = defaultCSMap
+    { csMap                   = defaultCSMap
 
-    , catCodeMap              = Cat.usableCharCatMap
-    , mathCodeMap             = newMathCodeMap
-    , lowercaseMap            = newLowercaseMap
-    , uppercaseMap            = newUppercaseMap
-    , spaceFactorMap          = newSpaceFactorMap
-    , delimiterCodeMap        = newDelimiterCodeMap
+    , catCodes              = Cat.usableCatCodes
+    , mathCodes             = newMathCodes
+    , lowercaseCodes            = newLowercaseCodes
+    , uppercaseCodes            = newUppercaseCodes
+    , spaceFactors          = newSpaceFactors
+    , delimiterCodes        = newDelimiterCodes
 
-    , integerParameterMap     = usableIntegerParameterMap
-    , lengthParameterMap      = usableLengthParameterMap
-    , glueParameterMap        = usableGlueParameterMap
-    -- , mathGlueParameterMap = newMathGlueParameterMap
-    , tokenListParameterMap   = newTokenListParameterMap
+    , integerParameters     = usableIntegerParameters
+    , lengthParameters      = usableLengthParameters
+    , glueParameters        = usableGlueParameters
+    -- , mathGlueParameters = newMathGlueParameters
+    , tokenListParameters   = newTokenListParameters
+
+    , integerRegister         = HMap.empty
+    , lengthRegister          = HMap.empty
+    , glueRegister            = HMap.empty
+    -- , mathGlueRegister        = HMap.empty
+    , tokenListRegister       = HMap.empty
+    -- , boxRegister             = HMap.empty
     }
 
 newLocalScope :: Scope
 newLocalScope = Scope
-    { csMap                   = HMap.empty
+    { csMap                 = HMap.empty
 
-    , catCodeMap              = HMap.empty
-    , mathCodeMap             = HMap.empty
-    , lowercaseMap            = HMap.empty
-    , uppercaseMap            = HMap.empty
-    , spaceFactorMap          = HMap.empty
-    , delimiterCodeMap        = HMap.empty
+    , catCodes            = HMap.empty
+    , mathCodes           = HMap.empty
+    , lowercaseCodes          = HMap.empty
+    , uppercaseCodes          = HMap.empty
+    , spaceFactors        = HMap.empty
+    , delimiterCodes      = HMap.empty
 
-    , integerParameterMap     = HMap.empty
-    , lengthParameterMap      = HMap.empty
-    , glueParameterMap        = HMap.empty
-    -- , mathGlueParameterMap = HMap.empty
-    , tokenListParameterMap   = HMap.empty
+    , integerParameters   = HMap.empty
+    , lengthParameters    = HMap.empty
+    , glueParameters      = HMap.empty
+    -- , mathGlueParameters  = HMap.empty
+    , tokenListParameters = HMap.empty
+
+    , integerRegister       = HMap.empty
+    , lengthRegister        = HMap.empty
+    , glueRegister          = HMap.empty
+    -- , mathGlueRegister      = HMap.empty
+    , tokenListRegister     = HMap.empty
+    -- , boxRegister           = HMap.empty
     }
 
 data Config = Config
     { currentFontNr     :: Maybe Int
     , fontInfos         :: V.Vector FontInfo
     , searchDirectories :: [Path Abs Dir]
-    -- Registers.
-    , integerRegister   :: RegisterMap IntVal
-    , lengthRegister    :: RegisterMap LenVal
-    , glueRegister      :: RegisterMap BL.Glue
-    -- , mathGlueRegister  :: RegisterMap MathGlue
-    , tokenListRegister :: RegisterMap BalancedText
-    -- , boxRegister       :: RegisterMap (Maybe Box)
-    , specialIntegerMap       :: HMap.HashMap SpecialInteger IntVal
-    , specialLengthMap        :: HMap.HashMap SpecialLength IntVal
+    , specialIntegers :: HMap.HashMap SpecialInteger IntVal
+    , specialLengths  :: HMap.HashMap SpecialLength IntVal
     -- File streams.
     , logStream         :: Handle
     , outFileStreams    :: HMap.HashMap FourBitInt Handle
@@ -128,14 +143,8 @@ newConfig =
         { currentFontNr     = Nothing
         , fontInfos         = V.empty
         , searchDirectories = [cwd]
-        , integerRegister   = HMap.empty
-        , lengthRegister    = HMap.empty
-        , glueRegister      = HMap.empty
-        -- , mathGlueRegister  = HMap.empty
-        , tokenListRegister = HMap.empty
-        -- , boxRegister       = HMap.empty
-        , specialIntegerMap = newSpecialIntegerMap
-        , specialLengthMap  = newSpecialLengthMap
+        , specialIntegers = newSpecialIntegers
+        , specialLengths  = newSpecialLengths
         , logStream         = logHandle
         , outFileStreams    = HMap.empty
         , scopedConfig      = (newGlobalScope, [])
@@ -181,18 +190,21 @@ addFont newInfo =
     modify (\conf -> conf{fontInfos = newInfos})
     pure $ V.length newInfos - 1
 
-parIndentBox :: Config -> BL.BreakableHListElem
-parIndentBox conf =
-    BL.HVListElem $ BL.VListBaseElem $ B.ElemBox $ B.Box
-        { contents      = B.HBoxContents []
-        , desiredLength = B.To . (lookupLengthParameter ParIndent) $ conf
-        }
-
 -- Scopes.
 
 modLocalScope :: (s, [(t, s)]) -> (s -> s) -> (s, [(t, s)])
 modLocalScope (gS, (t, lS):tLS) f = (gS, (t, f lS):tLS)
 modLocalScope (gS, []) f = (f gS, [])
+
+pushScope :: AST.CommandTrigger -> Config -> Config
+pushScope trig c@Config{scopedConfig = (g, locs)} =
+    c{scopedConfig = (g, (trig, newLocalScope):locs)}
+
+popScope :: AST.CommandTrigger -> Config -> Either String Config
+popScope _       Config{scopedConfig = (_, [])} = Left "Cannot pop from global scope"
+popScope trigA c@Config{scopedConfig = (g, (trigB, _):locs)}
+    | trigA /= trigB = Left $ "Entry and exit scope triggers differ: " ++ show (trigA, trigB)
+    | otherwise      = Right c{scopedConfig = (g, locs)}
 
 insertKey
     :: (Eq k, Hashable k)
@@ -219,14 +231,6 @@ insertKey getMap upD k v globalFlag conf =
     deleteKeyFromScope (trig, c) =
         (trig, upD c $ HMap.delete k $ getMap c)
 
-insertControlSequence
-    :: Lex.ControlSequenceLike
-    -> ResolvedToken
-    -> GlobalFlag
-    -> Config
-    -> Config
-insertControlSequence = insertKey csMap $ \c _map -> c{csMap = _map}
-
 scopedLookup :: (k -> Maybe v) -> (k, [(a, k)]) -> Maybe v
 scopedLookup f (g, []) = f g
 scopedLookup f (g, (_, loc):locs) = case f loc of
@@ -240,68 +244,26 @@ scopedMapLookup getMap k = lkp . scopedConfig
   where
     lkp = scopedLookup ((HMap.lookup k) . getMap)
 
+-- Control sequences.
+
 lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
 lookupCS = scopedMapLookup csMap
 
 lookupCSProper :: Lex.ControlSequence -> Config -> Maybe ResolvedToken
 lookupCSProper cs = lookupCS (Lex.ControlSequenceProper cs)
 
-lookupCatCode :: Cat.CharCode -> Config -> Cat.CatCode
-lookupCatCode t conf = Cat.catDefault $ scopedMapLookup catCodeMap t conf
-
-lookupIntegerParameter :: IntegerParameter -> Config -> IntVal
-lookupIntegerParameter p conf = fromMaybe 0 $ scopedMapLookup integerParameterMap p conf
-
-lookupLengthParameter :: LengthParameter -> Config -> LenVal
-lookupLengthParameter p conf = fromMaybe 0 $ scopedMapLookup lengthParameterMap p conf
-
-lookupGlueParameter :: GlueParameter -> Config -> BL.Glue
-lookupGlueParameter p conf = fromMaybe mempty $ scopedMapLookup glueParameterMap p conf
-
--- lookupMathGlueParameter :: MathGlueParameter -> Config -> MathGlue
--- lookupMathGlueParameter p conf = fromMaybe 0 $ scopedMapLookup mathGlueParameterMap p conf
-
-lookupTokenListParameter :: TokenListParameter -> Config -> BalancedText
-lookupTokenListParameter p conf = fromMaybe mempty $ scopedMapLookup tokenListParameterMap p conf
-
-lookupSpecialInteger :: SpecialInteger -> Config -> IntVal
-lookupSpecialInteger p conf = HMap.lookupDefault 0 p (specialIntegerMap conf)
-
-lookupSpecialLength :: SpecialLength -> Config -> IntVal
-lookupSpecialLength p conf = HMap.lookupDefault 0 p (specialLengthMap conf)
-
-setIntegerParameter :: IntegerParameter -> IntVal -> GlobalFlag -> Config -> Config
-setIntegerParameter = insertKey integerParameterMap $ \c _map -> c{integerParameterMap = _map}
-
-setLengthParameter :: LengthParameter -> LenVal -> GlobalFlag -> Config -> Config
-setLengthParameter = insertKey lengthParameterMap $ \c _map -> c{lengthParameterMap = _map}
-
-setGlueParameter :: GlueParameter -> BL.Glue -> GlobalFlag -> Config -> Config
-setGlueParameter = insertKey glueParameterMap $ \c _map -> c{glueParameterMap = _map}
-
--- setMathGlueParameter :: MathGlueParameter -> MathGlue -> GlobalFlag -> Config -> Config
--- setMathGlueParameter = insertKey mathGlueParameterMap $ \c _map -> c{mathGlueParameterMap = _map}
-
-setTokenListParameter :: TokenListParameter -> BalancedText -> GlobalFlag -> Config -> Config
-setTokenListParameter = insertKey tokenListParameterMap $ \c _map -> c{tokenListParameterMap = _map}
-
-setSpecialInteger :: SpecialInteger -> IntVal -> Config -> Config
-setSpecialInteger p v conf = conf{specialIntegerMap=HMap.insert p v $ specialIntegerMap conf}
-
-setSpecialLength :: SpecialLength -> IntVal -> Config -> Config
-setSpecialLength p v conf = conf{specialLengthMap=HMap.insert p v $ specialLengthMap conf}
-
-pushScope :: AST.CommandTrigger -> Config -> Config
-pushScope trig c@Config{scopedConfig = (g, locs)} =
-    c{scopedConfig = (g, (trig, newLocalScope):locs)}
-
-popScope :: AST.CommandTrigger -> Config -> Either String Config
-popScope _       Config{scopedConfig = (_, [])} = Left "Cannot pop from global scope"
-popScope trigA c@Config{scopedConfig = (g, (trigB, _):locs)}
-    | trigA /= trigB = Left $ "Entry and exit scope triggers differ: " ++ show (trigA, trigB)
-    | otherwise      = Right c{scopedConfig = (g, locs)}
+insertControlSequence
+    :: Lex.ControlSequenceLike
+    -> ResolvedToken
+    -> GlobalFlag
+    -> Config
+    -> Config
+insertControlSequence = insertKey csMap $ \c _map -> c{csMap = _map}
 
 -- Codes.
+
+lookupCatCode :: Cat.CharCode -> Config -> Cat.CatCode
+lookupCatCode t conf = Cat.catDefault $ scopedMapLookup catCodes t conf
 
 updateCharCodeMap
     :: (MonadError String m, MonadState Config m)
@@ -316,43 +278,108 @@ updateCharCodeMap t c n globalFlag =
         CategoryCodeType ->
             do
             v <- liftMay $ toEnumMay n
-            pure $ insertKey catCodeMap (\cnf m -> cnf{catCodeMap = m}) c v
+            pure $ insertKey catCodes (\cnf m -> cnf{catCodes = m}) c v
         MathCodeType ->
             do
             v <- liftMay $ toEnumMay n
-            pure $ insertKey mathCodeMap (\cnf m -> cnf{mathCodeMap = m}) c v
+            pure $ insertKey mathCodes (\cnf m -> cnf{mathCodes = m}) c v
         ChangeCaseCodeType dir ->
             do
             v <- liftMay $ toEnumMay n
             pure $ case dir of
-                Upward -> insertKey uppercaseMap (\cnf m -> cnf{uppercaseMap = m}) c v
-                Downward -> insertKey lowercaseMap (\cnf m -> cnf{lowercaseMap = m}) c v
+                Upward -> insertKey uppercaseCodes (\cnf m -> cnf{uppercaseCodes = m}) c v
+                Downward -> insertKey lowercaseCodes (\cnf m -> cnf{lowercaseCodes = m}) c v
         SpaceFactorCodeType ->
             do
             v <- liftMay $ toEnumMay n
-            pure $ insertKey spaceFactorMap (\cnf m -> cnf{spaceFactorMap = m}) c v
+            pure $ insertKey spaceFactors (\cnf m -> cnf{spaceFactors = m}) c v
         DelimiterCodeType ->
             do
             v <- liftMay $ toEnumMay n
-            pure $ insertKey delimiterCodeMap (\cnf m -> cnf{delimiterCodeMap = m}) c v
+            pure $ insertKey delimiterCodes (\cnf m -> cnf{delimiterCodes = m}) c v
     modify $ insert globalFlag
   where
     liftMay f = liftMaybe ("Invalid target value for code type " ++ show t ++ ": " ++ show n) f
 
+-- Parameters and special quantities.
+
+lookupIntegerParameter :: IntegerParameter -> Config -> IntVal
+lookupIntegerParameter p conf = fromMaybe 0 $ scopedMapLookup integerParameters p conf
+
+lookupLengthParameter :: LengthParameter -> Config -> LenVal
+lookupLengthParameter p conf = fromMaybe 0 $ scopedMapLookup lengthParameters p conf
+
+lookupGlueParameter :: GlueParameter -> Config -> BL.Glue
+lookupGlueParameter p conf = fromMaybe mempty $ scopedMapLookup glueParameters p conf
+
+-- lookupMathGlueParameter :: MathGlueParameter -> Config -> MathGlue
+-- lookupMathGlueParameter p conf = fromMaybe 0 $ scopedMapLookup mathGlueParameters p conf
+
+lookupTokenListParameter :: TokenListParameter -> Config -> BalancedText
+lookupTokenListParameter p conf = fromMaybe mempty $ scopedMapLookup tokenListParameters p conf
+
+lookupSpecialInteger :: SpecialInteger -> Config -> IntVal
+lookupSpecialInteger p conf = HMap.lookupDefault 0 p (specialIntegers conf)
+
+lookupSpecialLength :: SpecialLength -> Config -> IntVal
+lookupSpecialLength p conf = HMap.lookupDefault 0 p (specialLengths conf)
+
+setIntegerParameter :: IntegerParameter -> IntVal -> GlobalFlag -> Config -> Config
+setIntegerParameter = insertKey integerParameters $ \c _map -> c{integerParameters = _map}
+
+setLengthParameter :: LengthParameter -> LenVal -> GlobalFlag -> Config -> Config
+setLengthParameter = insertKey lengthParameters $ \c _map -> c{lengthParameters = _map}
+
+setGlueParameter :: GlueParameter -> BL.Glue -> GlobalFlag -> Config -> Config
+setGlueParameter = insertKey glueParameters $ \c _map -> c{glueParameters = _map}
+
+-- setMathGlueParameter :: MathGlueParameter -> MathGlue -> GlobalFlag -> Config -> Config
+-- setMathGlueParameter = insertKey mathGlueParameters $ \c _map -> c{mathGlueParameters = _map}
+
+setTokenListParameter :: TokenListParameter -> BalancedText -> GlobalFlag -> Config -> Config
+setTokenListParameter = insertKey tokenListParameters $ \c _map -> c{tokenListParameters = _map}
+
+setSpecialInteger :: SpecialInteger -> IntVal -> Config -> Config
+setSpecialInteger p v conf = conf{specialIntegers=HMap.insert p v $ specialIntegers conf}
+
+setSpecialLength :: SpecialLength -> IntVal -> Config -> Config
+setSpecialLength p v conf = conf{specialLengths=HMap.insert p v $ specialLengths conf}
+
+parIndentBox :: Config -> BL.BreakableHListElem
+parIndentBox conf =
+    BL.HVListElem $ BL.VListBaseElem $ B.ElemBox $ B.Box
+        { contents      = B.HBoxContents []
+        , desiredLength = B.To . (lookupLengthParameter ParIndent) $ conf
+        }
+
 -- Registers.
 
-setIntegerRegister :: MonadState Config m => EightBitInt -> IntVal -> m ()
-setIntegerRegister idx v =
-    modify (\c -> c{integerRegister=HMap.insert idx v $ integerRegister c})
+lookupIntegerRegister :: EightBitInt -> Config -> IntVal
+lookupIntegerRegister p conf = fromMaybe 0 $ scopedMapLookup integerRegister p conf
 
-setLengthRegister :: MonadState Config m => EightBitInt -> LenVal -> m ()
-setLengthRegister idx v =
-    modify (\c -> c{lengthRegister=HMap.insert idx v $ lengthRegister c})
+lookupLengthRegister :: EightBitInt -> Config -> LenVal
+lookupLengthRegister p conf = fromMaybe 0 $ scopedMapLookup lengthRegister p conf
 
-setGlueRegister :: MonadState Config m => EightBitInt -> BL.Glue -> m ()
-setGlueRegister idx v =
-    modify (\c -> c{glueRegister=HMap.insert idx v $ glueRegister c})
+lookupGlueRegister :: EightBitInt -> Config -> BL.Glue
+lookupGlueRegister p conf = fromMaybe mempty $ scopedMapLookup glueRegister p conf
 
-setTokenListRegister :: MonadState Config m => EightBitInt -> BalancedText -> m ()
-setTokenListRegister idx v =
-    modify (\c -> c{tokenListRegister=HMap.insert idx v $ tokenListRegister c})
+-- lookupMathGlueRegister :: EightBitInt -> Config -> MathGlue
+-- lookupMathGlueRegister p conf = fromMaybe 0 $ scopedMapLookup mathGlueRegister p conf
+
+lookupTokenListRegister :: EightBitInt -> Config -> BalancedText
+lookupTokenListRegister p conf = fromMaybe mempty $ scopedMapLookup tokenListRegister p conf
+
+setIntegerRegister :: EightBitInt -> IntVal -> GlobalFlag -> Config -> Config
+setIntegerRegister = insertKey integerRegister $ \c _map -> c{integerRegister = _map}
+
+setLengthRegister :: EightBitInt -> LenVal -> GlobalFlag -> Config -> Config
+setLengthRegister = insertKey lengthRegister $ \c _map -> c{lengthRegister = _map}
+
+setGlueRegister :: EightBitInt -> BL.Glue -> GlobalFlag -> Config -> Config
+setGlueRegister = insertKey glueRegister $ \c _map -> c{glueRegister = _map}
+
+-- setMathGlueRegister :: EightBitInt -> MathGlue -> GlobalFlag -> Config -> Config
+-- setMathGlueRegister = insertKey mathGlueRegister $ \c _map -> c{mathGlueRegister = _map}
+
+setTokenListRegister :: EightBitInt -> BalancedText -> GlobalFlag -> Config -> Config
+setTokenListRegister = insertKey tokenListRegister $ \c _map -> c{tokenListRegister = _map}

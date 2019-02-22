@@ -38,7 +38,7 @@ instance Readable CharCat where
 
 type CharCodeMap v = HMap.HashMap CharCode v
 
-type CharCatMap = CharCodeMap CatCode
+type CatCodes = CharCodeMap CatCode
 
 newCatCode :: CharCode -> CatCode
 newCatCode c
@@ -54,8 +54,8 @@ newCatCode c
     | c `elem` ['A' .. 'Z'] = Letter
     | otherwise             = Other
 
-newCharCatMap :: CharCatMap
-newCharCatMap =
+newCatCodes :: CatCodes
+newCatCodes =
     HMap.fromList $ fmap (\n -> (toEnum n, newCatCode $ toEnum n)) [0 .. 127]
 
 -- Add in some useful extras beyond the technical defaults.
@@ -66,14 +66,14 @@ extras = [ ('^', Superscript)
          , ('#', Parameter)
          ]
 
-usableCharCatMap :: CharCatMap
-usableCharCatMap =
-    foldl' (\m (k, v) -> HMap.insert k v m) newCharCatMap extras
+usableCatCodes :: CatCodes
+usableCatCodes =
+    foldl' (\m (k, v) -> HMap.insert k v m) newCatCodes extras
 
 catDefault :: Maybe CatCode -> CatCode
 catDefault = fromMaybe Invalid
 
-catLookup :: CharCatMap -> CharCode -> CatCode
+catLookup :: CatCodes -> CharCode -> CatCode
 catLookup m n = catDefault $ HMap.lookup n m
 
 extractCharCat

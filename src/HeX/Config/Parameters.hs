@@ -151,8 +151,8 @@ data PageFilllStretch
 data PageShrink
 data PageDepth
 
-newIntegerParameterMap :: HMap.HashMap IntegerParameter IntVal
-newIntegerParameterMap =
+newIntegerParameters :: HMap.HashMap IntegerParameter IntVal
+newIntegerParameters =
     HMap.fromList [ (Tolerance,     10000)
                   , (EscapeChar,    92)  -- '\'
                   , (EndLineChar,   13)  -- '\r'
@@ -165,45 +165,45 @@ newIntegerParameterMap =
                   , (Year,          1970)
                   ]
 
-newLengthParameterMap :: HMap.HashMap LengthParameter LenVal
-newLengthParameterMap = HMap.empty
+newLengthParameters :: HMap.HashMap LengthParameter LenVal
+newLengthParameters = HMap.empty
 
-newGlueParameterMap :: HMap.HashMap GlueParameter Glue
-newGlueParameterMap = HMap.empty
+newGlueParameters :: HMap.HashMap GlueParameter Glue
+newGlueParameters = HMap.empty
 
--- newMathGlueParameterMap :: HMap.HashMap MathGlueParameter MathGlue
--- newMathGlueParameterMap = HMap.empty
+-- newMathGlueParameters :: HMap.HashMap MathGlueParameter MathGlue
+-- newMathGlueParameters = HMap.empty
 
-newTokenListParameterMap :: HMap.HashMap TokenListParameter BalancedText
-newTokenListParameterMap = HMap.empty
+newTokenListParameters :: HMap.HashMap TokenListParameter BalancedText
+newTokenListParameters = HMap.empty
 
-newSpecialIntegerMap :: HMap.HashMap SpecialInteger IntVal
-newSpecialIntegerMap = HMap.empty
+newSpecialIntegers :: HMap.HashMap SpecialInteger IntVal
+newSpecialIntegers = HMap.empty
 
-newSpecialLengthMap :: HMap.HashMap SpecialLength IntVal
-newSpecialLengthMap =
+newSpecialLengths :: HMap.HashMap SpecialLength IntVal
+newSpecialLengths =
     HMap.fromList [ (PrevDepth, fromIntegral $ -Unit.oneKPt)
                   ]
 
-usableIntegerParameterMap :: HMap.HashMap IntegerParameter IntVal
-usableIntegerParameterMap =
+usableIntegerParameters :: HMap.HashMap IntegerParameter IntVal
+usableIntegerParameters =
     let vm = HMap.fromList [ (Tolerance, 500)
                            , (LinePenalty, 10)
                            , (Mag, 1000)
                            ]
-    in HMap.union vm $ newIntegerParameterMap
+    in HMap.union vm $ newIntegerParameters
 
-usableLengthParameterMap :: HMap.HashMap LengthParameter LenVal
-usableLengthParameterMap =
+usableLengthParameters :: HMap.HashMap LengthParameter LenVal
+usableLengthParameters =
     let vm = HMap.fromList [ (HSize, 30750000)
                            , (VSize, 37500000)
                            , (ParIndent, Unit.toScaledPointApprox (20 :: Int) Unit.Point)
                            ]
-    in HMap.union vm $ newLengthParameterMap
+    in HMap.union vm $ newLengthParameters
 
-usableGlueParameterMap :: HMap.HashMap GlueParameter Glue
-usableGlueParameterMap =
+usableGlueParameters :: HMap.HashMap GlueParameter Glue
+usableGlueParameters =
     let vm = HMap.fromList [ (BaselineSkip, fixedGlue $ Unit.toScaledPointApprox (12 :: Int) Unit.Point)
                            , (LineSkip, fixedGlue $ Unit.toScaledPointApprox (1 :: Int) Unit.Point)
                            ]
-    in HMap.union vm $ newGlueParameterMap
+    in HMap.union vm $ newGlueParameters

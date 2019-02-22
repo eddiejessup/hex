@@ -18,8 +18,8 @@ import           HeXPrelude
 import           HeX.Type
 import qualified HeX.Categorise                as Cat
 
-initialiseCharCodeMap :: (Cat.CharCode -> v) -> Cat.CharCodeMap v
-initialiseCharCodeMap val = HMap.fromList $ ((\c -> (c, val c)) . chr) <$> [0 .. 127]
+initialiseCharCodes :: (Cat.CharCode -> v) -> Cat.CharCodeMap v
+initialiseCharCodes val = HMap.fromList $ ((\c -> (c, val c)) . chr) <$> [0 .. 127]
 
 digits :: [Char]
 digits = ['1'..'9']
@@ -112,8 +112,8 @@ instance Enum FamilyCharRef where
         (fam `shiftL` 8) + pos
 
 -- All delcodes are −1 until they are changed by a \delcode command.
-newDelimiterCodeMap :: Cat.CharCodeMap DelimiterCode
-newDelimiterCodeMap = initialiseCharCodeMap $ const $ NotADelimiter (-1)
+newDelimiterCodes :: Cat.CharCodeMap DelimiterCode
+newDelimiterCodes = initialiseCharCodes $ const $ NotADelimiter (-1)
 
 -- Math code.
 
@@ -163,8 +163,8 @@ instance Enum MathCode where
 -- The 52 letters have \mathcode x = x + "7100.
 -- Otherwise,          \mathcode x = x
 -- Put otherwise: letters are class 7, family 1; digits are class 7, family 0.
-newMathCodeMap :: Cat.CharCodeMap MathCode
-newMathCodeMap = initialiseCharCodeMap f
+newMathCodes :: Cat.CharCodeMap MathCode
+newMathCodes = initialiseCharCodes f
  where
     f c
         | c `elem` digits  = NormalMathCode VariableFamily (FamilyCharRef 0 $ ord c)
@@ -199,15 +199,15 @@ instance Enum CaseChangeCode where
 -- By default, all \uccode and \lccode values are zero except that the
 -- letters a to z and A to Z have \uccode values A to Z and \lccode values a to
 -- z.
-newLowercaseMap :: Cat.CharCodeMap CaseChangeCode
-newLowercaseMap = initialiseCharCodeMap f
+newLowercaseCodes :: Cat.CharCodeMap CaseChangeCode
+newLowercaseCodes = initialiseCharCodes f
  where
     f c
         | c `elem` letters = ChangeToCode $ toLower c
         | otherwise        = NoCaseChange
 
-newUppercaseMap :: Cat.CharCodeMap CaseChangeCode
-newUppercaseMap = initialiseCharCodeMap f
+newUppercaseCodes :: Cat.CharCodeMap CaseChangeCode
+newUppercaseCodes = initialiseCharCodes f
  where
     f c
         | c `elem` letters = ChangeToCode $ toUpper c
@@ -232,8 +232,8 @@ instance Enum SpaceFactorCode where
 
 -- By default, all characters have a space factor code of 1000, except that the
 -- uppercase letters ‘A’ through ‘Z’ have code 999.
-newSpaceFactorMap :: Cat.CharCodeMap SpaceFactorCode
-newSpaceFactorMap = initialiseCharCodeMap $ SpaceFactorCode . f
+newSpaceFactors :: Cat.CharCodeMap SpaceFactorCode
+newSpaceFactors = initialiseCharCodes $ SpaceFactorCode . f
   where
     f c
         | c `elem` ['A' .. 'Z'] = 999
