@@ -33,7 +33,6 @@ import           Safe                           ( headMay
                                                 , toEnumMay )
 import           System.IO                      ( Handle
                                                 , hPutStrLn
-                                                , hFlush
                                                 )
 import qualified Text.Megaparsec               as PS
 
@@ -569,7 +568,7 @@ processVCommand oldStream pages curPage acc = \case
             _ -> throwError $ ConfigError "Cannot end: not in global scope"
         lastPages <- HP.runConfState $ runPageBuilder curPage (reverse acc)
         let pagesFinal = pages ++ lastPages
-        readOnConfState $ asks logStream >>= liftIO . hFlush
+        readOnConfState (asks finaliseConfig) >>= liftIO
         pure (pagesFinal, curPage, acc, False)
     HP.EnterHMode ->
         addParagraphToPage HP.Indent

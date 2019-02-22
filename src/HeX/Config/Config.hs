@@ -26,6 +26,7 @@ import           System.Directory
 import           System.IO                      ( Handle
                                                 , IOMode(..)
                                                 , openFile
+                                                , hClose
                                                 )
 
 import qualified TFM
@@ -139,6 +140,10 @@ newConfig =
         , outFileStreams    = HMap.empty
         , scopedConfig      = (newGlobalScope, [])
         }
+
+finaliseConfig :: Config -> IO ()
+finaliseConfig config = do
+    hClose $ logStream config
 
 -- Fonts.
 
