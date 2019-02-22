@@ -47,63 +47,68 @@ import           HeX.Parse.Resolve
 type RegisterMap v = HMap.HashMap EightBitInt v
 
 data Scope = Scope
-    { csMap                   :: CSMap
+    { currentFontNr       :: Maybe Int
+    , csMap               :: CSMap
     -- Char-code attribute maps.
-    , catCodes              :: Cat.CatCodes
-    , mathCodes             :: Cat.CharCodeMap MathCode
+    , catCodes            :: Cat.CatCodes
+    , mathCodes           :: Cat.CharCodeMap MathCode
     , lowercaseCodes
-    , uppercaseCodes            :: Cat.CharCodeMap CaseChangeCode
-    , spaceFactors          :: Cat.CharCodeMap SpaceFactorCode
-    , delimiterCodes        :: Cat.CharCodeMap DelimiterCode
+    , uppercaseCodes      :: Cat.CharCodeMap CaseChangeCode
+    , spaceFactors        :: Cat.CharCodeMap SpaceFactorCode
+    , delimiterCodes      :: Cat.CharCodeMap DelimiterCode
     -- Parameters.
-    , integerParameters     :: HMap.HashMap IntegerParameter IntVal
-    , lengthParameters      :: HMap.HashMap LengthParameter LenVal
-    , glueParameters        :: HMap.HashMap GlueParameter BL.Glue
-    -- , mathGlueParameters :: HMap.HashMap MathGlueParameter MathGlue
-    , tokenListParameters   :: HMap.HashMap TokenListParameter BalancedText
+    , integerParameters   :: HMap.HashMap IntegerParameter IntVal
+    , lengthParameters    :: HMap.HashMap LengthParameter LenVal
+    , glueParameters      :: HMap.HashMap GlueParameter BL.Glue
+    -- , mathGlueParameters  :: HMap.HashMap MathGlueParameter MathGlue
+    , tokenListParameters :: HMap.HashMap TokenListParameter BalancedText
     -- Registers.
-    , integerRegister         :: RegisterMap IntVal
-    , lengthRegister          :: RegisterMap LenVal
-    , glueRegister            :: RegisterMap BL.Glue
-    -- , mathGlueRegister        :: RegisterMap MathGlue
-    , tokenListRegister       :: RegisterMap BalancedText
-    -- , boxRegister             :: RegisterMap (Maybe Box)
+    , integerRegister     :: RegisterMap IntVal
+    , lengthRegister      :: RegisterMap LenVal
+    , glueRegister        :: RegisterMap BL.Glue
+    -- , mathGlueRegister    :: RegisterMap MathGlue
+    , tokenListRegister   :: RegisterMap BalancedText
+    -- , boxRegister         :: RegisterMap (Maybe Box)
 
     } deriving (Show)
 
 newGlobalScope :: Scope
 newGlobalScope = Scope
-    { csMap                   = defaultCSMap
+    { currentFontNr       = Nothing
 
-    , catCodes              = Cat.usableCatCodes
-    , mathCodes             = newMathCodes
-    , lowercaseCodes            = newLowercaseCodes
-    , uppercaseCodes            = newUppercaseCodes
-    , spaceFactors          = newSpaceFactors
-    , delimiterCodes        = newDelimiterCodes
+    , csMap               = defaultCSMap
 
-    , integerParameters     = usableIntegerParameters
-    , lengthParameters      = usableLengthParameters
-    , glueParameters        = usableGlueParameters
-    -- , mathGlueParameters = newMathGlueParameters
-    , tokenListParameters   = newTokenListParameters
+    , catCodes            = Cat.usableCatCodes
+    , mathCodes           = newMathCodes
+    , lowercaseCodes      = newLowercaseCodes
+    , uppercaseCodes      = newUppercaseCodes
+    , spaceFactors        = newSpaceFactors
+    , delimiterCodes      = newDelimiterCodes
 
-    , integerRegister         = HMap.empty
-    , lengthRegister          = HMap.empty
-    , glueRegister            = HMap.empty
-    -- , mathGlueRegister        = HMap.empty
-    , tokenListRegister       = HMap.empty
-    -- , boxRegister             = HMap.empty
+    , integerParameters   = usableIntegerParameters
+    , lengthParameters    = usableLengthParameters
+    , glueParameters      = usableGlueParameters
+    -- , mathGlueParameters  = newMathGlueParameters
+    , tokenListParameters = newTokenListParameters
+
+    , integerRegister     = HMap.empty
+    , lengthRegister      = HMap.empty
+    , glueRegister        = HMap.empty
+    -- , mathGlueRegister    = HMap.empty
+    , tokenListRegister   = HMap.empty
+    -- , boxRegister         = HMap.empty
     }
 
 newLocalScope :: Scope
 newLocalScope = Scope
-    { csMap                 = HMap.empty
+    { currentFontNr       = Nothing
+
+    , csMap               = HMap.empty
 
     , catCodes            = HMap.empty
     , mathCodes           = HMap.empty
-    , lowercaseCodes          = HMap.empty
-    , uppercaseCodes          = HMap.empty
+    , lowercaseCodes      = HMap.empty
+    , uppercaseCodes      = HMap.empty
     , spaceFactors        = HMap.empty
     , delimiterCodes      = HMap.empty
 
@@ -113,17 +118,16 @@ newLocalScope = Scope
     -- , mathGlueParameters  = HMap.empty
     , tokenListParameters = HMap.empty
 
-    , integerRegister       = HMap.empty
-    , lengthRegister        = HMap.empty
-    , glueRegister          = HMap.empty
-    -- , mathGlueRegister      = HMap.empty
-    , tokenListRegister     = HMap.empty
-    -- , boxRegister           = HMap.empty
+    , integerRegister     = HMap.empty
+    , lengthRegister      = HMap.empty
+    , glueRegister        = HMap.empty
+    -- , mathGlueRegister    = HMap.empty
+    , tokenListRegister   = HMap.empty
+    -- , boxRegister         = HMap.empty
     }
 
 data Config = Config
-    { currentFontNr     :: Maybe Int
-    , fontInfos         :: V.Vector FontInfo
+    { fontInfos         :: V.Vector FontInfo
     , searchDirectories :: [Path Abs Dir]
     , specialIntegers :: HMap.HashMap SpecialInteger IntVal
     , specialLengths  :: HMap.HashMap SpecialLength IntVal
@@ -140,8 +144,7 @@ newConfig =
     cwd <- parseAbsDir cwdRaw
     logHandle <- openFile "hex.log" WriteMode
     pure Config
-        { currentFontNr     = Nothing
-        , fontInfos         = V.empty
+        { fontInfos         = V.empty
         , searchDirectories = [cwd]
         , specialIntegers = newSpecialIntegers
         , specialLengths  = newSpecialLengths
@@ -154,7 +157,7 @@ finaliseConfig :: Config -> IO ()
 finaliseConfig config = do
     hClose $ logStream config
 
--- Fonts.
+-- Fonts info (global).
 
 data FontInfo = FontInfo
     { fontMetrics :: TexFont
@@ -175,12 +178,6 @@ lookupFontInfo fNr =
     do
     infos <- asks fontInfos
     liftMaybe "No such font number" $ infos !? fNr
-
-currentFontInfo :: (MonadReader Config m, MonadError String m) => m FontInfo
-currentFontInfo = asks currentFontNr >>= liftMaybe "Font number isn't set" >>= lookupFontInfo
-
-currentFontMetrics :: (MonadReader Config m, MonadError String m) => m TexFont
-currentFontMetrics = fontMetrics <$> currentFontInfo
 
 addFont :: MonadState Config m => FontInfo -> m Int
 addFont newInfo =
@@ -221,15 +218,15 @@ insertKey getMap upD k v globalFlag conf =
     insertToScopes scopes@(g, locs) =
         case globalFlag of
             Global ->
-                (insertKeyToScope g, deleteKeyFromScope <$> locs)
+                (insertKeyToScope g, (\(t, sc) -> (t, deleteKeyFromScope sc)) <$> locs)
             Local ->
                 modLocalScope scopes insertKeyToScope
 
     insertKeyToScope c =
         upD c $ HMap.insert k v $ getMap c
 
-    deleteKeyFromScope (trig, c) =
-        (trig, upD c $ HMap.delete k $ getMap c)
+    deleteKeyFromScope c =
+        upD c $ HMap.delete k $ getMap c
 
 scopedLookup :: (k -> Maybe v) -> (k, [(a, k)]) -> Maybe v
 scopedLookup f (g, []) = f g
@@ -243,6 +240,32 @@ scopedMapLookup
 scopedMapLookup getMap k = lkp . scopedConfig
   where
     lkp = scopedLookup ((HMap.lookup k) . getMap)
+
+-- Font number (scoped).
+
+lookupCurrentFontNr :: Config -> Maybe Int
+lookupCurrentFontNr = scopedLookup currentFontNr . scopedConfig
+
+currentFontInfo :: (MonadReader Config m, MonadError String m) => m FontInfo
+currentFontInfo = asks lookupCurrentFontNr >>= liftMaybe "Font number isn't set" >>= lookupFontInfo
+
+currentFontMetrics :: (MonadReader Config m, MonadError String m) => m TexFont
+currentFontMetrics = fontMetrics <$> currentFontInfo
+
+selectFontNr :: Int -> GlobalFlag -> Config -> Config
+selectFontNr n globalFlag conf =
+    conf{scopedConfig = insertToScopes $ scopedConfig conf}
+  where
+    insertToScopes scopes@(g, locs) =
+        case globalFlag of
+            Global ->
+                (selectFontInScope g, (\(t, sc) -> (t, deselectFontInScope sc)) <$> locs)
+            Local ->
+                modLocalScope scopes selectFontInScope
+
+    deselectFontInScope sc = sc{currentFontNr = Nothing}
+
+    selectFontInScope sc = sc{currentFontNr = Just n}
 
 -- Control sequences.
 

@@ -89,10 +89,10 @@ loadFont relPath =
 
     extractFontName p = stripExtension p <&> fileName
 
-selectFont :: MonadState Config m => Int -> m B.FontSelection
-selectFont n =
+selectFont :: MonadState Config m => Int -> HP.GlobalFlag -> m B.FontSelection
+selectFont n globalFlag =
     do
-    modify (\conf -> conf{currentFontNr = Just n})
+    modify $ selectFontNr n globalFlag
     pure $ B.FontSelection n
 
 characterBox :: (MonadReader Config m, MonadError String m) => CharCode -> m B.Character
@@ -306,7 +306,7 @@ handleModeIndep = \case
                 pure []
             HP.SelectFont fNr ->
                 do
-                fontSel <- HP.runConfState $ selectFont fNr
+                fontSel <- HP.runConfState $ selectFont fNr globalFlag
                 pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
         readOnConfState $ do
