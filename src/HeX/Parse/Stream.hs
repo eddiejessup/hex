@@ -16,10 +16,7 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 )
 import           Control.Monad.Reader           ( runReaderT
                                                 )
-import           Data.Char                      ( chr
-                                                , toLower
-                                                , toUpper
-                                                )
+import           Data.Char                      ( chr )
 import           Data.Proxy
 import qualified Data.Map.Strict               as Map
 import           Data.Map.Strict                ( (!?) )
@@ -124,8 +121,8 @@ expandMacro MacroContents{replacementTokens=(MacroText replaceToks)} args =
         rest = renderMacroText ts
 
 -- Change the case of the parsed tokens.
-expandChangeCase :: VDirection -> BalancedText -> [Lex.Token]
-expandChangeCase direction (BalancedText caseToks) =
+expandChangeCase :: (VDirection, Conf.Config) -> BalancedText -> [Lex.Token]
+expandChangeCase (direction, conf) (BalancedText caseToks) =
     changeCase direction <$> caseToks
   where
     -- Set the character code of each character token to its
@@ -135,8 +132,10 @@ expandChangeCase direction (BalancedText caseToks) =
         Lex.CharCatToken $ Lex.CharCat (switch dir char) cat
     changeCase _ t = t
 
-    switch Upward   = toUpper
-    switch Downward = toLower
+    switch dir char =
+        case Conf.lookupChangeCaseCode dir char conf of
+            Conf.NoCaseChange       -> char
+            Conf.ChangeToCode char' -> char'
 
 runSyntaxCommand
   :: InhibitableStream s
@@ -248,7 +247,7 @@ instance P.Stream ExpandedStream where
                         runRead strm f = runExceptT $ runReaderT f (config strm)
                     in case c of
                         ChangeCaseTok direction ->
-                            runExpandCommand stream' direction parseGeneralText expandChangeCase
+                            runExpandCommand stream' (direction, config stream') parseGeneralText expandChangeCase
                         MacroTok m ->
                             runExpandCommand stream' m (parseMacroArgs m) expandMacro
                         CSNameTok ->

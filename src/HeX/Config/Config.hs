@@ -288,6 +288,13 @@ insertControlSequence = insertKey csMap $ \c _map -> c{csMap = _map}
 lookupCatCode :: Cat.CharCode -> Config -> Cat.CatCode
 lookupCatCode t conf = Cat.catDefault $ scopedMapLookup catCodes t conf
 
+lookupChangeCaseCode :: VDirection -> Cat.CharCode -> Config -> CaseChangeCode
+lookupChangeCaseCode d t conf =
+    let field = case d of
+            Upward   -> uppercaseCodes
+            Downward -> lowercaseCodes
+    in fromMaybe NoCaseChange $ scopedMapLookup field t conf
+
 updateCharCodeMap
     :: (MonadError String m, MonadState Config m)
     => CodeType
