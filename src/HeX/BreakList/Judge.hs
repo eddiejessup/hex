@@ -17,7 +17,7 @@ import           HeX.Unit                          ( tenK
                                                    , showSP
                                                    , showFrac )
 
--- Here’s the way TEX goes about setting the glue when an hbox is being wrapped
+-- Here’s the way TeX goes about setting the glue when an hbox is being wrapped
 -- up: The natural width, x, of the box contents is determined by adding up the
 -- widths of the boxes and kerns inside, together with the natural widths of
 -- all the glue inside. Furthermore the total amount of glue stretchability and
@@ -26,10 +26,10 @@ import           HeX.Unit                          ( tenK
 -- fill + z3 filll available for shrinking. Now the natural width x is compared
 -- to the desired width w. If x = w, all glue gets its natural width. Otherwise
 -- the glue will be modified, by computing a “glue set ratio” r and a “glue set
--- order” i in the following way: (a) If x < w, TEX attempts to stretch the
+-- order” i in the following way: (a) If x < w, TeX attempts to stretch the
 -- contents of the box; the glue order is the highest subscript i such that yi
 -- is nonzero, and the glue ratio is r = (w−x)/yi. (If y0 = y1 = y2 = y3 = 0,
--- there’s no stretchability; both i and r are set to zero.) (b) If x > w, TEX
+-- there’s no stretchability; both i and r are set to zero.) (b) If x > w, TeX
 -- attempts to shrink the contents of the box in a similar way; the glue order
 -- is the highest subscript i such that zi ̸= 0, and the glue ratio is normally
 -- r = (x−w)/zi. However, r is set to 1.0 in the case i = 0 and x − w > z0,
