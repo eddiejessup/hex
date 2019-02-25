@@ -366,7 +366,7 @@ data PrimitiveToken
     | ShipOutTok -- \shipout
     | IgnoreSpacesTok -- \ignorespaces
     | SetAfterAssignmentTokenTok -- \afterassignment
-    | ToAfterGroupTokensTok -- \aftergroup
+    | AddToAfterGroupTokensTok -- \aftergroup
     | MessageTok MessageStream -- \message, \errmessage
     | ImmediateTok -- \immediate
     | OpenInputTok -- \openin
@@ -479,7 +479,19 @@ data TokenAttribute
     | CatCodeAttribute  -- \ifcat
     deriving (Show, Eq)
 
-data IfTok
+data MarkRegister
+    = TopMark  -- \topmark
+    | FirstMark  -- \firstmark
+    | BottomMark  -- \botmark
+    | SplitFirstMark  -- \splitfirstmark
+    deriving (Show, Eq)
+
+data ConditionTok
+    = ConditionHeadTok ConditionHeadTok
+    | ConditionBodyTok ConditionBodyTok
+    deriving (Show, Eq)
+
+data ConditionHeadTok
     = IfIntegerPairTestTok -- \ifnum
     | IfLengthPairTestTok -- \ifdim
     | IfIntegerOddTok -- \ifodd
@@ -492,29 +504,34 @@ data IfTok
     | CaseTok -- \ifcase
     deriving (Show, Eq)
 
+data ConditionBodyTok
+    = Else -- \else
+    | Or -- \or
+    | EndIf -- \fi
+    deriving (Show, Eq)
+
 data SyntaxCommandHeadToken
-    = ChangeCaseTok VDirection -- \uppercase, \lowercase
-    | CSNameTok  -- \csname
-    | MacroTok MacroContents
-    | IfTok IfTok
+    = MacroTok MacroContents
+    | ConditionTok ConditionTok
+    | NumberTok  -- \number
+    | RomanNumeralTok  -- \romannumeral
     | StringTok  -- \string
+    | JobNameTok  -- \jobname
+    | FontNameTok  -- \fontname
+    | MeaningTok  -- \meaning
+    | CSNameTok  -- \csname
+    | ExpandAfterTok  -- \expandafter
+    | NoExpandTok  -- \noexpand
+    | MarkRegisterTok MarkRegister
+    | InputTok  -- \input
+    | EndInputTok  -- \endinput
     | TheTok  -- \the
-    deriving (Show, Eq)
-
-data ConditionBlockToken
-    = ElseTok -- \else
-    | OrTok -- \or
-    | EndIfTok -- \fi
-    deriving (Show, Eq)
-
-data NonConditionBlockToken
-    = SyntaxCommandHeadToken SyntaxCommandHeadToken
-    | PrimitiveToken PrimitiveToken
+    | ChangeCaseTok VDirection -- \uppercase, \lowercase
     deriving (Show, Eq)
 
 data ResolvedToken
-    = ConditionBlockToken ConditionBlockToken
-    | NonConditionBlockToken NonConditionBlockToken
+    = SyntaxCommandHeadToken SyntaxCommandHeadToken
+    | PrimitiveToken PrimitiveToken
     deriving (Show, Eq)
 
 instance Ord ResolvedToken where

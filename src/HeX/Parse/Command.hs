@@ -49,7 +49,7 @@ parseAllModeCommand mode =
              , skipSatisfiedEquals T.ShowTheInternalQuantityTok >> (ShowTheInternalQuantity <$> parseInternalQuantity)
              , skipSatisfiedEquals T.ShipOutTok >> (ShipOut <$> parseBox)
              , skipSatisfiedEquals T.SetAfterAssignmentTokenTok >> (SetAfterAssignmentToken <$> parseToken)
-             , skipSatisfiedEquals T.ToAfterGroupTokensTok >> (AddToAfterGroupTokens <$> parseToken)
+             , skipSatisfiedEquals T.AddToAfterGroupTokensTok >> (AddToAfterGroupTokens <$> parseToken)
              , skipSatisfiedEquals T.MarkTok >> (AddMark <$> parseGeneralText)
              -- , parseInsert
              -- , parseVAdjust

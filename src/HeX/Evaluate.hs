@@ -275,31 +275,38 @@ showInternalQuantity = \case
 
 -- Condition
 
-data ElseState
-    = PreElse
-    | PostElse
+data IfBodyState
+    = IfPreElse
+    | IfPostElse
     deriving (Show, Eq)
 
-data BlockTarget
-    = IfBlockTarget { tgtIfElseState :: ElseState }
-    | CaseBlockTarget { currentCaseBlock, targetCaseBlock :: Int }
+data ConditionBlockTarget
+    = IfBlockTarget IfBodyState
+    | CaseBlockTarget Int
     deriving (Show)
 
-data ConditionBlockState = ConditionBlockState ElseState BlockTarget
+data CaseBodyState
+    = CasePostOr
+    | CasePostElse
     deriving (Show)
 
-evaluateConditionHead :: (MonadReader Config m, MonadError String m) => AST.ConditionHead -> m BlockTarget
+data ConditionBodyState
+    = IfBodyState IfBodyState
+    | CaseBodyState CaseBodyState
+    deriving (Show)
+
+evaluateConditionHead :: (MonadReader Config m, MonadError String m) => AST.ConditionHead -> m ConditionBlockTarget
 evaluateConditionHead = \case
     AST.CaseConditionHead n ->
         do
         en <- evaluateNumber n
-        pure $ CaseBlockTarget 0 en
+        pure $ CaseBlockTarget en
     AST.IfConditionHead ifH ->
         do
         bool <- evaluateIfConditionHead ifH
         pure $ IfBlockTarget $ if bool
-            then PreElse
-            else PostElse
+            then IfPreElse
+            else IfPostElse
 
 evaluateIfConditionHead :: (MonadReader Config m, MonadError String m) => AST.IfConditionHead -> m Bool
 evaluateIfConditionHead = \case

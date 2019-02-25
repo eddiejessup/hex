@@ -20,7 +20,7 @@ parseRelation = satisfyThen $ \t -> if
     | isEquals t            -> Just EQ
     | otherwise             -> Nothing
 
-conditionHeadParser :: InhibitableStream s => T.IfTok -> SimpParser s ConditionHead
+conditionHeadParser :: InhibitableStream s => T.ConditionHeadTok -> SimpParser s ConditionHead
 conditionHeadParser = \case
     T.IfIntegerPairTestTok ->
         IfConditionHead <$> (IfIntegerPairTest <$> parseNumber <*> parseRelation <*> parseNumber)

@@ -26,45 +26,55 @@ resolveToken _ _ t@(Lex.CharCatToken _) =
 _cs :: String -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper . Lex.ControlSequence
 
-_nt :: NonConditionBlockToken -> ResolvedToken
-_nt = NonConditionBlockToken
-
 syntaxTok :: SyntaxCommandHeadToken -> ResolvedToken
-syntaxTok = _nt . SyntaxCommandHeadToken
+syntaxTok = SyntaxCommandHeadToken
 
 primTok :: PrimitiveToken -> ResolvedToken
-primTok = _nt . PrimitiveToken
+primTok = PrimitiveToken
 
 defaultCSMap :: CSMap
 defaultCSMap = HMap.fromList
-    -- Tokens used in the body of condition blocks.
-    [ (_cs "else"        , ConditionBlockToken ElseTok)
-    , (_cs "or"          , ConditionBlockToken OrTok)
-    , (_cs "fi"          , ConditionBlockToken EndIfTok)
       -- Heads of syntax commands.
+      -- Heads of conditions.
+    [ (_cs "ifnum"       , syntaxTok $ ConditionTok $ ConditionHeadTok IfIntegerPairTestTok)
+    , (_cs "ifdim"       , syntaxTok $ ConditionTok $ ConditionHeadTok IfLengthPairTestTok)
+    , (_cs "ifodd"       , syntaxTok $ ConditionTok $ ConditionHeadTok IfIntegerOddTok)
+    , (_cs "ifvmode"     , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfInModeTok VerticalMode)
+    , (_cs "ifhmode"     , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfInModeTok HorizontalMode)
+    , (_cs "ifmmode"     , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfInModeTok MathMode)
+    , (_cs "ifinner"     , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfInModeTok InnerMode)
+    , (_cs "if"          , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfTokenAttributesEqualTok CharCodeAttribute)
+    , (_cs "ifcat"       , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfTokenAttributesEqualTok CatCodeAttribute)
+    , (_cs "ifx"         , syntaxTok $ ConditionTok $ ConditionHeadTok IfTokensEqualTok)
+    , (_cs "ifvoid"      , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfBoxRegisterIsTok IsVoid)
+    , (_cs "ifvbox"      , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfBoxRegisterIsTok HasVerticalBox)
+    , (_cs "ifhbox"      , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfBoxRegisterIsTok HasHorizontalBox)
+    , (_cs "ifeof"       , syntaxTok $ ConditionTok $ ConditionHeadTok IfInputEndedTok)
+    , (_cs "iftrue"      , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfConstTok True)
+    , (_cs "iffalse"     , syntaxTok $ ConditionTok $ ConditionHeadTok $ IfConstTok False)
+    , (_cs "ifcase"      , syntaxTok $ ConditionTok $ ConditionHeadTok CaseTok)
+    -- Tokens used in the body of condition blocks.
+    , (_cs "else"        , syntaxTok $ ConditionTok $ ConditionBodyTok Else)
+    , (_cs "or"          , syntaxTok $ ConditionTok $ ConditionBodyTok Or)
+    , (_cs "fi"          , syntaxTok $ ConditionTok $ ConditionBodyTok EndIf)
+    , (_cs "number"      , syntaxTok NumberTok)
+    , (_cs "romannumeral" , syntaxTok RomanNumeralTok)
+    , (_cs "string"      , syntaxTok StringTok)
+    , (_cs "jobname"     , syntaxTok JobNameTok)
+    , (_cs "fontname"    , syntaxTok FontNameTok)
+    , (_cs "meaning"     , syntaxTok MeaningTok)
+    , (_cs "csname"      , syntaxTok CSNameTok)
+    , (_cs "expandafter" , syntaxTok ExpandAfterTok)
+    , (_cs "noexpand"    , syntaxTok NoExpandTok)
+    , (_cs "topmark"        , syntaxTok $ MarkRegisterTok TopMark)
+    , (_cs "firstmark"      , syntaxTok $ MarkRegisterTok FirstMark)
+    , (_cs "botmark"        , syntaxTok $ MarkRegisterTok BottomMark)
+    , (_cs "splitfirstmark" , syntaxTok $ MarkRegisterTok SplitFirstMark)
+    , (_cs "input"       , syntaxTok InputTok)
+    , (_cs "endinput"    , syntaxTok EndInputTok)
+    , (_cs "the"         , syntaxTok TheTok)
     , (_cs "uppercase"   , syntaxTok $ ChangeCaseTok Upward)
     , (_cs "lowercase"   , syntaxTok $ ChangeCaseTok Downward)
-    , (_cs "csname"      , syntaxTok CSNameTok)
-    , (_cs "string"      , syntaxTok StringTok)
-    , (_cs "the"         , syntaxTok TheTok)
-    -- Heads of conditions.
-    , (_cs "ifnum"       , syntaxTok $ IfTok IfIntegerPairTestTok)
-    , (_cs "ifdim"       , syntaxTok $ IfTok IfLengthPairTestTok)
-    , (_cs "ifodd"       , syntaxTok $ IfTok IfIntegerOddTok)
-    , (_cs "ifvmode"     , syntaxTok $ IfTok $ IfInModeTok VerticalMode)
-    , (_cs "ifhmode"     , syntaxTok $ IfTok $ IfInModeTok HorizontalMode)
-    , (_cs "ifmmode"     , syntaxTok $ IfTok $ IfInModeTok MathMode)
-    , (_cs "ifinner"     , syntaxTok $ IfTok $ IfInModeTok InnerMode)
-    , (_cs "if"          , syntaxTok $ IfTok $ IfTokenAttributesEqualTok CharCodeAttribute)
-    , (_cs "ifcat"       , syntaxTok $ IfTok $ IfTokenAttributesEqualTok CatCodeAttribute)
-    , (_cs "ifx"         , syntaxTok $ IfTok IfTokensEqualTok)
-    , (_cs "ifvoid"      , syntaxTok $ IfTok $ IfBoxRegisterIsTok IsVoid)
-    , (_cs "ifvbox"      , syntaxTok $ IfTok $ IfBoxRegisterIsTok HasVerticalBox)
-    , (_cs "ifhbox"      , syntaxTok $ IfTok $ IfBoxRegisterIsTok HasHorizontalBox)
-    , (_cs "ifeof"       , syntaxTok $ IfTok IfInputEndedTok)
-    , (_cs "iftrue"      , syntaxTok $ IfTok $ IfConstTok True)
-    , (_cs "iffalse"     , syntaxTok $ IfTok $ IfConstTok False)
-    , (_cs "ifcase"      , syntaxTok $ IfTok CaseTok)
       -- Arguments of syntax commands.
     , (_cs "endcsname"   , primTok $ SyntaxCommandArg EndCSNameTok)
       -- Nothing special.
@@ -78,7 +88,7 @@ defaultCSMap = HMap.fromList
     , (_cs "shipout"     , primTok ShipOutTok)
     , (_cs "ignorespaces", primTok IgnoreSpacesTok)
     , (_cs "afterassignment", primTok SetAfterAssignmentTokenTok)
-    , (_cs "aftergroup"  , primTok ToAfterGroupTokensTok)
+    , (_cs "aftergroup"  , primTok AddToAfterGroupTokensTok)
     , (_cs "message"     , primTok $ MessageTok Out)
     , (_cs "errmessage"  , primTok $ MessageTok Err)
     , (_cs "immediate"   , primTok ImmediateTok)

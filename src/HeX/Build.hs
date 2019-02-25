@@ -566,6 +566,9 @@ processVCommand oldStream pages curPage acc = \case
         readOnConfState $ asks scopedConfig >>= \case
             (_, []) -> pure ()
             _ -> throwError $ ConfigError "Cannot end: not in global scope"
+        gets HP.skipState >>= \case
+            [] -> pure ()
+            _skipState -> throwError $ ConfigError $ "Cannot end: in condition block: " ++ show _skipState
         lastPages <- HP.runConfState $ runPageBuilder curPage (reverse acc)
         let pagesFinal = pages ++ lastPages
         readOnConfState (asks finaliseConfig) >>= liftIO
