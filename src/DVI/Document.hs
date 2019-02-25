@@ -121,7 +121,7 @@ parseMundaneInstruction st i = case i of
         pure st { instrs = instrsDone
                 , beginPagePointers = encLength instrsEnded : points
                 }
-    (DefineFont fontDef) ->
+    DefineFont fontDef ->
         let
             FontDefinition { fontInfo = info
                            , fontPath = path

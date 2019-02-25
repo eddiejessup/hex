@@ -6,6 +6,12 @@
 module HeX.Build where
 
 import           Control.Monad                  ( foldM )
+import           Control.Monad.Except           ( ExceptT
+                                                , MonadError
+                                                , liftEither
+                                                , throwError
+                                                , withExceptT
+                                                )
 import           Control.Monad.IO.Class         ( MonadIO )
 import           Control.Monad.Reader           ( MonadReader
                                                 , ReaderT
@@ -20,14 +26,9 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 , liftIO
                                                 , modify
                                                 )
-import           Control.Monad.Except           ( ExceptT
-                                                , MonadError
-                                                , liftEither
-                                                , throwError
-                                                , withExceptT
-                                                )
 import           Data.Either.Combinators        ( mapLeft )
 import qualified Data.HashMap.Strict           as HMap
+import           Data.Maybe                     ( fromMaybe )
 import           Path
 import           Safe                           ( headMay
                                                 , toEnumMay )
@@ -62,11 +63,15 @@ import qualified HeX.Unit                      as Unit
 loadFont
     :: (MonadState Config m, MonadIO m, MonadError String m)
     => Path Rel File
+    -> HP.FontSpecification
     -> m B.FontDefinition
-loadFont relPath =
+loadFont relPath fontSpec =
     do
     fontInfo_ <- readOnState $ readRelPath relPath
+    let designSizeSP = TFM.designSizeSP $ fontMetrics fontInfo_
+    scaleRatio <- readOnState $ evaluateFontSpecification designSizeSP fontSpec
     fontName <- extractFontName relPath
+    liftIO $ putStrLn $ "Loading font: " ++ show fontName ++ ", with design size: " ++ show designSizeSP ++ ", with scale ratio: " ++ show scaleRatio
     fNr <- addFont fontInfo_
     pure B.FontDefinition
         { fontNr           = fNr
@@ -74,12 +79,12 @@ loadFont relPath =
         , fontPath         = fontName
         , fontName         = fontName
         , fontInfo         = fontMetrics fontInfo_
-        , scaleFactorRatio = 1.0
+        , scaleFactorRatio = scaleRatio
         }
   where
     readRelPath p =
         findFilePath p <$> asks searchDirectories
-        >>= liftThrow "Could not find font"
+        >>= liftThrow ("Could not find font: " ++ show p)
         >>= readFontInfo
 
     stripExtension p =
@@ -142,6 +147,13 @@ setGlueVariable
 setGlueVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setGlueParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setGlueRegister i tgt globalFlag)
+
+setMathGlueVariable
+    :: (MonadState Config m, MonadError String m)
+    => HP.MathGlueVariable -> HP.GlobalFlag -> BL.MathGlue -> m ()
+setMathGlueVariable v globalFlag tgt = case v of
+    HP.ParamVar p       -> modify $ setMathGlueParameter p tgt globalFlag
+    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setMathGlueRegister i tgt globalFlag)
 
 setTokenListVariable
     :: (MonadState Config m, MonadError String m)
@@ -216,20 +228,19 @@ handleModeIndep = \case
                         pure ([], HP.primTok $ HP.LetCharCat tgtCC)
                     HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                         do
-                        resTok <-
-                            asks (lookupCSProper tgtCS)
-                            >>= liftMaybe ("Unknown control sequence: " ++ show tgtCS)
+                        resTok <- fromMaybe (HP.PrimitiveToken HP.RelaxTok) <$> asks (lookupCSProper tgtCS)
                         pure ([], resTok)
                     HP.ShortDefineTarget q n ->
                         do
                         en <- evaluateNumber n
                         pure ([], HP.primTok $ HP.IntRefTok q en)
-                    HP.FontTarget HP.NaturalFont fPath ->
+                    HP.FontTarget fontSpec fPath ->
                         do
-                        fontDef@B.FontDefinition{fontNr=fNr} <- loadFont fPath
+                        fontDef@B.FontDefinition{fontNr=fNr} <- loadFont fPath fontSpec
                         let fontRefTok = HP.primTok $ HP.FontRefToken fNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure ([boxElem], fontRefTok)
+                    oth -> throwError $ "Unimplemented: " ++ show oth
                 modify (\strm -> HP.insertControlSequence strm cs newCSTok globalFlag)
                 pure acc
             HP.SetVariable ass ->
@@ -241,8 +252,8 @@ handleModeIndep = \case
                         readOnState (evaluateLength tgt) >>= setLengthVariable v globalFlag
                     HP.GlueVariableAssignment v tgt    ->
                         readOnState (evaluateGlue tgt) >>= setGlueVariable v globalFlag
-                    HP.MathGlueVariableAssignment _ _  ->
-                        error "math-glue assignment not implemented"
+                    HP.MathGlueVariableAssignment v tgt  ->
+                        readOnState (evaluateMathGlue tgt) >>= setMathGlueVariable v globalFlag
                     HP.TokenListVariableAssignment v tgt ->
                         do
                         eTgt <- readOnState $ case tgt of
@@ -265,6 +276,10 @@ handleModeIndep = \case
                         do
                         newVarVal <- readOnState $ mappend <$> evaluateGlueVariable var <*> evaluateGlue plusVal
                         setGlueVariable var globalFlag newVarVal
+                    HP.AdvanceMathGlueVariable var plusVal ->
+                        do
+                        newVarVal <- readOnState $ mappend <$> evaluateMathGlueVariable var <*> evaluateMathGlue plusVal
+                        setMathGlueVariable var globalFlag newVarVal
                     -- Division of a positive integer by a positive integer
                     -- discards the remainder, and the sign of the result
                     -- changes if you change the sign of either operand.
@@ -308,6 +323,7 @@ handleModeIndep = \case
                 do
                 fontSel <- HP.runConfState $ selectFont fNr globalFlag
                 pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
+            oth -> throwError $ "Unimplemented: " ++ show oth
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
         readOnConfState $ do
         en <- evaluateNumber n

@@ -60,13 +60,13 @@ data Scope = Scope
     , integerParameters   :: HMap.HashMap IntegerParameter IntVal
     , lengthParameters    :: HMap.HashMap LengthParameter LenVal
     , glueParameters      :: HMap.HashMap GlueParameter BL.Glue
-    -- , mathGlueParameters  :: HMap.HashMap MathGlueParameter MathGlue
+    , mathGlueParameters  :: HMap.HashMap MathGlueParameter BL.MathGlue
     , tokenListParameters :: HMap.HashMap TokenListParameter BalancedText
     -- Registers.
     , integerRegister     :: RegisterMap IntVal
     , lengthRegister      :: RegisterMap LenVal
     , glueRegister        :: RegisterMap BL.Glue
-    -- , mathGlueRegister    :: RegisterMap MathGlue
+    , mathGlueRegister    :: RegisterMap BL.MathGlue
     , tokenListRegister   :: RegisterMap BalancedText
     -- , boxRegister         :: RegisterMap (Maybe Box)
 
@@ -88,13 +88,13 @@ newGlobalScope = Scope
     , integerParameters   = usableIntegerParameters
     , lengthParameters    = usableLengthParameters
     , glueParameters      = usableGlueParameters
-    -- , mathGlueParameters  = newMathGlueParameters
+    , mathGlueParameters  = newMathGlueParameters
     , tokenListParameters = newTokenListParameters
 
     , integerRegister     = HMap.empty
     , lengthRegister      = HMap.empty
     , glueRegister        = HMap.empty
-    -- , mathGlueRegister    = HMap.empty
+    , mathGlueRegister    = HMap.empty
     , tokenListRegister   = HMap.empty
     -- , boxRegister         = HMap.empty
     }
@@ -115,13 +115,13 @@ newLocalScope = Scope
     , integerParameters   = HMap.empty
     , lengthParameters    = HMap.empty
     , glueParameters      = HMap.empty
-    -- , mathGlueParameters  = HMap.empty
+    , mathGlueParameters  = HMap.empty
     , tokenListParameters = HMap.empty
 
     , integerRegister     = HMap.empty
     , lengthRegister      = HMap.empty
     , glueRegister        = HMap.empty
-    -- , mathGlueRegister    = HMap.empty
+    , mathGlueRegister    = HMap.empty
     , tokenListRegister   = HMap.empty
     -- , boxRegister         = HMap.empty
     }
@@ -141,11 +141,15 @@ newConfig :: IO Config
 newConfig =
     do
     cwdRaw <- getCurrentDirectory
-    cwd <- parseAbsDir cwdRaw
+    _searchDirectories <- mapM parseAbsDir [ "/usr/local/texlive/2018basic/texmf-dist/fonts/tfm/public/latex-fonts"
+                                           , "/usr/local/texlive/2018basic/texmf-dist/fonts/tfm/public/cm"
+                                           , "/usr/local/texlive/2018basic/texmf-dist/fonts/tfm/public/knuth-lib"
+                                           , cwdRaw
+                                           ]
     logHandle <- openFile "hex.log" WriteMode
     pure Config
         { fontInfos         = V.empty
-        , searchDirectories = [cwd]
+        , searchDirectories = _searchDirectories
         , specialIntegers = newSpecialIntegers
         , specialLengths  = newSpecialLengths
         , logStream         = logHandle
@@ -342,8 +346,8 @@ lookupLengthParameter p conf = fromMaybe 0 $ scopedMapLookup lengthParameters p 
 lookupGlueParameter :: GlueParameter -> Config -> BL.Glue
 lookupGlueParameter p conf = fromMaybe mempty $ scopedMapLookup glueParameters p conf
 
--- lookupMathGlueParameter :: MathGlueParameter -> Config -> MathGlue
--- lookupMathGlueParameter p conf = fromMaybe 0 $ scopedMapLookup mathGlueParameters p conf
+lookupMathGlueParameter :: MathGlueParameter -> Config -> BL.MathGlue
+lookupMathGlueParameter p conf = fromMaybe mempty $ scopedMapLookup mathGlueParameters p conf
 
 lookupTokenListParameter :: TokenListParameter -> Config -> BalancedText
 lookupTokenListParameter p conf = fromMaybe mempty $ scopedMapLookup tokenListParameters p conf
@@ -363,8 +367,8 @@ setLengthParameter = insertKey lengthParameters $ \c _map -> c{lengthParameters 
 setGlueParameter :: GlueParameter -> BL.Glue -> GlobalFlag -> Config -> Config
 setGlueParameter = insertKey glueParameters $ \c _map -> c{glueParameters = _map}
 
--- setMathGlueParameter :: MathGlueParameter -> MathGlue -> GlobalFlag -> Config -> Config
--- setMathGlueParameter = insertKey mathGlueParameters $ \c _map -> c{mathGlueParameters = _map}
+setMathGlueParameter :: MathGlueParameter -> BL.MathGlue -> GlobalFlag -> Config -> Config
+setMathGlueParameter = insertKey mathGlueParameters $ \c _map -> c{mathGlueParameters = _map}
 
 setTokenListParameter :: TokenListParameter -> BalancedText -> GlobalFlag -> Config -> Config
 setTokenListParameter = insertKey tokenListParameters $ \c _map -> c{tokenListParameters = _map}
@@ -393,8 +397,8 @@ lookupLengthRegister p conf = fromMaybe 0 $ scopedMapLookup lengthRegister p con
 lookupGlueRegister :: EightBitInt -> Config -> BL.Glue
 lookupGlueRegister p conf = fromMaybe mempty $ scopedMapLookup glueRegister p conf
 
--- lookupMathGlueRegister :: EightBitInt -> Config -> MathGlue
--- lookupMathGlueRegister p conf = fromMaybe 0 $ scopedMapLookup mathGlueRegister p conf
+lookupMathGlueRegister :: EightBitInt -> Config -> BL.MathGlue
+lookupMathGlueRegister p conf = fromMaybe mempty $ scopedMapLookup mathGlueRegister p conf
 
 lookupTokenListRegister :: EightBitInt -> Config -> BalancedText
 lookupTokenListRegister p conf = fromMaybe mempty $ scopedMapLookup tokenListRegister p conf
@@ -408,8 +412,8 @@ setLengthRegister = insertKey lengthRegister $ \c _map -> c{lengthRegister = _ma
 setGlueRegister :: EightBitInt -> BL.Glue -> GlobalFlag -> Config -> Config
 setGlueRegister = insertKey glueRegister $ \c _map -> c{glueRegister = _map}
 
--- setMathGlueRegister :: EightBitInt -> MathGlue -> GlobalFlag -> Config -> Config
--- setMathGlueRegister = insertKey mathGlueRegister $ \c _map -> c{mathGlueRegister = _map}
+setMathGlueRegister :: EightBitInt -> BL.MathGlue -> GlobalFlag -> Config -> Config
+setMathGlueRegister = insertKey mathGlueRegister $ \c _map -> c{mathGlueRegister = _map}
 
 setTokenListRegister :: EightBitInt -> BalancedText -> GlobalFlag -> Config -> Config
 setTokenListRegister = insertKey tokenListRegister $ \c _map -> c{tokenListRegister = _map}

@@ -68,10 +68,10 @@ getTableParams
         tableToLength ExtensibleCharacter = extensibleCharDataLengthWords
         tableToLength FontParameter = fontParamDataLengthWords
         inferredFileLengthWords =
-            headerPointerWords + sum (fmap tableToLength [minBound ..])
+            headerPointerWords + sum (tableToLength <$> [minBound ..])
     when (_fileLengthWords /= inferredFileLengthWords)
-        (fail
-             ("Incorrect table lengths: read " ++
-              show _fileLengthWords ++
-              " is not equal to inferred " ++ show inferredFileLengthWords))
+        $ fail $ "Incorrect table lengths: read "
+            ++ show _fileLengthWords
+            ++ " is not equal to inferred "
+            ++ show inferredFileLengthWords
     pure (tableToLength, _smallestCharCode, _largestCharCode)

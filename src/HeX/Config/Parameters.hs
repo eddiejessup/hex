@@ -7,6 +7,7 @@ import qualified Data.HashMap.Strict           as HMap
 
 import           HeX.Type
 import           HeX.BreakList                  ( Glue(..)
+                                                , MathGlue
                                                 , fixedGlue )
 import qualified HeX.Unit                      as Unit
 import           HeX.Parse.Token
@@ -20,7 +21,7 @@ newtype LenParamVal a = LenParamVal {unLenParam :: LenVal}
 newtype GlueParamVal a = GlueParamVal {unGlueParam :: Glue}
     deriving (Show)
 
-newtype MathGlueParamVal a = MathGlueParamVal {unMathGlueParam :: Glue}
+newtype MathGlueParamVal a = MathGlueParamVal {unMathGlueParam :: MathGlue}
     deriving (Show)
 
 newtype TokenListParamVal a = TokenListParamVal {unTokenListParam :: BalancedText}
@@ -171,8 +172,8 @@ newLengthParameters = HMap.empty
 newGlueParameters :: HMap.HashMap GlueParameter Glue
 newGlueParameters = HMap.empty
 
--- newMathGlueParameters :: HMap.HashMap MathGlueParameter MathGlue
--- newMathGlueParameters = HMap.empty
+newMathGlueParameters :: HMap.HashMap MathGlueParameter MathGlue
+newMathGlueParameters = HMap.empty
 
 newTokenListParameters :: HMap.HashMap TokenListParameter BalancedText
 newTokenListParameters = HMap.empty

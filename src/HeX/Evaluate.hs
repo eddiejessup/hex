@@ -191,6 +191,34 @@ evaluateBoxDimensionRef (AST.BoxDimensionRef n _) =
 evaluateCoercedLength :: (MonadReader Config m, MonadError String m) => AST.CoercedLength -> m Int
 evaluateCoercedLength (AST.InternalGlueAsLength g) = BL.dimen <$> evaluateInternalGlue g
 
+-- Math length.
+
+evaluateMathLength :: (MonadReader Config m, MonadError String m) => AST.MathLength -> m Int
+evaluateMathLength (AST.MathLength (T.Sign isPos) uLn) =
+    do
+    eULn <- evaluateUnsignedMathLength uLn
+    pure $ if isPos then eULn else -eULn
+
+evaluateUnsignedMathLength :: (MonadReader Config m, MonadError String m) => AST.UnsignedMathLength -> m Int
+evaluateUnsignedMathLength = \case
+    AST.NormalMathLengthAsUMathLength v -> evaluateNormalMathLength v
+    AST.CoercedMathLength v -> evaluateCoercedMathLength v
+
+evaluateNormalMathLength :: (MonadReader Config m, MonadError String m) => AST.NormalMathLength -> m Int
+evaluateNormalMathLength (AST.MathLengthSemiConstant f mathU) =
+    do
+    ef <- evaluateFactor f
+    eu <- evaluateMathUnit mathU
+    pure $ round $ ef * (fromIntegral eu)
+
+evaluateMathUnit :: (MonadReader Config m, MonadError String m) => AST.MathUnit -> m Int
+evaluateMathUnit = \case
+    AST.Mu -> pure 1
+    AST.InternalMathGlueAsUnit mg -> (BL.dimen . BL.unMathGlue) <$> evaluateInternalMathGlue mg
+
+evaluateCoercedMathLength :: (MonadReader Config m, MonadError String m) => AST.CoercedMathLength -> m Int
+evaluateCoercedMathLength (AST.InternalMathGlueAsMathLength mg) = (BL.dimen . BL.unMathGlue) <$> evaluateInternalMathGlue mg
+
 -- Glue.
 
 evaluateGlue :: (MonadReader Config m, MonadError String m) => AST.Glue -> m BL.Glue
@@ -226,6 +254,38 @@ evaluateGlueVariable :: (MonadReader Config m, MonadError String m) => AST.GlueV
 evaluateGlueVariable = \case
     AST.ParamVar p    -> asks $ lookupGlueParameter p
     AST.RegisterVar n -> getRegisterIdx n lookupGlueRegister
+
+-- Math glue.
+
+evaluateMathGlue :: (MonadReader Config m, MonadError String m) => AST.MathGlue -> m BL.MathGlue
+evaluateMathGlue = \case
+    AST.ExplicitMathGlue mDim mStr mShr ->
+        do
+        g <- BL.Glue <$> evaluateMathLength mDim <*> evaluateMathFlex mStr <*> evaluateMathFlex mShr
+        pure $ BL.MathGlue g
+    AST.InternalMathGlue (T.Sign isPos) v ->
+        do
+        ev <- evaluateInternalMathGlue v
+        pure $ if isPos then ev else BL.negateMathGlue ev
+
+evaluateMathFlex :: (MonadReader Config m, MonadError String m) => Maybe AST.MathFlex -> m BL.GlueFlex
+evaluateMathFlex = \case
+    Just (AST.FiniteMathFlex ln) ->
+        do
+        eLn <- evaluateMathLength ln
+        pure BL.GlueFlex{factor = fromIntegral eLn, order = 0}
+    Just (AST.FilMathFlex ln) -> evaluateFilLength ln
+    Nothing -> pure BL.noFlex
+
+evaluateInternalMathGlue :: (MonadReader Config m, MonadError String m) => AST.InternalMathGlue -> m BL.MathGlue
+evaluateInternalMathGlue = \case
+    AST.InternalMathGlueVariable v -> evaluateMathGlueVariable v
+    AST.LastMathGlue -> undefined
+
+evaluateMathGlueVariable :: (MonadReader Config m, MonadError String m) => AST.MathGlueVariable -> m BL.MathGlue
+evaluateMathGlueVariable = \case
+    AST.ParamVar p    -> asks $ lookupMathGlueParameter p
+    AST.RegisterVar n -> getRegisterIdx n lookupMathGlueRegister
 
 -- Token list.
 
@@ -392,3 +452,19 @@ evaluateCharCodeRef ref = case ref of
     AST.CharRef c       -> pure c
     AST.CharTokenRef c  -> pure $ chr c
     AST.CharCodeNrRef n -> chr <$> evaluateNumber n
+
+
+evaluateFontSpecification
+    :: (MonadReader Config m, MonadError String m)
+    => Rational -> AST.FontSpecification -> m Rational
+evaluateFontSpecification designSizeSP = \case
+    AST.NaturalFont ->
+        pure 1
+    AST.FontAt ln ->
+        do
+        eLn <- evaluateLength ln
+        pure $ fromIntegral eLn / designSizeSP
+    AST.FontScaled n ->
+        do
+        en <- evaluateNumber n
+        pure $ fromIntegral en / 1000

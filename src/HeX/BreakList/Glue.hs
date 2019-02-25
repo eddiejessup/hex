@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module HeX.BreakList.Glue where
 
 import           HeXPrelude
@@ -80,3 +82,9 @@ filGlue = Glue {dimen = 0, stretch = filFlex, shrink = noFlex}
 
 fixedGlue :: IntVal -> Glue
 fixedGlue d = Glue d noFlex noFlex
+
+newtype MathGlue = MathGlue {unMathGlue :: Glue}
+    deriving (Show, Eq, Semigroup, Monoid)
+
+negateMathGlue :: MathGlue -> MathGlue
+negateMathGlue (MathGlue g) = MathGlue $ negateGlue g
