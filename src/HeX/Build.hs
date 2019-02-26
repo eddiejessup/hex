@@ -241,7 +241,7 @@ handleModeIndep = \case
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure ([boxElem], fontRefTok)
                     oth -> throwError $ "Unimplemented: " ++ show oth
-                modify (\strm -> HP.insertControlSequence strm cs newCSTok globalFlag)
+                HP.runConfState $ modify $ setControlSequence cs newCSTok globalFlag
                 pure acc
             HP.SetVariable ass ->
                 do
@@ -323,6 +323,12 @@ handleModeIndep = \case
                 do
                 fontSel <- HP.runConfState $ selectFont fNr globalFlag
                 pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
+            HP.SetFamilyMember fm fontRef ->
+                do
+                eFm <- readOnConfState $ evaluateFamilyMember fm
+                fNr <- readOnConfState $ evaluateFontRef fontRef
+                HP.runConfState $ modify $ setFamilyMemberFont eFm fNr globalFlag
+                pure []
             oth -> throwError $ "Unimplemented: " ++ show oth
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
         readOnConfState $ do

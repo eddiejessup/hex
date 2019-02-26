@@ -47,7 +47,10 @@ import           HeX.Parse.Resolve
 type RegisterMap v = HMap.HashMap EightBitInt v
 
 data Scope = Scope
+    -- Fonts.
     { currentFontNr       :: Maybe Int
+    , familyMemberFonts   :: HMap.HashMap (FontRange, Int) Int
+    -- Control sequences.
     , csMap               :: CSMap
     -- Char-code attribute maps.
     , catCodes            :: Cat.CatCodes
@@ -75,6 +78,7 @@ data Scope = Scope
 newGlobalScope :: Scope
 newGlobalScope = Scope
     { currentFontNr       = Nothing
+    , familyMemberFonts   = HMap.empty
 
     , csMap               = defaultCSMap
 
@@ -102,6 +106,7 @@ newGlobalScope = Scope
 newLocalScope :: Scope
 newLocalScope = Scope
     { currentFontNr       = Nothing
+    , familyMemberFonts   = HMap.empty
 
     , csMap               = HMap.empty
 
@@ -179,9 +184,7 @@ readFontInfo fontPath =
 
 lookupFontInfo :: (MonadReader Config m, MonadError String m) => Int -> m FontInfo
 lookupFontInfo fNr =
-    do
-    infos <- asks fontInfos
-    liftMaybe "No such font number" $ infos !? fNr
+    (!? fNr) <$> asks fontInfos >>= liftMaybe "No such font number"
 
 addFont :: MonadState Config m => FontInfo -> m Int
 addFont newInfo =
@@ -250,8 +253,11 @@ scopedMapLookup getMap k = lkp . scopedConfig
 lookupCurrentFontNr :: Config -> Maybe Int
 lookupCurrentFontNr = scopedLookup currentFontNr . scopedConfig
 
+mLookupCurrentFontNr :: (MonadReader Config m, MonadError String m) => m Int
+mLookupCurrentFontNr = asks lookupCurrentFontNr >>= liftMaybe "Font number isn't set"
+
 currentFontInfo :: (MonadReader Config m, MonadError String m) => m FontInfo
-currentFontInfo = asks lookupCurrentFontNr >>= liftMaybe "Font number isn't set" >>= lookupFontInfo
+currentFontInfo = mLookupCurrentFontNr >>= lookupFontInfo
 
 currentFontMetrics :: (MonadReader Config m, MonadError String m) => m TexFont
 currentFontMetrics = fontMetrics <$> currentFontInfo
@@ -271,6 +277,15 @@ selectFontNr n globalFlag conf =
 
     selectFontInScope sc = sc{currentFontNr = Just n}
 
+setFamilyMemberFont
+    :: (FontRange, Int) -> Int -> GlobalFlag -> Config -> Config
+setFamilyMemberFont = insertKey familyMemberFonts $ \c _map -> c{familyMemberFonts = _map}
+
+lookupFontFamilyMember :: (MonadReader Config m, MonadError String m) => (FontRange, Int) -> m Int
+lookupFontFamilyMember k =
+    asks (scopedMapLookup familyMemberFonts k)
+        >>= liftMaybe ("Family member undefined: " ++ show k)
+
 -- Control sequences.
 
 lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
@@ -279,13 +294,9 @@ lookupCS = scopedMapLookup csMap
 lookupCSProper :: Lex.ControlSequence -> Config -> Maybe ResolvedToken
 lookupCSProper cs = lookupCS (Lex.ControlSequenceProper cs)
 
-insertControlSequence
-    :: Lex.ControlSequenceLike
-    -> ResolvedToken
-    -> GlobalFlag
-    -> Config
-    -> Config
-insertControlSequence = insertKey csMap $ \c _map -> c{csMap = _map}
+setControlSequence
+    :: Lex.ControlSequenceLike -> ResolvedToken -> GlobalFlag -> Config -> Config
+setControlSequence = insertKey csMap $ \c _map -> c{csMap = _map}
 
 -- Codes.
 

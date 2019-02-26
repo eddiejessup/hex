@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 module HeX.Evaluate where
 
@@ -94,22 +95,19 @@ evaluateCodeTableRef (AST.CodeTableRef q n) =
 evaluateFontCharRef :: (MonadReader Config m, MonadError String m) => AST.FontCharRef -> m Int
 evaluateFontCharRef (AST.FontCharRef fChar fontRef) =
     do
-    fontInfo <- evaluateFontRef fontRef
+    fontInfo <- evaluateFontRef fontRef >>= lookupFontInfo
     pure $ case fChar of
         T.HyphenChar -> hyphenChar fontInfo
         T.SkewChar   -> skewChar fontInfo
 
-evaluateFontRef :: (MonadReader Config m, MonadError String m) => AST.FontRef -> m FontInfo
+evaluateFontRef :: (MonadReader Config m, MonadError String m) => AST.FontRef -> m Int
 evaluateFontRef = \case
-    AST.FontTokenRef fNr -> lookupFontInfo fNr
-    AST.CurrentFontRef -> currentFontInfo
-    AST.FamilyMemberFontRef v -> evaluateFamilyMember v
+    AST.FontTokenRef fNr -> pure fNr
+    AST.CurrentFontRef -> mLookupCurrentFontNr
+    AST.FamilyMemberFontRef v -> evaluateFamilyMember v >>= lookupFontFamilyMember
 
-evaluateFamilyMember :: (MonadReader Config m, MonadError String m) => AST.FamilyMember -> m FontInfo
-evaluateFamilyMember (AST.FamilyMember _ n) =
-    do
-    _ <- evaluateNumber n
-    undefined
+evaluateFamilyMember :: (MonadReader Config m, MonadError String m) => AST.FamilyMember -> m (T.FontRange, Int)
+evaluateFamilyMember (AST.FamilyMember rng n) = (rng,) <$> evaluateNumber n
 
 evaluateCoercedInteger :: (MonadReader Config m, MonadError String m) => AST.CoercedInteger -> m Int
 evaluateCoercedInteger = \case

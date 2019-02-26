@@ -3,7 +3,7 @@
 
 module HeX.Parse.Token where
 
-import           GHC.Generics                   (Generic)
+import           GHC.Generics                   ( Generic )
 import           Data.Hashable                  ( Hashable )
 import qualified Data.Map.Strict               as Map
 
@@ -238,7 +238,9 @@ data FontRange
     = TextSizeFontRange -- \textfont
     | ScriptSizeFontRange -- \scriptfont
     | ScriptScriptSizeFontRange -- \scriptscriptfont
-    deriving (Show, Eq)
+    deriving (Show, Eq, Generic, Enum, Bounded)
+
+instance Hashable FontRange
 
 data ModedCommandPrimitiveToken
     = SpecifiedGlueTok -- \vskip, \hskip

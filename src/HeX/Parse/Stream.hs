@@ -70,15 +70,6 @@ newExpandStream cs =
         , skipState     = []
         }
 
-insertControlSequence
-    :: ExpandedStream
-    -> Lex.ControlSequenceLike
-    -> ResolvedToken
-    -> GlobalFlag
-    -> ExpandedStream
-insertControlSequence es@ExpandedStream{config=c} cs t globalFlag =
-    es{config=Conf.insertControlSequence cs t globalFlag c}
-
 -- Expanding syntax commands.
 
 expandCSName :: () -> String -> [Lex.Token]
