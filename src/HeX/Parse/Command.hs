@@ -43,13 +43,13 @@ extractVModeCommand = extractResult parseVModeCommand
 
 parseAllModeCommand :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAllModeCommand mode =
-    P.choice [ skipSatisfiedEquals T.ShowTokenTok >> (ShowToken <$> parseToken)
+    P.choice [ skipSatisfiedEquals T.ShowTokenTok >> (ShowToken <$> parseLexToken)
              , skipSatisfiedEquals T.ShowBoxTok >> (ShowBox <$> parseNumber)
              , skipSatisfiedEquals T.ShowListsTok $> ShowLists
              , skipSatisfiedEquals T.ShowTheInternalQuantityTok >> (ShowTheInternalQuantity <$> parseInternalQuantity)
              , skipSatisfiedEquals T.ShipOutTok >> (ShipOut <$> parseBox)
-             , skipSatisfiedEquals T.SetAfterAssignmentTokenTok >> (SetAfterAssignmentToken <$> parseToken)
-             , skipSatisfiedEquals T.AddToAfterGroupTokensTok >> (AddToAfterGroupTokens <$> parseToken)
+             , skipSatisfiedEquals T.SetAfterAssignmentTokenTok >> (SetAfterAssignmentToken <$> parseLexToken)
+             , skipSatisfiedEquals T.AddToAfterGroupTokensTok >> (AddToAfterGroupTokens <$> parseLexToken)
              , skipSatisfiedEquals T.MarkTok >> (AddMark <$> parseGeneralText)
              -- , parseInsert
              -- , parseVAdjust

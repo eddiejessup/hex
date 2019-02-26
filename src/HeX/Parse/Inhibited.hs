@@ -365,8 +365,11 @@ parseParamText = parseInhibited unsafeParseParamText
 parseMacroText :: InhibitableStream s => SimpParser s MacroText
 parseMacroText = parseInhibited unsafeParseMacroText
 
-parseToken :: InhibitableStream s => SimpParser s Lex.Token
-parseToken = parseInhibited unsafeAnySingleLex
+parseLexToken :: InhibitableStream s => SimpParser s Lex.Token
+parseLexToken = parseInhibited unsafeAnySingleLex
+
+parseLetArg :: InhibitableStream s => SimpParser s Lex.Token
+parseLetArg = parseInhibited skipOneOptionalSpace >> parseLexToken
 
 -- Derived related parsers.
 

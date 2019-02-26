@@ -184,7 +184,7 @@ parseLet :: InhibitableStream s => SimpParser s AssignmentBody
 parseLet =
     do
     skipSatisfiedEquals T.LetTok
-    (cs, tok) <- parseVarEqVal (parseCSName, skipOneOptionalSpace >> parseToken) (,)
+    (cs, tok) <- parseVarEqVal (parseCSName, parseLetArg) (,)
     pure $ DefineControlSequence cs (LetTarget tok)
 
 parseFutureLet :: InhibitableStream s => SimpParser s AssignmentBody
@@ -192,8 +192,8 @@ parseFutureLet =
     do
     skipSatisfiedEquals T.FutureLetTok
     cs <- parseCSName
-    tok1 <- parseToken
-    tok2 <- parseToken
+    tok1 <- parseLexToken
+    tok2 <- parseLexToken
     pure $ DefineControlSequence cs (FutureLetTarget tok1 tok2)
 
 parseShortMacroAssignment :: InhibitableStream s => SimpParser s AssignmentBody

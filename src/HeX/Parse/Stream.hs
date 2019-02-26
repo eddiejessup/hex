@@ -265,7 +265,7 @@ expandSyntaxCommand strm = \case
         undefined
     StringTok ->
         let escapeChar = (Conf.IntParamVal . Conf.lookupIntegerParameter EscapeChar . config) strm
-        in runExpandCommand strm escapeChar parseToken expandString
+        in runExpandCommand strm escapeChar parseLexToken expandString
     JobNameTok ->
         undefined
     FontNameTok ->

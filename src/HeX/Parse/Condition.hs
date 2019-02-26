@@ -33,7 +33,7 @@ conditionHeadParser = \case
     T.IfTokenAttributesEqualTok attr ->
         IfConditionHead <$> (IfTokenAttributesEqual attr <$> P.anySingle <*> P.anySingle)
     T.IfTokensEqualTok ->
-        IfConditionHead <$> (IfTokensEqual <$> parseToken <*> parseToken)
+        IfConditionHead <$> (IfTokensEqual <$> parseLexToken <*> parseLexToken)
     T.IfBoxRegisterIsTok attr ->
         IfConditionHead <$> (IfBoxRegisterIs attr <$> parseNumber)
     T.IfInputEndedTok ->

@@ -241,6 +241,7 @@ handleModeIndep = \case
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure ([boxElem], fontRefTok)
                     oth -> throwError $ "Unimplemented: " ++ show oth
+                liftIO $ putStrLn $ "Setting CS " ++ show cs ++ " to token: " ++ show newCSTok ++ (if globalFlag == HP.Global then " globally" else " locally")
                 HP.runConfState $ modify $ setControlSequence cs newCSTok globalFlag
                 pure acc
             HP.SetVariable ass ->
