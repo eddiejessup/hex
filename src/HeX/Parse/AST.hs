@@ -260,8 +260,6 @@ data AssignmentBody
     | SetHyphenationPatterns T.BalancedText
     | SetBoxDimension BoxDimensionRef Length
     | SetInteractionMode T.InteractionMode
-    | SetSpecialInteger T.SpecialInteger Number
-    | SetSpecialLength T.SpecialLength Length
     deriving (Show)
 
 data TokenListAssignmentTarget
@@ -275,6 +273,8 @@ data VariableAssignment
     | GlueVariableAssignment GlueVariable Glue
     | MathGlueVariableAssignment MathGlueVariable MathGlue
     | TokenListVariableAssignment TokenListVariable TokenListAssignmentTarget
+    | SpecialIntegerVariableAssignment T.SpecialInteger Number
+    | SpecialLengthVariableAssignment T.SpecialLength Length
     deriving (Show)
 
 data VariableModification

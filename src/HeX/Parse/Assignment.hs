@@ -105,8 +105,6 @@ parseNonMacroAssignment =
                  , skipSatisfiedEquals T.HyphenationPatternsTok >> (SetHyphenationPatterns <$> parseGeneralText)
                  , parseSetBoxDimension
                  , SetInteractionMode <$> satisfyThen tokToInteractionMode
-                 , parseSetSpecialInteger
-                 , parseSetSpecialLength
                  ]
 
     tokToInteractionMode (T.InteractionModeTok m) = Just m
@@ -141,6 +139,11 @@ parseVariableAssignment =
              , parseVarEqVal mathGlueVarValPair MathGlueVariableAssignment
              , parseVarEqVal tokenListVarValPair TokenListVariableAssignment
              , TokenListVariableAssignment <$> parseTokenListVariable <* skipFiller <*> (TokenListAssignmentVar <$> parseTokenListVariable)
+
+             -- Unofficial variable assignments, separated because of being
+             -- global in the TeXbook.
+             , parseVarEqVal (parseSpecialInteger, parseNumber) SpecialIntegerVariableAssignment
+             , parseVarEqVal (parseSpecialLength, parseLength) SpecialLengthVariableAssignment
              ]
 
 parseVariableModification :: forall s. InhibitableStream s => SimpParser s VariableModification
@@ -304,11 +307,3 @@ parseSetFontChar =
 parseSetBoxDimension :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetBoxDimension =
     parseVarEqVal (parseBoxDimensionRef, parseLength) SetBoxDimension
-
-parseSetSpecialInteger :: InhibitableStream s => SimpParser s AssignmentBody
-parseSetSpecialInteger =
-    parseVarEqVal (parseSpecialInteger, parseNumber) SetSpecialInteger
-
-parseSetSpecialLength :: InhibitableStream s => SimpParser s AssignmentBody
-parseSetSpecialLength =
-    parseVarEqVal (parseSpecialLength, parseLength) SetSpecialLength

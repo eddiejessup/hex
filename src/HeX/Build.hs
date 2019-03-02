@@ -255,7 +255,7 @@ handleModeIndep = \case
                 retElems acc
             HP.SetVariable ass ->
                 do
-                liftConfigError $ HP.runConfState $ case ass of
+                liftConfState $ case ass of
                     HP.IntegerVariableAssignment v tgt ->
                         readOnState (evaluateNumber tgt) >>= setIntegerVariable v globalFlag
                     HP.LengthVariableAssignment v tgt  ->
@@ -270,10 +270,14 @@ handleModeIndep = \case
                             HP.TokenListAssignmentVar tgtVar   -> evaluateTokenListVariable tgtVar
                             HP.TokenListAssignmentText tgtText -> pure tgtText
                         setTokenListVariable v globalFlag eTgt
+                    HP.SpecialIntegerVariableAssignment v tgt ->
+                        readOnState (evaluateNumber tgt) >>= (\en -> modify $ setSpecialInteger v en)
+                    HP.SpecialLengthVariableAssignment v tgt ->
+                        readOnState (evaluateLength tgt) >>= (\en -> modify $ setSpecialLength v en)
                 noElems
             HP.ModifyVariable modCommand ->
                 do
-                liftConfigError $ HP.runConfState $ case modCommand of
+                liftConfState $ case modCommand of
                     HP.AdvanceIntegerVariable var plusVal ->
                         do
                         newVarVal <- readOnState $ (+) <$> evaluateIntegerVariable var <*> evaluateNumber plusVal
@@ -327,7 +331,7 @@ handleModeIndep = \case
                 liftIO $ putStrLn $ "Evaluated code table value " ++ show val ++ " to " ++ show eVal
                 idxChar <- liftMaybeConfigError ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
                 liftIO $ putStrLn $ "Setting " ++ show codeType ++ "@" ++ show eIdx ++ " (" ++ show idxChar ++ ") to " ++ show eVal
-                liftConfigError $ HP.runConfState $ updateCharCodeMap codeType idxChar eVal globalFlag
+                liftConfState $ updateCharCodeMap codeType idxChar eVal globalFlag
                 noElems
             HP.SelectFont fNr ->
                 do
@@ -461,6 +465,12 @@ data BuildError
 
 liftConfigError :: Monad m => ExceptT String m a -> ExceptT BuildError m a
 liftConfigError f = withExceptT ConfigError f
+
+liftConfState
+    :: MonadState HP.ExpandedStream m
+    => StateT Config (ExceptT String m) a
+    -> ExceptT BuildError m a
+liftConfState x = liftConfigError $ HP.runConfState x
 
 liftReadOnConfState
     :: MonadState HP.ExpandedStream m
