@@ -462,6 +462,10 @@ data BuildError
 liftConfigError :: Monad m => ExceptT String m a -> ExceptT BuildError m a
 liftConfigError f = withExceptT ConfigError f
 
+liftReadOnConfState
+    :: MonadState HP.ExpandedStream m
+    => ReaderT Config (StateT Config (ExceptT String m)) a
+    -> ExceptT BuildError m a
 liftReadOnConfState x = liftConfigError $ readOnConfState x
 
 throwConfigError :: MonadError BuildError m => String -> m a
