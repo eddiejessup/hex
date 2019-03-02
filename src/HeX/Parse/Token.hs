@@ -9,6 +9,7 @@ import qualified Data.Map.Strict               as Map
 
 import           HeX.Type
 import qualified HeX.Lex                       as Lex
+import           HeX.Box                        ( VBoxAlignType )
 
 -- mconcat on this newtype wrapper should get the final sign of a list of
 -- signs. Bit pretentious, sorry.
@@ -356,6 +357,11 @@ data RemovableItem
     | GlueItem  -- \unskip
     deriving (Show, Eq)
 
+data ExplicitBox
+    = ExplicitHBox -- \hbox
+    | ExplicitVBox VBoxAlignType
+    deriving (Show, Eq)
+
 data PrimitiveToken
     = SyntaxCommandArg SyntaxCommandArg
     -- Starters of commands.
@@ -450,8 +456,7 @@ data PrimitiveToken
     | FetchedBoxTok BoxFetchMode -- \box, \copy
     | LastBoxTok -- \lastbox
     | SplitVBoxTok -- \vsplit
-    | HBoxTok -- \hbox
-    | VBoxTok {top :: Bool} -- \vbox, \vtop
+    | ExplicitBoxTok ExplicitBox
     -- > Setting the contents of a box register.
     | SetBoxRegisterTok -- \setbox
     -- > Reading contents into control sequences (not sure what this is about).

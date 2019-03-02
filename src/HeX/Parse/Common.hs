@@ -88,6 +88,10 @@ liftLexPred _ _ = False
 skipOneOptionalSpace :: (P.Stream s, P.Token s ~ PrimitiveToken) => NullSimpParser s
 skipOneOptionalSpace = skipOneOptionalSatisfied isSpace
 
+-- TODO: Maybe other things can act as left braces.
+skipLeftBrace :: (P.Stream s, P.Token s ~ PrimitiveToken) => NullSimpParser s
+skipLeftBrace = skipSatisfied $ primTokHasCategory Lex.BeginGroup
+
 -- <optional spaces> = <zero or more spaces>.
 skipOptionalSpaces :: (P.Stream s, P.Token s ~ PrimitiveToken) => NullSimpParser s
 skipOptionalSpaces = skipManySatisfied isSpace

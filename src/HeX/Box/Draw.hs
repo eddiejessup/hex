@@ -22,7 +22,7 @@ boxToDVI ax b =
   where
     contentDVI Box { .. } = case contents of
         HBoxContents elems -> concatMap hBoxElemToDVI elems
-        VBoxContents elems -> concatMap vBoxElemToDVI elems
+        VBoxContents elems _ -> concatMap vBoxElemToDVI elems
 
 axisVBoxElemToDVI :: Axis -> VBoxElem -> [D.Instruction]
 axisVBoxElemToDVI ax el = case el of

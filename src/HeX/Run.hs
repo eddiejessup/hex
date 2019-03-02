@@ -133,7 +133,7 @@ codesToSth xs f =
 
 codesToParaList :: [CharCode] -> IO [BreakableHListElem]
 codesToParaList xs =
-    reverse <$> codesToSth xs (extractParagraph Indent)
+    reverse <$> codesToSth xs (extractHList Indent False)
 
 runPara :: [CharCode] -> IO ()
 runPara xs = codesToParaList xs >>= putStrLn . intercalate "\n" . fmap show
@@ -142,7 +142,7 @@ runPara xs = codesToParaList xs >>= putStrLn . intercalate "\n" . fmap show
 
 codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
 codesToParaBoxes xs =
-    reverse <$> codesToSth xs (extractParagraphLineBoxes Indent)
+    reverse <$> codesToSth xs (extractBreakAndSetHList Indent)
 
 runSetPara :: [CharCode] -> IO ()
 runSetPara xs =
@@ -153,7 +153,7 @@ runSetPara xs =
 -- Pages list.
 
 codesToPages :: [CharCode] -> IO [Page]
-codesToPages xs = codesToSth xs extractPages
+codesToPages xs = codesToSth xs extractBreakAndSetVList
 
 printList :: Show a => [a] -> IO ()
 printList = putStrLn . intercalate "\n" . fmap show

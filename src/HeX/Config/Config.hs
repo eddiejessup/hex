@@ -44,6 +44,11 @@ import           HeX.Config.Parameters
 import           HeX.Config.Codes
 import           HeX.Parse.Resolve
 
+data Group
+    = LocalStructureGroup AST.CommandTrigger
+    | ExplicitBoxGroup
+    deriving (Show)
+
 type RegisterMap v = HMap.HashMap EightBitInt v
 
 data Scope = Scope
@@ -139,7 +144,7 @@ data Config = Config
     -- File streams.
     , logStream         :: Handle
     , outFileStreams    :: HMap.HashMap FourBitInt Handle
-    , scopedConfig      :: (Scope, [(AST.CommandTrigger, Scope)])
+    , scopedConfig      :: (Scope, [(Group, Scope)])
     } deriving (Show)
 
 newConfig :: IO Config
@@ -200,15 +205,15 @@ modLocalScope :: (s, [(t, s)]) -> (s -> s) -> (s, [(t, s)])
 modLocalScope (gS, (t, lS):tLS) f = (gS, (t, f lS):tLS)
 modLocalScope (gS, []) f = (f gS, [])
 
-pushScope :: AST.CommandTrigger -> Config -> Config
-pushScope trig c@Config{scopedConfig = (g, locs)} =
-    c{scopedConfig = (g, (trig, newLocalScope):locs)}
+pushGroup :: Group -> Config -> Config
+pushGroup grp c@Config{scopedConfig = (g, locs)} =
+    c{scopedConfig = (g, (grp, newLocalScope):locs)}
 
-popScope :: AST.CommandTrigger -> Config -> Either String Config
-popScope _       Config{scopedConfig = (_, [])} = Left "Cannot pop from global scope"
-popScope trigA c@Config{scopedConfig = (g, (trigB, _):locs)}
-    | trigA /= trigB = Left $ "Entry and exit scope triggers differ: " ++ show (trigA, trigB)
-    | otherwise      = Right c{scopedConfig = (g, locs)}
+popGroup :: Config -> Maybe (Group, Config)
+popGroup c@Config{scopedConfig = (g, locs)} =
+    case locs of
+        [] -> Nothing
+        (grp, _):locs' -> Just (grp, c{scopedConfig = (g, locs')})
 
 insertKey
     :: (Eq k, Hashable k)

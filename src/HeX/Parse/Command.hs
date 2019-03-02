@@ -54,17 +54,14 @@ parseAllModeCommand mode =
              -- , parseInsert
              -- , parseVAdjust
              , skipSatisfied isSpace $> AddSpace
-             , AddBox NaturalPlacement <$> parseBox
              , parseStartParagraph
              , skipSatisfiedEquals T.EndParagraphTok $> EndParagraph
 
              -- Mode-parametrised.
              , parseAddLeaders mode
-             , parseAddShiftedBox mode
              , parseAddUnwrappedFetchedBox mode
              , AddRule <$> parseRule mode
              -- , parseAlign mode
-
              , ModeIndependentCommand <$> parseModeIndependentCommand mode
              ]
 
@@ -89,15 +86,6 @@ parseAddLeaders mode =
     parseLeaders = satisfyThen $ \case
         T.LeadersTok t -> Just t
         _                 -> Nothing
-
-parseAddShiftedBox :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
-parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
-  where
-    parseDirection = satisfyThen $ \case
-        T.ModedCommand mode2 (T.ShiftedBoxTok d) | (mode == mode2) -> Just d
-        _ -> Nothing
-
-    parsePlacement = ShiftedPlacement <$> parseDirection <*> parseLength
 
 parseAddUnwrappedFetchedBox :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
 parseAddUnwrappedFetchedBox mode =
@@ -166,6 +154,8 @@ parseModeIndependentCommand mode =
              , P.try parseCloseOutput
              , P.try parseWriteToStream
              , skipSatisfiedEquals T.DoSpecialTok >> (DoSpecial <$> parseExpandedGeneralText)
+             , parseAddShiftedBox mode
+             , AddBox NaturalPlacement <$> parseBox
              ]
 
 parseChangeScope :: InhibitableStream s => SimpParser s ModeIndependentCommand
@@ -267,6 +257,15 @@ parseWriteToStream =
         Immediate -> ImmediateWriteText <$> parseExpandedGeneralText
         Deferred -> DeferredWriteText <$> parseGeneralText
     pure $ WriteToStream n txt
+
+parseAddShiftedBox :: InhibitableStream s => Axis -> SimpParser s ModeIndependentCommand
+parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
+  where
+    parseDirection = satisfyThen $ \case
+        T.ModedCommand mode2 (T.ShiftedBoxTok d) | (mode == mode2) -> Just d
+        _ -> Nothing
+
+    parsePlacement = ShiftedPlacement <$> parseDirection <*> parseLength
 
 -- VMode.
 

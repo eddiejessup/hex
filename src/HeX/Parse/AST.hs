@@ -307,23 +307,13 @@ data Box
     = FetchedRegisterBox T.BoxFetchMode Number
     | LastBox
     | VSplitBox Number Length
-    -- \| ExplicitBox BoxSpecification ExplicitBox
+    | ExplicitBox BoxSpecification T.ExplicitBox
     deriving (Show)
 
 data BoxSpecification
     = Natural
     | To Length
     | Spread Length
-    deriving (Show)
-
--- data ExplicitBox
---     = ExplicitHBox HModeMaterial
---     | ExplicitVBox VModeMaterial VBoxAlignType
---     deriving (Show)
-
-data VBoxAlignType
-    = DefaultAlign
-    | TopAlign
     deriving (Show)
 
 data BoxOrRule
@@ -347,7 +337,6 @@ data AllModesCommand
     -- \| AddInsertion Number VModeMaterial
     -- \| AddAdjustment VModeMaterial
     | AddSpace
-    | AddBox BoxPlacement Box
     | StartParagraph T.IndentFlag
     | EndParagraph
     | AddLeaders T.LeadersType BoxOrRule Glue
@@ -371,6 +360,7 @@ data ModeIndependentCommand
     | ModifyFileStream FileStreamType FileStreamAction Number
     | WriteToStream Number WriteText
     | DoSpecial T.ExpandedBalancedText
+    | AddBox BoxPlacement Box
     deriving (Show)
 
 data VModeCommand

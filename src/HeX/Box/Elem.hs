@@ -28,6 +28,11 @@ data DesiredLength
     | To LenVal
     deriving (Show)
 
+data VBoxAlignType
+    = DefaultAlign -- \vbox
+    | TopAlign -- \vtop
+    deriving (Show, Eq)
+
 newtype Kern = Kern { kernDimen :: LenVal }
     deriving (Show)
 
@@ -39,7 +44,7 @@ instance Readable SetGlue where
 
 data BoxContents
     = HBoxContents [HBoxElem]
-    | VBoxContents [VBoxElem]
+    | VBoxContents [VBoxElem] VBoxAlignType
     deriving (Show)
 
 data Box = Box
@@ -47,30 +52,62 @@ data Box = Box
     , desiredLength :: DesiredLength
     } deriving (Show)
 
-instance Dimensioned BoxContents where
-    naturalLength dim b = case (dim, b) of
-        (Width,  (HBoxContents cs)) -> sumLength cs
-        (_,      (HBoxContents cs)) -> maxLength cs
-        (Width,  (VBoxContents cs)) -> maxLength cs
-        (Height, (VBoxContents cs)) -> sumLength cs
-        (Depth,  (VBoxContents _)) -> error "TODO"
-      where
-        subLengths cs = naturalLength dim <$> cs
-        maxLength cs = maximumDef 0 $ subLengths cs
-        sumLength cs = sum $ subLengths cs
-
 instance Dimensioned Box where
     naturalLength dim b = case (dim, b) of
+
+        -- HBox.
+
         (Width,  Box (HBoxContents _) (To to)) -> to
-        (Height, Box (VBoxContents _) (To to)) -> to
 
-        (Width,  Box bc@(HBoxContents _) (Spread spread)) -> spread + (naturalLength Width bc)
-        (Height, Box bc@(VBoxContents _) (Spread spread)) -> spread + (naturalLength Height bc)
+        (Width,  Box bc@(HBoxContents _) (Spread spread)) -> spread + (naturalLength Width (Box bc Natural))
 
-        -- TODO: Look up and implement specification.
-        (Depth,  Box (VBoxContents _) _) -> error "Not implemented: Depth of VBox"
+        (Width,  Box (HBoxContents cs) Natural) -> sumLength cs
 
-        (_,      Box bc _) -> naturalLength dim bc
+        -- The height and depth of an hbox are the maximum distances by which
+        -- the interior boxes reach above and below the baseline, respectively.
+        -- An \hbox never has negative height or depth, but the width can be
+        -- negative.
+        (Height, Box (HBoxContents cs) _) -> maxLength cs
+
+        (Depth,  Box (HBoxContents cs) _) -> maxLength cs
+
+        -- VBox.
+
+        -- The width of a \vbox is the maximum distance by which an
+        -- enclosed box extends to the right of the reference point, taking
+        -- possible shifting into account. This width is always nonnegative.
+        (Width,  Box (VBoxContents cs _) _) -> maxLength cs
+
+        (Height, Box (VBoxContents _ _) (To to)) -> to
+
+        (Height, Box bc@(VBoxContents _ _) (Spread spread)) -> spread + (naturalLength Height (Box bc Natural))
+
+        (Height, Box (VBoxContents cs DefaultAlign) Natural) ->
+            -- h + d for all but last elements, plus the last element's height.
+            (sum $ hPlusD <$> init cs) + (naturalLength Height $ last cs)
+
+        -- When wrapping a vertical list via \vbox, to compute its depth,
+        -- - If the list contains no boxes, the depth is zero.
+        -- - If there's at least one box, consider the final box.
+        --     - if the box is followed by kerning or glue, possibly with
+        --       intervening penalties or other things, the depth is zero.
+        --     - otherwise, the depth is that box's depth.
+        -- If the computed depth exceeds \boxmaxdepth,
+        --     - the depth is \boxmaxdepth
+        --     - add the excess depth to the box's natural height, essentially
+        --       moving the reference point down to reduce the depth to the
+        --       stated maximum.
+        (Depth,  Box (VBoxContents [] DefaultAlign) _) -> 0
+        (Depth,  Box (VBoxContents cs DefaultAlign) _) -> naturalLength Depth $ last cs
+
+      where
+        subLengths cs = naturalLength dim <$> cs
+
+        maxLength cs = max 0 $ maximumDef 0 $ subLengths cs
+
+        sumLength cs = sum $ subLengths cs
+
+        hPlusD e = naturalLength Height e + naturalLength Depth e
 
 data BaseElem
     = ElemBox Box

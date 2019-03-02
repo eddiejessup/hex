@@ -5,7 +5,8 @@
 
 module HeX.Build where
 
-import           Control.Monad                  ( foldM )
+import           Control.Monad                  ( foldM
+                                                , when )
 import           Control.Monad.Except           ( ExceptT
                                                 , MonadError
                                                 , liftEither
@@ -48,7 +49,7 @@ import           HeXPrelude
 import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
-import           HeX.BreakList.Line             ( setParagraph )
+import           HeX.BreakList.Line             ( breakAndSetParagraph )
 import           HeX.BreakList.Page             ( PageBreakJudgment(..)
                                                 , pageBreakJudgment
                                                 , setPage
@@ -183,43 +184,51 @@ showExpandedBalancedText (HP.ExpandedBalancedText txt) = concatMap showPrimTok t
 
 handleModeIndep
     :: (MonadState HP.ExpandedStream m, MonadIO m)
-    => HP.ModeIndependentCommand -> ExceptT String m [BL.BreakableVListElem]
+    => HP.ModeIndependentCommand -> ExceptT BuildError m (Maybe [BL.BreakableVListElem])
 handleModeIndep = \case
-    HP.ChangeScope (HP.Sign isPos) trig ->
+    HP.ChangeScope (HP.Sign True) trig ->
         do
-        HP.runConfState $ if isPos
-            then
-                modify $ pushScope trig
-            else
-                gets (popScope trig) >>= (\case
-                    Left err -> throwError err
-                    Right conf' -> put conf')
-        pure []
+        pushGroup' $ LocalStructureGroup trig
+        noElems
+    HP.ChangeScope (HP.Sign False) trig ->
+        HP.runConfState $
+            gets popGroup >>= \case
+                Nothing -> throwConfigError "No group to leave"
+                Just (grp, conf') ->
+                    do
+                    put conf'
+                    case grp of
+                        LocalStructureGroup trigConf ->
+                            do
+                            when (trigConf /= trig) $ throwConfigError $ "Entry and exit group triggers differ: " ++ show (trig, trigConf)
+                            retElems []
+                        ExplicitBoxGroup ->
+                            pure Nothing
     HP.Message HP.Out eTxt ->
         do
         liftIO $ putStrLn $ showExpandedBalancedText eTxt
-        pure []
+        noElems
     HP.Relax ->
-        pure []
+        noElems
     HP.IgnoreSpaces ->
-        pure []
+        noElems
     HP.AddPenalty n ->
         do
-        p <- readOnConfState $ evaluatePenalty n
-        pure [BL.ListPenalty p]
+        p <- liftReadOnConfState $ evaluatePenalty n
+        retElems [BL.ListPenalty p]
     HP.AddKern ln ->
         do
-        k <- readOnConfState $ evaluateKern ln
-        pure [BL.VListBaseElem $ B.ElemKern k]
+        k <- liftReadOnConfState $ evaluateKern ln
+        retElems [BL.VListBaseElem $ B.ElemKern k]
     HP.AddGlue g ->
         do
-        eG <- readOnConfState $ evaluateGlue g
-        pure [BL.ListGlue eG]
+        eG <- liftReadOnConfState $ evaluateGlue g
+        retElems [BL.ListGlue eG]
     HP.Assign HP.Assignment{global = globalFlag, body = _body} ->
         case _body of
             HP.DefineControlSequence cs tgt ->
                 do
-                (acc, newCSTok) <- readOnConfState $ case tgt of
+                (acc, newCSTok) <- liftReadOnConfState $ case tgt of
                     HP.MacroTarget macro ->
                         pure ([], HP.syntaxTok $ HP.MacroTok macro)
                     -- TODO: If a \let target is an active character, should we
@@ -243,10 +252,10 @@ handleModeIndep = \case
                     oth -> throwError $ "Unimplemented: " ++ show oth
                 liftIO $ putStrLn $ "Setting CS " ++ show cs ++ " to token: " ++ show newCSTok ++ (if globalFlag == HP.Global then " globally" else " locally")
                 HP.runConfState $ modify $ setControlSequence cs newCSTok globalFlag
-                pure acc
+                retElems acc
             HP.SetVariable ass ->
                 do
-                HP.runConfState $ case ass of
+                liftConfigError $ HP.runConfState $ case ass of
                     HP.IntegerVariableAssignment v tgt ->
                         readOnState (evaluateNumber tgt) >>= setIntegerVariable v globalFlag
                     HP.LengthVariableAssignment v tgt  ->
@@ -261,10 +270,10 @@ handleModeIndep = \case
                             HP.TokenListAssignmentVar tgtVar   -> evaluateTokenListVariable tgtVar
                             HP.TokenListAssignmentText tgtText -> pure tgtText
                         setTokenListVariable v globalFlag eTgt
-                pure []
+                noElems
             HP.ModifyVariable modCommand ->
                 do
-                HP.runConfState $ case modCommand of
+                liftConfigError $ HP.runConfState $ case modCommand of
                     HP.AdvanceIntegerVariable var plusVal ->
                         do
                         newVarVal <- readOnState $ (+) <$> evaluateIntegerVariable var <*> evaluateNumber plusVal
@@ -309,30 +318,30 @@ handleModeIndep = \case
                                         Upward -> BL.multiplyGlue
                                         Downward -> BL.divGlue
                                 setGlueVariable var globalFlag $ op eVar eScaleVal
-                pure []
+                noElems
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
-                eIdx <- readOnConfState $ evaluateNumber idx
-                eVal <- readOnConfState $ evaluateNumber val
+                eIdx <- liftReadOnConfState $ evaluateNumber idx
+                eVal <- liftReadOnConfState $ evaluateNumber val
                 liftIO $ putStrLn $ "Evaluated code table index " ++ show idx ++ " to " ++ show eIdx
                 liftIO $ putStrLn $ "Evaluated code table value " ++ show val ++ " to " ++ show eVal
-                idxChar <- liftMaybe ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
+                idxChar <- liftMaybeConfigError ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
                 liftIO $ putStrLn $ "Setting " ++ show codeType ++ "@" ++ show eIdx ++ " (" ++ show idxChar ++ ") to " ++ show eVal
-                HP.runConfState $ updateCharCodeMap codeType idxChar eVal globalFlag
-                pure []
+                liftConfigError $ HP.runConfState $ updateCharCodeMap codeType idxChar eVal globalFlag
+                noElems
             HP.SelectFont fNr ->
                 do
                 fontSel <- HP.runConfState $ selectFont fNr globalFlag
-                pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
+                retElems [BL.VListBaseElem $ B.ElemFontSelection fontSel]
             HP.SetFamilyMember fm fontRef ->
                 do
-                eFm <- readOnConfState $ evaluateFamilyMember fm
-                fNr <- readOnConfState $ evaluateFontRef fontRef
+                eFm <- liftReadOnConfState $ evaluateFamilyMember fm
+                fNr <- liftReadOnConfState $ evaluateFontRef fontRef
                 HP.runConfState $ modify $ setFamilyMemberFont eFm fNr globalFlag
-                pure []
-            oth -> throwError $ "Unimplemented: " ++ show oth
+                noElems
+            oth -> throwConfigError $ "Unimplemented: " ++ show oth
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
-        readOnConfState $ do
+        liftReadOnConfState $ do
         en <- evaluateNumber n
         fStreams <- asks outFileStreams
         let txtStr = showExpandedBalancedText eTxt
@@ -347,14 +356,28 @@ handleModeIndep = \case
                  liftIO $ hPutStrLn fStream txtStr
             Nothing ->
                 do
-                if en >= 0
-                    -- Write to terminal.
-                    then liftIO $ putStrLn txtStr
-                    else pure ()
+                -- Write to terminal.
+                when (en >= 0) $ liftIO $ putStrLn txtStr
                 -- Write to log
                 logHandle <- asks logStream
                 liftIO $ hPutStrLn logHandle txtStr
-        pure []
+        retElems []
+    HP.AddBox HP.NaturalPlacement (HP.ExplicitBox HP.Natural boxType) ->
+        do
+        pushGroup' ExplicitBoxGroup
+        b <- case boxType of
+            HP.ExplicitHBox ->
+                (B.HBoxContents . BL.setHList BL.NaturallyGood . reverse) <$> extractHList HP.DoNotIndent True
+            HP.ExplicitVBox alignType ->
+                ((\els -> B.VBoxContents els alignType) . BL.setVList BL.NaturallyGood . reverse) <$> extractVList True
+        retElems $ [(BL.VListBaseElem . B.ElemBox . (\bc -> B.Box bc B.Natural)) b]
+
+  where
+    retElems els = pure $ Just els
+
+    noElems = retElems []
+
+    pushGroup' grp = HP.runConfState $ modify $ pushGroup grp
 
 getStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
 getStream strms n =
@@ -366,21 +389,25 @@ processHCommand
     :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.ExpandedStream
     -> [BL.BreakableHListElem]
+    -> Bool  -- restricted?
     -> HP.HModeCommand
-    -> ExceptT String m ([BL.BreakableHListElem], Bool)
-processHCommand oldStream acc = \case
+    -> ExceptT BuildError m ([BL.BreakableHListElem], Bool)
+processHCommand oldStream acc inRestricted = \case
     HP.LeaveHMode ->
-        do
         -- Inner mode: forbidden. TODO.
-        -- Outer mode: insert the rol sequence "\par" into the input. The control
-        -- sequence's current meaning will be used, which might no longer be the \par
-        -- primitive.
-        -- (Note that we use oldStream.)
-        let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
-        put $ HP.insertLexToken oldStream parToken
-        continueUnchanged
+        if inRestricted
+            then throwConfigError "Should not see vertical command in restricted horizontal mode"
+            -- Outer mode: insert the rol sequence "\par" into the input. The control
+            -- sequence's current meaning will be used, which might no longer be the \par
+            -- primitive.
+            -- (Note that we use oldStream.)
+            else
+                do
+                let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
+                put $ HP.insertLexToken oldStream parToken
+                continueUnchanged
     HP.AddCharacter c ->
-        do
+        liftConfigError $ do
         charCode <- readOnConfState $ evaluateCharCodeRef c
         hCharBox <- (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ characterBox charCode)
         modAccum $ hCharBox : acc
@@ -391,18 +418,20 @@ processHCommand oldStream acc = \case
         HP.StartParagraph HP.DoNotIndent ->
             continueUnchanged
         HP.StartParagraph HP.Indent ->
-            do
+            liftConfigError $ do
             indentBox <- readOnConfState $ asks parIndentBox
             modAccum (indentBox : acc)
-        -- \par: end the current paragraph.
+        -- \par: Restricted: does nothing. Unrestricted: ends mode.
         HP.EndParagraph ->
-            pure (acc, False)
+            if inRestricted
+                then continueUnchanged
+                else pure (acc, False)
         HP.AddSpace ->
-            do
+            liftConfigError $ do
             hGlue <- (BL.HVListElem . BL.ListGlue) <$> readOnConfState spaceGlue
             modAccum $ hGlue : acc
         HP.AddRule HP.Rule{..} ->
-            readOnConfState $ do
+            liftReadOnConfState $ do
             evalW <- case width of
                 Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
                 Just ln -> evaluateLength ln
@@ -415,9 +444,11 @@ processHCommand oldStream acc = \case
             let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
             modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
         HP.ModeIndependentCommand mcom ->
-            do
-            extraAcc <- handleModeIndep mcom
-            modAccum $ (BL.HVListElem <$> extraAcc) ++ acc
+            handleModeIndep mcom >>= \case
+                Nothing ->
+                    pure (acc, False)
+                Just extraAcc ->
+                    modAccum $ (BL.HVListElem <$> extraAcc) ++ acc
   where
     modAccum newAcc = pure (newAcc, True)
 
@@ -431,11 +462,22 @@ data BuildError
 liftConfigError :: Monad m => ExceptT String m a -> ExceptT BuildError m a
 liftConfigError f = withExceptT ConfigError f
 
-extractParagraph
+liftReadOnConfState x = liftConfigError $ readOnConfState x
+
+throwConfigError :: MonadError BuildError m => String -> m a
+throwConfigError s = throwError $ ConfigError s
+
+liftMaybeConfigError
+    :: MonadError BuildError m
+    => String -> Maybe a -> m a
+liftMaybeConfigError s = liftMaybe (ConfigError s)
+
+extractHList
     :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.IndentFlag
+    -> Bool
     -> ExceptT BuildError m [BL.BreakableHListElem]
-extractParagraph indentFlag =
+extractHList indentFlag inRestricted =
     do
     indentBox <- readOnConfState $ asks parIndentBox
     extractParagraphInner [indentBox | indentFlag == HP.Indent]
@@ -446,23 +488,24 @@ extractParagraph indentFlag =
         oldStream <- get
         (PS.State{stateInput = newStream}, com) <- liftEither $ ParseError `mapLeft` HP.extractHModeCommand oldStream
         put newStream
-        (procAcc, continue) <- liftConfigError $ processHCommand oldStream acc com
+        liftIO $ putStrLn $ (if inRestricted then "Restricted" else "Unrestricted") ++ " horizontal mode, processing command: " ++ show com
+        (procAcc, continue) <- processHCommand oldStream acc inRestricted com
         if continue
             then extractParagraphInner procAcc
             else pure procAcc
 
-extractParagraphLineBoxes
+extractBreakAndSetHList
     :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.IndentFlag
     -> ExceptT BuildError m [[B.HBoxElem]]
-extractParagraphLineBoxes indentFlag =
+extractBreakAndSetHList indentFlag =
     do
-    hList <- extractParagraph indentFlag
+    hList <- extractHList indentFlag False
     readOnConfState $ do
         desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
         lineTol <- asks $ IntParamVal . lookupIntegerParameter HP.Tolerance
         linePen <- asks $ IntParamVal . lookupIntegerParameter HP.LinePenalty
-        pure $ setParagraph desiredW lineTol linePen hList
+        pure $ breakAndSetParagraph desiredW lineTol linePen hList
 
 data CurrentPage = CurrentPage
     { items :: [BL.BreakableVListElem]
@@ -577,25 +620,25 @@ addVListElem acc e = case e of
 processVCommand
     :: (MonadState HP.ExpandedStream m, MonadIO m)
     => HP.ExpandedStream
-    -> [B.Page]
-    -> CurrentPage
     -> [BL.BreakableVListElem]
+    -> Bool -- internal?
     -> HP.VModeCommand
-    -> ExceptT BuildError m ([B.Page], CurrentPage, [BL.BreakableVListElem], Bool)
-processVCommand oldStream pages curPage acc = \case
+    -> ExceptT BuildError m ([BL.BreakableVListElem], Bool)
+processVCommand oldStream acc inInternal = \case
     -- End recursion.
     HP.End ->
-        do
-        readOnConfState $ asks scopedConfig >>= \case
-            (_, []) -> pure ()
-            _ -> throwError $ ConfigError "Cannot end: not in global scope"
-        gets HP.skipState >>= \case
-            [] -> pure ()
-            _skipState -> throwError $ ConfigError $ "Cannot end: in condition block: " ++ show _skipState
-        lastPages <- HP.runConfState $ runPageBuilder curPage (reverse acc)
-        let pagesFinal = pages ++ lastPages
-        readOnConfState (asks finaliseConfig) >>= liftIO
-        pure (pagesFinal, curPage, acc, False)
+        if inInternal
+            then throwConfigError "End not allowed in internal vertical mode"
+        else
+            do
+            readOnConfState $ asks scopedConfig >>= \case
+                (_, []) -> pure ()
+                _ -> throwConfigError "Cannot end: not in global scope"
+            gets HP.skipState >>= \case
+                [] -> pure ()
+                _skipState -> throwConfigError $ "Cannot end: in condition block: " ++ show _skipState
+            readOnConfState (asks finaliseConfig) >>= liftIO
+            pure (acc, False)
     HP.EnterHMode ->
         addParagraphToPage HP.Indent
     HP.VAllModesCommand aCom -> case aCom of
@@ -611,25 +654,27 @@ processVCommand oldStream pages curPage acc = \case
             do
             evalW <- case width of
                 Nothing -> readOnConfState $ gets $ lookupLengthParameter HP.HSize
-                Just ln -> liftConfigError $ readOnConfState $ evaluateLength ln
+                Just ln -> liftReadOnConfState $ evaluateLength ln
             evalH <- case height of
                 -- TODO.
                 Nothing -> readOnConfState $ pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> liftConfigError $ readOnConfState $ evaluateLength ln
+                Just ln -> liftReadOnConfState $ evaluateLength ln
             evalD <- case depth of
                 Nothing -> readOnConfState $ pure 0
-                Just ln -> liftConfigError $ readOnConfState $ evaluateLength ln
+                Just ln -> liftReadOnConfState $ evaluateLength ln
             let rule = B.Rule{width = evalW, height = evalH, depth = evalD}
             modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
         HP.ModeIndependentCommand mcom ->
-            do
-            extraAcc <- liftConfigError $ handleModeIndep mcom
-            modAccum (extraAcc ++ acc)
+            handleModeIndep mcom >>= \case
+                Nothing ->
+                    pure (acc, False)
+                Just extraAcc ->
+                    modAccum $ extraAcc ++ acc
         oth -> error $ show oth
   where
-    modAccum newAcc = pure (pages, curPage, newAcc, True)
+    modAccum newAcc = pure (newAcc, True)
 
-    continueUnchanged = pure (pages, curPage, acc, True)
+    continueUnchanged = pure (acc, True)
 
     addParagraphToPage indentFlag =
         do
@@ -638,27 +683,38 @@ processVCommand oldStream pages curPage acc = \case
         -- (Note that we set "oldStream", not "newStream".)
         -- Paraboxes are returned in reading order.
         put oldStream
-        lineBoxes <- extractParagraphLineBoxes indentFlag
+        lineBoxes <- extractBreakAndSetHList indentFlag
         desiredW <- readOnConfState $ asks $ lookupLengthParameter HP.HSize
         let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
         newAcc <- HP.runConfState $ foldM addVListElem acc $ BL.VListBaseElem . B.ElemBox . toBox <$> lineBoxes
-        modAccum newAcc
+        -- Continue iff not in internal mode.
+        pure (newAcc, not inInternal)
 
 newCurrentPage :: CurrentPage
 newCurrentPage = CurrentPage [] Nothing
 
-extractPages
+extractVList
     :: (MonadState HP.ExpandedStream m, MonadIO m)
-    => ExceptT BuildError m [B.Page]
-extractPages =
-    extractPagesInner [] newCurrentPage []
+    => Bool
+    -> ExceptT BuildError m [BL.BreakableVListElem]
+extractVList inInternal =
+    extractVListInner []
   where
-    extractPagesInner pages curPage acc =
+    extractVListInner acc =
         do
         oldStream <- get
         (PS.State {stateInput = newStream}, com) <- liftEither $ ParseError `mapLeft` HP.extractVModeCommand oldStream
         put newStream
-        (procPages, procCurPage, procAcc, continue) <- processVCommand oldStream pages curPage acc com
+        liftIO $ putStrLn $ (if inInternal then "Internal" else "Outer") ++ " vertical mode, processing command: " ++ show com
+        (procAcc, continue) <- processVCommand oldStream acc inInternal com
         if continue
-            then extractPagesInner procPages procCurPage procAcc
-            else pure procPages
+            then extractVListInner procAcc
+            else pure procAcc
+
+extractBreakAndSetVList
+    :: (MonadState HP.ExpandedStream m, MonadIO m)
+    => ExceptT BuildError m [B.Page]
+extractBreakAndSetVList = do
+    vList <- extractVList False
+    liftIO $ print $ length vList
+    HP.runConfState $ runPageBuilder newCurrentPage $ reverse vList

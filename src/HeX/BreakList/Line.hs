@@ -190,32 +190,17 @@ shortestRoute es rs = minimumDef (Route [] (Demerit 0)) (bestSubroute <$> es)
                 Root      -> Route [boxes] ed
                 Branch sn -> routeCons (rs !! (length rs - sn - 1)) boxes ed
 
-bestRoute
-    :: LenParamVal HSize
-    -> IntParamVal Tolerance
-    -> IntParamVal LinePenalty
-    -> [BreakableHListElem]
-    -> [[B.HBoxElem]]
-bestRoute dw tol lp xs =
-    let
-        BreakingState{..} = foldl' (appendEntry dw tol lp) initialBreakingState $ A.toAdjacents xs
-        inEdges = inEdgeConcat chunk <$> accEdges
-        acceptableDInEdges = toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
-        (Route rawLns _) = shortestRoute acceptableDInEdges nodeToBestRoute
-    in
-        reverse rawLns
-
 -- Expects contents in reverse order.
 -- Returns lines in reading order.
-setParagraph
+breakAndSetParagraph
     :: LenParamVal HSize
     -> IntParamVal Tolerance
     -> IntParamVal LinePenalty
     -> [BreakableHListElem]
     -> [[B.HBoxElem]]
-setParagraph _ _ _ [] =
+breakAndSetParagraph _ _ _ [] =
     []
-setParagraph dw tol lp (x : xs) =
+breakAndSetParagraph dw tol lp (x : xs) =
     let
         -- Remove the final item if it's glue.
         xsTrimmed = case x of
@@ -229,4 +214,14 @@ setParagraph dw tol lp (x : xs) =
             : (HVListElem $ ListPenalty $ Penalty tenK)
             : xsTrimmed
     in
-        bestRoute dw tol lp $ reverse xsFinished
+        go $ reverse xsFinished
+  where
+    go :: [BreakableHListElem] -> [[B.HBoxElem]]
+    go _xs =
+        let
+            BreakingState{..} = foldl' (appendEntry dw tol lp) initialBreakingState $ A.toAdjacents _xs
+            inEdges = inEdgeConcat chunk <$> accEdges
+            acceptableDInEdges = toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
+            (Route rawLns _) = shortestRoute acceptableDInEdges nodeToBestRoute
+        in
+            reverse rawLns

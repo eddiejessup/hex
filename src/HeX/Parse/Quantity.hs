@@ -432,8 +432,7 @@ parseBox :: InhibitableStream s => SimpParser s Box
 parseBox = P.choice [ parseRegisterBox
                     , skipSatisfiedEquals T.LastBoxTok $> LastBox
                     , parseVSplitBox
-                    -- TODO: Implement (it will be complicated).
-                    -- , parseExplicitBox
+                    , parseExplicitBox
                     ]
 
 parseRegisterBox :: InhibitableStream s => SimpParser s Box
@@ -450,3 +449,20 @@ parseVSplitBox =
     nr <- parseNumber
     skipKeyword "to"
     VSplitBox nr <$> parseLength
+
+parseExplicitBox :: InhibitableStream s => SimpParser s Box
+parseExplicitBox =
+    do
+    bt <- parseBoxType
+    bs <- parseBoxSpecification
+    skipLeftBrace
+    pure $ ExplicitBox bs bt
+  where
+    parseBoxSpecification = P.choice [ skipKeyword "to" *> (To <$> parseLength)
+                                     , skipKeyword "spread" *> (Spread <$> parseLength)
+                                     , pure Natural
+                                     ] <* skipFiller
+
+    parseBoxType = satisfyThen $ \case
+        T.ExplicitBoxTok b -> Just b
+        _                  -> Nothing

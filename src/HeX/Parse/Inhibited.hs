@@ -394,8 +394,7 @@ _parseDelimitedText
 _parseDelimitedText parser =
     do
     skipFiller
-    -- TODO: Maybe other things can act as left braces.
-    skipSatisfied $ primTokHasCategory Lex.BeginGroup
+    skipLeftBrace
     parser Discard
 
 parseGeneralText :: InhibitableStream s => SimpParser s BalancedText

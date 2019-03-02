@@ -4,6 +4,7 @@ import qualified Data.HashMap.Strict           as HMap
 
 import           HeX.Type
 import qualified HeX.Lex                       as Lex
+import qualified HeX.Box                       as B
 import           HeX.Parse.Token
 
 data ExpansionMode = Expanding | NotExpanding
@@ -329,9 +330,9 @@ defaultCSMap = HMap.fromList
     , (_cs "copy"             , primTok $ FetchedBoxTok Lookup)
     , (_cs "lastbox"          , primTok LastBoxTok)
     , (_cs "vsplit"           , primTok SplitVBoxTok)
-    , (_cs "hbox"             , primTok HBoxTok)
-    , (_cs "vbox"             , primTok $ VBoxTok False)
-    , (_cs "vtop"             , primTok $ VBoxTok True)
+    , (_cs "hbox"             , primTok $ ExplicitBoxTok ExplicitHBox)
+    , (_cs "vbox"             , primTok $ ExplicitBoxTok $ ExplicitVBox B.DefaultAlign)
+    , (_cs "vtop"             , primTok $ ExplicitBoxTok $ ExplicitVBox B.TopAlign)
     , (_cs "setbox"           , primTok SetBoxRegisterTok)
       -- Stream.
     , (_cs "read"             , primTok ReadTok)
