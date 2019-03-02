@@ -1,6 +1,7 @@
 module HeX.Parse.Resolve where
 
 import qualified Data.HashMap.Strict           as HMap
+import           Data.Maybe                     ( fromMaybe )
 
 import           HeX.Type
 import qualified HeX.Lex                       as Lex
@@ -12,17 +13,18 @@ data ExpansionMode = Expanding | NotExpanding
 
 type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
 
-resolveToken :: (Lex.ControlSequenceLike -> Maybe ResolvedToken) -> ExpansionMode -> Lex.Token -> ResolvedToken
-resolveToken csLookup Expanding (Lex.ControlSequenceToken cs) =
-    let key = Lex.ControlSequenceProper cs
-    in case csLookup key of
-        Nothing -> (primTok $ ResolutionError key)
-        Just rt -> rt
-resolveToken _ NotExpanding t@(Lex.ControlSequenceToken _) =
-    primTok $ UnexpandedTok t
--- TODO: Active characters.
-resolveToken _ _ t@(Lex.CharCatToken _) =
-    primTok $ UnexpandedTok t
+resolveToken
+    :: (Lex.ControlSequenceLike -> Maybe ResolvedToken)
+    -> ExpansionMode
+    -> Lex.Token
+    -> ResolvedToken
+resolveToken _        NotExpanding t = primTok $ UnexpandedTok t
+resolveToken csLookup Expanding    t = case t of
+    Lex.ControlSequenceToken cs                 -> lkp $ Lex.ControlSequenceProper cs
+    Lex.CharCatToken (Lex.CharCat c Lex.Active) -> lkp $ Lex.ActiveCharacter c
+    _ -> primTok $ UnexpandedTok t
+  where
+    lkp key = fromMaybe (primTok $ ResolutionError key) $ csLookup key
 
 _cs :: String -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper . Lex.ControlSequence
