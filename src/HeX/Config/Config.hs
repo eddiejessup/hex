@@ -145,6 +145,7 @@ data Config = Config
     , logStream         :: Handle
     , outFileStreams    :: HMap.HashMap FourBitInt Handle
     , scopedConfig      :: (Scope, [(Group, Scope)])
+    , afterAssignmentToken :: Maybe Lex.Token
     } deriving (Show)
 
 newConfig :: IO Config
@@ -165,6 +166,7 @@ newConfig =
         , logStream         = logHandle
         , outFileStreams    = HMap.empty
         , scopedConfig      = (newGlobalScope, [])
+        , afterAssignmentToken = Nothing
         }
 
 finaliseConfig :: Config -> IO ()

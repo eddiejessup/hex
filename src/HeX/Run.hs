@@ -117,14 +117,15 @@ strEitherToIO :: Either String v -> IO v
 strEitherToIO (Left err) = ioError $ userError $ err
 strEitherToIO (Right v)  = pure v
 
-buildEitherToIO :: Either BuildError b -> IO b
+buildEitherToIO :: P.ShowErrorComponent s => Either (BuildError s) b -> IO b
 buildEitherToIO (Left (ParseError errBundle)) = ioError $ userError $ P.showErrorComponent errBundle
 buildEitherToIO (Left (ConfigError s))        = ioError $ userError $ "Bad semantics: " ++ s
 buildEitherToIO (Right v)                     = pure v
 
 codesToSth
-    :: [CharCode]
-    -> ExceptT BuildError (StateT ExpandedStream IO) a
+    :: P.ShowErrorComponent s
+    => [CharCode]
+    -> ExceptT (BuildError s) (StateT ExpandedStream IO) a
     -> IO a
 codesToSth xs f =
     newExpandStream xs >>= evalStateT (runExceptT f) >>= buildEitherToIO

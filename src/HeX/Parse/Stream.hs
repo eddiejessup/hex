@@ -22,9 +22,7 @@ import           Data.Char                      ( chr )
 import           Data.Proxy
 import qualified Data.Map.Strict               as Map
 import           Data.Map.Strict                ( (!?) )
-import qualified Data.Set                      as Set
-import qualified Data.List.NonEmpty            as NE
-import qualified Data.Foldable                 as Fold
+import           Safe                           ( headMay )
 import qualified Text.Megaparsec               as P
 
 import           HeX.Type
@@ -49,12 +47,12 @@ data ExpandedStream = ExpandedStream
     , skipState     :: [ConditionBodyState]
     } deriving (Show)
 
-runConfState :: MonadState ExpandedStream m => StateT Conf.Config m a -> m a
+runConfState :: (InhibitableStream s, MonadState s m) => StateT Conf.Config m a -> m a
 runConfState f =
     do
-    conf <- gets config
+    conf <- gets getConfig
     (v, conf') <- runStateT f conf
-    modify (\stream -> stream{config=conf'})
+    modify $ setConfig conf'
     pure v
 
 newExpandStream :: [Cat.CharCode] -> IO ExpandedStream
@@ -406,6 +404,9 @@ instance P.Stream ExpandedStream where
 
     reachOffset _ _freshState = (freshSourcePos, "", _freshState)
 
+instance Eq ExpandedStream where
+    _ == _ = True
+
 instance InhibitableStream ExpandedStream where
     setExpansion mode = P.updateParserState $ setStateExpansion
       where
@@ -414,38 +415,8 @@ instance InhibitableStream ExpandedStream where
 
     getConfig = config
 
+    setConfig c s = s{config = c}
+
     insertLexToken s t = s{lexTokens = t : lexTokens s}
 
-instance Eq ExpandedStream where
-    _ == _ = True
-
-instance Ord (ParseErrorBundle ExpandedStream) where
-    compare _ _ = EQ
-
-instance P.ShowErrorComponent (ParseErrorBundle ExpandedStream) where
-    showErrorComponent (P.ParseErrorBundle errs _) =
-        Fold.concat $ NE.intersperse "\n\n" $ P.showErrorComponent <$> errs
-
-instance Ord (ParseError ExpandedStream) where
-    compare _ _ = EQ
-
-instance P.ShowErrorComponent (ParseError ExpandedStream) where
-    showErrorComponent (P.TrivialError offset (Just (P.Tokens unexpecteds)) expecteds) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found unexpected tokens: " ++ show (NE.toList unexpecteds) ++ ".\n"
-        ++ "Expected one of: " ++ show (Set.toList expecteds)
-    showErrorComponent (P.TrivialError offset Nothing expecteds) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found no unexpected tokens.\n"
-        ++ "Expected one of: " ++ show (Set.toList expecteds)
-    showErrorComponent (P.TrivialError offset (Just P.EndOfInput) expecteds) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found end of input.\n"
-        ++ "Expected one of: " ++ show (Set.toList expecteds)
-    showErrorComponent (P.TrivialError offset (Just (P.Label lab)) expecteds) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found label: " ++ show lab ++ ".\n"
-        ++ "Expected one of: " ++ show (Set.toList expecteds)
-    showErrorComponent (P.FancyError offset sth) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found fancy error: " ++ show sth ++ ".\n"
+    getConditionBodyState = headMay . skipState

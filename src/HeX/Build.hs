@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module HeX.Build where
 
@@ -123,10 +124,13 @@ readOnState :: MonadState r m => ReaderT r m b -> m b
 readOnState f = get >>= runReaderT f
 
 readOnConfState
-    :: (MonadState HP.ExpandedStream m)
+    :: (HP.InhibitableStream s, MonadState s m)
     => ReaderT Config (StateT Config m) a
     -> m a
 readOnConfState f = HP.runConfState $ readOnState f
+
+modConfState :: (MonadState s m, HP.InhibitableStream s) => (Config -> Config) -> m ()
+modConfState x = HP.runConfState $ modify $ x
 
 setIntegerVariable
     :: (MonadState Config m, MonadError String m)
@@ -183,8 +187,8 @@ showExpandedBalancedText :: HP.ExpandedBalancedText -> String
 showExpandedBalancedText (HP.ExpandedBalancedText txt) = concatMap showPrimTok txt
 
 handleModeIndep
-    :: (MonadState HP.ExpandedStream m, MonadIO m)
-    => HP.ModeIndependentCommand -> ExceptT BuildError m (Maybe [BL.BreakableVListElem])
+    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    => HP.ModeIndependentCommand -> ExceptT (BuildError (HP.ParseErrorBundle s)) m (Maybe [BL.BreakableVListElem])
 handleModeIndep = \case
     HP.ChangeScope (HP.Sign True) trig ->
         do
@@ -212,6 +216,16 @@ handleModeIndep = \case
         noElems
     HP.IgnoreSpaces ->
         noElems
+    -- Re-insert the ⟨token⟩ into the input just after running the next
+    -- assignment command. Later \afterassignment commands override earlier
+    -- commands. If the assignment is a \setbox, and if the assigned ⟨box⟩ is
+    -- \{hbox,vbox,vtop}, insert the ⟨token⟩ just after the '{' in the box
+    -- construction (not after the '}'). Insert the ⟨token⟩ just before tokens
+    -- inserted by \everyhbox or \everyvbox.
+    HP.SetAfterAssignmentToken lt ->
+        do
+        modConfState $ \conf -> conf{afterAssignmentToken = Just lt}
+        noElems
     HP.AddPenalty n ->
         do
         p <- liftReadOnConfState $ evaluatePenalty n
@@ -225,7 +239,8 @@ handleModeIndep = \case
         eG <- liftReadOnConfState $ evaluateGlue g
         retElems [BL.ListGlue eG]
     HP.Assign HP.Assignment{global = globalFlag, body = _body} ->
-        case _body of
+        do
+        assignElems <- case _body of
             HP.DefineControlSequence cs tgt ->
                 do
                 (acc, newCSTok) <- liftReadOnConfState $ case tgt of
@@ -251,8 +266,8 @@ handleModeIndep = \case
                         pure ([boxElem], fontRefTok)
                     oth -> throwError $ "Unimplemented: " ++ show oth
                 liftIO $ putStrLn $ "Setting CS " ++ show cs ++ " to token: " ++ show newCSTok ++ (if globalFlag == HP.Global then " globally" else " locally")
-                HP.runConfState $ modify $ setControlSequence cs newCSTok globalFlag
-                retElems acc
+                modConfState $ setControlSequence cs newCSTok globalFlag
+                pure acc
             HP.SetVariable ass ->
                 do
                 liftConfState $ case ass of
@@ -274,7 +289,7 @@ handleModeIndep = \case
                         readOnState (evaluateNumber tgt) >>= (\en -> modify $ setSpecialInteger v en)
                     HP.SpecialLengthVariableAssignment v tgt ->
                         readOnState (evaluateLength tgt) >>= (\en -> modify $ setSpecialLength v en)
-                noElems
+                pure []
             HP.ModifyVariable modCommand ->
                 do
                 liftConfState $ case modCommand of
@@ -322,7 +337,7 @@ handleModeIndep = \case
                                         Upward -> BL.multiplyGlue
                                         Downward -> BL.divGlue
                                 setGlueVariable var globalFlag $ op eVar eScaleVal
-                noElems
+                pure []
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
                 eIdx <- liftReadOnConfState $ evaluateNumber idx
@@ -332,18 +347,24 @@ handleModeIndep = \case
                 idxChar <- liftMaybeConfigError ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
                 liftIO $ putStrLn $ "Setting " ++ show codeType ++ "@" ++ show eIdx ++ " (" ++ show idxChar ++ ") to " ++ show eVal
                 liftConfState $ updateCharCodeMap codeType idxChar eVal globalFlag
-                noElems
+                pure []
             HP.SelectFont fNr ->
                 do
                 fontSel <- HP.runConfState $ selectFont fNr globalFlag
-                retElems [BL.VListBaseElem $ B.ElemFontSelection fontSel]
+                pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
             HP.SetFamilyMember fm fontRef ->
                 do
                 eFm <- liftReadOnConfState $ evaluateFamilyMember fm
                 fNr <- liftReadOnConfState $ evaluateFontRef fontRef
-                HP.runConfState $ modify $ setFamilyMemberFont eFm fNr globalFlag
-                noElems
-            oth -> throwConfigError $ "Unimplemented: " ++ show oth
+                modConfState $ setFamilyMemberFont eFm fNr globalFlag
+                pure []
+        HP.runConfState (gets afterAssignmentToken) >>= \case
+            Nothing -> pure ()
+            Just lt ->
+                do
+                modify $ \s -> HP.insertLexToken s lt
+                modConfState $ \c -> c{afterAssignmentToken = Nothing}
+        retElems assignElems
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
         liftReadOnConfState $ do
         en <- evaluateNumber n
@@ -381,7 +402,7 @@ handleModeIndep = \case
 
     noElems = retElems []
 
-    pushGroup' grp = HP.runConfState $ modify $ pushGroup grp
+    pushGroup' grp = modConfState $ pushGroup grp
 
 getStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
 getStream strms n =
@@ -390,12 +411,12 @@ getStream strms n =
     HMap.lookup fourBitn strms
 
 processHCommand
-    :: (MonadState HP.ExpandedStream m, MonadIO m)
-    => HP.ExpandedStream
+    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    => s
     -> [BL.BreakableHListElem]
     -> Bool  -- restricted?
     -> HP.HModeCommand
-    -> ExceptT BuildError m ([BL.BreakableHListElem], Bool)
+    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m ([BL.BreakableHListElem], Bool)
 processHCommand oldStream acc inRestricted = \case
     HP.LeaveHMode ->
         -- Inner mode: forbidden. TODO.
@@ -458,39 +479,38 @@ processHCommand oldStream acc inRestricted = \case
 
     continueUnchanged = pure (acc, True)
 
-data BuildError
-  = ParseError (HP.ParseErrorBundle HP.ExpandedStream)
+data BuildError s
+  = ParseError s
   | ConfigError String
-  deriving (Show)
 
-liftConfigError :: Monad m => ExceptT String m a -> ExceptT BuildError m a
+liftConfigError :: Monad m => ExceptT String m a -> ExceptT (BuildError (HP.ParseErrorBundle s)) m a
 liftConfigError f = withExceptT ConfigError f
 
 liftConfState
-    :: MonadState HP.ExpandedStream m
+    :: (HP.InhibitableStream s, MonadState s m)
     => StateT Config (ExceptT String m) a
-    -> ExceptT BuildError m a
+    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m a
 liftConfState x = liftConfigError $ HP.runConfState x
 
 liftReadOnConfState
-    :: MonadState HP.ExpandedStream m
+    :: (HP.InhibitableStream s, MonadState s m)
     => ReaderT Config (StateT Config (ExceptT String m)) a
-    -> ExceptT BuildError m a
+    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m a
 liftReadOnConfState x = liftConfigError $ readOnConfState x
 
-throwConfigError :: MonadError BuildError m => String -> m a
+throwConfigError :: MonadError (BuildError s) m => String -> m a
 throwConfigError s = throwError $ ConfigError s
 
 liftMaybeConfigError
-    :: MonadError BuildError m
+    :: MonadError (BuildError s) m
     => String -> Maybe a -> m a
 liftMaybeConfigError s = liftMaybe (ConfigError s)
 
 extractHList
-    :: (MonadState HP.ExpandedStream m, MonadIO m)
+    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
     => HP.IndentFlag
     -> Bool
-    -> ExceptT BuildError m [BL.BreakableHListElem]
+    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m [BL.BreakableHListElem]
 extractHList indentFlag inRestricted =
     do
     indentBox <- readOnConfState $ asks parIndentBox
@@ -509,9 +529,9 @@ extractHList indentFlag inRestricted =
             else pure procAcc
 
 extractBreakAndSetHList
-    :: (MonadState HP.ExpandedStream m, MonadIO m)
+    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
     => HP.IndentFlag
-    -> ExceptT BuildError m [[B.HBoxElem]]
+    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m [[B.HBoxElem]]
 extractBreakAndSetHList indentFlag =
     do
     hList <- extractHList indentFlag False
@@ -632,12 +652,12 @@ addVListElem acc e = case e of
                 in  e : glue : acc
 
 processVCommand
-    :: (MonadState HP.ExpandedStream m, MonadIO m)
-    => HP.ExpandedStream
+    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    => s
     -> [BL.BreakableVListElem]
     -> Bool -- internal?
     -> HP.VModeCommand
-    -> ExceptT BuildError m ([BL.BreakableVListElem], Bool)
+    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m ([BL.BreakableVListElem], Bool)
 processVCommand oldStream acc inInternal = \case
     -- End recursion.
     HP.End ->
@@ -648,9 +668,9 @@ processVCommand oldStream acc inInternal = \case
             readOnConfState $ asks scopedConfig >>= \case
                 (_, []) -> pure ()
                 _ -> throwConfigError "Cannot end: not in global scope"
-            gets HP.skipState >>= \case
-                [] -> pure ()
-                _skipState -> throwConfigError $ "Cannot end: in condition block: " ++ show _skipState
+            gets HP.getConditionBodyState >>= \case
+                Nothing -> pure ()
+                Just _condState -> throwConfigError $ "Cannot end: in condition block: " ++ show _condState
             readOnConfState (asks finaliseConfig) >>= liftIO
             pure (acc, False)
     HP.EnterHMode ->
@@ -708,9 +728,9 @@ newCurrentPage :: CurrentPage
 newCurrentPage = CurrentPage [] Nothing
 
 extractVList
-    :: (MonadState HP.ExpandedStream m, MonadIO m)
+    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
     => Bool
-    -> ExceptT BuildError m [BL.BreakableVListElem]
+    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m [BL.BreakableVListElem]
 extractVList inInternal =
     extractVListInner []
   where
@@ -726,8 +746,8 @@ extractVList inInternal =
             else pure procAcc
 
 extractBreakAndSetVList
-    :: (MonadState HP.ExpandedStream m, MonadIO m)
-    => ExceptT BuildError m [B.Page]
+    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    => ExceptT (BuildError (HP.ParseErrorBundle s)) m [B.Page]
 extractBreakAndSetVList = do
     vList <- extractVList False
     liftIO $ print $ length vList

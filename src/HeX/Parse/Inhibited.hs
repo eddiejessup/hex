@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module HeX.Parse.Inhibited where
@@ -10,8 +11,10 @@ import           Control.Monad                  ( guard
 import           Data.Char                      ( ord )
 import qualified Data.Foldable                 as Fold
 import           Data.Functor                   ( ($>) )
+import qualified Data.List.NonEmpty            as NE
 import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
+import qualified Data.Set                      as Set
 import           Safe                           ( lastMay
                                                 , initMay
                                                 )
@@ -20,20 +23,56 @@ import           Text.Megaparsec                ( (<|>) )
 
 import qualified HeX.Lex                       as Lex
 import           HeX.Config                     ( Config )
+import           HeX.Evaluate
 import           HeX.Parse.Helpers
 import           HeX.Parse.Resolve
 import           HeX.Parse.Token
 import           HeX.Parse.Common
 
-class (P.Stream s, Show s, P.Token s ~ PrimitiveToken) => InhibitableStream s where
+class (P.Stream s, Show s, P.Token s ~ PrimitiveToken, Eq s) => InhibitableStream s where
     setExpansion :: Ord e => ExpansionMode -> P.Parsec e s ()
 
     getConfig :: s -> Config
+
+    setConfig :: Config -> s -> s
 
     insertLexToken :: s -> Lex.Token -> s
 
     insertLexTokens :: s -> [Lex.Token] -> s
     insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
+
+    getConditionBodyState :: s -> Maybe ConditionBodyState
+
+instance InhibitableStream s => Ord (ParseErrorBundle s) where
+    compare _ _ = EQ
+
+instance InhibitableStream s => P.ShowErrorComponent (ParseErrorBundle s) where
+    showErrorComponent (P.ParseErrorBundle errs _) =
+        Fold.concat $ NE.intersperse "\n\n" $ P.showErrorComponent <$> errs
+
+instance InhibitableStream s => Ord (ParseError s) where
+    compare _ _ = EQ
+
+instance InhibitableStream s => P.ShowErrorComponent (ParseError s) where
+    showErrorComponent (P.TrivialError offset (Just (P.Tokens unexpecteds)) expecteds) =
+        "Error at " ++ show offset ++ ".\n"
+        ++ "Found unexpected tokens: " ++ show (NE.toList unexpecteds) ++ ".\n"
+        ++ "Expected one of: " ++ show (Set.toList expecteds)
+    showErrorComponent (P.TrivialError offset Nothing expecteds) =
+        "Error at " ++ show offset ++ ".\n"
+        ++ "Found no unexpected tokens.\n"
+        ++ "Expected one of: " ++ show (Set.toList expecteds)
+    showErrorComponent (P.TrivialError offset (Just P.EndOfInput) expecteds) =
+        "Error at " ++ show offset ++ ".\n"
+        ++ "Found end of input.\n"
+        ++ "Expected one of: " ++ show (Set.toList expecteds)
+    showErrorComponent (P.TrivialError offset (Just (P.Label lab)) expecteds) =
+        "Error at " ++ show offset ++ ".\n"
+        ++ "Found label: " ++ show lab ++ ".\n"
+        ++ "Expected one of: " ++ show (Set.toList expecteds)
+    showErrorComponent (P.FancyError offset sth) =
+        "Error at " ++ show offset ++ ".\n"
+        ++ "Found fancy error: " ++ show sth ++ ".\n"
 
 inhibitExpansion, enableExpansion
     :: Ord e

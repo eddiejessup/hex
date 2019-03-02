@@ -329,8 +329,6 @@ data AllModesCommand
     | ShowLists
     | ShowTheInternalQuantity InternalQuantity
     | ShipOut Box
-    | SetAfterAssignmentToken Lex.Token
-    | AddToAfterGroupTokens Lex.Token
     | AddMark T.BalancedText
     -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
     -- -- then can 'migrate' out.
@@ -356,6 +354,8 @@ data ModeIndependentCommand
     | AddMathKern MathLength
     | RemoveItem T.RemovableItem
     | AddGlue Glue
+    | SetAfterAssignmentToken Lex.Token
+    | AddToAfterGroupTokens Lex.Token
     | Message T.MessageStream T.ExpandedBalancedText
     | ModifyFileStream FileStreamType FileStreamAction Number
     | WriteToStream Number WriteText

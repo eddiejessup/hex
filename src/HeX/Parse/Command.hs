@@ -48,8 +48,6 @@ parseAllModeCommand mode =
              , skipSatisfiedEquals T.ShowListsTok $> ShowLists
              , skipSatisfiedEquals T.ShowTheInternalQuantityTok >> (ShowTheInternalQuantity <$> parseInternalQuantity)
              , skipSatisfiedEquals T.ShipOutTok >> (ShipOut <$> parseBox)
-             , skipSatisfiedEquals T.SetAfterAssignmentTokenTok >> (SetAfterAssignmentToken <$> parseLexToken)
-             , skipSatisfiedEquals T.AddToAfterGroupTokensTok >> (AddToAfterGroupTokens <$> parseLexToken)
              , skipSatisfiedEquals T.MarkTok >> (AddMark <$> parseGeneralText)
              -- , parseInsert
              -- , parseVAdjust
@@ -146,6 +144,8 @@ parseModeIndependentCommand mode =
              , parseRemoveItem
              , AddGlue <$> parseModedGlue mode
              , Assign <$> parseAssignment
+             , skipSatisfiedEquals T.SetAfterAssignmentTokenTok >> (SetAfterAssignmentToken <$> parseLexToken)
+             , skipSatisfiedEquals T.AddToAfterGroupTokensTok >> (AddToAfterGroupTokens <$> parseLexToken)
              , parseMessage
              , parseOpenInput
              , skipSatisfiedEquals T.CloseInputTok >> (ModifyFileStream FileInput Close <$> parseNumber)
