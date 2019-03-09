@@ -24,7 +24,7 @@ import           HeX.Parse.Assignment
 
 type ExtractResult s c = Either (ParseErrorBundle s) (P.State s, c)
 
-extractResult :: InhibitableStream s => SimpParser s c -> s -> ExtractResult s c
+extractResult :: SimpParser s c -> s -> ExtractResult s c
 extractResult p stream =
     do
     let (state, eCom) = easyRunParser p stream

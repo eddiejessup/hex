@@ -154,7 +154,7 @@ parseVariableModification = P.choice [ parseAdvanceVar numVarValPair AdvanceInte
                                      , parseScaleVar
                                      ]
   where
-    parseAdvanceVar :: InhibitableStream s => (SimpParser s a, SimpParser s b) -> (a -> b -> VariableModification) -> SimpParser s VariableModification
+    parseAdvanceVar :: (SimpParser s a, SimpParser s b) -> (a -> b -> VariableModification) -> SimpParser s VariableModification
     parseAdvanceVar (varParser, valParser) f =
         do
         skipSatisfiedEquals T.AdvanceVarTok

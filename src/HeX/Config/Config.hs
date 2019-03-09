@@ -76,8 +76,7 @@ data Scope = Scope
     , glueRegister        :: RegisterMap BL.Glue
     , mathGlueRegister    :: RegisterMap BL.MathGlue
     , tokenListRegister   :: RegisterMap BalancedText
-    -- , boxRegister         :: RegisterMap (Maybe Box)
-
+    , boxRegister         :: RegisterMap B.Box
     } deriving (Show)
 
 newGlobalScope :: Scope
@@ -105,7 +104,7 @@ newGlobalScope = Scope
     , glueRegister        = HMap.empty
     , mathGlueRegister    = HMap.empty
     , tokenListRegister   = HMap.empty
-    -- , boxRegister         = HMap.empty
+    , boxRegister         = HMap.empty
     }
 
 newLocalScope :: Scope
@@ -133,7 +132,7 @@ newLocalScope = Scope
     , glueRegister        = HMap.empty
     , mathGlueRegister    = HMap.empty
     , tokenListRegister   = HMap.empty
-    -- , boxRegister         = HMap.empty
+    , boxRegister         = HMap.empty
     }
 
 data Config = Config
@@ -217,30 +216,42 @@ popGroup c@Config{scopedConfig = (g, locs)} =
         [] -> Nothing
         (grp, _):locs' -> Just (grp, c{scopedConfig = (g, locs')})
 
-insertKey
+data KeyOperation v
+    = InsertVal v
+    | DeleteVal
+
+modifyKey
     :: (Eq k, Hashable k)
     => (Scope -> HMap.HashMap k v)
     -> (Scope -> HMap.HashMap k v -> Scope)
     -> k
-    -> v
+    -> KeyOperation v
     -> GlobalFlag
     -> Config
     -> Config
-insertKey getMap upD k v globalFlag conf =
+modifyKey getMap upD k keyOp globalFlag conf =
     conf{scopedConfig = insertToScopes $ scopedConfig conf}
   where
     insertToScopes scopes@(g, locs) =
         case globalFlag of
             Global ->
-                (insertKeyToScope g, (\(t, sc) -> (t, deleteKeyFromScope sc)) <$> locs)
+                (modOp g, (\(t, sc) -> (t, deleteKeyFromScope sc)) <$> locs)
             Local ->
-                modLocalScope scopes insertKeyToScope
+                modLocalScope scopes modOp
 
-    insertKeyToScope c =
+    modOp = case keyOp of
+        DeleteVal -> deleteKeyFromScope
+        InsertVal v -> insertKeyToScope v
+
+    insertKeyToScope v c =
         upD c $ HMap.insert k v $ getMap c
 
     deleteKeyFromScope c =
         upD c $ HMap.delete k $ getMap c
+
+insertKey getMap upD k v = modifyKey getMap upD k (InsertVal v)
+
+deleteKey getMap upD k = modifyKey getMap upD k DeleteVal
 
 scopedLookup :: (k -> Maybe v) -> (k, [(a, k)]) -> Maybe v
 scopedLookup f (g, []) = f g
@@ -421,6 +432,9 @@ lookupMathGlueRegister p conf = fromMaybe mempty $ scopedMapLookup mathGlueRegis
 lookupTokenListRegister :: EightBitInt -> Config -> BalancedText
 lookupTokenListRegister p conf = fromMaybe mempty $ scopedMapLookup tokenListRegister p conf
 
+lookupBoxRegister :: EightBitInt -> Config -> Maybe B.Box
+lookupBoxRegister p conf = scopedMapLookup boxRegister p conf
+
 setIntegerRegister :: EightBitInt -> IntVal -> GlobalFlag -> Config -> Config
 setIntegerRegister = insertKey integerRegister $ \c _map -> c{integerRegister = _map}
 
@@ -435,3 +449,9 @@ setMathGlueRegister = insertKey mathGlueRegister $ \c _map -> c{mathGlueRegister
 
 setTokenListRegister :: EightBitInt -> BalancedText -> GlobalFlag -> Config -> Config
 setTokenListRegister = insertKey tokenListRegister $ \c _map -> c{tokenListRegister = _map}
+
+setBoxRegister :: EightBitInt -> B.Box -> GlobalFlag -> Config -> Config
+setBoxRegister = insertKey boxRegister $ \c _map -> c{boxRegister = _map}
+
+delBoxRegister :: EightBitInt -> GlobalFlag -> Config -> Config
+delBoxRegister = deleteKey boxRegister $ \c _map -> c{boxRegister = _map}

@@ -75,7 +75,7 @@ evaluateIntegerVariable = \case
     AST.ParamVar p -> asks $ lookupIntegerParameter p
     AST.RegisterVar n -> getRegisterIdx n lookupIntegerRegister
 
-evaluateSpecialInteger :: (MonadReader Config m, MonadError String m) => T.SpecialInteger -> m Int
+evaluateSpecialInteger :: (MonadReader Config m) => T.SpecialInteger -> m Int
 evaluateSpecialInteger p = asks $ lookupSpecialInteger p
 
 evaluateCodeTableRef :: (MonadReader Config m, MonadError String m) => AST.CodeTableRef -> m Int
@@ -171,7 +171,7 @@ evaluateLengthVariable = \case
     AST.ParamVar p -> asks $ lookupLengthParameter p
     AST.RegisterVar n -> getRegisterIdx n lookupLengthRegister
 
-evaluateSpecialLength :: (MonadReader Config m, MonadError String m) => T.SpecialLength -> m Int
+evaluateSpecialLength :: (MonadReader Config m) => T.SpecialLength -> m Int
 evaluateSpecialLength p = asks $ lookupSpecialLength p
 
 evaluateFontDimensionRef :: (MonadReader Config m, MonadError String m) => AST.FontDimensionRef -> m Int
@@ -451,6 +451,11 @@ evaluateCharCodeRef ref = case ref of
     AST.CharTokenRef c  -> pure $ chr c
     AST.CharCodeNrRef n -> chr <$> evaluateNumber n
 
+evaluateBoxSpecification :: (MonadReader Config m, MonadError String m) => AST.BoxSpecification -> m B.DesiredLength
+evaluateBoxSpecification = \case
+    AST.Natural -> pure B.Natural
+    AST.To ln -> B.To <$> evaluateLength ln
+    AST.Spread ln -> B.Spread <$> evaluateLength ln
 
 evaluateFontSpecification
     :: (MonadReader Config m, MonadError String m)

@@ -186,13 +186,36 @@ showBalancedText (HP.BalancedText txt) = concatMap showLexTok txt
 showExpandedBalancedText :: HP.ExpandedBalancedText -> String
 showExpandedBalancedText (HP.ExpandedBalancedText txt) = concatMap showPrimTok txt
 
+constructBox
+    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    => HP.Box -> ExceptBuildT s m (Maybe B.Box)
+constructBox = \case
+    HP.ExplicitBox spec boxType ->
+        do
+        eSpec <- liftReadOnConfState $ evaluateBoxSpecification spec
+        modConfState $ pushGroup ExplicitBoxGroup
+        b <- case boxType of
+            HP.ExplicitHBox ->
+                (B.HBoxContents . BL.setHList BL.NaturallyGood . reverse) <$> extractHList HP.DoNotIndent True
+            HP.ExplicitVBox alignType ->
+                ((\els -> B.VBoxContents els alignType) . BL.setVList BL.NaturallyGood . reverse) <$> extractVList True
+        pure $ Just $ B.Box b eSpec
+    HP.FetchedRegisterBox fetchMode idx ->
+        do
+        eIdx <- liftReadOnConfState $ evaluateEightBitInt idx
+        box <- readOnConfState $ asks $ lookupBoxRegister eIdx
+        case fetchMode of
+            HP.Lookup -> pure ()
+            HP.Pop -> HP.runConfState $ modify $ delBoxRegister eIdx HP.Local
+        pure box
+
 handleModeIndep
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
-    => HP.ModeIndependentCommand -> ExceptT (BuildError (HP.ParseErrorBundle s)) m (Maybe [BL.BreakableVListElem])
+    => HP.ModeIndependentCommand -> ExceptBuildT s m (Maybe [BL.BreakableVListElem])
 handleModeIndep = \case
     HP.ChangeScope (HP.Sign True) trig ->
         do
-        pushGroup' $ LocalStructureGroup trig
+        modConfState $ pushGroup $ LocalStructureGroup trig
         noElems
     HP.ChangeScope (HP.Sign False) trig ->
         HP.runConfState $
@@ -358,6 +381,15 @@ handleModeIndep = \case
                 fNr <- liftReadOnConfState $ evaluateFontRef fontRef
                 modConfState $ setFamilyMemberFont eFm fNr globalFlag
                 pure []
+            HP.SetBoxRegister idx box ->
+                do
+                eIdx <- liftReadOnConfState $ evaluateEightBitInt idx
+                mayBox <- constructBox box
+                modConfState $ case mayBox of
+                    Nothing -> delBoxRegister eIdx globalFlag
+                    Just b -> setBoxRegister eIdx b globalFlag
+                pure []
+            oth -> error $ show oth
         HP.runConfState (gets afterAssignmentToken) >>= \case
             Nothing -> pure ()
             Just lt ->
@@ -387,22 +419,17 @@ handleModeIndep = \case
                 logHandle <- asks logStream
                 liftIO $ hPutStrLn logHandle txtStr
         retElems []
-    HP.AddBox HP.NaturalPlacement (HP.ExplicitBox HP.Natural boxType) ->
+    HP.AddBox HP.NaturalPlacement box ->
         do
-        pushGroup' ExplicitBoxGroup
-        b <- case boxType of
-            HP.ExplicitHBox ->
-                (B.HBoxContents . BL.setHList BL.NaturallyGood . reverse) <$> extractHList HP.DoNotIndent True
-            HP.ExplicitVBox alignType ->
-                ((\els -> B.VBoxContents els alignType) . BL.setVList BL.NaturallyGood . reverse) <$> extractVList True
-        retElems $ [(BL.VListBaseElem . B.ElemBox . (\bc -> B.Box bc B.Natural)) b]
+        mayBox <- constructBox box
+        retElems $ case mayBox of
+            Nothing -> []
+            Just b  -> [(BL.VListBaseElem . B.ElemBox) b]
 
   where
     retElems els = pure $ Just els
 
     noElems = retElems []
-
-    pushGroup' grp = modConfState $ pushGroup grp
 
 getStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
 getStream strms n =
@@ -416,7 +443,7 @@ processHCommand
     -> [BL.BreakableHListElem]
     -> Bool  -- restricted?
     -> HP.HModeCommand
-    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m ([BL.BreakableHListElem], Bool)
+    -> ExceptBuildT s m ([BL.BreakableHListElem], Bool)
 processHCommand oldStream acc inRestricted = \case
     HP.LeaveHMode ->
         -- Inner mode: forbidden. TODO.
@@ -483,19 +510,19 @@ data BuildError s
   = ParseError s
   | ConfigError String
 
-liftConfigError :: Monad m => ExceptT String m a -> ExceptT (BuildError (HP.ParseErrorBundle s)) m a
+liftConfigError :: Monad m => ExceptT String m a -> ExceptBuildT s m a
 liftConfigError f = withExceptT ConfigError f
 
 liftConfState
     :: (HP.InhibitableStream s, MonadState s m)
     => StateT Config (ExceptT String m) a
-    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m a
+    -> ExceptBuildT s m a
 liftConfState x = liftConfigError $ HP.runConfState x
 
 liftReadOnConfState
     :: (HP.InhibitableStream s, MonadState s m)
     => ReaderT Config (StateT Config (ExceptT String m)) a
-    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m a
+    -> ExceptBuildT s m a
 liftReadOnConfState x = liftConfigError $ readOnConfState x
 
 throwConfigError :: MonadError (BuildError s) m => String -> m a
@@ -506,11 +533,13 @@ liftMaybeConfigError
     => String -> Maybe a -> m a
 liftMaybeConfigError s = liftMaybe (ConfigError s)
 
+type ExceptBuildT s m a = ExceptT (BuildError (HP.ParseErrorBundle s)) m a
+
 extractHList
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
     => HP.IndentFlag
     -> Bool
-    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m [BL.BreakableHListElem]
+    -> ExceptBuildT s m [BL.BreakableHListElem]
 extractHList indentFlag inRestricted =
     do
     indentBox <- readOnConfState $ asks parIndentBox
@@ -531,7 +560,7 @@ extractHList indentFlag inRestricted =
 extractBreakAndSetHList
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
     => HP.IndentFlag
-    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m [[B.HBoxElem]]
+    -> ExceptBuildT s m [[B.HBoxElem]]
 extractBreakAndSetHList indentFlag =
     do
     hList <- extractHList indentFlag False
@@ -657,7 +686,7 @@ processVCommand
     -> [BL.BreakableVListElem]
     -> Bool -- internal?
     -> HP.VModeCommand
-    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m ([BL.BreakableVListElem], Bool)
+    -> ExceptBuildT s m ([BL.BreakableVListElem], Bool)
 processVCommand oldStream acc inInternal = \case
     -- End recursion.
     HP.End ->
@@ -730,7 +759,7 @@ newCurrentPage = CurrentPage [] Nothing
 extractVList
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
     => Bool
-    -> ExceptT (BuildError (HP.ParseErrorBundle s)) m [BL.BreakableVListElem]
+    -> ExceptBuildT s m [BL.BreakableVListElem]
 extractVList inInternal =
     extractVListInner []
   where
@@ -747,7 +776,7 @@ extractVList inInternal =
 
 extractBreakAndSetVList
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
-    => ExceptT (BuildError (HP.ParseErrorBundle s)) m [B.Page]
+    => ExceptBuildT s m [B.Page]
 extractBreakAndSetVList = do
     vList <- extractVList False
     liftIO $ print $ length vList
