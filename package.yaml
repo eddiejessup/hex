@@ -35,6 +35,14 @@ dependencies:
 library:
   source-dirs: src
 
+ghc-options:
+- -optP-Wno-nonportable-include-path
+- -Wall
+- -Wcompat
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wredundant-constraints
+
 executables:
   hex:
     main:                HeX.hs
@@ -43,7 +51,6 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -optP-Wno-nonportable-include-path
     dependencies:
     - hex
 
