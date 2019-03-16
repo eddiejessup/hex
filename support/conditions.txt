@@ -1,0 +1,58 @@
+% In TeX, the skipped falsey text has an invalid double-else. But because the text is skipped quite naively, only checking for ifs and endifs (ignoring elses), no error is raised.
+% This mirrors my implementation, so that's good.
+\ifnum1=2   \iftrue \else \else \fi   \else hello \fi
+\ifnum1=1 hello \else \or \fi
+
+% In TeX, this will produce nothing. this implies that the first 'else' is inserted after the 'iffy' context has been added, and is considered to apply to the condition-head.
+% This mirrors my implementation, so that's good.
+\expandafter \else \ifnum1=1 hihi \fi
+
+% This _does_ raise and error, because the extra else is in a block that is not skipped.
+% This mirrors my implementation, so that's good.
+\ifnum1=1   \iffalse \else \else yo \fi   \else hello \fi
+
+
+see if:
+    true: push state, done
+    false: push, skip until see,
+        iftok: something
+        else: modify state, done
+        fi: pop state, done
+
+
+
+    \if(P) A \else B \fi
+    \if(P) A \fi
+
+parse the if, have remainder:
+
+    A \else B \fi
+    A \fi
+
+if P is true:
+
+    push the state 'pre-else'
+
+    then when we see,
+        - \else, skip until we see \fi
+        - \fi, do nothing
+    then pop the state
+
+if P is false:
+
+    skip until,
+        - \else, skip that too, to have remainder:
+
+            B \fi
+
+        and push the state 'post-else', so when we see,
+            - \else, raise an error
+            - \fi, do nothing
+        then pop the state
+
+        - \fi, skip that too
+
+
+
+  if   if   if   \fi   \fi   \else
+0    1    2    3     2     1
