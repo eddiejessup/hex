@@ -247,8 +247,25 @@ modifyKey getMap upD k keyOp globalFlag conf =
     deleteKeyFromScope c =
         upD c $ HMap.delete k $ getMap c
 
+insertKey
+    :: (Eq k, Hashable k)
+    => (Scope -> HMap.HashMap k v)
+    -> (Scope -> HMap.HashMap k v -> Scope)
+    -> k
+    -> v
+    -> GlobalFlag
+    -> Config
+    -> Config
 insertKey getMap upD k v = modifyKey getMap upD k (InsertVal v)
 
+deleteKey
+    :: (Eq k, Hashable k)
+    => (Scope -> HMap.HashMap k v)
+    -> (Scope -> HMap.HashMap k v -> Scope)
+    -> k
+    -> GlobalFlag
+    -> Config
+    -> Config
 deleteKey getMap upD k = modifyKey getMap upD k DeleteVal
 
 scopedLookup :: (k -> Maybe v) -> (k, [(a, k)]) -> Maybe v
