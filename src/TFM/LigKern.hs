@@ -1,72 +1,12 @@
+{-# LANGUAGE LambdaCase #-}
+
 module TFM.LigKern where
 
-import           Prelude                 hiding ( length )
-
-import           Data.Bits
-import           Data.ByteString         hiding ( head
-                                                , last
-                                                )
-import           Data.List.Split
+import qualified Data.Binary.Get as B.G
+import           Data.Bits ( shift, (.&.) )
 
 import           TFM.Common
 
--- The lig/kern array contains instructions explaining how to handle special
--- letter pairs. Each instruction consists of four bytes:
--- * skip_byte: Skip this many intervening steps to reach the next step. If
---   >= 128, indicates that this is the final program step.
--- * next_char: If this character follows the current character in the input,
---   then perform the given operation and stop. Otherwise, continue.
--- * op_byte: If < 128, indicates a ligature step. Otherwise, indicates a kern step.
--- * remainder: Argument for the ligature or kern instruction.
--- # Kern step instructions:
---
--- Insert an additional space equal to:
---     kern[256 * (op_byte + 128) + remainder]
--- between the current character and next characters in the input. This amount
--- can be negative, bringing the characters closer together, or positive,
--- pushing them apart.
--- # Ligature step instructions:
---
--- There are eight kinds of ligature steps, with 'op_byte' codes:
---     4a + 2b + c
--- where
---     0 <= a <= b + c
---     0 <= b
---     c in [0, 1]
--- * Insert the character with code 'remainder', between the current and next characters
--- * If 'b = 0', delete the current character
--- * If 'c = 0', delete the next character
--- * Pass over 'a' characters in the input to reach the next current character.
---   (This character may have its own ligature/kerning program).
--- Note that:
--- * if 'a = 0' and 'b = 1', the current character is unchanged
--- * if 'a = b' and 'c = 1', the current character is changed but the next character is unchanged.
--- # Boundary characters.
---
--- TeX puts implicit characters at the left and right boundaries of each
--- consecutive string of characters from the same font. These characters do not
--- appear in the output, but they can affect ligatures and kerning.
---
--- If the first instruction of the lig/kern array has 'skip_byte = 255', that
--- instruction's 'next_char' is the right-boundary character of
--- this font. The value of 'next_char' need not lie between the smallest and
--- largest character codes in the font, according to the TFM file.
--- If the last instruction of the lig/kern array has 'skip_byte = 255', there
--- is a special ligature/kerning program for a left-boundary character,
--- beginning at location:
---     256 * op_byte + remainder
--- # Optional larger lig/kern arrays
---
--- If the first instruction of a character's 'lig_kern' program has
--- 'skip_byte > 128', the program actually begins in location:
---     256 * op_byte + remainder
--- This allows large lig/kern arrays, because the first
--- instruction must otherwise appear in a location that is <= 255.
--- Any instruction with 'skip_byte > 128' in the lig/kern array must satisfy:
---     256 * op_byte + remainder < nl
--- Where 'nl' is the number of words in the lig/kern table. If such an
--- instruction is encountered during program execution, it denotes an
--- unconditional halt, without performing a ligature command.
 kernOp :: Int
 kernOp = 128
 
@@ -86,53 +26,38 @@ data LigKernInstr = LigKernInstr
     , operation :: Either LigatureOp KernOp
     } deriving (Show)
 
-readInstrSet :: [[Int]] -> Int -> (Int, Int, Int, Int)
-readInstrSet sets i =
-    let [w, x, y, z] = sets !! i
-    in  (w, x, y, z)
-
-getLigKernOperation :: (Int -> KernOp) -> Int -> Int -> Either LigatureOp KernOp
-getLigKernOperation readKern op remain
-    | op >= kernOp = Right $ readKern $ 256 * (op - kernOp) + remain
-    | otherwise = Left LigatureOp
-        { ligatureChar      = remain
-        , charsToPassOver   = op `shift` 2
-        , deleteCurrentChar = (op .&. 0x02) == 0
-        , deleteNextChar    = (op .&. 0x01) == 0
+readLigKern :: [Rational] -> LigKernCommand -> LigKernInstr
+readLigKern kerns (LigKernCommand _skipByte _nextChar _opByte _remainder) =
+    LigKernInstr
+        { stop = _skipByte >= 128
+        , nextChar = _nextChar
+        , operation = if _opByte >= kernOp
+            then Right $ KernOp $ kerns !! (256 * (_opByte - kernOp) + _remainder)
+            else Left LigatureOp
+                { ligatureChar      = _remainder
+                , charsToPassOver   = _opByte `shift` 2
+                , deleteCurrentChar = (_opByte .&. 0x02) == 0
+                , deleteNextChar    = (_opByte .&. 0x01) == 0
+                }
         }
 
-analyzeLigKernInstr
-    :: (Int -> KernOp)
-    -> Int
-    -> Int
-    -> Int
-    -> Int
-    -> LigKernInstr
-analyzeLigKernInstr readKern skip next op remain =
-    let _operation = getLigKernOperation readKern op remain
-    in  LigKernInstr
-            { stop = skip >= 128
-            , nextChar = next
-            , operation = _operation
-            }
+    -- TODO: Implement
+    -- when (firstSkipByte == 255) $ Left "Unsupported: Right boundary characters"
+    -- when (firstSkipByte > 128) $ Left "Unsupported: Large LigKern arrays"
+    -- when (lastSkipByte == 255) $ Left "Unsupported: Left boundary characters"
+  -- where
+    -- edgesMay xs = do
+    --     hd <- headMay xs
+    --     lst <- lastMay xs
+    --     pure (hd, lst)
 
-getKern :: ByteString -> (Int -> KernOp)
-getKern kStr iWords = KernOp $ runGetAt getFixWord kStr iWords
+data LigKernCommand = LigKernCommand
+    { skipByte
+    , commandNextChar
+    , opByte
+    , remainder :: Int
+    } deriving (Show)
 
-readLigKerns :: ByteString -> ByteString -> [LigKernInstr]
-readLigKerns ligKernStr kernStr
-    | firstSkipByte == 255 =
-        error "Sorry, right boundary characters are not supported"
-    | firstSkipByte > 128 =
-        error "Sorry, large LigKern arrays are not supported"
-    | lastSkipByte == 255 =
-        error "Sorry, left boundary characters are not supported"
-    | otherwise =
-        let kernGetter = getKern kernStr
-        in  fmap (\(a, b, c, d) -> analyzeLigKernInstr kernGetter a b c d) sets
-  where
-    ligKernTblLengthWords = length ligKernStr `div` 4
-    readSet = readInstrSet $ (chunksOf 4 . fmap fromIntegral) (unpack ligKernStr)
-    sets = readSet <$> [0 .. ligKernTblLengthWords - 1]
-    (firstSkipByte, _, _, _) = head sets
-    (lastSkipByte, _, _, _) = last sets
+getLigKernCommand :: B.G.Get LigKernCommand
+getLigKernCommand =
+    LigKernCommand <$> getWord8Int <*> getWord8Int <*> getWord8Int <*> getWord8Int

@@ -4,25 +4,24 @@ module TFM.Parse
   )
 where
 
-import qualified Data.Binary.Get               as BG
-import           Data.ByteString
+import qualified Data.Binary.Get               as B.SG
+import qualified Data.ByteString               as BS
+import qualified Data.ByteString.Lazy          as BS.L
 import           Data.HashMap.Strict
 
 import           TFM.Character
 import           TFM.Common
-import qualified TFM.FontParams                as F
-import qualified TFM.Header                    as H
+import qualified TFM.FontParams as F
+import qualified TFM.Header as H
 import           TFM.LigKern
-import           TFM.Table                      ( Table(..)
-                                                , getTableParams
-                                                , tablePosBytes
-                                                )
+import           TFM.Recipe
+import qualified TFM.Table as T
 
 data TexFont = TexFont
     { checksum              :: Int
     , designFontSize        :: Rational
     , characterCodingScheme
-    , family                :: ByteString
+    , family                :: Maybe String
     , slant
     , spacing
     , spaceStretch
@@ -30,59 +29,50 @@ data TexFont = TexFont
     , xHeight
     , quad
     , extraSpace            :: Rational
-    , mathSymbolParams      :: Maybe F.MathSymbolParams
-    , mathExtensionParams   :: Maybe F.MathExtensionParams
+    , extraParams           :: Maybe F.ExtraFontParams
     , ligKerns              :: [LigKernInstr]
     , characters            :: HashMap Char Character
     } deriving (Show)
 
-newTFM :: BG.Get TexFont
-newTFM =
+runGetEith :: String -> B.SG.Get b -> BS.ByteString -> Either String b
+runGetEith ctx f s = case B.SG.runGetOrFail f (BS.L.fromStrict s) of
+        Left (rest, offset, err) -> Left ("In " <> show (ctx, rest, offset) <> ": " <> err)
+        Right (_, _, v) -> Right v
+
+newTFM :: BS.ByteString -> Either String TexFont
+newTFM contents =
     do
-    -- Read and set table lengths.
-    (tableToLength, _smallestCharCode, _largestCharCode) <- getTableParams
-    let skipUpTo tbl =
-            do
-            curPos <- fromIntegral <$> BG.bytesRead
-            BG.skip $ tablePosBytes tableToLength tbl - curPos
-    skipUpTo Header
-    header <- H.getHeader (tablePosBytes tableToLength CharacterInfo)
-    let readTableStr = BG.getByteString . wordToByte . tableToLength
-    skipUpTo CharacterInfo
-    cInfoStr <- readTableStr CharacterInfo
-    wStr <- readTableStr Width
-    hStr <- readTableStr Height
-    dStr <- readTableStr Depth
-    iStr <- readTableStr ItalicCorrection
-    ligKernStr <- readTableStr LigKerns
-    kernStr <- readTableStr Kern
-    extStr <- readTableStr ExtensibleCharacter
-    skipUpTo FontParameter
-    fontParams <- F.getFontParams $ H.characterCodingScheme header
-    let _characters = readCharInfos
-            _smallestCharCode
-            _largestCharCode
-            cInfoStr
-            extStr
-            wStr
-            hStr
-            dStr
-            iStr
-        _ligKerns = readLigKerns ligKernStr kernStr
+    tableParams <- runGetEith "tableParams" T.getTableParams contents
+
+    let runGetEithTable s f tbl = runGetEith s f $ (T.tableToString tableParams) tbl
+
+    header <- runGetEithTable "header" H.getHeader T.Header
+    charInfos <- runGetEithTable "charInfos" (getChunks getCharInfo) T.CharacterInfo
+    widths <- runGetEithTable "widths" (getChunks getFixWord) T.Width
+    heights <- runGetEithTable "heights" (getChunks getFixWord) T.Height
+    depths <- runGetEithTable "depths" (getChunks getFixWord) T.Depth
+    italicCorrs <- runGetEithTable "italicCorrs" (getChunks getFixWord) T.ItalicCorrection
+    ligKernCommands <- runGetEithTable "ligKernCommands" (getChunks getLigKernCommand) T.LigKern
+    kerns <- runGetEithTable "kerns" (getChunks getFixWord) T.Kern
+    recipes <- runGetEithTable "recipes" (getChunks getExtensibleRecipe) T.ExtensibleRecipe
+    params <- runGetEithTable "params" (F.getFontParams (H.characterCodingScheme header)) T.FontParameter
+
+    let chars = readCharacters (T.smallestCharCode tableParams) charInfos recipes widths heights depths italicCorrs
+        ligKernInstrs = readLigKern kerns <$> ligKernCommands
+
     pure TexFont
         { checksum              = H.checksum header
         , designFontSize        = H.designFontSize header
         , characterCodingScheme = H.characterCodingScheme header
         , family                = H.family header
-        , slant                 = F.slant fontParams
-        , spacing               = F.spacing fontParams
-        , spaceStretch          = F.spaceStretch fontParams
-        , spaceShrink           = F.spaceShrink fontParams
-        , xHeight               = F.xHeight fontParams
-        , quad                  = F.quad fontParams
-        , extraSpace            = F.extraSpace fontParams
-        , mathSymbolParams      = F.mathSymbolParams fontParams
-        , mathExtensionParams   = F.mathExtensionParams fontParams
-        , ligKerns              = _ligKerns
-        , characters            = _characters
+        , slant                 = F.slant params
+        , spacing               = F.spacing params
+        , spaceStretch          = F.spaceStretch params
+        , spaceShrink           = F.spaceShrink params
+        , xHeight               = F.xHeight params
+        , quad                  = F.quad params
+        , extraSpace            = F.extraSpace params
+        , extraParams           = F.extraParams params
+        , ligKerns              = ligKernInstrs
+        , characters            = chars
         }

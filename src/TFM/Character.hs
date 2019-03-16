@@ -27,22 +27,19 @@ module TFM.Character where
 -- > 3, 'ext_tag': this character code represents an extensible character, that
 --   is, a character that is built from smaller pieces so that it can be made
 --   arbitrarily large. The pieces are specified in 'exten[remainder]'.
-import           Data.Bits
-import           Data.ByteString
+import           Data.Bits ( shiftR, (.&.) )
+import qualified Data.Binary.Get as B.G
+import           Data.Char ( chr )
+import           Data.List.Index ( indexed )
 import           Data.HashMap.Lazy
 
 import           TFM.Common
+import           TFM.Recipe
 
 data Character = Character
-    { code                 :: Char
-    , width, height, depth :: Rational
+    { width, height, depth :: Rational
     , italicCorrection     :: Rational
     , special              :: Maybe CharacterSpecial
-    } deriving (Show)
-
-data ExtensibleRecipe = ExtensibleRecipe
-    { top, middle, bottom :: Int
-    , repeater            :: Int
     } deriving (Show)
 
 data CharacterSpecial
@@ -51,6 +48,59 @@ data CharacterSpecial
     | NextLargerChar Int
     deriving (Show)
 
+character
+    :: [ExtensibleRecipe]
+    -> [Rational]
+    -> [Rational]
+    -> [Rational]
+    -> [Rational]
+    -> CharInfo
+    -> Character
+character recipes widths heights depths italicCorrs charInfo =
+    let
+        _remainder = remainder charInfo
+        _width  = getDim widths $ widthIdx charInfo
+        _height = getDim heights $ heightIdx charInfo
+        _depth  = getDim depths $ depthIdx charInfo
+        _italicCorrection = getDim italicCorrs $ italicIdx charInfo
+        -- If the character is special, get its particular extra attributes.
+        _special = case tag charInfo of
+            Plain      -> Nothing
+            LigKern    -> Just $ LigKernIndex _remainder
+            Chain      -> Just $ NextLargerChar _remainder
+            Extensible -> Just $ ExtensibleRecipeSpecial $ recipes !! _remainder
+    in  Character
+        { width            = _width
+        , height           = _height
+        , depth            = _depth
+        , italicCorrection = _italicCorrection
+        , special          = _special
+        }
+  where
+    -- Get a dimension from some dimension table, at some index
+    getDim dims i
+        | i == 0 = 0
+        | otherwise = dims !! i
+
+readCharacters
+    :: Int
+    -> [CharInfo]
+    -> [ExtensibleRecipe]
+    -> [Rational] -> [Rational] -> [Rational] -> [Rational]
+    -> HashMap Char Character
+readCharacters _minCode charInfos recipes widths heights depths italicCorrs =
+    let charList = character recipes widths heights depths italicCorrs <$> charInfos
+    in  fromList $ fmap (\(idx, c) -> (chr $ idx + _minCode, c)) $ indexed charList
+
+data CharInfo = CharInfo
+    { widthIdx
+    , heightIdx
+    , depthIdx
+    , italicIdx :: Int
+    , tag :: Tag
+    , remainder :: Int
+    } deriving Show
+
 data Tag
     = Plain
     | LigKern
@@ -58,73 +108,17 @@ data Tag
     | Extensible
     deriving (Enum, Ord, Eq, Show)
 
-readCharInfo
-    :: Int
-    -> ByteString
-    -> ByteString
-    -> ByteString
-    -> ByteString
-    -> ByteString
-    -> ByteString
-    -> Int
-    -> Character
-readCharInfo _smallestCharCode charInfoStr extStr wStr hStr dStr iStr _code =
-    let charIdx = _code - _smallestCharCode
-        (widthIdx, heightDepthByte, italicTagByte, remainder) =
-            runGetAt get4Word8Ints charInfoStr charIdx
-
-        heightIdx = heightDepthByte `shiftR` 4
-        depthIdx = heightDepthByte .&. 0xF
-        italicIdx = italicTagByte `shiftR` 6
-
-        tag = italicTagByte .&. 0x3
-
-        -- Get a dimension from some dimension table, at some index
-        getDim str i
-          | i == 0 = 0
-          | otherwise = runGetAt getFixWord str i
-
-        _width  = getDim wStr widthIdx
-        _height = getDim hStr heightIdx
-        _depth  = getDim dStr depthIdx
-
-        _italicCorrection = getDim iStr italicIdx
-        -- If the character is special, get its particular extra attributes.
-        _special =
-            case toEnum tag of
-                Plain      -> Nothing
-                LigKern    -> Just $ LigKernIndex remainder
-                Chain      -> Just $ NextLargerChar remainder
-                Extensible ->
-                    let (_top, _middle, _bottom, _repeater) =
-                          runGetAt get4Word8Ints extStr remainder
-                    in Just $ ExtensibleRecipeSpecial ExtensibleRecipe
-                        { top = _top
-                        , middle = _middle
-                        , bottom = _bottom
-                        , repeater = _repeater
-                        }
-    in  Character
-            { code             = toEnum _code
-            , width            = _width
-            , height           = _height
-            , depth            = _depth
-            , italicCorrection = _italicCorrection
-            , special          = _special
-            }
-
-readCharInfos
-    :: Int
-    -> Int
-    -> ByteString
-    -> ByteString
-    -> ByteString
-    -> ByteString
-    -> ByteString
-    -> ByteString
-    -> HashMap Char Character
-readCharInfos _smallestCharCode _largestCharCode cInfoStr extStr wStr hStr dStr iStr =
-    let charList = fmap
-            (readCharInfo _smallestCharCode cInfoStr extStr wStr hStr dStr iStr)
-            [_smallestCharCode .. _largestCharCode]
-    in  fromList $ (\c@Character {code = i} -> (i, c)) <$> charList
+getCharInfo :: B.G.Get CharInfo
+getCharInfo =
+    do
+    _widthIdx <- getWord8Int
+    heightDepthByte <- getWord8Int
+    italicTagByte <- getWord8Int
+    _remainder <- getWord8Int
+    pure $ CharInfo
+        { widthIdx = _widthIdx
+        , heightIdx = heightDepthByte `shiftR` 4
+        , depthIdx = heightDepthByte .&. 0xF
+        , italicIdx = italicTagByte `shiftR` 6
+        , tag = toEnum $ italicTagByte .&. 0x3
+        , remainder = _remainder }

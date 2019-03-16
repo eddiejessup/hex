@@ -1,27 +1,11 @@
+{-# LANGUAGE MultiWayIf #-}
+
 module TFM.FontParams where
 
--- Define some structures containing core parameters of the font, and some
-import           Control.Monad
-import           Data.Binary
-import           Data.ByteString         hiding ( elem
-                                                , pack
-                                                )
-import           Data.ByteString.Char8          ( pack )
+import qualified Data.Binary.Get as B.G
 
 import           TFM.Common
 
--- Character coding schemes that should have the corresponding extra sets of
--- font parameters.
-mathSymbolSchemes :: [ByteString]
-mathSymbolSchemes = pack <$> ["TeX math symbols"]
-
-mathExtensionSchemes :: [ByteString]
-mathExtensionSchemes =
-  pack <$> [ "TeX math extension"
-           , "euler substitutions only"
-           ]
-
--- optional extra sets of parameters.
 data FontParams = FontParams
     { slant
     , spacing
@@ -29,10 +13,14 @@ data FontParams = FontParams
     , spaceShrink
     , xHeight
     , quad
-    , extraSpace          :: Rational
-    , mathSymbolParams    :: Maybe MathSymbolParams
-    , mathExtensionParams :: Maybe MathExtensionParams
+    , extraSpace :: Rational
+    , extraParams :: Maybe ExtraFontParams
     } deriving (Show)
+
+data ExtraFontParams
+    = MathSymbolFontParams MathSymbolParams
+    | MathExtensionFontParams MathExtensionParams
+     deriving (Show)
 
 data MathSymbolParams = MathSymbolParams
     { num1
@@ -53,65 +41,55 @@ data MathSymbolParams = MathSymbolParams
     } deriving (Show)
 
 data MathExtensionParams = MathExtensionParams
-    { defaultRuleThickness :: Rational
-    , bigOpSpacing         :: [Rational]
+    { defaultRuleThickness
+    , bigOpSpacing1
+    , bigOpSpacing2
+    , bigOpSpacing3
+    , bigOpSpacing4
+    , bigOpSpacing5 :: Rational
     } deriving (Show)
 
-readMathSymbolParams :: ByteString -> Get (Maybe MathSymbolParams)
-readMathSymbolParams scheme =
-    if scheme `elem` mathSymbolSchemes
-        then do
-            [_num1, _num2, _num3, _denom1, _denom2, _sup1, _sup2, _sup3, _sub1, _sub2, _supdrop, _subdrop, _delim1, _delim2, _axisHeight] <- replicateM 15 getFixWord
-            pure $ Just MathSymbolParams
-                { num1       = _num1
-                , num2       = _num2
-                , num3       = _num3
-                , denom1     = _denom1
-                , denom2     = _denom2
-                , sup1       = _sup1
-                , sup2       = _sup2
-                , sup3       = _sup3
-                , sub1       = _sub1
-                , sub2       = _sub2
-                , supdrop    = _supdrop
-                , subdrop    = _subdrop
-                , delim1     = _delim1
-                , delim2     = _delim2
-                , axisHeight = _axisHeight
-                }
-        else
-            pure Nothing
+readMathSymbolParams :: B.G.Get MathSymbolParams
+readMathSymbolParams = MathSymbolParams
+    <$> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
 
-readMathExtensionParams :: ByteString -> Get (Maybe MathExtensionParams)
-readMathExtensionParams scheme
-    | scheme `elem` mathExtensionSchemes =
-        do
-        _defaultRuleThickness <- getFixWord
-        _bigOpSpacing <- replicateM 5 getFixWord
-        pure $ Just MathExtensionParams
-            { defaultRuleThickness = _defaultRuleThickness
-            , bigOpSpacing         = _bigOpSpacing
-            }
-    | otherwise =
-        pure Nothing
+readMathExtensionParams :: B.G.Get MathExtensionParams
+readMathExtensionParams = MathExtensionParams
+    <$> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
+    <*> getFixWord
 
-getFontParams :: ByteString -> Get FontParams
+getFontParams :: Maybe String -> B.G.Get FontParams
 getFontParams scheme =
-    do
-    when (scheme == pack "TeX math italic") $
-        fail "Unsupported character coding scheme"
-    [_slant, _spacing, _spaceStretch, _spaceShrink, _xHeight, _quad, _extraSpace] <- replicateM 7 getFixWord
-    -- Read parameters relating to math symbols and extensions, if present.
-    _mathSymbolParams <- readMathSymbolParams scheme
-    _mathExtensionParams <- readMathExtensionParams scheme
-    pure FontParams
-        { slant               = _slant
-        , spacing             = _spacing
-        , spaceStretch        = _spaceStretch
-        , spaceShrink         = _spaceShrink
-        , xHeight             = _xHeight
-        , quad                = _quad
-        , extraSpace          = _extraSpace
-        , mathSymbolParams    = _mathSymbolParams
-        , mathExtensionParams = _mathExtensionParams
-        }
+    FontParams
+        <$> (getFixWord)
+        <*> (getFixWord)
+        <*> (getFixWord)
+        <*> (getFixWord)
+        <*> (getFixWord)
+        <*> (getFixWord)
+        <*> (getFixWord)
+        <*> case scheme of
+            Just "TeX math symbols" ->
+                (Just . MathSymbolFontParams) <$> readMathSymbolParams
+            Just "TeX math extension" ->
+                (Just . MathExtensionFontParams) <$> readMathExtensionParams
+            _ ->
+                pure Nothing

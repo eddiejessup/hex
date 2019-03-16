@@ -1,47 +1,46 @@
 module TFM.Common where
 
-import           Prelude                 hiding ( drop )
-
--- Convert a quantity in units of words, into the equivalent in bytes.
-import           Data.Binary
-import           Data.Binary.Get
-import           Data.ByteString
-import qualified Data.ByteString.Lazy          as BSL
+import           Control.Monad                  ( when )
+import           Data.Binary.Get                ( Get)
+import qualified Data.Binary.Get               as B.G
+import qualified Data.ByteString               as BS
+import           Data.Char                      ( chr )
 import           Data.Ratio                     ( (%) )
 
 -- The increment by which real numbers can be specified.
 fixWordScale :: Rational
 fixWordScale = 1 % (2 ^ (20 :: Integer))
 
+-- Convert a quantity in units of words, into the equivalent in bytes.
 wordToByte :: (Num a) => a -> a
 wordToByte = (* 4)
 
 -- Read a floating point value.
 getFixWord :: Get Rational
-getFixWord = (* fixWordScale) . fromIntegral <$> getWord32be
+getFixWord = (* fixWordScale) . fromIntegral <$> getWord32beInt
 
 -- Read integers encoded as big-endian byte sequences.
 getWord8Int, getWord16beInt, getWord32beInt :: Get Int
-getWord8Int = fromIntegral <$> getWord8
-getWord16beInt = fromIntegral <$> getWord16be
-getWord32beInt = fromIntegral <$> getWord32be
+getWord8Int = fromIntegral <$> B.G.getWord8
+getWord16beInt = fromIntegral <$> B.G.getWord16be
+getWord32beInt = fromIntegral <$> B.G.getWord32be
+
+getChunks :: Get v -> Get [v]
+getChunks f =
+    B.G.isEmpty >>= \b -> if b
+        then pure []
+        else
+            do
+            el <- f
+            (el:) <$> getChunks f
 
 -- Read a string that's encoded as an integer, followed by that number of
 -- characters.
-getBCPL :: Get ByteString
-getBCPL = getWord8Int >>= getByteString
-
-get4Word8Ints :: Get (Int, Int, Int, Int)
-get4Word8Ints =
+getBCPL :: Int -> Get String
+getBCPL maxLen =
     do
-    b1 <- getWord8Int
-    b2 <- getWord8Int
-    b3 <- getWord8Int
-    b4 <- getWord8Int
-    pure (b1, b2, b3, b4)
-
-runGetStrict :: Get a -> ByteString -> a
-runGetStrict a s = runGet a $ BSL.fromStrict s
-
-runGetAt :: Get a -> ByteString -> Int -> a
-runGetAt a s iWords = runGetStrict a $ drop (wordToByte iWords) s
+    n <- getWord8Int
+    when (n > (maxLen - 1)) $ fail $ "BCPL string length too large: " ++ show n
+    s <- B.G.getByteString n
+    B.G.skip $ maxLen - 1 - n
+    pure $ (chr . fromIntegral) <$> (BS.unpack s)

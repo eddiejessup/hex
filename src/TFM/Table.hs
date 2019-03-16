@@ -1,7 +1,11 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
+
 module TFM.Table where
 
 import           Control.Monad
-import           Data.Binary
+import           Data.Binary.Get ( Get, getByteString )
+import           Data.ByteString ( ByteString )
 
 import           TFM.Common
 
@@ -12,20 +16,6 @@ headerDataLengthWordsMin = 18
 headerPointerWords = 6
 headerPointerBytes = wordToByte headerPointerWords
 
--- From a map from each table to their length, infer a particular table's
--- position.
-tablePosBytes :: (Table -> Int) -> Table -> Int
--- Base case: The header starts at a fixed position.
-tablePosBytes _ Header = headerPointerBytes
--- Otherwise,
-tablePosBytes tblLengthsWords tbl =
-    let prevTbl = pred tbl
-        prevPos = tablePosBytes tblLengthsWords prevTbl
-        prevLen = wordToByte $ tblLengthsWords prevTbl
-    -- The table's position is the previous table's position, plus that
-    -- table's length.
-    in  prevPos + prevLen
-
 -- Sections within the file containing different bits of information.
 data Table
     = Header
@@ -34,18 +24,26 @@ data Table
     | Height
     | Depth
     | ItalicCorrection
-    | LigKerns
+    | LigKern
     | Kern
-    | ExtensibleCharacter
+    | ExtensibleRecipe
     | FontParameter
     deriving (Show, Eq, Enum, Ord, Bounded)
 
-getTableParams :: Get (Table -> Int, Int, Int)
+data TableParams = TableParams
+    { tableToString :: Table -> ByteString
+    , smallestCharCode, largestCharCode :: Int
+    } deriving Show
+
+instance Show (Table -> ByteString) where
+    show _ = "Table -> ByteString"
+
+getTableParams :: Get TableParams
 getTableParams
    = do
     -- Read and set table lengths.
-    _fileLengthWords <- getWord16beInt
-    _headerDataLengthWords <- max headerDataLengthWordsMin <$> getWord16beInt
+    fileLengthWords <- getWord16beInt
+    headerDataLengthWords <- max headerDataLengthWordsMin <$> getWord16beInt
     _smallestCharCode <- getWord16beInt
     _largestCharCode <- getWord16beInt
     -- Read the lengths of all tables after and including the 'Width' table.
@@ -55,23 +53,50 @@ getTableParams
     italicCorrectionDataLengthWords <- getWord16beInt
     ligKernDataLengthWords <- getWord16beInt
     kernDataLengthWords <- getWord16beInt
-    extensibleCharDataLengthWords <- getWord16beInt
+    extensibleRecipeDataLengthWords <- getWord16beInt
     fontParamDataLengthWords <- getWord16beInt
-    let tableToLength Header = _headerDataLengthWords
-        tableToLength CharacterInfo = _largestCharCode - _smallestCharCode + 1
-        tableToLength Width = widthDataLengthWords
-        tableToLength Height = heightDataLengthWords
-        tableToLength Depth = depthDataLengthWords
-        tableToLength ItalicCorrection = italicCorrectionDataLengthWords
-        tableToLength LigKerns = ligKernDataLengthWords
-        tableToLength Kern = kernDataLengthWords
-        tableToLength ExtensibleCharacter = extensibleCharDataLengthWords
-        tableToLength FontParameter = fontParamDataLengthWords
+    let characterInfoDataLengthWords = _largestCharCode - _smallestCharCode + 1
         inferredFileLengthWords =
-            headerPointerWords + sum (tableToLength <$> [minBound ..])
-    when (_fileLengthWords /= inferredFileLengthWords)
+            headerPointerWords
+            + headerDataLengthWords
+            + characterInfoDataLengthWords
+            + widthDataLengthWords
+            + heightDataLengthWords
+            + depthDataLengthWords
+            + italicCorrectionDataLengthWords
+            + ligKernDataLengthWords
+            + kernDataLengthWords
+            + extensibleRecipeDataLengthWords
+            + fontParamDataLengthWords
+    when (fileLengthWords /= inferredFileLengthWords)
         $ fail $ "Incorrect table lengths: read "
-            ++ show _fileLengthWords
+            ++ show fileLengthWords
             ++ " is not equal to inferred "
-            ++ show inferredFileLengthWords
-    pure (tableToLength, _smallestCharCode, _largestCharCode)
+            ++ show (headerDataLengthWords, (_largestCharCode, _smallestCharCode), widthDataLengthWords, heightDataLengthWords, depthDataLengthWords, italicCorrectionDataLengthWords, ligKernDataLengthWords, kernDataLengthWords, extensibleRecipeDataLengthWords, fontParamDataLengthWords)
+
+    let getByteStringWords = getByteString . wordToByte
+
+    headerStr <- getByteStringWords headerDataLengthWords
+    characterInfoStr <- getByteStringWords characterInfoDataLengthWords
+    widthStr <- getByteStringWords widthDataLengthWords
+    heightStr <- getByteStringWords heightDataLengthWords
+    depthStr <- getByteStringWords depthDataLengthWords
+    italicCorrectionStr <- getByteStringWords italicCorrectionDataLengthWords
+    ligKernsStr <- getByteStringWords ligKernDataLengthWords
+    kernStr <- getByteStringWords kernDataLengthWords
+    extensibleRecipeStr <- getByteStringWords extensibleRecipeDataLengthWords
+    fontParameterStr <- getByteStringWords fontParamDataLengthWords
+
+    let _tableToString = \case
+            Header           -> headerStr
+            CharacterInfo    -> characterInfoStr
+            Width            -> widthStr
+            Height           -> heightStr
+            Depth            -> depthStr
+            ItalicCorrection -> italicCorrectionStr
+            LigKern          -> ligKernsStr
+            Kern             -> kernStr
+            ExtensibleRecipe -> extensibleRecipeStr
+            FontParameter    -> fontParameterStr
+
+    pure $ TableParams _tableToString _smallestCharCode _largestCharCode

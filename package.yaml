@@ -21,6 +21,7 @@ dependencies:
 - extra
 - filepath
 - hashable
+- ilist
 - megaparsec
 - MissingH
 - mtl
