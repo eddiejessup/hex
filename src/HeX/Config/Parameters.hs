@@ -1,6 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TupleSections #-}
-
 module HeX.Config.Parameters where
 
 import qualified Data.HashMap.Strict           as HMap

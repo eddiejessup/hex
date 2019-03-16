@@ -1,8 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ViewPatterns #-}
 
 module HeX.Parse.Inhibited where
 
@@ -116,14 +113,13 @@ newtype MacroArgument = MacroArgument [Lex.Token]
 nrExpressions :: (a -> Ordering) -> [a] -> Maybe (Int, Int)
 nrExpressions f = foldM next (0, 0)
   where
-    next v@(dpth, nrExprs) (f -> cmp) =
-        case cmp of
+    next v@(dpth, nrExprs) x =
+        case f x of
             EQ -> Just v
             GT -> Just (succ dpth, nrExprs)
-            LT
-                | dpth < 1  -> Nothing
-                | dpth == 1 -> Just (pred dpth, succ nrExprs)
-                | otherwise  -> Just (pred dpth, nrExprs)
+            LT |  dpth < 1  -> Nothing
+               |  dpth == 1 -> Just (pred dpth, succ nrExprs)
+               |  otherwise  -> Just (pred dpth, nrExprs)
 
 hasValidGrouping :: (a -> Ordering) -> [a] -> Bool
 hasValidGrouping f xs =

@@ -66,3 +66,23 @@ tests:
     dependencies:
     - hex
     - hspec
+
+default-extensions:
+- EmptyCase
+- FlexibleContexts
+- FlexibleInstances
+- InstanceSigs
+- MultiParamTypeClasses
+- LambdaCase
+- MultiWayIf
+- NamedFieldPuns
+- TupleSections
+- DeriveFoldable
+- DeriveFunctor
+- DeriveGeneric
+- DeriveLift
+- DeriveTraversable
+- DerivingStrategies
+- GeneralizedNewtypeDeriving
+- StandaloneDeriving
+- ScopedTypeVariables

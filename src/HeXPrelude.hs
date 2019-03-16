@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module HeXPrelude
   ( Readable(..)
   , liftMaybe

@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiWayIf #-}
-
 module TFM.FontParams where
 
 import qualified Data.Binary.Get as B.G

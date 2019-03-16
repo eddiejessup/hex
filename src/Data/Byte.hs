@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Data.Byte where
 
 data Signedness = Signed | Unsigned

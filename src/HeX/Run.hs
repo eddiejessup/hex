@@ -1,6 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE FlexibleContexts #-}
-
 module HeX.Run where
 
 import           Prelude                 hiding ( writeFile )

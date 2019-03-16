@@ -1,5 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module HeX.BreakList.Glue where
 
 import           HeXPrelude

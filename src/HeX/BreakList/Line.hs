@@ -1,8 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ViewPatterns #-}
 
 module HeX.BreakList.Line where
 
@@ -132,52 +129,54 @@ appendEntry
     -> BreakingState
     -> ElemAdj
     -> BreakingState
-appendEntry dw tol lp BreakingState{..} x@(toBreakItem -> Just br) =
-    let
-        -- Extend the accumulating edges with the normal-items 'chunk',
-        -- accumulated since seeing the last break item.
-        inEdges = inEdgeConcat chunk <$> accEdges
-        -- Here, just consider the in-edges 'unfinalised', i.e. without each
-        -- edge's lines stripped to the form used in an actual break. This is
-        -- because the edges may be passed on to later calls, in such form, to
-        -- build up longer lines.
-        promisingInEdges = filter (isPromising dw) inEdges
-        -- 'finalise' the promising edges to get 'candidate' edges to actually
-        -- break.
-        candidateBrokenDInEdges = withStatus dw . finaliseInEdge x <$> promisingInEdges
-    in
-        -- Filter the candidates to those we could actually accept.
-        case toOnlyAcceptables tol lp br candidateBrokenDInEdges of
-            -- If we can't break at this point acceptably somehow, just treat
-            -- the break item like a non-break item.
-            [] ->
-                BreakingState promisingInEdges nodeToBestRoute [x]
-            -- If some edges are acceptable, explore this fruitful avenue.
-            acceptableDInEdges ->
-                let
-                    -- For later calls, build up the still-promising edges with
-                    -- the break item added.
-                    grownPromisingInEdges = inEdgeCons x <$> promisingInEdges
-                    -- Add an edge representing the chance to break here.
-                    newInEdge = newEdge $ length nodeToBestRoute
-                    -- Add that new edge to the existing, now-grown, edges.
-                    newAccEdges = newInEdge : grownPromisingInEdges
-                    -- Find the best way to reach this break-point, given the
-                    -- acceptable previous lines and the known best ways to
-                    -- reach those lines.
-                    newRoute = shortestRoute acceptableDInEdges nodeToBestRoute
-                in
-                    -- The new state should contain:
-                    -- - The ongoing edges that are still promising
-                    -- - The optimal route to reach this break, appended to the list of
-                    --   node best-routes.
-                    -- - A new empty chunk, to accumulate the contents we see until the
-                    --   next break.
-                    BreakingState newAccEdges (newRoute : nodeToBestRoute) []
--- If we see a non-break item, the new state is the same as the old, but with
--- the item appended to the accumulated items 'chunk'.
-appendEntry _ _ _ st@BreakingState{..} x =
-    st{ chunk = x : chunk }
+appendEntry dw tol lp st@BreakingState{..} x =
+    case toBreakItem x of
+        -- If we see a non-break item, the new state is the same as the old,
+        -- but with the item appended to the accumulated items 'chunk'.
+        Nothing ->
+            st{ chunk = x : chunk }
+        Just br ->
+            let
+                -- Extend the accumulating edges with the normal-items 'chunk',
+                -- accumulated since seeing the last break item.
+                inEdges = inEdgeConcat chunk <$> accEdges
+                -- Here, just consider the in-edges 'unfinalised', i.e. without each
+                -- edge's lines stripped to the form used in an actual break. This is
+                -- because the edges may be passed on to later calls, in such form, to
+                -- build up longer lines.
+                promisingInEdges = filter (isPromising dw) inEdges
+                -- 'finalise' the promising edges to get 'candidate' edges to actually
+                -- break.
+                candidateBrokenDInEdges = withStatus dw . finaliseInEdge x <$> promisingInEdges
+            in
+                -- Filter the candidates to those we could actually accept.
+                case toOnlyAcceptables tol lp br candidateBrokenDInEdges of
+                    -- If we can't break at this point acceptably somehow, just treat
+                    -- the break item like a non-break item.
+                    [] ->
+                        BreakingState promisingInEdges nodeToBestRoute [x]
+                    -- If some edges are acceptable, explore this fruitful avenue.
+                    acceptableDInEdges ->
+                        let
+                            -- For later calls, build up the still-promising edges with
+                            -- the break item added.
+                            grownPromisingInEdges = inEdgeCons x <$> promisingInEdges
+                            -- Add an edge representing the chance to break here.
+                            newInEdge = newEdge $ length nodeToBestRoute
+                            -- Add that new edge to the existing, now-grown, edges.
+                            newAccEdges = newInEdge : grownPromisingInEdges
+                            -- Find the best way to reach this break-point, given the
+                            -- acceptable previous lines and the known best ways to
+                            -- reach those lines.
+                            newRoute = shortestRoute acceptableDInEdges nodeToBestRoute
+                        in
+                            -- The new state should contain:
+                            -- - The ongoing edges that are still promising
+                            -- - The optimal route to reach this break, appended to the list of
+                            --   node best-routes.
+                            -- - A new empty chunk, to accumulate the contents we see until the
+                            --   next break.
+                            BreakingState newAccEdges (newRoute : nodeToBestRoute) []
 
 shortestRoute :: [(InEdge, GlueStatus, Demerit)] -> [Route] -> Route
 shortestRoute es rs = minimumDef (Route [] (Demerit 0)) (bestSubroute <$> es)

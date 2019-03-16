@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module TFM.LigKern where
 
 import qualified Data.Binary.Get as B.G

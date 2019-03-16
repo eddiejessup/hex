@@ -1,6 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module HeX.Parse.Token where
 
 import           GHC.Generics                   ( Generic )
