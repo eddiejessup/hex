@@ -1,4 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Inhibited where
@@ -18,6 +17,9 @@ import           Safe                           ( lastMay
 import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
 
+import           HeX.Lex                        ( CharCat(..)
+                                                , Token(..)
+                                                )
 import qualified HeX.Lex                       as Lex
 import           HeX.Config                     ( Config )
 import           HeX.Evaluate
@@ -171,7 +173,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
         -- Skip blank tokens (assumed to mean spaces).
         skipManySatisfied (primTokHasCategory Lex.Space)
         unsafeAnySingleLex >>= \case
-            t@(Lex.CharCatToken Lex.CharCat{cat = Lex.BeginGroup}) ->
+            t@(CharCatToken CharCat{cat = Lex.BeginGroup}) ->
                 do
                 (BalancedText ts) <- unsafeParseBalancedText Include
                 pure $ t:ts
@@ -220,7 +222,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
 unsafeParseCSName :: InhibitableStream s => SimpParser s Lex.ControlSequenceLike
 unsafeParseCSName = handleLex tokToCSLike
   where
-    tokToCSLike (Lex.CharCatToken Lex.CharCat{cat = Lex.Active, char = c}) =
+    tokToCSLike (CharCatToken CharCat{cat = Lex.Active, char = c}) =
         Just $ Lex.ActiveCharacter c
     tokToCSLike (Lex.ControlSequenceToken cs) =
         Just $ Lex.ControlSequenceProper cs
@@ -275,7 +277,7 @@ maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
             -- starting from the successor of this digit.
             _    -> maybeParseParametersFrom (succ dig)
 
-    matchesDigit (Lex.CharCatToken Lex.CharCat {char=chr, cat=cat})
+    matchesDigit (CharCatToken CharCat {char=chr, cat=cat})
         = (cat `elem` [Lex.Letter, Lex.Other]) && (chr == digitToChar dig)
     matchesDigit _
         = False
@@ -358,7 +360,7 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
         unsafeAnySingleLex >>= \case
             -- If we see a '#', parse the parameter number and return a token
             -- representing the call.
-            (Lex.CharCatToken Lex.CharCat{cat = Lex.Parameter}) -> do
+            (CharCatToken CharCat{cat = Lex.Parameter}) -> do
                 paramDig <- handleLex handleParamNr
                 pure (MacroTextParamToken paramDig, EQ)
             -- Otherwise, just return the ordinary lex token.
@@ -366,7 +368,7 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
                 pure (MacroTextLexToken t, tokToChange t)
 
     -- We are only happy if the '#' is followed by a decimal digit.
-    handleParamNr (Lex.CharCatToken Lex.CharCat{char=chr, cat=cat})
+    handleParamNr (CharCatToken CharCat{char=chr, cat=cat})
         | cat `elem` [Lex.Letter, Lex.Other] = charToDigit chr
         | otherwise = Nothing
     handleParamNr _ = Nothing
@@ -376,7 +378,7 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
 unsafeParseCharLike :: InhibitableStream s => SimpParser s Int
 unsafeParseCharLike = ord <$> handleLex tokToCharLike
   where
-    tokToCharLike (Lex.CharCatToken Lex.CharCat{char = c}) = Just c
+    tokToCharLike (CharCatToken CharCat{char = c}) = Just c
     tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence [c])) = Just c
     tokToCharLike _ = Nothing
 

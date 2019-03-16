@@ -1,5 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-
 module HeX.Evaluate where
 
 import           Control.Monad.Except           ( MonadError
@@ -230,7 +228,7 @@ evaluateFlex = \case
     Just (AST.FiniteFlex ln) ->
         do
         eLn <- evaluateLength ln
-        pure BL.GlueFlex{factor = fromIntegral eLn, order = 0}
+        pure BL.GlueFlex { BL.factor = fromIntegral eLn, BL.order = 0 }
     Just (AST.FilFlex ln) -> evaluateFilLength ln
     Nothing -> pure BL.noFlex
 
@@ -238,7 +236,7 @@ evaluateFilLength :: (MonadReader Config m, MonadError String m) => AST.FilLengt
 evaluateFilLength (AST.FilLength (T.Sign isPos) f ord) =
     do
     eF <- evaluateFactor f
-    pure BL.GlueFlex{factor = if isPos then eF else -eF, order = ord}
+    pure BL.GlueFlex { BL.factor = if isPos then eF else -eF, BL.order = ord }
 
 evaluateInternalGlue :: (MonadReader Config m, MonadError String m) => AST.InternalGlue -> m BL.Glue
 evaluateInternalGlue = \case
@@ -268,7 +266,7 @@ evaluateMathFlex = \case
     Just (AST.FiniteMathFlex ln) ->
         do
         eLn <- evaluateMathLength ln
-        pure BL.GlueFlex{factor = fromIntegral eLn, order = 0}
+        pure BL.GlueFlex { BL.factor = fromIntegral eLn, BL.order = 0 }
     Just (AST.FilMathFlex ln) -> evaluateFilLength ln
     Nothing -> pure BL.noFlex
 

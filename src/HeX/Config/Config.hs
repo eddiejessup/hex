@@ -1,6 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module HeX.Config.Config where
 
 import           Control.Monad.IO.Class         ( MonadIO )
@@ -184,7 +181,7 @@ readFontInfo fontPath =
     fontMetrics <- liftIO $ TFM.readTFMFancy fontPath
     hyphenChar <- asks $ lookupIntegerParameter DefaultHyphenChar
     skewChar <- asks $ lookupIntegerParameter DefaultSkewChar
-    pure FontInfo{..}
+    pure FontInfo { fontMetrics, hyphenChar, skewChar }
 
 lookupFontInfo :: (MonadReader Config m, MonadError String m) => Int -> m FontInfo
 lookupFontInfo fNr =
@@ -426,8 +423,8 @@ setSpecialLength p v conf = conf{specialLengths=HMap.insert p v $ specialLengths
 parIndentBox :: Config -> BL.BreakableHListElem
 parIndentBox conf =
     BL.HVListElem $ BL.VListBaseElem $ B.ElemBox $ B.Box
-        { contents      = B.HBoxContents []
-        , desiredLength = B.To . (lookupLengthParameter ParIndent) $ conf
+        { B.contents      = B.HBoxContents []
+        , B.desiredLength = B.To . (lookupLengthParameter ParIndent) $ conf
         }
 
 -- Registers.

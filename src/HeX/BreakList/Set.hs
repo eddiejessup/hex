@@ -1,6 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module HeX.BreakList.Set where
 
 import           Data.Maybe                     ( mapMaybe )

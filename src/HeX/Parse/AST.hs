@@ -1,5 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-
 module HeX.Parse.AST where
 
 import           Path                           ( File

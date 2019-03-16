@@ -1,5 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Stream where
@@ -407,8 +405,8 @@ instance Eq ExpandedStream where
 instance InhibitableStream ExpandedStream where
     setExpansion mode = P.updateParserState $ setStateExpansion
       where
-        setStateExpansion est@P.State{stateInput=es} =
-          est{P.stateInput = es{expansionMode = mode}}
+        setStateExpansion est@P.State { P.stateInput = es } =
+          est { P.stateInput = es {expansionMode = mode } }
 
     getConfig = config
 

@@ -86,3 +86,4 @@ default-extensions:
 - GeneralizedNewtypeDeriving
 - StandaloneDeriving
 - ScopedTypeVariables
+- NamedFieldPuns

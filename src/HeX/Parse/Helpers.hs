@@ -1,4 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Helpers where
@@ -23,18 +22,18 @@ freshSourcePos = P.initialPos "elmo_source"
 
 freshPosState :: s -> P.PosState s
 freshPosState stream = P.PosState
-    { pstateInput = stream
-    , pstateOffset = 0
-    , pstateSourcePos = freshSourcePos
-    , pstateTabWidth = P.mkPos 4
-    , pstateLinePrefix = ">!> "
+    { P.pstateInput = stream
+    , P.pstateOffset = 0
+    , P.pstateSourcePos = freshSourcePos
+    , P.pstateTabWidth = P.mkPos 4
+    , P.pstateLinePrefix = ">!> "
     }
 
 freshState :: s -> P.State s
 freshState stream = P.State
-    { stateInput = stream
-    , stateOffset = 0
-    , statePosState = freshPosState stream
+    { P.stateInput = stream
+    , P.stateOffset = 0
+    , P.statePosState = freshPosState stream
     }
 
 easyRunParser :: SimpParser s a -> s -> (P.State s, Either (ParseErrorBundle s) a)
@@ -79,25 +78,25 @@ skipSatisfiedChunk (x:xs) = skipSatisfiedEquals x >> skipSatisfiedChunk xs
 
 copyState :: P.State s -> s' -> P.State s'
 copyState state tgtStream =
-    let P.State { stateInput = _
-                , stateOffset = offset
-                , statePosState = posState
+    let P.State { P.stateInput = _
+                , P.stateOffset = offset
+                , P.statePosState = posState
                 } = state
-    in  P.State { stateInput = tgtStream
-                , stateOffset = offset
-                , statePosState = copyPosState posState
+    in  P.State { P.stateInput = tgtStream
+                , P.stateOffset = offset
+                , P.statePosState = copyPosState posState
                 }
   where
     copyPosState posState =
-        let P.PosState { pstateInput = _
-                       , pstateOffset = offset
-                       , pstateSourcePos = sourcePos
-                       , pstateTabWidth = tabWidth
-                       , pstateLinePrefix = linePrefix
+        let P.PosState { P.pstateInput = _
+                       , P.pstateOffset = offset
+                       , P.pstateSourcePos = sourcePos
+                       , P.pstateTabWidth = tabWidth
+                       , P.pstateLinePrefix = linePrefix
                        } = posState
-        in  P.PosState { pstateInput = tgtStream
-                       , pstateOffset = offset
-                       , pstateSourcePos = sourcePos
-                       , pstateTabWidth = tabWidth
-                       , pstateLinePrefix = linePrefix
+        in  P.PosState { P.pstateInput = tgtStream
+                       , P.pstateOffset = offset
+                       , P.pstateSourcePos = sourcePos
+                       , P.pstateTabWidth = tabWidth
+                       , P.pstateLinePrefix = linePrefix
                        }

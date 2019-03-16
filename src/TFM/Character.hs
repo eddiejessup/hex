@@ -1,5 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-
 module TFM.Character where
 
 -- The character info array contains, for each character, six fields packed

@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module HeX.BreakList.Elem where
 
 import           Data.Adjacent
@@ -102,14 +100,14 @@ condenseHList :: [BreakableHListElem] -> [CondensedHListElem]
 condenseHList =
     foldr append []
   where
-    append (HListHBaseElem (ElemCharacter Character {..})) [] =
+    append (HListHBaseElem (ElemCharacter Character { char })) [] =
         [Sentence [char]]
     append e [] =
         [NonSentence e]
     append e r@(x:xs) = case (x, e) of
-        (Sentence cs, HListHBaseElem (ElemCharacter Character {..})) ->
+        (Sentence cs, HListHBaseElem (ElemCharacter Character { char })) ->
             Sentence (char : cs) : xs
-        (_, HListHBaseElem (ElemCharacter Character {..})) ->
+        (_, HListHBaseElem (ElemCharacter Character { char })) ->
             Sentence [char] : r
         _ ->
             NonSentence e : r

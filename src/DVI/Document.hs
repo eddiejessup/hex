@@ -1,6 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module DVI.Document where
 
 import           Control.Monad
@@ -9,48 +6,51 @@ import           Safe                           ( lastDef )
 
 import           HeX.Type
 
-import           TFM
+import qualified TFM
 
 import           DVI.Operation                  ( Operation(DefineFontNr) )
 import           DVI.Encode                     ( encLength )
 import           DVI.Instruction
 
 data Rule = Rule
-    { width
-    , height
-    , depth  :: !LenVal
+    { ruleWidth
+    , ruleHeight
+    , ruleDepth  :: !LenVal
     } deriving (Show)
 
 instance Dimensioned Rule where
-    naturalLength dim Rule{..} = case dim of
-        Width  -> width
-        Height -> height
-        Depth  -> depth
+    naturalLength dim rule = getDim rule
+      where
+        getDim = case dim of
+            Width  -> ruleWidth
+            Height -> ruleHeight
+            Depth  -> ruleDepth
 
 data Character = Character
     { char  :: !Char
-    , width
-    , height
-    , depth :: !LenVal
+    , charWidth
+    , charHeight
+    , charDepth :: !LenVal
     } deriving (Show)
 
 instance Dimensioned Character where
-    naturalLength dim Character{..} = case dim of
-        Width  -> width
-        Height -> height
-        Depth  -> depth
+    naturalLength dim char = getDim char
+      where
+        getDim = case dim of
+            Width  -> charWidth
+            Height -> charHeight
+            Depth  -> charDepth
 
 data FontDefinition = FontDefinition
-    { fontInfo         :: !TexFont
+    { fontInfo         :: !TFM.TexFont
     , fontPath         :: !String
     , fontName         :: !String
     , fontNr           :: !Int
     , scaleFactorRatio :: !Rational
     } deriving (Show)
 
-newtype FontSelection = FontSelection
-    { fontNr :: Int
-    } deriving (Show)
+newtype FontSelection = FontSelection Int
+    deriving (Show)
 
 data Instruction
     = AddCharacter !Character
@@ -91,7 +91,7 @@ parseMundaneInstruction st i = case i of
         pure st' { curFontNr = Just n }
     AddCharacter Character { char = c } ->
         addInstruction st <$> getCharacterInstruction (ord c) Set
-    AddRule Rule { width = w, height = h, depth = d } ->
+    AddRule Rule { ruleWidth = w, ruleHeight = h, ruleDepth = d } ->
         pure $ addInstruction st $ getRuleInstruction Set (h + d) w
     Move ax dist ->
         addInstruction st <$> getMoveInstruction ax dist
@@ -128,9 +128,9 @@ parseMundaneInstruction st i = case i of
                            , fontNr = n
                            , scaleFactorRatio = scaleRatio
                            } = fontDef
-            cs = checksum info
-            ds = round $ designSizeSP info
-            sf = designScaleSP info scaleRatio
+            cs = TFM.checksum info
+            ds = round $ TFM.designSizeSP info
+            sf = TFM.designScaleSP info scaleRatio
         in
             addInstruction st <$> getDefineFontInstruction n path sf ds cs
     PushStack ->

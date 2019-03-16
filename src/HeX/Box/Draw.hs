@@ -1,6 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-
 module HeX.Box.Draw where
 
 import qualified DVI.Document                  as D
@@ -20,7 +17,7 @@ boxToDVI ax b =
     ++ contentDVI b
     ++ [D.PopStack, D.Move ax $ axisNaturalSpan ax b]
   where
-    contentDVI Box { .. } = case contents of
+    contentDVI Box { contents } = case contents of
         HBoxContents elems -> concatMap hBoxElemToDVI elems
         VBoxContents elems _ -> concatMap vBoxElemToDVI elems
 

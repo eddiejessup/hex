@@ -1,6 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module HeX.Config.Codes where
 
 import           Data.Bits                      ( (.&.)
@@ -14,7 +11,6 @@ import           Data.Char                      ( chr
                                                 )
 import qualified Data.HashMap.Strict           as HMap
 
-import           HeXPrelude
 import           HeX.Type
 import qualified HeX.Categorise                as Cat
 
@@ -72,7 +68,7 @@ instance Enum DelimiterCode where
             in  DelimiterSpecCode $ DelimiterSpec smallVar largeVar
 
     fromEnum (NotADelimiter n) = n
-    fromEnum (DelimiterSpecCode DelimiterSpec{..}) =
+    fromEnum (DelimiterSpecCode DelimiterSpec { smallVar, largeVar }) =
         (fromEnum largeVar `shiftL` 12) + (fromEnum smallVar)
 
 data DelimiterSpec = DelimiterSpec { smallVar, largeVar :: DelimiterVar }

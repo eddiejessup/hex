@@ -1,5 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-
 module TFM.Recipe where
 
 import qualified Data.Binary.Get as B.G

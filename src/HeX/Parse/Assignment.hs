@@ -1,4 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module HeX.Parse.Assignment where
@@ -56,11 +55,11 @@ parseDefineMacro =
     -- Replacement text.
     replacementTokens <- parseMacroText
     let tgt = T.MacroContents
-            { preParamTokens = preParamTokens
-            , parameters = parameters
-            , replacementTokens = replacementTokens
-            , long = T.LongTok `elem` prefixes
-            , outer = T.OuterTok `elem` prefixes
+            { T.preParamTokens = preParamTokens
+            , T.parameters = parameters
+            , T.replacementTokens = replacementTokens
+            , T.long = T.LongTok `elem` prefixes
+            , T.outer = T.OuterTok `elem` prefixes
             }
     pure Assignment
         { body = DefineControlSequence cs (MacroTarget tgt)

@@ -1,5 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-
 module HeX.BreakList.Page where
 
 import HeX.BreakList

@@ -1,6 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-
 module HeX.Box.Elem
   ( FontDefinition(..)
   , FontSelection(..)
@@ -40,7 +37,7 @@ newtype SetGlue = SetGlue { glueDimen :: LenVal }
     deriving (Show)
 
 instance Readable SetGlue where
-    describe SetGlue {..} = "[" ++ Unit.showSP glueDimen ++ "]"
+    describe SetGlue { glueDimen } = "[" ++ Unit.showSP glueDimen ++ "]"
 
 data BoxContents
     = HBoxContents [HBoxElem]

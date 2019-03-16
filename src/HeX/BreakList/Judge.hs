@@ -1,6 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module HeX.BreakList.Judge where
 
 import           HeXPrelude
@@ -117,7 +114,7 @@ badness gs = case gs of
     NaturallyGood            -> FiniteBadness 0
     UnfixablyBare            -> FiniteBadness tenK
     FixablyBad Overfull _    -> InfiniteBadness
-    FixablyBad _ FixParams {..}
+    FixablyBad _ FixParams { ratio, setOrder }
         -- if i == 0, the badness is approximately min(100r^3, 10000).
         | setOrder == 0 ->
             FiniteBadness $ min tenK $ round $ (ratio ^ (3 :: Int)) * 100
@@ -135,7 +132,7 @@ setGlue st g@Glue {dimen = d} =
     -- as appropriate.
     -- The glue's width is u, plus: r * f_j if j = i; otherwise 0.
     glueDiff :: GlueStatus -> Glue -> Int
-    glueDiff s Glue {..} = case s of
+    glueDiff s Glue { stretch, shrink } = case s of
         NaturallyGood -> 0
         -- Note: I made this logic up. Take a 'do your best' approach. This
         -- shouldn't matter anyway, because unfixably bare implies there's no
@@ -145,6 +142,6 @@ setGlue st g@Glue {dimen = d} =
         -- Full or overfull
         FixablyBad _ p -> -(scaleFactor shrink p)
 
-    scaleFactor GlueFlex {factor = f, order = gO} FixParams { .. }
+    scaleFactor GlueFlex {factor = f, order = gO} FixParams { ratio, setOrder }
         | setOrder == gO = round (ratio * f)
         | otherwise = 0

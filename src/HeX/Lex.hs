@@ -1,5 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-
 module HeX.Lex where
 
 import           Data.Hashable                  ( Hashable

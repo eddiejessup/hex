@@ -1,6 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module HeX.BreakList.Line where
 
 import           Safe                           ( minimumDef )
@@ -8,7 +5,8 @@ import           Data.List.Extra                ( foldl' )
 import           Control.Applicative            ( empty )
 import           Control.Monad                  ( guard )
 
-import qualified Data.Adjacent                 as A
+import           Data.Adjacent                  ( Adj(..) )
+import qualified Data.Adjacent                 as Adj
 import qualified HeX.Box                       as B
 import           HeX.Unit                       ( tenK )
 import           HeX.Config
@@ -23,7 +21,7 @@ newtype Demerit = Demerit { unDemerit :: Int }
 newtype IsDiscarding = IsDiscarding Bool
     deriving (Show)
 
-type ElemAdj = A.Adj BreakableHListElem
+type ElemAdj = Adj BreakableHListElem
 
 data Node = Root | Branch !Int
     deriving (Show)
@@ -41,19 +39,19 @@ newEdge n = InEdge [] (Branch n) (IsDiscarding True)
 
 inEdgeCons :: ElemAdj -> InEdge -> InEdge
 inEdgeCons c e@(InEdge cs n (IsDiscarding _discarding))
-    | _discarding && isDiscardable (A.fromAdjacency c) = e
+    | _discarding && isDiscardable (Adj.fromAdjacency c) = e
     | otherwise = InEdge (c : cs) n (IsDiscarding False)
 
 inEdgeConcat :: [ElemAdj] -> InEdge -> InEdge
 inEdgeConcat xs e = foldr inEdgeCons e xs
 
 edgeStatus :: LenParamVal HSize -> InEdge -> GlueStatus
-edgeStatus (LenParamVal dw) (InEdge v _ _) = listGlueStatus dw $ A.fromAdjacencies v
+edgeStatus (LenParamVal dw) (InEdge v _ _) = listGlueStatus dw $ Adj.fromAdjacencies v
 
 withStatus :: LenParamVal HSize -> InEdge -> (InEdge, GlueStatus)
 withStatus dw e = (e, edgeStatus dw e)
 
-data Route = Route !([[B.HBoxElem]]) !Demerit
+data Route = Route ![[B.HBoxElem]] !Demerit
     deriving (Show)
 
 instance Eq Route where
@@ -96,7 +94,7 @@ isPromising dw e =
 
 finaliseInEdge :: ElemAdj -> InEdge -> InEdge
 -- If the break-point is at glue, then the line doesn't include that glue.
-finaliseInEdge A.Adj { val = HVListElem (ListGlue _) } e = e
+finaliseInEdge Adj { adjVal = HVListElem (ListGlue _) } e = e
 -- If the break is at some other type of break, the line includes it.
 finaliseInEdge x (InEdge cs n discard) = InEdge (x:cs) n discard
 
@@ -129,7 +127,7 @@ appendEntry
     -> BreakingState
     -> ElemAdj
     -> BreakingState
-appendEntry dw tol lp st@BreakingState{..} x =
+appendEntry dw tol lp st@BreakingState { accEdges, nodeToBestRoute, chunk } x =
     case toBreakItem x of
         -- If we see a non-break item, the new state is the same as the old,
         -- but with the item appended to the accumulated items 'chunk'.
@@ -183,7 +181,7 @@ shortestRoute es rs = minimumDef (Route [] (Demerit 0)) (bestSubroute <$> es)
   where
     bestSubroute (InEdge ev n _, st, ed) =
         let
-            boxes = setHList st (reverse $ A.fromAdjacencies ev)
+            boxes = setHList st (reverse $ Adj.fromAdjacencies ev)
         in
             case n of
                 Root      -> Route [boxes] ed
@@ -218,7 +216,7 @@ breakAndSetParagraph dw tol lp (x : xs) =
     go :: [BreakableHListElem] -> [[B.HBoxElem]]
     go _xs =
         let
-            BreakingState{..} = foldl' (appendEntry dw tol lp) initialBreakingState $ A.toAdjacents _xs
+            BreakingState { accEdges, nodeToBestRoute, chunk } = foldl' (appendEntry dw tol lp) initialBreakingState $ Adj.toAdjacents _xs
             inEdges = inEdgeConcat chunk <$> accEdges
             acceptableDInEdges = toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
             (Route rawLns _) = shortestRoute acceptableDInEdges nodeToBestRoute

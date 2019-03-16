@@ -4,6 +4,7 @@ module TFM
     , designScaleSP
     , readTFM
     , readTFMFancy
+    , Character(..)
     )
 where
 
@@ -14,6 +15,7 @@ import           HeX.Unit                       ( toScaledPoint
                                                 )
 
 import           TFM.Parse
+import           TFM.Character                  ( Character(..) )
 
 designSizeSP :: TexFont -> Rational
 designSizeSP f = toScaledPoint (designFontSize f) Point

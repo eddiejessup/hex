@@ -6,10 +6,8 @@ data SignableInt = SignableInt !Signedness !Int
 
 isSignedNrExpressibleInNBits :: Int -> Int -> Bool
 isSignedNrExpressibleInNBits nrBits n =
-    let
-        x = 2 ^ (nrBits - 1)
-    in
-        (-x <= n) && (n <= x - 1)
+    let x = 2 ^ (nrBits - 1)
+    in  (-x <= n) && (n <= x - 1)
 
 toSignableInt :: Signedness -> Int -> Either String SignableInt
 toSignableInt Unsigned n
@@ -31,9 +29,7 @@ bytesNeeded = \case
     SignableInt _ 0 -> 1
     SignableInt Unsigned n -> bytesNeededUnsigned n
     SignableInt Signed n ->
-        let
-            nrBytesUnsigned = bytesNeededUnsigned n
-        in
-            if isSignedNrExpressibleInNBits (8 * nrBytesUnsigned) n
+        let nrBytesUnsigned = bytesNeededUnsigned n
+        in  if isSignedNrExpressibleInNBits (8 * nrBytesUnsigned) n
                 then nrBytesUnsigned
                 else nrBytesUnsigned + 1
