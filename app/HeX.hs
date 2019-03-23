@@ -37,7 +37,7 @@ options =
     [ Opt.Option ['h'] ["help"]   (Opt.NoArg Help)           "show usage information"
     , Opt.Option ['a'] ["amble"]  (Opt.NoArg Amble)          "prepend pre- and post-amble to input"
     , Opt.Option ['o'] ["output"] (Opt.OptArg output "FILE") "output to FILE"
-    , Opt.Option ['m'] ["mode"]   (Opt.OptArg (mode) "MODE")   "output in mode MODE"
+    , Opt.Option ['m'] ["mode"]   (Opt.OptArg mode "MODE")   "output in mode MODE"
     ]
   where
     output = Output . toS . fromMaybe "out.dvi"

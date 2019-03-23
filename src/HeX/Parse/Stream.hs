@@ -14,8 +14,11 @@ import           Control.Monad.Reader           ( ReaderT
                                                 , runReaderT
                                                 )
 import           Data.Char                      ( chr )
+import qualified Data.Foldable                 as Fold
+import qualified Data.List.NonEmpty            as NE
 import qualified Data.Map.Strict               as Map
 import           Data.Map.Strict                ( (!?) )
+import qualified Data.Set                      as Set
 import qualified Text.Megaparsec               as P
 
 import           HeX.Type
@@ -413,3 +416,34 @@ instance InhibitableStream ExpandedStream where
     insertLexToken s t = s{lexTokens = t : lexTokens s}
 
     getConditionBodyState = headMay . skipState
+
+instance Ord (ParseErrorBundle ExpandedStream) where
+    compare _ _ = EQ
+
+instance P.ShowErrorComponent (ParseErrorBundle ExpandedStream) where
+    showErrorComponent (P.ParseErrorBundle errs _) =
+        Fold.concat $ NE.intersperse "\n\n" $ P.showErrorComponent <$> errs
+
+instance Ord (ParseError ExpandedStream) where
+    compare _ _ = EQ
+
+instance P.ShowErrorComponent (ParseError ExpandedStream) where
+    showErrorComponent (P.TrivialError offset (Just (P.Tokens unexpecteds)) expecteds) =
+        "Error at " <> show offset <> ".\n"
+        <> "Found unexpected tokens: " <> show (NE.toList unexpecteds) <> ".\n"
+        <> "Expected one of: " <> show (Set.toList expecteds)
+    showErrorComponent (P.TrivialError offset Nothing expecteds) =
+        "Error at " <> show offset <> ".\n"
+        <> "Found no unexpected tokens.\n"
+        <> "Expected one of: " <> show (Set.toList expecteds)
+    showErrorComponent (P.TrivialError offset (Just P.EndOfInput) expecteds) =
+        "Error at " <> show offset <> ".\n"
+        <> "Found end of input.\n"
+        <> "Expected one of: " <> show (Set.toList expecteds)
+    showErrorComponent (P.TrivialError offset (Just (P.Label lab)) expecteds) =
+        "Error at " <> show offset <> ".\n"
+        <> "Found label: " <> show lab <> ".\n"
+        <> "Expected one of: " <> show (Set.toList expecteds)
+    showErrorComponent (P.FancyError offset sth) =
+        "Error at " <> show offset <> ".\n"
+        <> "Found fancy error: " <> show sth <> ".\n"
