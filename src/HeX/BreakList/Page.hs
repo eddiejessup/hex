@@ -1,5 +1,7 @@
 module HeX.BreakList.Page where
 
+import HeXlude
+
 import HeX.BreakList
 
 import           HeX.Unit                       ( tenK

@@ -1,9 +1,10 @@
 module HeX.Categorise where
 
-import HeXPrelude
+import HeXlude
 
 import           Data.Foldable                  ( foldl' )
 import           Data.Maybe                     ( fromMaybe )
+import qualified Data.Text                     as Text
 
 import qualified Data.HashMap.Strict           as HMap
 
@@ -34,7 +35,7 @@ data CharCat = CharCat
     } deriving (Show)
 
 instance Readable CharCat where
-    describe (CharCat c ct) = show ct ++ " '" ++ [c] ++ "'"
+    describe (CharCat c ct) = showT ct <> " '" <> Text.singleton c <> "'"
 
 type CharCodeMap v = HMap.HashMap CharCode v
 

@@ -1,5 +1,7 @@
 module Data.Adjacent where
 
+import HeXlude
+
 data Adj a = Adj
     { adjPre :: !(Maybe a)
     , adjVal :: !a

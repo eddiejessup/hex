@@ -1,7 +1,7 @@
 module HeX.BreakList.Line where
 
-import           Safe                           ( minimumDef )
-import           Data.List.Extra                ( foldl' )
+import HeXlude
+
 import           Control.Applicative            ( empty )
 import           Control.Monad                  ( guard )
 
@@ -126,13 +126,13 @@ appendEntry
     -> IntParamVal LinePenalty
     -> BreakingState
     -> ElemAdj
-    -> BreakingState
+    -> Either Text BreakingState
 appendEntry dw tol lp st@BreakingState { accEdges, nodeToBestRoute, chunk } x =
     case toBreakItem x of
         -- If we see a non-break item, the new state is the same as the old,
         -- but with the item appended to the accumulated items 'chunk'.
         Nothing ->
-            st{ chunk = x : chunk }
+            pure st{ chunk = x : chunk }
         Just br ->
             let
                 -- Extend the accumulating edges with the normal-items 'chunk',
@@ -152,7 +152,7 @@ appendEntry dw tol lp st@BreakingState { accEdges, nodeToBestRoute, chunk } x =
                     -- If we can't break at this point acceptably somehow, just treat
                     -- the break item like a non-break item.
                     [] ->
-                        BreakingState promisingInEdges nodeToBestRoute [x]
+                        pure $ BreakingState promisingInEdges nodeToBestRoute [x]
                     -- If some edges are acceptable, explore this fruitful avenue.
                     acceptableDInEdges ->
                         let
@@ -166,26 +166,32 @@ appendEntry dw tol lp st@BreakingState { accEdges, nodeToBestRoute, chunk } x =
                             -- Find the best way to reach this break-point, given the
                             -- acceptable previous lines and the known best ways to
                             -- reach those lines.
-                            newRoute = shortestRoute acceptableDInEdges nodeToBestRoute
                         in
+                            do
+                            newRoute <- shortestRoute acceptableDInEdges nodeToBestRoute
                             -- The new state should contain:
                             -- - The ongoing edges that are still promising
                             -- - The optimal route to reach this break, appended to the list of
                             --   node best-routes.
                             -- - A new empty chunk, to accumulate the contents we see until the
                             --   next break.
-                            BreakingState newAccEdges (newRoute : nodeToBestRoute) []
+                            pure $ BreakingState newAccEdges (newRoute : nodeToBestRoute) []
 
-shortestRoute :: [(InEdge, GlueStatus, Demerit)] -> [Route] -> Route
-shortestRoute es rs = minimumDef (Route [] (Demerit 0)) (bestSubroute <$> es)
+shortestRoute :: [(InEdge, GlueStatus, Demerit)] -> [Route] -> Either Text Route
+shortestRoute es rs =
+    do
+    subRs <- mapM bestSubroute es
+    pure $ minimumDef (Route [] (Demerit 0)) subRs
   where
     bestSubroute (InEdge ev n _, st, ed) =
-        let
-            boxes = setHList st (reverse $ Adj.fromAdjacencies ev)
-        in
-            case n of
-                Root      -> Route [boxes] ed
-                Branch sn -> routeCons (rs !! (length rs - sn - 1)) boxes ed
+        let boxes = setHList st (reverse $ Adj.fromAdjacencies ev)
+        in  case n of
+            Root      ->
+                pure $ Route [boxes] ed
+            Branch sn ->
+                do
+                subR <- atEith "route" rs (length rs - sn - 1)
+                pure $ routeCons subR boxes ed
 
 -- Expects contents in reverse order.
 -- Returns lines in reading order.
@@ -194,9 +200,9 @@ breakAndSetParagraph
     -> IntParamVal Tolerance
     -> IntParamVal LinePenalty
     -> [BreakableHListElem]
-    -> [[B.HBoxElem]]
+    -> Either Text [[B.HBoxElem]]
 breakAndSetParagraph _ _ _ [] =
-    []
+    pure []
 breakAndSetParagraph dw tol lp (x : xs) =
     let
         -- Remove the final item if it's glue.
@@ -213,12 +219,11 @@ breakAndSetParagraph dw tol lp (x : xs) =
     in
         go $ reverse xsFinished
   where
-    go :: [BreakableHListElem] -> [[B.HBoxElem]]
+    go :: [BreakableHListElem] -> Either Text [[B.HBoxElem]]
     go _xs =
-        let
-            BreakingState { accEdges, nodeToBestRoute, chunk } = foldl' (appendEntry dw tol lp) initialBreakingState $ Adj.toAdjacents _xs
-            inEdges = inEdgeConcat chunk <$> accEdges
+        do
+        BreakingState { accEdges, nodeToBestRoute, chunk } <- foldM (appendEntry dw tol lp) initialBreakingState $ Adj.toAdjacents _xs
+        let inEdges = inEdgeConcat chunk <$> accEdges
             acceptableDInEdges = toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
-            (Route rawLns _) = shortestRoute acceptableDInEdges nodeToBestRoute
-        in
-            reverse rawLns
+        (Route rawLns _) <- shortestRoute acceptableDInEdges nodeToBestRoute
+        pure $ reverse rawLns

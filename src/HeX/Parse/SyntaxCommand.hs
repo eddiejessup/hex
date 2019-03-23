@@ -1,6 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module HeX.Parse.SyntaxCommand where
+
+import HeXlude
 
 import qualified HeX.Categorise                as Cat
 import           HeX.Parse.Common

@@ -1,6 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module HeX.Parse.Command where
+
+import HeXlude
 
 import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
@@ -24,9 +24,9 @@ type ExtractResult s c = Either (ParseErrorBundle s) (P.State s, c)
 extractResult :: SimpParser s c -> s -> ExtractResult s c
 extractResult p stream =
     do
-    let (state, eCom) = easyRunParser p stream
+    let (parseState, eCom) = easyRunParser p stream
     com <- eCom
-    pure (state, com)
+    pure (parseState, com)
 
 extractHModeCommand :: InhibitableStream s => s -> ExtractResult s HModeCommand
 extractHModeCommand = extractResult parseHModeCommand

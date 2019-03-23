@@ -4,7 +4,10 @@ module TFM.Parse
   )
 where
 
-import qualified Data.Binary.Get               as B.SG
+import HeXlude
+
+import           Data.Ascii                     ( Ascii )
+import qualified Data.Binary.Get               as B.G
 import qualified Data.ByteString               as BS
 import qualified Data.ByteString.Lazy          as BS.L
 import           Data.HashMap.Strict
@@ -21,7 +24,7 @@ data TexFont = TexFont
     { checksum              :: Int
     , designFontSize        :: Rational
     , characterCodingScheme
-    , family                :: Maybe String
+    , family                :: Maybe Ascii
     , slant
     , spacing
     , spaceStretch
@@ -34,17 +37,19 @@ data TexFont = TexFont
     , characters            :: HashMap Char Character
     } deriving (Show)
 
-runGetEith :: String -> B.SG.Get b -> BS.ByteString -> Either String b
-runGetEith ctx f s = case B.SG.runGetOrFail f (BS.L.fromStrict s) of
-        Left (rest, offset, err) -> Left ("In " <> show (ctx, rest, offset) <> ": " <> err)
+runGetEith :: Text -> B.G.Get b -> BS.ByteString -> Either Text b
+runGetEith ctx f s = case B.G.runGetOrFail f (BS.L.fromStrict s) of
+        Left (_, _, err) -> Left $ "In " <> showT ctx <> ": " <> toS err
         Right (_, _, v) -> Right v
 
-newTFM :: BS.ByteString -> Either String TexFont
+newTFM :: BS.ByteString -> Either Text TexFont
 newTFM contents =
     do
     tableParams <- runGetEith "tableParams" T.getTableParams contents
 
-    let runGetEithTable s f tbl = runGetEith s f $ (T.tableToString tableParams) tbl
+    let
+        runGetEithTable :: Text -> B.G.Get b -> T.Table -> Either Text b
+        runGetEithTable s f tbl = runGetEith s f ((T.tableToString tableParams) tbl)
 
     header <- runGetEithTable "header" H.getHeader T.Header
     charInfos <- runGetEithTable "charInfos" (getChunks getCharInfo) T.CharacterInfo
@@ -57,8 +62,8 @@ newTFM contents =
     recipes <- runGetEithTable "recipes" (getChunks getExtensibleRecipe) T.ExtensibleRecipe
     params <- runGetEithTable "params" (F.getFontParams (H.characterCodingScheme header)) T.FontParameter
 
-    let chars = readCharacters (T.smallestCharCode tableParams) charInfos recipes widths heights depths italicCorrs
-        ligKernInstrs = readLigKern kerns <$> ligKernCommands
+    ligKernInstrs <- mapM (readLigKern kerns) ligKernCommands
+    chars <- readCharacters (T.smallestCharCode tableParams) charInfos recipes widths heights depths italicCorrs
 
     pure TexFont
         { checksum              = H.checksum header

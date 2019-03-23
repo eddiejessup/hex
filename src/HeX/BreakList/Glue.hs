@@ -1,6 +1,6 @@
 module HeX.BreakList.Glue where
 
-import           HeXPrelude
+import HeXlude
 
 import qualified HeX.Unit                      as UN
 import           HeX.Type
@@ -15,7 +15,7 @@ data GlueFlex = GlueFlex
 instance Readable GlueFlex where
     describe (GlueFlex 0 0) = "0"
     describe (GlueFlex f 0) = UN.showSP f
-    describe (GlueFlex f n) = show f ++ " fil" ++ show n
+    describe (GlueFlex f n) = show f <> " fil" <> show n
 
 instance Semigroup GlueFlex where
     a@(GlueFlex fA oA) <> b@(GlueFlex fB oB) =
@@ -52,9 +52,9 @@ data Glue = Glue
 
 instance Readable Glue where
     describe (Glue d (GlueFlex 0 0) (GlueFlex 0 0)) =
-        "{- " ++ UN.showSP d ++ " -}"
+        "{- " <> UN.showSP d <> " -}"
     describe (Glue d str shr) =
-        "{" ++ UN.showSP d ++ ("+" ++ show str) ++ ("-" ++ show shr) ++ "}"
+        "{" <> UN.showSP d <> ("+" <> show str) <> ("-" <> show shr) <> "}"
 
 instance Semigroup Glue where
     (Glue dA strA shrA) <> (Glue dB strB shrB) =

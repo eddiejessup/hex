@@ -1,10 +1,12 @@
 module TFM.Common where
 
+import HeXlude
+
 import           Control.Monad                  ( when )
+import           Data.Ascii                     ( Ascii )
+import qualified Data.Ascii                    as Asc
 import           Data.Binary.Get                ( Get)
 import qualified Data.Binary.Get               as B.G
-import qualified Data.ByteString               as BS
-import           Data.Char                      ( chr )
 import           Data.Ratio                     ( (%) )
 
 -- The increment by which real numbers can be specified.
@@ -36,11 +38,12 @@ getChunks f =
 
 -- Read a string that's encoded as an integer, followed by that number of
 -- characters.
-getBCPL :: Int -> Get String
+getBCPL :: Int -> Get Ascii
 getBCPL maxLen =
     do
     n <- getWord8Int
-    when (n > (maxLen - 1)) $ fail $ "BCPL string length too large: " ++ show n
+    when (n > (maxLen - 1)) $ fail $ "BCPL string length too large: " <> show n
     s <- B.G.getByteString n
+    asc <- maybeToFail "Could not decode ASCII from bytes" (Asc.fromByteString s)
     B.G.skip $ maxLen - 1 - n
-    pure $ (chr . fromIntegral) <$> (BS.unpack s)
+    pure asc

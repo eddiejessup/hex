@@ -1,6 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module HeX.Parse.Common where
+
+import HeXlude
 
 import           Data.Char                      ( toLower
                                                 , toUpper
@@ -104,15 +104,15 @@ skipOptionalEquals =
     skipOptionalSpaces
     skipOneOptionalSatisfied isEquals
 
-skipKeyword :: (P.Stream s, P.Token s ~ PrimitiveToken) => String -> NullSimpParser s
+skipKeyword :: (P.Stream s, P.Token s ~ PrimitiveToken) => [CharCode] -> NullSimpParser s
 skipKeyword s =
     skipOptionalSpaces *>
     mapM_ (skipSatisfied . matchNonActiveCharacterUncased) s
 
-parseOptionalKeyword :: (P.Stream s, P.Token s ~ PrimitiveToken) => String -> SimpParser s Bool
+parseOptionalKeyword :: (P.Stream s, P.Token s ~ PrimitiveToken) => [CharCode] -> SimpParser s Bool
 parseOptionalKeyword s = isJust <$> P.optional (P.try $ skipKeyword s)
 
-parseKeywordToValue :: (P.Stream s, P.Token s ~ PrimitiveToken) => String -> b -> SimpParser s b
+parseKeywordToValue :: (P.Stream s, P.Token s ~ PrimitiveToken) => [CharCode] -> b -> SimpParser s b
 parseKeywordToValue s = (skipKeyword s $>)
 
 parseManyChars :: (P.Stream s, P.Token s ~ PrimitiveToken) => SimpParser s [CharCode]

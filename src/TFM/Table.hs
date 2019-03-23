@@ -1,6 +1,7 @@
 module TFM.Table where
 
-import           Control.Monad
+import HeXlude
+
 import           Data.Binary.Get ( Get, getByteString )
 import           Data.ByteString ( ByteString )
 
@@ -30,10 +31,7 @@ data Table
 data TableParams = TableParams
     { tableToString :: Table -> ByteString
     , smallestCharCode, largestCharCode :: Int
-    } deriving Show
-
-instance Show (Table -> ByteString) where
-    show _ = "Table -> ByteString"
+    }
 
 getTableParams :: Get TableParams
 getTableParams
@@ -67,9 +65,9 @@ getTableParams
             + fontParamDataLengthWords
     when (fileLengthWords /= inferredFileLengthWords)
         $ fail $ "Incorrect table lengths: read "
-            ++ show fileLengthWords
-            ++ " is not equal to inferred "
-            ++ show (headerDataLengthWords, (_largestCharCode, _smallestCharCode), widthDataLengthWords, heightDataLengthWords, depthDataLengthWords, italicCorrectionDataLengthWords, ligKernDataLengthWords, kernDataLengthWords, extensibleRecipeDataLengthWords, fontParamDataLengthWords)
+            <> show fileLengthWords
+            <> " is not equal to inferred "
+            <> show (headerDataLengthWords, (_largestCharCode, _smallestCharCode), widthDataLengthWords, heightDataLengthWords, depthDataLengthWords, italicCorrectionDataLengthWords, ligKernDataLengthWords, kernDataLengthWords, extensibleRecipeDataLengthWords, fontParamDataLengthWords)
 
     let getByteStringWords = getByteString . wordToByte
 

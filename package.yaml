@@ -12,6 +12,7 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/eddiejessup/hex#readme>
 
 dependencies:
+- ascii
 - base >= 4.7 && < 5
 - binary
 - bytestring
@@ -27,8 +28,10 @@ dependencies:
 - mtl
 - parser-combinators
 - path
+- protolude
 - safe
 - split
+- text
 - transformers
 - unordered-containers
 - vector
@@ -68,22 +71,25 @@ tests:
     - hspec
 
 default-extensions:
-- EmptyCase
-- FlexibleContexts
-- FlexibleInstances
-- InstanceSigs
-- MultiParamTypeClasses
-- LambdaCase
-- MultiWayIf
-- NamedFieldPuns
-- TupleSections
 - DeriveFoldable
 - DeriveFunctor
 - DeriveGeneric
 - DeriveLift
 - DeriveTraversable
 - DerivingStrategies
+- EmptyCase
+- FlexibleContexts
+- FlexibleInstances
 - GeneralizedNewtypeDeriving
-- StandaloneDeriving
-- ScopedTypeVariables
+- InstanceSigs
+- LambdaCase
+- MultiParamTypeClasses
+- MultiWayIf
 - NamedFieldPuns
+- NoImplicitPrelude
+- OverloadedStrings
+- ScopedTypeVariables
+- StandaloneDeriving
+- TupleSections
+- TypeApplications
+- TypeFamilies

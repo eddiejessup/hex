@@ -1,5 +1,7 @@
 module TFM.Character where
 
+import HeXlude
+
 -- The character info array contains, for each character, six fields packed
 -- into four bytes:
 -- > 8 bits: width_index
@@ -35,9 +37,9 @@ import           TFM.Common
 import           TFM.Recipe
 
 data Character = Character
-    { width, height, depth :: Rational
-    , italicCorrection     :: Rational
-    , special              :: Maybe CharacterSpecial
+    { width, height, depth
+    , italicCorrection :: Rational
+    , special          :: Maybe CharacterSpecial
     } deriving (Show)
 
 data CharacterSpecial
@@ -53,42 +55,47 @@ character
     -> [Rational]
     -> [Rational]
     -> CharInfo
-    -> Character
+    -> Either Text Character
 character recipes widths heights depths italicCorrs charInfo =
-    let
-        _remainder = remainder charInfo
-        _width  = getDim widths $ widthIdx charInfo
-        _height = getDim heights $ heightIdx charInfo
-        _depth  = getDim depths $ depthIdx charInfo
-        _italicCorrection = getDim italicCorrs $ italicIdx charInfo
-        -- If the character is special, get its particular extra attributes.
-        _special = case tag charInfo of
-            Plain      -> Nothing
-            LigKern    -> Just $ LigKernIndex _remainder
-            Chain      -> Just $ NextLargerChar _remainder
-            Extensible -> Just $ ExtensibleRecipeSpecial $ recipes !! _remainder
-    in  Character
-        { width            = _width
-        , height           = _height
-        , depth            = _depth
-        , italicCorrection = _italicCorrection
-        , special          = _special
+    do
+    width  <- dimAtEith "width" widths $ widthIdx charInfo
+    height <- dimAtEith "height" heights $ heightIdx charInfo
+    depth  <- dimAtEith "depth" depths $ depthIdx charInfo
+    italicCorrection <- dimAtEith "italic correction" italicCorrs $ italicIdx charInfo
+    let _remainder = remainder charInfo
+    -- If the character is special, get its particular extra attributes.
+    special <- case tag charInfo of
+            Plain      -> pure $ Nothing
+            LigKern    -> pure $ Just $ LigKernIndex _remainder
+            Chain      -> pure $ Just $ NextLargerChar _remainder
+            Extensible ->
+                do
+                recipe <- atEith "recipe" recipes _remainder
+                pure $ Just $ ExtensibleRecipeSpecial recipe
+    pure Character
+        { width
+        , height
+        , depth
+        , italicCorrection
+        , special
         }
   where
     -- Get a dimension from some dimension table, at some index
-    getDim dims i
-        | i == 0 = 0
-        | otherwise = dims !! i
+    dimAtEith :: Text -> [Rational] -> Int -> Either Text Rational
+    dimAtEith str xs i
+        | i == 0 = Right 0
+        | otherwise = atEith str xs i
 
 readCharacters
     :: Int
     -> [CharInfo]
     -> [ExtensibleRecipe]
     -> [Rational] -> [Rational] -> [Rational] -> [Rational]
-    -> HashMap Char Character
+    -> Either Text (HashMap Char Character)
 readCharacters _minCode charInfos recipes widths heights depths italicCorrs =
-    let charList = character recipes widths heights depths italicCorrs <$> charInfos
-    in  fromList $ fmap (\(idx, c) -> (chr $ idx + _minCode, c)) $ indexed charList
+    do
+    charList <- mapM (character recipes widths heights depths italicCorrs) charInfos
+    pure $ fromList $ fmap (\(idx, c) -> (chr $ idx + _minCode, c)) $ indexed charList
 
 data CharInfo = CharInfo
     { widthIdx

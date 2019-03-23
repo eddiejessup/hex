@@ -1,5 +1,7 @@
 module HeX.Parse.Token where
 
+import HeXlude
+
 import           GHC.Generics                   ( Generic )
 import           Data.Hashable                  ( Hashable )
 import qualified Data.Map.Strict               as Map
@@ -470,7 +472,7 @@ data PrimitiveToken
     | InteractionModeTok InteractionMode
 
     | ResolutionError Lex.ControlSequenceLike
-    | SubParserError String
+    | SubParserError Text
 
     | UnexpandedTok Lex.Token
     deriving (Show, Eq)

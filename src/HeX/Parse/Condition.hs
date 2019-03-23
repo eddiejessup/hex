@@ -1,6 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module HeX.Parse.Condition where
+
+import HeXlude
 
 import qualified Text.Megaparsec               as P
 

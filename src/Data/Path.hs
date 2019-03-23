@@ -1,5 +1,7 @@
 module Data.Path where
 
+import HeXlude
+
 import           Control.Monad.Extra            ( findM )
 import           Control.Monad.IO.Class         ( liftIO )
 import           System.Directory
@@ -13,5 +15,15 @@ firstExistingPath :: [Path b File] -> MaybeT IO (Path b File)
 -- and which tests if a file exists.
 firstExistingPath = MaybeT . liftIO . findM (doesFileExist . toFilePath)
 
-findFilePath :: Path Rel File -> [Path Abs Dir] -> MaybeT IO (Path Abs File)
+findFilePath :: Path Rel File -> [Path b Dir] -> MaybeT IO (Path b File)
 findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs
+
+stripExtension' :: Path b File -> Maybe (Path b File)
+stripExtension' = Path.setFileExtension ""
+
+stripExtension
+    :: (MonadIO m, MonadError Text m) => Path b File -> m (Path b File)
+stripExtension p =
+    liftThrow
+        ("Could not strip font extension for: " <> showT p)
+        (Path.setFileExtension "" p)

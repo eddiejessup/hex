@@ -1,5 +1,7 @@
 module HeX.Config.Parameters where
 
+import HeXlude
+
 import qualified Data.HashMap.Strict           as HMap
 
 import           HeX.Type

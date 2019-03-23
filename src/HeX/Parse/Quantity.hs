@@ -1,6 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module HeX.Parse.Quantity where
+
+import HeXlude
 
 import           Data.Foldable                  ( foldl' )
 import           Data.Ratio                     ( (%) )
@@ -9,6 +9,7 @@ import           Data.Functor                   ( ($>) )
 import qualified Text.Megaparsec               as P
 
 import           HeX.Type
+import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 import           HeX.Unit                       ( PhysicalUnit(..) )
 import           HeX.Parse.Helpers
@@ -244,7 +245,7 @@ parseGlue = P.choice [ ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> par
                      , InternalGlue <$> parseSigns <*> parseInternalGlue
                      ]
 
-parseFlex :: InhibitableStream s => String -> SimpParser s (Maybe Flex)
+parseFlex :: InhibitableStream s => [CharCode] -> SimpParser s (Maybe Flex)
 parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
                        , const Nothing <$> skipOptionalSpaces
                        ]
@@ -268,7 +269,7 @@ parseMathGlue = P.choice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFle
                          , InternalMathGlue <$> parseSigns <*> parseInternalMathGlue
                          ]
 
-parseMathFlex :: InhibitableStream s => String -> SimpParser s (Maybe MathFlex)
+parseMathFlex :: InhibitableStream s => [CharCode] -> SimpParser s (Maybe MathFlex)
 parseMathFlex s = P.choice [ Just <$> P.try parsePresentFlex
                            , const Nothing <$> skipOptionalSpaces
                            ]

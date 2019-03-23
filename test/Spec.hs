@@ -1,26 +1,29 @@
 import Test.Hspec
 
-import qualified Data.ByteString.Lazy as BS
-import Data.List.Utils ( replace )
+import qualified Prelude
+import Protolude
+
+import qualified Data.ByteString as BS
+import qualified Data.Text as Text
 import System.Directory ( listDirectory )
 
 import           HeX.Run                        ( codesToDVIBytes )
 
-cmpFile :: FilePath -> IO ()
+cmpFile :: Text -> IO ()
 cmpFile fname =
     do
-    inp <- readFile $ "test/input/" ++ fname
+    inp <- Prelude.readFile $ toS $ "test/input/" <> fname
     outp <- codesToDVIBytes inp
-    outpValid <- BS.readFile $ "test/output/" ++ replace ".tex" ".dvi" fname
+    outpValid <- BS.readFile $ toS $ "test/output/" <> Text.replace ".tex" ".dvi" fname
     outp `shouldBe` outpValid
 
-testFile :: FilePath -> SpecWith ()
+testFile :: Text -> SpecWith ()
 testFile fname =
-    it ("turns TeX into DVI: " ++ fname) $ cmpFile fname
+    it (toS $ "turns TeX into DVI: " <> fname) $ cmpFile fname
 
 main :: IO ()
 main = do
     inpFnames <- listDirectory "test/input"
     hspec $
         describe "HeX" $
-            mapM_ testFile inpFnames
+            mapM_ testFile $ toS <$> inpFnames

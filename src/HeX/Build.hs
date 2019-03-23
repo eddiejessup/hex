@@ -1,5 +1,7 @@
 module HeX.Build where
 
+import HeXlude
+
 import           Control.Monad                  ( foldM
                                                 , when )
 import           Control.Monad.Except           ( ExceptT
@@ -22,24 +24,20 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 , liftIO
                                                 , modify
                                                 )
+import           Data.Adjacent                  ( Adj(..) )
 import           Data.Either.Combinators        ( mapLeft )
 import qualified Data.HashMap.Strict           as HMap
 import           Data.Maybe                     ( fromMaybe )
-import           Path
-import           Safe                           ( headMay
-                                                , toEnumMay )
-import           System.IO                      ( Handle
-                                                , hPutStrLn
-                                                )
-import qualified Text.Megaparsec               as PS
-
-import           Data.Adjacent                  ( Adj(..) )
 import           Data.Path                      ( findFilePath )
+import qualified Data.Text                     as Text
+import           Path
+import           Safe                           ( toEnumMay )
+import           System.IO                      ( Handle )
+import qualified Text.Megaparsec               as PS
 
 import qualified TFM
 import           TFM                            ( TexFont(..) )
 
-import           HeXPrelude
 import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
@@ -56,7 +54,7 @@ import qualified HeX.Parse                     as HP
 import qualified HeX.Unit                      as Unit
 
 loadFont
-    :: (MonadState Config m, MonadIO m, MonadError String m)
+    :: (MonadState Config m, MonadIO m, MonadError Text m)
     => Path Rel File
     -> HP.FontSpecification
     -> m B.FontDefinition
@@ -66,12 +64,12 @@ loadFont relPath fontSpec =
     let designSizeSP = TFM.designSizeSP $ fontMetrics fontInfo_
     scaleRatio <- readOnState $ evaluateFontSpecification designSizeSP fontSpec
     fontName <- extractFontName relPath
-    liftIO $ putStrLn $ "Loading font: " ++ show fontName ++ ", with design size: " ++ show designSizeSP ++ ", with scale ratio: " ++ show scaleRatio
+    liftIO $ putStrLn $ "Loading font: " <> showT fontName <> ", with design size: " <> showT designSizeSP <> ", with scale ratio: " <> showT scaleRatio
     fNr <- addFont fontInfo_
     pure B.FontDefinition
         { B.fontNr           = fNr
         -- TODO: Improve mapping of name and path.
-        , B.fontPath         = fontName
+        , B.fontPath         = relPath
         , B.fontName         = fontName
         , B.fontInfo         = fontMetrics fontInfo_
         , B.scaleFactorRatio = scaleRatio
@@ -79,13 +77,13 @@ loadFont relPath fontSpec =
   where
     readRelPath p =
         findFilePath p <$> asks searchDirectories
-        >>= liftThrow ("Could not find font: " ++ show p)
+        >>= liftThrow ("Could not find font: " <> showT p)
         >>= readFontInfo
 
     stripExtension p =
         liftThrow "Could not strip font extension" $ Path.setFileExtension "" p
 
-    fileName = Path.filename >>> Path.toFilePath
+    fileName = Path.filename >>> Path.toFilePath >>> toS
 
     extractFontName p = stripExtension p <&> fileName
 
@@ -95,7 +93,7 @@ selectFont n globalFlag =
     modify $ selectFontNr n globalFlag
     pure $ B.FontSelection n
 
-characterBox :: (MonadReader Config m, MonadError String m) => CharCode -> m B.Character
+characterBox :: (MonadReader Config m, MonadError Text m) => CharCode -> m B.Character
 characterBox char =
     do
     fontMetrics <- currentFontMetrics
@@ -104,7 +102,7 @@ characterBox char =
         liftMaybe "No such character" $ (HMap.lookup char $ characters fontMetrics)
     pure B.Character { B.char = char, B.charWidth = toSP width, B.charHeight = toSP height, B.charDepth = toSP depth }
 
-spaceGlue :: (MonadReader Config m, MonadError String m) => m BL.Glue
+spaceGlue :: (MonadReader Config m, MonadError Text m) => m BL.Glue
 spaceGlue =
     do
     fontMetrics@TexFont { spacing, spaceStretch, spaceShrink } <- currentFontMetrics
@@ -125,60 +123,60 @@ modConfState :: (MonadState s m, HP.InhibitableStream s) => (Config -> Config) -
 modConfState x = HP.runConfState $ modify $ x
 
 setIntegerVariable
-    :: (MonadState Config m, MonadError String m)
+    :: (MonadState Config m, MonadError Text m)
     => HP.IntegerVariable -> HP.GlobalFlag -> IntVal -> m ()
 setIntegerVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setIntegerParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setIntegerRegister i tgt globalFlag)
 
 setLengthVariable
-    :: (MonadState Config m, MonadError String m)
+    :: (MonadState Config m, MonadError Text m)
     => HP.LengthVariable -> HP.GlobalFlag -> LenVal -> m ()
 setLengthVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setLengthParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setLengthRegister i tgt globalFlag)
 
 setGlueVariable
-    :: (MonadState Config m, MonadError String m)
+    :: (MonadState Config m, MonadError Text m)
     => HP.GlueVariable -> HP.GlobalFlag -> BL.Glue -> m ()
 setGlueVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setGlueParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setGlueRegister i tgt globalFlag)
 
 setMathGlueVariable
-    :: (MonadState Config m, MonadError String m)
+    :: (MonadState Config m, MonadError Text m)
     => HP.MathGlueVariable -> HP.GlobalFlag -> BL.MathGlue -> m ()
 setMathGlueVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setMathGlueParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setMathGlueRegister i tgt globalFlag)
 
 setTokenListVariable
-    :: (MonadState Config m, MonadError String m)
+    :: (MonadState Config m, MonadError Text m)
     => HP.TokenListVariable -> HP.GlobalFlag -> HP.BalancedText -> m ()
 setTokenListVariable v globalFlag tgt = case v of
     HP.ParamVar p       -> modify $ setTokenListParameter p tgt globalFlag
     HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setTokenListRegister i tgt globalFlag)
 
-showLexTok :: Lex.Token -> String
+showLexTok :: Lex.Token -> Text
 showLexTok = \case
-    Lex.CharCatToken (Lex.CharCat { Lex.char, Lex.cat = Lex.Letter }) -> [char]
-    Lex.CharCatToken (Lex.CharCat { Lex.char, Lex.cat = Lex.Other }) -> [char]
-    Lex.CharCatToken (Lex.CharCat { Lex.char, Lex.cat = Lex.Space }) -> [char]
-    Lex.CharCatToken cc -> show cc
-    Lex.ControlSequenceToken (Lex.ControlSequence cs) -> "\\" ++ cs
+    Lex.CharCatToken (Lex.CharCat { Lex.char, Lex.cat = Lex.Letter }) -> Text.singleton char
+    Lex.CharCatToken (Lex.CharCat { Lex.char, Lex.cat = Lex.Other }) -> Text.singleton char
+    Lex.CharCatToken (Lex.CharCat { Lex.char, Lex.cat = Lex.Space }) -> Text.singleton char
+    Lex.CharCatToken cc -> showT cc
+    Lex.ControlSequenceToken (Lex.ControlSequence cs) -> "\\" <> toS cs
 
-showPrimTok :: HP.PrimitiveToken -> String
+showPrimTok :: HP.PrimitiveToken -> Text
 showPrimTok = \case
     HP.UnexpandedTok t -> showLexTok t
     HP.SubParserError err -> err
-    HP.ResolutionError cs -> "Unknown control sequence: " ++ show cs
-    pt -> show pt
+    HP.ResolutionError cs -> "Unknown control sequence: " <> showT cs
+    pt -> showT pt
 
-showBalancedText :: HP.BalancedText -> String
-showBalancedText (HP.BalancedText txt) = concatMap showLexTok txt
+showBalancedText :: HP.BalancedText -> Text
+showBalancedText (HP.BalancedText txt) = Text.concat $ showLexTok <$> txt
 
-showExpandedBalancedText :: HP.ExpandedBalancedText -> String
-showExpandedBalancedText (HP.ExpandedBalancedText txt) = concatMap showPrimTok txt
+showExpandedBalancedText :: HP.ExpandedBalancedText -> Text
+showExpandedBalancedText (HP.ExpandedBalancedText txt) = Text.concat $ showPrimTok <$> txt
 
 constructBox
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
@@ -221,7 +219,7 @@ handleModeIndep = \case
                     case grp of
                         LocalStructureGroup trigConf ->
                             do
-                            when (trigConf /= trig) $ throwConfigError $ "Entry and exit group triggers differ: " ++ show (trig, trigConf)
+                            when (trigConf /= trig) $ throwConfigError $ "Entry and exit group triggers differ: " <> showT (trig, trigConf)
                             retElems []
                         ExplicitBoxGroup ->
                             pure Nothing
@@ -281,8 +279,7 @@ handleModeIndep = \case
                         let fontRefTok = HP.primTok $ HP.FontRefToken fontNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure ([boxElem], fontRefTok)
-                    oth -> throwError $ "Unimplemented: " ++ show oth
-                liftIO $ putStrLn $ "Setting CS " ++ show cs ++ " to token: " ++ show newCSTok ++ (if global == HP.Global then " globally" else " locally")
+                liftIO $ putStrLn $ "Setting CS " <> showT cs <> " to token: " <> showT newCSTok <> (if global == HP.Global then " globally" else " locally")
                 modConfState $ setControlSequence cs newCSTok global
                 pure acc
             HP.SetVariable ass ->
@@ -359,10 +356,10 @@ handleModeIndep = \case
                 do
                 eIdx <- liftReadOnConfState $ evaluateNumber idx
                 eVal <- liftReadOnConfState $ evaluateNumber val
-                liftIO $ putStrLn $ "Evaluated code table index " ++ show idx ++ " to " ++ show eIdx
-                liftIO $ putStrLn $ "Evaluated code table value " ++ show val ++ " to " ++ show eVal
-                idxChar <- liftMaybeConfigError ("Invalid character code index: " ++ show eIdx) (toEnumMay eIdx)
-                liftIO $ putStrLn $ "Setting " ++ show codeType ++ "@" ++ show eIdx ++ " (" ++ show idxChar ++ ") to " ++ show eVal
+                liftIO $ putStrLn $ "Evaluated code table index " <> showT idx <> " to " <> showT eIdx
+                liftIO $ putStrLn $ "Evaluated code table value " <> showT val <> " to " <> showT eVal
+                idxChar <- liftMaybeConfigError ("Invalid character code index: " <> showT eIdx) (toEnumMay eIdx)
+                liftIO $ putStrLn $ "Setting " <> showT codeType <> "@" <> showT eIdx <> " (" <> showT idxChar <> ") to " <> showT eVal
                 liftConfState $ updateCharCodeMap codeType idxChar eVal global
                 pure []
             HP.SelectFont fNr ->
@@ -383,7 +380,6 @@ handleModeIndep = \case
                     Nothing -> delBoxRegister eIdx global
                     Just b -> setBoxRegister eIdx b global
                 pure []
-            oth -> error $ show oth
         HP.runConfState (gets afterAssignmentToken) >>= \case
             Nothing -> pure ()
             Just lt ->
@@ -494,7 +490,7 @@ processHCommand oldStream acc inRestricted = \case
                 Nothing ->
                     pure (acc, False)
                 Just extraAcc ->
-                    modAccum $ (BL.HVListElem <$> extraAcc) ++ acc
+                    modAccum $ (BL.HVListElem <$> extraAcc) <> acc
   where
     modAccum newAcc = pure (newAcc, True)
 
@@ -502,29 +498,29 @@ processHCommand oldStream acc inRestricted = \case
 
 data BuildError s
   = ParseError s
-  | ConfigError String
+  | ConfigError Text
 
-liftConfigError :: Monad m => ExceptT String m a -> ExceptBuildT s m a
+liftConfigError :: Monad m => ExceptT Text m a -> ExceptBuildT s m a
 liftConfigError f = withExceptT ConfigError f
 
 liftConfState
     :: (HP.InhibitableStream s, MonadState s m)
-    => StateT Config (ExceptT String m) a
+    => StateT Config (ExceptT Text m) a
     -> ExceptBuildT s m a
 liftConfState x = liftConfigError $ HP.runConfState x
 
 liftReadOnConfState
     :: (HP.InhibitableStream s, MonadState s m)
-    => ReaderT Config (StateT Config (ExceptT String m)) a
+    => ReaderT Config (StateT Config (ExceptT Text m)) a
     -> ExceptBuildT s m a
 liftReadOnConfState x = liftConfigError $ readOnConfState x
 
-throwConfigError :: MonadError (BuildError s) m => String -> m a
+throwConfigError :: MonadError (BuildError s) m => Text -> m a
 throwConfigError s = throwError $ ConfigError s
 
 liftMaybeConfigError
     :: MonadError (BuildError s) m
-    => String -> Maybe a -> m a
+    => Text -> Maybe a -> m a
 liftMaybeConfigError s = liftMaybe (ConfigError s)
 
 type ExceptBuildT s m a = ExceptT (BuildError (HP.ParseErrorBundle s)) m a
@@ -545,7 +541,7 @@ extractHList indentFlag inRestricted =
         oldStream <- get
         (PS.State { PS.stateInput = newStream }, com) <- liftEither $ ParseError `mapLeft` HP.extractHModeCommand oldStream
         put newStream
-        liftIO $ putStrLn $ (if inRestricted then "Restricted" else "Unrestricted") ++ " horizontal mode, processing command: " ++ show com
+        -- liftIO $ putStrLn $ (if inRestricted then "Restricted" else "Unrestricted") <> " horizontal mode, processing command: " <> showT com
         (procAcc, continue) <- processHCommand oldStream acc inRestricted com
         if continue
             then extractParagraphInner procAcc
@@ -562,7 +558,7 @@ extractBreakAndSetHList indentFlag =
         desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
         lineTol <- asks $ IntParamVal . lookupIntegerParameter HP.Tolerance
         linePen <- asks $ IntParamVal . lookupIntegerParameter HP.LinePenalty
-        pure $ breakAndSetParagraph desiredW lineTol linePen hList
+        liftEither $ ConfigError `mapLeft` breakAndSetParagraph desiredW lineTol linePen hList
 
 data CurrentPage = CurrentPage
     { items :: [BL.BreakableVListElem]
@@ -612,7 +608,7 @@ runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
                         -- We didn't actually split at x: x was just what made us compute
                         -- cost and notice we'd gone too far. So add it to the left-overs
                         -- to return.
-                        in  (newPage :) <$> runPageBuilder newCurrentPage (toReturn ++ (x:xs))
+                        in  (newPage :) <$> runPageBuilder newCurrentPage (toReturn <> (x:xs))
                     -- If p ≤ −10000, we know the best breakpoint is this one, so break
                     -- here.
                     (BreakPageHere, _) ->
@@ -693,7 +689,7 @@ processVCommand oldStream acc inInternal = \case
                 _ -> throwConfigError "Cannot end: not in global scope"
             gets HP.getConditionBodyState >>= \case
                 Nothing -> pure ()
-                Just _condState -> throwConfigError $ "Cannot end: in condition block: " ++ show _condState
+                Just _condState -> throwConfigError $ "Cannot end: in condition block: " <> showT _condState
             readOnConfState (asks finaliseConfig) >>= liftIO
             pure (acc, False)
     HP.EnterHMode ->
@@ -726,8 +722,7 @@ processVCommand oldStream acc inInternal = \case
                 Nothing ->
                     pure (acc, False)
                 Just extraAcc ->
-                    modAccum $ extraAcc ++ acc
-        oth -> error $ show oth
+                    modAccum $ extraAcc <> acc
   where
     modAccum newAcc = pure (newAcc, True)
 
@@ -762,7 +757,7 @@ extractVList inInternal =
         oldStream <- get
         (PS.State { PS.stateInput = newStream }, com) <- liftEither $ ParseError `mapLeft` HP.extractVModeCommand oldStream
         put newStream
-        liftIO $ putStrLn $ (if inInternal then "Internal" else "Outer") ++ " vertical mode, processing command: " ++ show com
+        -- liftIO $ putStrLn $ (if inInternal then "Internal" else "Outer") <> " vertical mode, processing command: " <> showT com
         (procAcc, continue) <- processVCommand oldStream acc inInternal com
         if continue
             then extractVListInner procAcc

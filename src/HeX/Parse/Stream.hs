@@ -1,6 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module HeX.Parse.Stream where
+
+import HeXlude
 
 import           Control.Monad.Except           ( Except
                                                 , runExcept )
@@ -14,13 +14,12 @@ import           Control.Monad.Reader           ( ReaderT
                                                 , runReaderT
                                                 )
 import           Data.Char                      ( chr )
-import           Data.Proxy
 import qualified Data.Map.Strict               as Map
 import           Data.Map.Strict                ( (!?) )
-import           Safe                           ( headMay )
 import qualified Text.Megaparsec               as P
 
 import           HeX.Type
+import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
 import           HeX.Evaluate
@@ -65,51 +64,51 @@ newExpandStream cs =
 
 -- Expanding syntax commands.
 
-expandCSName :: () -> String -> [Lex.Token]
+expandCSName :: () -> [CharCode] -> Either Text [Lex.Token]
 expandCSName _ charToks =
     -- TODO: if control sequence doesn't exist, define one that holds
     -- '\relax'.
-    [Lex.ControlSequenceToken $ Lex.ControlSequence charToks]
+    Right [Lex.ControlSequenceToken $ Lex.ControlSequence charToks]
 
-expandString :: Conf.IntParamVal Conf.EscapeChar -> Lex.Token -> [Lex.Token]
-expandString (Conf.IntParamVal escapeCharCode) tok = case tok of
+expandString :: Conf.IntParamVal Conf.EscapeChar -> Lex.Token -> Either Text [Lex.Token]
+expandString (Conf.IntParamVal escapeCharCode) tok = Right $ case tok of
     Lex.CharCatToken _ -> [tok]
     Lex.ControlSequenceToken (Lex.ControlSequence s) ->
-        stringAsMadeTokens $ escape ++ s
+        stringAsMadeTokens $ escape <> s
   where
-
     escape = if (escapeCharCode < 0) || (escapeCharCode > 255)
         then []
         else [chr escapeCharCode]
 
-expandMacro :: MacroContents -> Map.Map Digit MacroArgument -> [Lex.Token]
+expandMacro :: MacroContents -> Map.Map Digit MacroArgument -> Either Text [Lex.Token]
 expandMacro MacroContents{replacementTokens=(MacroText replaceToks)} args =
     renderMacroText replaceToks
   where
-    renderMacroText []     = []
-    renderMacroText (t:ts) = render t
-      where
-        render (MacroTextLexToken x)     = x:rest
-        render (MacroTextParamToken dig) = case args !? dig of
-            Nothing -> error "No such parameter"
-            Just (MacroArgument arg) -> arg ++ rest
-
-        rest = renderMacroText ts
+    renderMacroText []     = Right []
+    renderMacroText (t:ts) =
+        do
+        rest <- renderMacroText ts
+        case t of
+            (MacroTextLexToken x) -> Right (x:rest)
+            (MacroTextParamToken dig) -> case args !? dig of
+                Nothing -> Left "No such parameter"
+                Just (MacroArgument arg) -> Right $ arg <> rest
 
 -- Change the case of the parsed tokens.
-expandChangeCase :: (VDirection, Conf.Config) -> BalancedText -> [Lex.Token]
+expandChangeCase :: (VDirection, Conf.Config) -> BalancedText -> Either Text [Lex.Token]
 expandChangeCase (direction, conf) (BalancedText caseToks) =
-    changeCase direction <$> caseToks
+    Right $ changeCase <$> caseToks
   where
     -- Set the character code of each character token to its
     -- \uccode or \lccode value, if that value is non-zero.
     -- Don't change the category code.
-    changeCase dir (Lex.CharCatToken (Lex.CharCat char cat)) =
-        Lex.CharCatToken $ Lex.CharCat (switch dir char) cat
-    changeCase _ t = t
+    changeCase = \case
+        Lex.CharCatToken (Lex.CharCat char cat) ->
+            Lex.CharCatToken $ Lex.CharCat (switch char) cat
+        t -> t
 
-    switch dir char =
-        case Conf.lookupChangeCaseCode dir char conf of
+    switch char =
+        case Conf.lookupChangeCaseCode direction char conf of
             Conf.NoCaseChange       -> char
             Conf.ChangeToCode char' -> char'
 
@@ -145,7 +144,6 @@ skipToIfDelim blk stream = go stream 1
             _ ->
                 cont n
 
-
 skipUpToCaseBlock ::  Int -> ExpandedStream -> Maybe ExpandedStream
 skipUpToCaseBlock tgt stream = go stream 0 1
   where
@@ -175,11 +173,11 @@ skipUpToCaseBlock tgt stream = go stream 0 1
 
 runRead
     :: ExpandedStream
-    -> ReaderT Conf.Config (Except String) a
-    -> Either String a
+    -> ReaderT Conf.Config (Except e) a
+    -> Either e a
 runRead s f = runExcept $ runReaderT f (config s)
 
-expandConditionToken :: ExpandedStream -> ConditionTok -> (Maybe String, ExpandedStream)
+expandConditionToken :: ExpandedStream -> ConditionTok -> (Maybe Text, ExpandedStream)
 expandConditionToken strm = \case
     ConditionHeadTok ifTok -> case easyRunParser (conditionHeadParser ifTok) strm of
         (P.State resultStream _ _, Left err) ->
@@ -206,7 +204,7 @@ expandConditionToken strm = \case
     ConditionBodyTok delim -> case (delim, skipState strm) of
         -- Shouldn't see any condition token outside a condition block.
         (_, []) ->
-            (Just $ "Not in a condition body, but saw condition-body token: " ++ show delim, strm)
+            (Just $ "Not in a condition body, but saw condition-body token: " <> show delim, strm)
         -- Shouldn't see an 'or' while in an if-condition.
         (Or, (IfBodyState _):_) ->
             (Just "In an if-condition, not case-condition, but saw 'or'", strm)
@@ -246,25 +244,25 @@ expandConditionToken strm = \case
 expandSyntaxCommand
     :: ExpandedStream
     -> SyntaxCommandHeadToken
-    -> (Either String [Lex.Token], ExpandedStream)
+    -> (Either Text [Lex.Token], ExpandedStream)
 expandSyntaxCommand strm = \case
     MacroTok m ->
         runExpandCommand strm m (parseMacroArgs m) expandMacro
     ConditionTok ct ->
         (\(v, s) -> (justToEither v, s)) $ expandConditionToken strm ct
     NumberTok ->
-        undefined
+        notImplemented
     RomanNumeralTok ->
-        undefined
+        notImplemented
     StringTok ->
         let escapeChar = (Conf.IntParamVal . Conf.lookupIntegerParameter EscapeChar . config) strm
         in runExpandCommand strm escapeChar parseLexToken expandString
     JobNameTok ->
-        undefined
+        notImplemented
     FontNameTok ->
-        undefined
+        notImplemented
     MeaningTok ->
-        undefined
+        notImplemented
     CSNameTok ->
         runExpandCommand strm () parseCSNameArgs expandCSName
     ExpandAfterTok ->
@@ -279,13 +277,13 @@ expandSyntaxCommand strm = \case
                     Just (Right expandedLTs, expandedStrm) ->
                         (Right $ expandAfterArgLT:expandedLTs, expandedStrm)
     NoExpandTok ->
-        undefined
+        notImplemented
     MarkRegisterTok _ ->
-        undefined
+        notImplemented
     InputTok ->
-        undefined
+        notImplemented
     EndInputTok ->
-        undefined
+        notImplemented
     TheTok -> case easyRunParser parseInternalQuantity strm of
         (P.State resultStream _ _, Left err) ->
             (Left $ show err, resultStream)
@@ -303,7 +301,7 @@ expandSyntaxCommand strm = \case
             (P.State resultStream _ _, Left err) ->
                 (Left $ show err, resultStream)
             (P.State resultStream _ _, Right a)  ->
-                (Right $ f com a, resultStream)
+                (f com a, resultStream)
 
     justToEither Nothing = Right mempty
     justToEither (Just e) = Left e
@@ -331,7 +329,7 @@ fetchResolvedToken stream =
     let lkp cs = Conf.lookupCS cs $ config stream'
     pure (lt, resolveToken lkp (expansionMode stream') lt, stream')
 
-fetchAndExpandToken :: ExpandedStream -> Maybe (Either String [Lex.Token], ExpandedStream)
+fetchAndExpandToken :: ExpandedStream -> Maybe (Either Text [Lex.Token], ExpandedStream)
 fetchAndExpandToken ExpandedStream{codes = []} = Nothing
 fetchAndExpandToken stream =
     do
@@ -391,9 +389,9 @@ instance P.Stream ExpandedStream where
                     Right lts ->
                         P.take1_ $ insertLexTokens expandStream lts
 
-    takeN_ = undefined
+    takeN_ = notImplemented
 
-    takeWhile_ = undefined
+    takeWhile_ = notImplemented
 
     showTokens Proxy = show
 

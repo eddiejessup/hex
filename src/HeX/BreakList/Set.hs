@@ -1,5 +1,7 @@
 module HeX.BreakList.Set where
 
+import HeXlude
+
 import           Data.Maybe                     ( mapMaybe )
 
 import           HeX.Box

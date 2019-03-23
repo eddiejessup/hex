@@ -1,5 +1,7 @@
 module HeX.Config.Config where
 
+import HeXlude
+
 import           Control.Monad.IO.Class         ( MonadIO )
 import           Control.Monad.State.Lazy       ( liftIO
                                                 , modify
@@ -8,9 +10,9 @@ import           Control.Monad.State.Lazy       ( liftIO
 import           Control.Monad.Reader           ( MonadReader
                                                 , asks )
 import           Control.Monad.Except           ( MonadError
+                                                , liftEither
                                                 )
 
-import           Data.Hashable
 import qualified Data.HashMap.Strict           as HMap
 import           Data.Maybe                     ( fromMaybe )
 import qualified Data.Vector                   as V
@@ -27,7 +29,6 @@ import           System.IO                      ( Handle
 import qualified TFM
 import           TFM                            ( TexFont )
 
-import           HeXPrelude
 import           HeX.Type
 import qualified HeX.Categorise                as Cat
 import qualified HeX.Lex                       as Lex
@@ -175,15 +176,18 @@ data FontInfo = FontInfo
     , skewChar    :: IntVal
     } deriving (Show)
 
-readFontInfo :: (MonadReader Config m, MonadIO m) => Path Abs File -> m FontInfo
+readFontInfo
+    :: (MonadReader Config m, MonadIO m, MonadError Text m)
+    => Path Abs File -> m FontInfo
 readFontInfo fontPath =
     do
-    fontMetrics <- liftIO $ TFM.readTFMFancy fontPath
+    eithFontMetrics <- liftIO $ TFM.readTFMFancy fontPath
+    fontMetrics <- liftEither eithFontMetrics
     hyphenChar <- asks $ lookupIntegerParameter DefaultHyphenChar
     skewChar <- asks $ lookupIntegerParameter DefaultSkewChar
     pure FontInfo { fontMetrics, hyphenChar, skewChar }
 
-lookupFontInfo :: (MonadReader Config m, MonadError String m) => Int -> m FontInfo
+lookupFontInfo :: (MonadReader Config m, MonadError Text m) => Int -> m FontInfo
 lookupFontInfo fNr =
     (!? fNr) <$> asks fontInfos >>= liftMaybe "No such font number"
 
@@ -283,13 +287,13 @@ scopedMapLookup getMap k = lkp . scopedConfig
 lookupCurrentFontNr :: Config -> Maybe Int
 lookupCurrentFontNr = scopedLookup currentFontNr . scopedConfig
 
-mLookupCurrentFontNr :: (MonadReader Config m, MonadError String m) => m Int
+mLookupCurrentFontNr :: (MonadReader Config m, MonadError Text m) => m Int
 mLookupCurrentFontNr = asks lookupCurrentFontNr >>= liftMaybe "Font number isn't set"
 
-currentFontInfo :: (MonadReader Config m, MonadError String m) => m FontInfo
+currentFontInfo :: (MonadReader Config m, MonadError Text m) => m FontInfo
 currentFontInfo = mLookupCurrentFontNr >>= lookupFontInfo
 
-currentFontMetrics :: (MonadReader Config m, MonadError String m) => m TexFont
+currentFontMetrics :: (MonadReader Config m, MonadError Text m) => m TexFont
 currentFontMetrics = fontMetrics <$> currentFontInfo
 
 selectFontNr :: Int -> GlobalFlag -> Config -> Config
@@ -311,10 +315,10 @@ setFamilyMemberFont
     :: (FontRange, Int) -> Int -> GlobalFlag -> Config -> Config
 setFamilyMemberFont = insertKey familyMemberFonts $ \c _map -> c{familyMemberFonts = _map}
 
-lookupFontFamilyMember :: (MonadReader Config m, MonadError String m) => (FontRange, Int) -> m Int
+lookupFontFamilyMember :: (MonadReader Config m, MonadError Text m) => (FontRange, Int) -> m Int
 lookupFontFamilyMember k =
     asks (scopedMapLookup familyMemberFonts k)
-        >>= liftMaybe ("Family member undefined: " ++ show k)
+        >>= liftMaybe ("Family member undefined: " <> show k)
 
 -- Control sequences.
 
@@ -341,7 +345,7 @@ lookupChangeCaseCode d t conf =
     in fromMaybe NoCaseChange $ scopedMapLookup field t conf
 
 updateCharCodeMap
-    :: (MonadError String m, MonadState Config m)
+    :: (MonadError Text m, MonadState Config m)
     => CodeType
     -> Cat.CharCode
     -> IntVal
@@ -374,7 +378,8 @@ updateCharCodeMap t c n globalFlag =
             pure $ insertKey delimiterCodes (\cnf m -> cnf{delimiterCodes = m}) c v
     modify $ insert globalFlag
   where
-    liftMay f = liftMaybe ("Invalid target value for code type " ++ show t ++ ": " ++ show n) f
+    liftMay :: MonadError Text m => Maybe a -> m a
+    liftMay = liftMaybe ("Invalid target value for code type " <> show t <> ": " <> show n)
 
 -- Parameters and special quantities.
 

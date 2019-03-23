@@ -1,6 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module HeX.Parse.Inhibited where
+
+import HeXlude
 
 import           Control.Monad                  ( guard
                                                 , foldM )
@@ -11,9 +11,6 @@ import qualified Data.List.NonEmpty            as NE
 import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
 import qualified Data.Set                      as Set
-import           Safe                           ( lastMay
-                                                , initMay
-                                                )
 import qualified Text.Megaparsec               as P
 import           Text.Megaparsec                ( (<|>) )
 
@@ -54,24 +51,24 @@ instance InhibitableStream s => Ord (ParseError s) where
 
 instance InhibitableStream s => P.ShowErrorComponent (ParseError s) where
     showErrorComponent (P.TrivialError offset (Just (P.Tokens unexpecteds)) expecteds) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found unexpected tokens: " ++ show (NE.toList unexpecteds) ++ ".\n"
-        ++ "Expected one of: " ++ show (Set.toList expecteds)
+        "Error at " <> show offset <> ".\n"
+        <> "Found unexpected tokens: " <> show (NE.toList unexpecteds) <> ".\n"
+        <> "Expected one of: " <> show (Set.toList expecteds)
     showErrorComponent (P.TrivialError offset Nothing expecteds) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found no unexpected tokens.\n"
-        ++ "Expected one of: " ++ show (Set.toList expecteds)
+        "Error at " <> show offset <> ".\n"
+        <> "Found no unexpected tokens.\n"
+        <> "Expected one of: " <> show (Set.toList expecteds)
     showErrorComponent (P.TrivialError offset (Just P.EndOfInput) expecteds) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found end of input.\n"
-        ++ "Expected one of: " ++ show (Set.toList expecteds)
+        "Error at " <> show offset <> ".\n"
+        <> "Found end of input.\n"
+        <> "Expected one of: " <> show (Set.toList expecteds)
     showErrorComponent (P.TrivialError offset (Just (P.Label lab)) expecteds) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found label: " ++ show lab ++ ".\n"
-        ++ "Expected one of: " ++ show (Set.toList expecteds)
+        "Error at " <> show offset <> ".\n"
+        <> "Found label: " <> show lab <> ".\n"
+        <> "Expected one of: " <> show (Set.toList expecteds)
     showErrorComponent (P.FancyError offset sth) =
-        "Error at " ++ show offset ++ ".\n"
-        ++ "Found fancy error: " ++ show sth ++ ".\n"
+        "Error at " <> show offset <> ".\n"
+        <> "Found fancy error: " <> show sth <> ".\n"
 
 inhibitExpansion, enableExpansion
     :: Ord e
@@ -191,13 +188,13 @@ unsafeParseMacroArgs MacroContents{preParamTokens=pre, parameters=params} =
     parseDelimitedArgs ts delims = do
         -- Parse tokens until we see the delimiter tokens, then add what we grab
         -- to our accumulating argument.
-        arg <- (ts ++) <$> P.manyTill unsafeAnySingleLex (skipSatisfiedLexChunk delims)
+        arg <- (ts <>) <$> P.manyTill unsafeAnySingleLex (skipSatisfiedLexChunk delims)
         if hasValidGrouping tokToChange arg
             -- If the argument has valid grouping, then we are done.
             then pure arg
             -- Otherwise, add the 'red herring' delimiters we just parsed and
             -- continue.
-            else parseDelimitedArgs (arg ++ delims) delims
+            else parseDelimitedArgs (arg <> delims) delims
 
     -- Check if an argument has an outer '{}' pair that should be stripped, and
     -- do this if so.
@@ -277,8 +274,8 @@ maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
             -- starting from the successor of this digit.
             _    -> maybeParseParametersFrom (succ dig)
 
-    matchesDigit (CharCatToken CharCat {char=chr, cat=cat})
-        = (cat `elem` [Lex.Letter, Lex.Other]) && (chr == digitToChar dig)
+    matchesDigit (CharCatToken CharCat {char=c, cat=cat})
+        = (cat `elem` [Lex.Letter, Lex.Other]) && (c == digitToChar dig)
     matchesDigit _
         = False
 
@@ -368,8 +365,8 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
                 pure (MacroTextLexToken t, tokToChange t)
 
     -- We are only happy if the '#' is followed by a decimal digit.
-    handleParamNr (CharCatToken CharCat{char=chr, cat=cat})
-        | cat `elem` [Lex.Letter, Lex.Other] = charToDigit chr
+    handleParamNr (CharCatToken CharCat{char=c, cat=cat})
+        | cat `elem` [Lex.Letter, Lex.Other] = charToDigit c
         | otherwise = Nothing
     handleParamNr _ = Nothing
 

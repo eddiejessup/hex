@@ -1,5 +1,7 @@
 module TFM.LigKern where
 
+import HeXlude
+
 import qualified Data.Binary.Get as B.G
 import           Data.Bits ( shift, (.&.) )
 
@@ -24,19 +26,22 @@ data LigKernInstr = LigKernInstr
     , operation :: Either LigatureOp KernOp
     } deriving (Show)
 
-readLigKern :: [Rational] -> LigKernCommand -> LigKernInstr
+readLigKern :: [Rational] -> LigKernCommand -> Either Text LigKernInstr
 readLigKern kerns (LigKernCommand _skipByte _nextChar _opByte _remainder) =
-    LigKernInstr
+    do
+    op <- if _opByte >= kernOp
+        then (Right . KernOp) <$>
+            (atEith "kern" kerns $ (256 * (_opByte - kernOp) + _remainder))
+        else pure $ Left LigatureOp
+            { ligatureChar      = _remainder
+            , charsToPassOver   = _opByte `shift` 2
+            , deleteCurrentChar = (_opByte .&. 0x02) == 0
+            , deleteNextChar    = (_opByte .&. 0x01) == 0
+            }
+    pure LigKernInstr
         { stop = _skipByte >= 128
         , nextChar = _nextChar
-        , operation = if _opByte >= kernOp
-            then Right $ KernOp $ kerns !! (256 * (_opByte - kernOp) + _remainder)
-            else Left LigatureOp
-                { ligatureChar      = _remainder
-                , charsToPassOver   = _opByte `shift` 2
-                , deleteCurrentChar = (_opByte .&. 0x02) == 0
-                , deleteNextChar    = (_opByte .&. 0x01) == 0
-                }
+        , operation = op
         }
 
     -- TODO: Implement

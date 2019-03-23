@@ -1,5 +1,7 @@
 module HeX.Box.Draw where
 
+import HeXlude
+
 import qualified DVI.Document                  as D
 
 import           HeX.Type
@@ -8,14 +10,14 @@ import           HeX.Box.Elem
 ruleToDVI :: Axis -> Rule -> [D.Instruction]
 ruleToDVI ax b =
     [D.PushStack]
-    ++ [D.AddRule b]
-    ++ [D.PopStack, D.Move ax $ axisNaturalSpan ax b]
+    <> [D.AddRule b]
+    <> [D.PopStack, D.Move ax $ axisNaturalSpan ax b]
 
 boxToDVI :: Axis -> Box -> [D.Instruction]
 boxToDVI ax b =
     [D.PushStack]
-    ++ contentDVI b
-    ++ [D.PopStack, D.Move ax $ axisNaturalSpan ax b]
+    <> contentDVI b
+    <> [D.PopStack, D.Move ax $ axisNaturalSpan ax b]
   where
     contentDVI Box { contents } = case contents of
         HBoxContents elems -> concatMap hBoxElemToDVI elems

@@ -1,5 +1,7 @@
 module Data.Byte where
 
+import HeXlude
+
 data Signedness = Signed | Unsigned
 
 data SignableInt = SignableInt !Signedness !Int
@@ -9,14 +11,14 @@ isSignedNrExpressibleInNBits nrBits n =
     let x = 2 ^ (nrBits - 1)
     in  (-x <= n) && (n <= x - 1)
 
-toSignableInt :: Signedness -> Int -> Either String SignableInt
+toSignableInt :: Signedness -> Int -> Either Text SignableInt
 toSignableInt Unsigned n
-    | n < 0 = fail $ "Number argument for unsigned is negative: " ++ show n
-    | otherwise = pure $ SignableInt Unsigned n
+    | n < 0 = Left $ "Number argument for unsigned is negative: " <> show n
+    | otherwise = Right $ SignableInt Unsigned n
 toSignableInt Signed n =
     pure $ SignableInt Signed n
 
-toSignedInt, toUnsignedInt :: Int -> Either String SignableInt
+toSignedInt, toUnsignedInt :: Int -> Either Text SignableInt
 toSignedInt = toSignableInt Signed
 toUnsignedInt = toSignableInt Unsigned
 

@@ -1,6 +1,9 @@
 module HeX.BreakList.Elem where
 
+import HeXlude
+
 import           Data.Adjacent
+import qualified Data.Text                     as Text
 
 import           HeX.Type
 import           HeX.Box
@@ -92,7 +95,7 @@ instance Dimensioned BreakableHListElem where
 
 -- Just used to show an HList more compactly.
 data CondensedHListElem
-    = Sentence String
+    = Sentence Text
     | NonSentence BreakableHListElem
     deriving (Show)
 
@@ -101,13 +104,13 @@ condenseHList =
     foldr append []
   where
     append (HListHBaseElem (ElemCharacter Character { char })) [] =
-        [Sentence [char]]
+        [Sentence $ Text.singleton char]
     append e [] =
         [NonSentence e]
     append e r@(x:xs) = case (x, e) of
         (Sentence cs, HListHBaseElem (ElemCharacter Character { char })) ->
-            Sentence (char : cs) : xs
+            Sentence (Text.cons char cs) : xs
         (_, HListHBaseElem (ElemCharacter Character { char })) ->
-            Sentence [char] : r
+            Sentence (Text.singleton char) : r
         _ ->
             NonSentence e : r

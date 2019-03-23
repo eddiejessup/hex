@@ -7,9 +7,8 @@ module HeX.Box.Elem
   )
 where
 
-import           Safe.Foldable                  ( maximumDef )
+import HeXlude
 
-import           HeXPrelude
 import           HeX.Type
 import qualified HeX.Unit                      as Unit
 
@@ -37,7 +36,7 @@ newtype SetGlue = SetGlue { glueDimen :: LenVal }
     deriving (Show)
 
 instance Readable SetGlue where
-    describe SetGlue { glueDimen } = "[" ++ Unit.showSP glueDimen ++ "]"
+    describe SetGlue { glueDimen } = "[" <> Unit.showSP glueDimen <> "]"
 
 data BoxContents
     = HBoxContents [HBoxElem]
@@ -54,7 +53,7 @@ instance Dimensioned Box where
 
         -- HBox.
 
-        (Width,  Box (HBoxContents _) (To to)) -> to
+        (Width,  Box (HBoxContents _) (To toLen)) -> toLen
 
         (Width,  Box bc@(HBoxContents _) (Spread spread)) -> spread + (naturalLength Width (Box bc Natural))
 
@@ -75,13 +74,19 @@ instance Dimensioned Box where
         -- possible shifting into account. This width is always nonnegative.
         (Width,  Box (VBoxContents cs _) _) -> maxLength cs
 
-        (Height, Box (VBoxContents _ _) (To to)) -> to
+        (Height, Box (VBoxContents _ _) (To toLen)) -> toLen
 
         (Height, Box bc@(VBoxContents _ _) (Spread spread)) -> spread + (naturalLength Height (Box bc Natural))
 
         (Height, Box (VBoxContents cs DefaultAlign) Natural) ->
             -- h + d for all but last elements, plus the last element's height.
-            (sum $ hPlusD <$> init cs) + (naturalLength Height $ last cs)
+            let allButLast = case initMay cs of
+                    Nothing -> 0
+                    Just _inits -> sum $ hPlusD <$> _inits
+                lastElem = case lastMay cs of
+                    Nothing -> 0
+                    Just lst -> naturalLength Height lst
+            in allButLast + lastElem
 
         -- When wrapping a vertical list via \vbox, to compute its depth,
         -- - If the list contains no boxes, the depth is zero.
@@ -94,10 +99,13 @@ instance Dimensioned Box where
         --     - add the excess depth to the box's natural height, essentially
         --       moving the reference point down to reduce the depth to the
         --       stated maximum.
-        (Depth,  Box (VBoxContents [] DefaultAlign) _) -> 0
-        (Depth,  Box (VBoxContents cs DefaultAlign) _) -> naturalLength Depth $ last cs
+        (Depth,  Box (VBoxContents cs DefaultAlign) _) ->
+            case lastMay cs of
+                Nothing -> 0
+                Just lst -> naturalLength Depth lst
 
       where
+        subLengths :: Dimensioned a => [a] -> [LenVal]
         subLengths cs = naturalLength dim <$> cs
 
         maxLength cs = max 0 $ maximumDef 0 $ subLengths cs

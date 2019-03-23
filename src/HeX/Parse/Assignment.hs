@@ -1,6 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module HeX.Parse.Assignment where
+
+import HeXlude
 
 import           Control.Monad                  ( when )
 import           Control.Monad.Except           ( runExceptT )
@@ -51,7 +51,7 @@ parseDefineMacro =
     -- Parameter text.
     (preParamTokens, parameters) <- parseParamText
     -- TODO: Support expanded-def.
-    when (defExpandType == T.ExpandDef) $ error "expanded-def not implemented"
+    when (defExpandType == T.ExpandDef) $ notImplemented
     -- Replacement text.
     replacementTokens <- parseMacroText
     let tgt = T.MacroContents
@@ -271,9 +271,9 @@ parseFileName =
                 _ -> Nothing
         _ -> Nothing
     skipSatisfied isSpace
-    case parseRelFile (fileName ++ ".tfm") of
-      Just p -> pure p
-      Nothing -> fail $ "Invalid filename: " ++ fileName ++ ".tfm"
+    maybeToFail
+        ("Invalid filename: " <> show fileName <> ".tfm")
+        (parseRelFile (fileName <> ".tfm"))
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
 parseNewFontAssignment :: InhibitableStream s => SimpParser s AssignmentBody

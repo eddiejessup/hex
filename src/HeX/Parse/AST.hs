@@ -1,5 +1,7 @@
 module HeX.Parse.AST where
 
+import HeXlude
+
 import           Path                           ( File
                                                 , Path
                                                 , Rel

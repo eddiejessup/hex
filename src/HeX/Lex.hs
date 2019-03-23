@@ -1,5 +1,7 @@
 module HeX.Lex where
 
+import HeXlude
+
 import           Data.Hashable                  ( Hashable
                                                 , hashWithSalt
                                                 )
@@ -7,7 +9,7 @@ import           Data.Hashable                  ( Hashable
 import qualified HeX.Categorise                as Cat
 import           HeX.Categorise                 ( CharCode, CatCode )
 
-newtype ControlSequence = ControlSequence String
+newtype ControlSequence = ControlSequence [CharCode]
     deriving (Show, Eq)
 
 data ControlSequenceLike
@@ -72,7 +74,7 @@ chopDropWhile getNext test cs = case getNext cs of
 -- 'a', get [a] up to but not including the succeeding item, and the rest of
 -- the list, including the elements that generated the stopping 'a'.
 chopBreak :: ([b] -> Maybe (a, [b])) -> (a -> Bool) -> [b] -> ([a], [b])
-chopBreak get test cs = revFirst $ inner [] get cs
+chopBreak f test cs = revFirst $ inner [] f cs
   where
     revFirst (a, b) = (reverse a, b)
 
@@ -89,14 +91,14 @@ extractToken
     -> [CharCode]
     -> Maybe (Token, LexState, [CharCode])
 extractToken _     _     [] = Nothing
-extractToken charToCat state cs =
+extractToken charToCat _state cs =
     do
     (cc1, rest) <- getCC cs
     extractTokenRest cc1 rest
   where
     getCC = Cat.extractCharCat charToCat
 
-    extractTokenRest (Cat.CharCat n cat1) rest = case (cat1, state) of
+    extractTokenRest (Cat.CharCat n cat1) rest = case (cat1, _state) of
         -- Control sequence: Grab it.
         (Cat.Escape, _) ->
             do
@@ -122,7 +124,7 @@ extractToken charToCat state cs =
                 dropWhile (\c -> charToCat c /= Cat.EndOfLine) rest
         -- Space at the start of a line: Ignore.
         (Cat.Space, LineBegin) ->
-            extractToken charToCat state rest
+            extractToken charToCat _state rest
         -- Empty line: Make a paragraph.
         (Cat.EndOfLine, LineBegin) ->
             pure (ControlSequenceToken $ ControlSequence "par", LineBegin, rest)
@@ -149,9 +151,9 @@ extractToken charToCat state cs =
             pure (CharCatToken $ CharCat n Active, LineMiddle, rest)
         -- Space, or end of line, while skipping blanks: Ignore.
         (Cat.Space, SkippingBlanks) ->
-            extractToken charToCat state rest
+            extractToken charToCat _state rest
         (Cat.EndOfLine, SkippingBlanks) ->
-            extractToken charToCat  state rest
+            extractToken charToCat  _state rest
         -- Space in middle of line: Make a space token and start skipping blanks.
         (Cat.Space, LineMiddle) ->
             pure (spaceTok, SkippingBlanks, rest)
@@ -160,8 +162,8 @@ extractToken charToCat state cs =
             pure (spaceTok, LineBegin, rest)
         -- Ignored: Ignore.
         (Cat.Ignored, _) ->
-            extractToken charToCat state rest
+            extractToken charToCat _state rest
         -- Invalid: Print error message and ignore.
         -- TODO: TeXbook says to print an error message in this case.
         (Cat.Invalid, _) ->
-            extractToken charToCat state rest
+            extractToken charToCat _state rest

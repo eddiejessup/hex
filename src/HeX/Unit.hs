@@ -1,7 +1,8 @@
 module HeX.Unit where
 
+import HeXlude
+
 import           Data.Ratio                     ( (%) )
-import           Text.Printf                    ( printf )
 
 tenK :: Int
 tenK = 10000
@@ -87,9 +88,9 @@ toScaledPointApprox n u = round $ toScaledPoint n u
 fromScaledPoint :: PhysicalUnit -> Rational
 fromScaledPoint = recip . inScaledPoint
 
-showFrac :: Real n => n -> String
-showFrac n = printf "%.1f" (realToFrac n :: Double)
+showFrac :: Real n => n -> Text
+showFrac n = showT $ roundToDec 1 (realToFrac n :: Double)
 
-showSP :: Real n => n -> String
+showSP :: Real n => n -> Text
 showSP n =
-  showFrac ((realToFrac n * realToFrac (scaledPointIn Point)) :: Double) ++ "pt"
+  showFrac ((realToFrac n * realToFrac (scaledPointIn Point)) :: Double) <> "pt"

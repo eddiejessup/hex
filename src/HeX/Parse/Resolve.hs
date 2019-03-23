@@ -1,9 +1,12 @@
 module HeX.Parse.Resolve where
 
+import HeXlude
+
 import qualified Data.HashMap.Strict           as HMap
 import           Data.Maybe                     ( fromMaybe )
 
 import           HeX.Type
+import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 import qualified HeX.Box                       as B
 import           HeX.Parse.Token
@@ -26,7 +29,7 @@ resolveToken csLookup Expanding    t = case t of
   where
     lkp key = fromMaybe (primTok $ ResolutionError key) $ csLookup key
 
-_cs :: String -> Lex.ControlSequenceLike
+_cs :: [CharCode] -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper . Lex.ControlSequence
 
 syntaxTok :: SyntaxCommandHeadToken -> ResolvedToken

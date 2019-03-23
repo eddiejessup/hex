@@ -1,13 +1,12 @@
 module HeX.Run where
 
-import           Prelude                 hiding ( writeFile )
+import HeXlude
 
 import           Control.Monad.Except           ( ExceptT
                                                 , runExceptT )
 import           Control.Monad.State.Lazy       ( StateT
                                                 , evalStateT
                                                 )
-import           Data.ByteString.Lazy           ( ByteString )
 import qualified Data.HashMap.Strict           as HMap
 import           Data.List                      ( intercalate )
 import           Data.List.NonEmpty             ( NonEmpty(..) )
@@ -105,18 +104,17 @@ runCommand xs = newExpandStream xs >>= extractAndPrint
         Left (P.ParseErrorBundle ((P.TrivialError _ (Just P.EndOfInput) _) :| []) _) ->
             pure ()
         Left errs ->
-            ioError $ userError $ show errs
-
+            panic $ show errs
 
 -- Generic.
 
-strEitherToIO :: Either String v -> IO v
-strEitherToIO (Left err) = ioError $ userError $ err
+strEitherToIO :: Either Text v -> IO v
+strEitherToIO (Left err) = panic $ err
 strEitherToIO (Right v)  = pure v
 
 buildEitherToIO :: P.ShowErrorComponent s => Either (BuildError s) b -> IO b
-buildEitherToIO (Left (ParseError errBundle)) = ioError $ userError $ P.showErrorComponent errBundle
-buildEitherToIO (Left (ConfigError s))        = ioError $ userError $ "Bad semantics: " ++ s
+buildEitherToIO (Left (ParseError errBundle)) = panic $ toS $ P.showErrorComponent errBundle
+buildEitherToIO (Left (ConfigError s))        = panic $ "Bad semantics: " <> s
 buildEitherToIO (Right v)                     = pure v
 
 codesToSth

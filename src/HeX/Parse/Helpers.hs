@@ -1,6 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
-
 module HeX.Parse.Helpers where
+
+import HeXlude
 
 import           Data.Functor                   ( ($>) )
 import qualified Data.Set                      as Set
@@ -77,11 +77,11 @@ skipSatisfiedChunk []     = pure ()
 skipSatisfiedChunk (x:xs) = skipSatisfiedEquals x >> skipSatisfiedChunk xs
 
 copyState :: P.State s -> s' -> P.State s'
-copyState state tgtStream =
+copyState _state tgtStream =
     let P.State { P.stateInput = _
                 , P.stateOffset = offset
                 , P.statePosState = posState
-                } = state
+                } = _state
     in  P.State { P.stateInput = tgtStream
                 , P.stateOffset = offset
                 , P.statePosState = copyPosState posState

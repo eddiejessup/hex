@@ -1,5 +1,7 @@
 module HeX.Config.Codes where
 
+import HeXlude
+
 import           Data.Bits                      ( (.&.)
                                                 , shiftR
                                                 , shiftL
@@ -27,7 +29,7 @@ upperLetters :: [Char]
 upperLetters = ['A'..'Z']
 
 letters :: [Char]
-letters = lowerLetters ++ upperLetters
+letters = lowerLetters <> upperLetters
 
 -- The ⟨number⟩ at the end of a ⟨code assignment⟩ must not be negative, except
 -- in the case that a \delcode is being assigned.
@@ -61,7 +63,7 @@ instance Bounded DelimiterCode where
 instance Enum DelimiterCode where
     toEnum n
         | n < 0 = NotADelimiter n
-        | n > 0xFFFFFF = error $ "Value too large: " ++ show n
+        | n > 0xFFFFFF = panic $ "Value too large: " <> show n
         | otherwise =
             let smallVar = toEnum $ n `shiftR` 12
                 largeVar = toEnum $ n .&. 0xFFF
@@ -100,8 +102,8 @@ instance Bounded FamilyCharRef where
 
 instance Enum FamilyCharRef where
     toEnum n
-        | n < 0 = error $ "Negative value: " ++ show n
-        | n > 0xFFF = error $ "Value too large: " ++ show n
+        | n < 0 = panic $ "Negative value: " <> show n
+        | n > 0xFFF = panic $ "Value too large: " <> show n
         | otherwise = FamilyCharRef (n `shiftR` 8) (n .&. 0xFF)
 
     fromEnum (FamilyCharRef fam pos) =
@@ -143,8 +145,8 @@ instance Bounded MathCode where
 
 instance Enum MathCode where
     toEnum n
-        | n < 0 = error $ "Negative value: " ++ show n
-        | n > 0x8000 = error $ "Value too large: " ++ show n
+        | n < 0 = panic $ "Negative value: " <> show n
+        | n > 0x8000 = panic $ "Value too large: " <> show n
         | n == 0x8000 = ActiveMathCode
         | otherwise =
             let cls = toEnum $ n `shiftR` 12
@@ -184,8 +186,8 @@ instance Bounded CaseChangeCode where
 
 instance Enum CaseChangeCode where
     toEnum n
-        | n < 0 = error $ "Negative value: " ++ show n
-        | n > 255 = error $ "Value too large: " ++ show n
+        | n < 0 = panic $ "Negative value: " <> show n
+        | n > 255 = panic $ "Value too large: " <> show n
         | n == 0 = NoCaseChange
         | otherwise = ChangeToCode $ toEnum n
 
@@ -220,8 +222,8 @@ instance Bounded SpaceFactorCode where
 
 instance Enum SpaceFactorCode where
     toEnum n
-        | n < 0 = error $ "Negative value: " ++ show n
-        | n >= 0x8000 = error $ "Value too large: " ++ show n
+        | n < 0 = panic $ "Negative value: " <> show n
+        | n >= 0x8000 = panic $ "Value too large: " <> show n
         | otherwise = SpaceFactorCode n
 
     fromEnum (SpaceFactorCode n) = n

@@ -1,5 +1,8 @@
 module TFM.Header where
 
+import HeXlude
+
+import           Data.Ascii                     ( Ascii )
 import qualified Data.Binary as B
 import           Data.Binary.Get ( Get )
 import qualified Data.Binary.Get as B.G
@@ -15,8 +18,8 @@ familyLength                = 20
 data Header = Header
     { checksum              :: Int
     , designFontSize        :: Rational
-    , characterCodingScheme :: Maybe String
-    , family                :: Maybe String
+    , characterCodingScheme :: Maybe Ascii
+    , family                :: Maybe Ascii
     , sevenBitSafeFlag      :: Maybe B.Word8
     , face                  :: Maybe Face
     } deriving (Show)
@@ -43,47 +46,44 @@ parseFace n
     wt = case d6 of
         0 -> Medium
         1 -> Bold
-        2 -> Light
-        _ -> error "Should be impossible"
+        _ -> Light
     ex = case d2 of
         0 -> Regular
         1 -> Condensed
-        2 -> Extended
-        _ -> error "Should be impossible"
+        _ -> Extended
     sl = case m2 of
         0 -> Roman
-        1 -> Italic
-        _ -> error "Should be impossible"
+        _ -> Italic
 
 getHeader :: Get Header
 getHeader =
     do
     -- header[0 ... 1]: Required; checksum and design size.
-    _checksum <- getWord32beInt
-    _designFontSize <- getFixWord
+    checksum <- getWord32beInt
+    designFontSize <- getFixWord
     -- header[2 ... 11]: Optional; character coding scheme.
-    _characterCodingScheme <- B.G.isEmpty >>= \b -> if b
+    characterCodingScheme <- B.G.isEmpty >>= \b -> if b
         then pure Nothing
         else Just <$> getBCPL characterCodingSchemeLength
     -- header[12 ... 16]: Optional; font family.
-    _family <- B.G.isEmpty >>= \b -> if b
+    family <- B.G.isEmpty >>= \b -> if b
         then pure Nothing
         else Just <$> getBCPL familyLength
     -- header[17]: Optional; seven-bit-safe-flag, and face code.
-    (_sevenBitSafeFlag, _face) <- B.G.isEmpty >>= \b -> if b
+    (sevenBitSafeFlag, face) <- B.G.isEmpty >>= \b -> if b
             then pure (Nothing, Nothing)
             else
                 do
-                _sevenBitSafeFlag <- B.G.getWord8
+                sevenBitSafeFlag <- B.G.getWord8
                 _ <- B.G.getWord8
                 _ <- B.G.getWord8
-                _face <- parseFace <$> B.G.getWord8
-                pure (Just _sevenBitSafeFlag, _face)
+                face <- parseFace <$> B.G.getWord8
+                pure (Just sevenBitSafeFlag, face)
     pure Header
-        { checksum              = _checksum
-        , designFontSize        = _designFontSize
-        , characterCodingScheme = _characterCodingScheme
-        , family                = _family
-        , sevenBitSafeFlag      = _sevenBitSafeFlag
-        , face                  = _face
+        { checksum
+        , designFontSize
+        , characterCodingScheme
+        , family
+        , sevenBitSafeFlag
+        , face
         }

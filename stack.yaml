@@ -3,6 +3,7 @@ resolver: lts-13.13
 packages:
 - .
 
-extra-deps: []
+extra-deps:
+- ascii-0.0.5.2@sha256:287657d24abe70eaa1ca37e709256f92f565743f08a16bbc896f3da85ee50434
 
 extra-package-dbs: []

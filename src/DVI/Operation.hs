@@ -1,6 +1,9 @@
 module DVI.Operation where
 
+import HeXlude
+
 import qualified Data.Binary                   as B
+import qualified Data.ByteString.Lazy          as BS.L
 import qualified Data.Word                     as W
 
 import           HeX.Type
@@ -63,7 +66,7 @@ data Operation
     deriving (Show)
 
 instance Encodable Operation where
-    encode op = B.encode $ case op of
+    encode op = BS.L.toStrict $ B.encode $ case op of
         AddChar (FastCharOp n) -> n
         AddChar (ArgCharOp Set b) -> 128 + toWord b
         AddChar (ArgCharOp Put b) -> 133 + toWord b

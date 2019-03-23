@@ -1,9 +1,10 @@
 module HeX.Type where
 
+import HeXlude
+
 import           Control.Applicative           ( Alternative
                                                , empty
                                                )
-import           Data.Hashable
 import           GHC.Generics                  ( Generic )
 
 type IntVal = Int

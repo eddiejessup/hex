@@ -1,14 +1,14 @@
 module Main where
 
-import           Prelude                 hiding ( writeFile )
+import qualified Prelude
+import           Protolude
+import           Protolude.Panic                ( panic )
 
-import           Data.ByteString.Lazy           ( writeFile )
-import           Data.Maybe
-import           System.Console.GetOpt
-import           System.Environment
-import           Safe                           ( lastDef )
+import qualified Data.ByteString                as BS
+import qualified System.Console.GetOpt          as Opt
 import           Control.Monad                  ( when )
 
+import           HeX.Categorise                 ( CharCode )
 import           HeX.Run
 
 data Mode
@@ -32,17 +32,17 @@ data Flag
     | Mode !Mode
     deriving (Show, Eq)
 
-options :: [OptDescr Flag]
+options :: [Opt.OptDescr Flag]
 options =
-    [ Option ['h'] ["help"]   (NoArg Help)           "show usage information"
-    , Option ['a'] ["amble"]  (NoArg Amble)          "prepend pre- and post-amble to input"
-    , Option ['o'] ["output"] (OptArg output "FILE") "output to FILE"
-    , Option ['m'] ["mode"]   (OptArg mode "MODE")   "output in mode MODE"
+    [ Opt.Option ['h'] ["help"]   (Opt.NoArg Help)           "show usage information"
+    , Opt.Option ['a'] ["amble"]  (Opt.NoArg Amble)          "prepend pre- and post-amble to input"
+    , Opt.Option ['o'] ["output"] (Opt.OptArg output "FILE") "output to FILE"
+    , Opt.Option ['m'] ["mode"]   (Opt.OptArg (mode) "MODE")   "output in mode MODE"
     ]
   where
-    output = Output . fromMaybe "out.dvi"
+    output = Output . toS . fromMaybe "out.dvi"
 
-    mode m = Mode $ case m of
+    mode m = Mode $ case (toS <$> m) of
         Nothing          -> DVIWriteMode
         Just "cat"       -> CatMode
         Just "lex"       -> LexMode
@@ -55,34 +55,34 @@ options =
         Just "dvi"       -> DVIMode
         Just "rawdvi"    -> RawDVIMode
         Just "bytes"     -> DVIWriteMode
-        Just s           -> error $ "Unknown mode: " ++ s
+        Just s           -> panic $ "Unknown mode: " <> s
 
-usage :: String
-usage = usageInfo header options
+usage :: Text
+usage = toS $ Opt.usageInfo header options
   where
     header = "Usage: hex [OPTION...] [file]"
 
-preamble, postamble :: String
+preamble, postamble :: [CharCode]
 preamble = "\\font\\thefont=cmr10 \\thefont\n\n"
 postamble = "\n\n\\end\n"
 
-parseArgs :: [String] -> IO ([Flag], [String])
+parseArgs :: [Text] -> IO ([Flag], [Text])
 parseArgs argStr =
-    case getOpt Permute options argStr of
-        (o, n, []  ) -> pure (o, n)
-        (_, _, errs) -> ioError $ userError $ concat errs ++ usage
+    case Opt.getOpt Opt.Permute options (toS <$> argStr) of
+        (o, n, []  ) -> pure (o, toS <$> n)
+        (_, _, errs) -> panic $ ((mconcat (toS <$> errs) <> usage) :: Text)
 
 main :: IO ()
 main = do
-    (flags, args) <- getArgs >>= parseArgs
-    when (Help `elem` flags) (ioError $ userError usage)
+    (flags, args) <- ((toS <$>) <$> getArgs) >>= parseArgs
+    when (Help `elem` flags) $ panic usage
     inputRaw <- case args of
-        ["-"] -> getContents
-        [f  ] -> readFile f
-        _     -> ioError $ userError usage
+        ["-"] -> Prelude.getContents
+        [f  ] -> Prelude.readFile (toS f)
+        _     -> panic usage
     let
         input = if Amble `elem` flags
-            then preamble ++ inputRaw ++ postamble
+            then preamble <> inputRaw <> postamble
             else inputRaw
         mode = lastDef DVIWriteMode [ m | (Mode m) <- flags ]
         dest = lastDef "out.dvi" [ f | (Output f) <- flags ]
@@ -97,4 +97,4 @@ main = do
         PageMode     -> runPages input
         DVIMode      -> runDVI input
         RawDVIMode   -> runDVIRaw input
-        DVIWriteMode -> codesToDVIBytes input >>= writeFile dest
+        DVIWriteMode -> codesToDVIBytes input >>= BS.writeFile dest

@@ -1,6 +1,6 @@
 module HeX.BreakList.Judge where
 
-import           HeXPrelude
+import HeXlude
 
 import           HeX.Box                           ( SetGlue(..) )
 import           HeX.BreakList.BreakList           ( BreakableListElem(..)
@@ -47,9 +47,9 @@ data FixParams = FixParams
 
 instance Readable FixParams where
     describe (FixParams r n) = case n of
-        0 -> "Finite ratio: " ++ showFrac r
-        1 -> "Fil ratio: " ++ showSP r
-        _ -> "Fil order: " ++ show n ++ ", ratio: " ++ showSP r
+        0 -> "Finite ratio: " <> showFrac r
+        1 -> "Fil ratio: " <> showSP r
+        _ -> "Fil order: " <> show n <> ", ratio: " <> showSP r
 
 data LengthJudgment
     = Bare
