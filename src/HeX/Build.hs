@@ -4,179 +4,30 @@ import HeXlude
 
 import           Control.Monad                  ( foldM
                                                 , when )
-import           Control.Monad.Except           ( ExceptT
-                                                , MonadError
-                                                , liftEither
-                                                , throwError
-                                                , withExceptT
-                                                )
+import           Control.Monad.Except           ( liftEither )
 import           Control.Monad.IO.Class         ( MonadIO )
-import           Control.Monad.Reader           ( MonadReader
-                                                , ReaderT
-                                                , asks
-                                                , runReaderT
-                                                )
-import           Control.Monad.State.Lazy       ( MonadState
-                                                , StateT
-                                                , get
-                                                , gets
-                                                , put
-                                                , liftIO
-                                                , modify
-                                                )
-import           Data.Adjacent                  ( Adj(..) )
 import           Data.Either.Combinators        ( mapLeft )
-import qualified Data.HashMap.Strict           as HMap
-import           Data.Maybe                     ( fromMaybe )
-import           Data.Path                      ( findFilePath )
-import qualified Data.Text                     as Text
-import           Path
 import           Safe                           ( toEnumMay )
-import           System.IO                      ( Handle )
 import qualified Text.Megaparsec               as PS
 
-import qualified TFM
-import           TFM                            ( TexFont(..) )
-
-import           HeX.Type
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
-import           HeX.BreakList.Line             ( breakAndSetParagraph )
-import           HeX.BreakList.Page             ( PageBreakJudgment(..)
-                                                , pageBreakJudgment
-                                                , setPage
-                                                )
 import           HeX.Config
-import           HeX.Categorise                 ( CharCode )
 import qualified HeX.Lex                       as Lex
 import           HeX.Evaluate
 import qualified HeX.Parse                     as HP
 import qualified HeX.Unit                      as Unit
-
-loadFont
-    :: (MonadState Config m, MonadIO m, MonadError Text m)
-    => Path Rel File
-    -> HP.FontSpecification
-    -> m B.FontDefinition
-loadFont relPath fontSpec =
-    do
-    fontInfo_ <- readOnState $ readRelPath relPath
-    let designSizeSP = TFM.designSizeSP $ fontMetrics fontInfo_
-    scaleRatio <- readOnState $ evaluateFontSpecification designSizeSP fontSpec
-    fontName <- extractFontName relPath
-    liftIO $ putStrLn $ "Loading font: " <> showT fontName <> ", with design size: " <> showT designSizeSP <> ", with scale ratio: " <> showT scaleRatio
-    fNr <- addFont fontInfo_
-    pure B.FontDefinition
-        { B.fontNr           = fNr
-        -- TODO: Improve mapping of name and path.
-        , B.fontPath         = relPath
-        , B.fontName         = fontName
-        , B.fontInfo         = fontMetrics fontInfo_
-        , B.scaleFactorRatio = scaleRatio
-        }
-  where
-    readRelPath p =
-        findFilePath p <$> asks searchDirectories
-        >>= liftThrow ("Could not find font: " <> showT p)
-        >>= readFontInfo
-
-    stripExtension p =
-        liftThrow "Could not strip font extension" $ Path.setFileExtension "" p
-
-    fileName = Path.filename >>> Path.toFilePath >>> toS
-
-    extractFontName p = stripExtension p <&> fileName
-
-selectFont :: MonadState Config m => Int -> HP.GlobalFlag -> m B.FontSelection
-selectFont n globalFlag =
-    do
-    modify $ selectFontNr n globalFlag
-    pure $ B.FontSelection n
-
-characterBox :: (MonadReader Config m, MonadError Text m) => CharCode -> m B.Character
-characterBox char =
-    do
-    fontMetrics <- currentFontMetrics
-    let toSP = TFM.designScaleSP fontMetrics
-    TFM.Character { TFM.width, TFM.height, TFM.depth } <-
-        liftMaybe "No such character" $ (HMap.lookup char $ characters fontMetrics)
-    pure B.Character { B.char = char, B.charWidth = toSP width, B.charHeight = toSP height, B.charDepth = toSP depth }
-
-spaceGlue :: (MonadReader Config m, MonadError Text m) => m BL.Glue
-spaceGlue =
-    do
-    fontMetrics@TexFont { spacing, spaceStretch, spaceShrink } <- currentFontMetrics
-    let toSP = TFM.designScaleSP fontMetrics
-        toFlex = toSP >>> fromIntegral >>> BL.finiteFlex
-    pure BL.Glue { BL.dimen = toSP spacing, BL.stretch = toFlex spaceStretch, BL.shrink = toFlex spaceShrink }
-
-readOnState :: MonadState r m => ReaderT r m b -> m b
-readOnState f = get >>= runReaderT f
-
-readOnConfState
-    :: (HP.InhibitableStream s, MonadState s m)
-    => ReaderT Config (StateT Config m) a
-    -> m a
-readOnConfState f = HP.runConfState $ readOnState f
-
-modConfState :: (MonadState s m, HP.InhibitableStream s) => (Config -> Config) -> m ()
-modConfState x = HP.runConfState $ modify $ x
-
-setIntegerVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.IntegerVariable -> HP.GlobalFlag -> IntVal -> m ()
-setIntegerVariable v globalFlag tgt = case v of
-    HP.ParamVar p       -> modify $ setIntegerParameter p tgt globalFlag
-    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setIntegerRegister i tgt globalFlag)
-
-setLengthVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.LengthVariable -> HP.GlobalFlag -> LenVal -> m ()
-setLengthVariable v globalFlag tgt = case v of
-    HP.ParamVar p       -> modify $ setLengthParameter p tgt globalFlag
-    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setLengthRegister i tgt globalFlag)
-
-setGlueVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.GlueVariable -> HP.GlobalFlag -> BL.Glue -> m ()
-setGlueVariable v globalFlag tgt = case v of
-    HP.ParamVar p       -> modify $ setGlueParameter p tgt globalFlag
-    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setGlueRegister i tgt globalFlag)
-
-setMathGlueVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.MathGlueVariable -> HP.GlobalFlag -> BL.MathGlue -> m ()
-setMathGlueVariable v globalFlag tgt = case v of
-    HP.ParamVar p       -> modify $ setMathGlueParameter p tgt globalFlag
-    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setMathGlueRegister i tgt globalFlag)
-
-setTokenListVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.TokenListVariable -> HP.GlobalFlag -> HP.BalancedText -> m ()
-setTokenListVariable v globalFlag tgt = case v of
-    HP.ParamVar p       -> modify $ setTokenListParameter p tgt globalFlag
-    HP.RegisterVar iRaw -> readOnState (evaluateEightBitInt iRaw) >>= (\i -> modify $ setTokenListRegister i tgt globalFlag)
-
-showLexTok :: Lex.Token -> Text
-showLexTok = \case
-    Lex.CharCatToken (Lex.CharCat { Lex.char, Lex.cat = Lex.Letter }) -> Text.singleton char
-    Lex.CharCatToken (Lex.CharCat { Lex.char, Lex.cat = Lex.Other }) -> Text.singleton char
-    Lex.CharCatToken (Lex.CharCat { Lex.char, Lex.cat = Lex.Space }) -> Text.singleton char
-    Lex.CharCatToken cc -> showT cc
-    Lex.ControlSequenceToken (Lex.ControlSequence cs) -> "\\" <> toS cs
-
-showPrimTok :: HP.PrimitiveToken -> Text
-showPrimTok = \case
-    HP.UnexpandedTok t -> showLexTok t
-    HP.SubParserError err -> err
-    HP.ResolutionError cs -> "Unknown control sequence: " <> showT cs
-    pt -> showT pt
-
-showBalancedText :: HP.BalancedText -> Text
-showBalancedText (HP.BalancedText txt) = Text.concat $ showLexTok <$> txt
-
-showExpandedBalancedText :: HP.ExpandedBalancedText -> Text
-showExpandedBalancedText (HP.ExpandedBalancedText txt) = Text.concat $ showPrimTok <$> txt
+import           HeX.Command                    ( ExceptBuildT
+                                                , liftReadOnConfState
+                                                , readOnConfState
+                                                , modConfState
+                                                , throwConfigError
+                                                , liftConfState
+                                                , readOnState
+                                                , liftMaybeConfigError
+                                                , liftConfigError
+                                                , BuildError(..) )
+import qualified HeX.Command                   as Com
 
 constructBox
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
@@ -225,7 +76,7 @@ handleModeIndep = \case
                             pure Nothing
     HP.Message HP.Out eTxt ->
         do
-        liftIO $ putStrLn $ showExpandedBalancedText eTxt
+        liftIO $ putStrLn $ Com.showExpandedBalancedText eTxt
         noElems
     HP.Relax ->
         noElems
@@ -275,7 +126,7 @@ handleModeIndep = \case
                         pure ([], HP.primTok $ HP.IntRefTok q en)
                     HP.FontTarget fontSpec fPath ->
                         do
-                        fontDef@B.FontDefinition { B.fontNr } <- loadFont fPath fontSpec
+                        fontDef@B.FontDefinition { B.fontNr } <- Com.loadFont fPath fontSpec
                         let fontRefTok = HP.primTok $ HP.FontRefToken fontNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure ([boxElem], fontRefTok)
@@ -286,19 +137,19 @@ handleModeIndep = \case
                 do
                 liftConfState $ case ass of
                     HP.IntegerVariableAssignment v tgt ->
-                        readOnState (evaluateNumber tgt) >>= setIntegerVariable v global
+                        readOnState (evaluateNumber tgt) >>= Com.setIntegerVariable v global
                     HP.LengthVariableAssignment v tgt  ->
-                        readOnState (evaluateLength tgt) >>= setLengthVariable v global
+                        readOnState (evaluateLength tgt) >>= Com.setLengthVariable v global
                     HP.GlueVariableAssignment v tgt    ->
-                        readOnState (evaluateGlue tgt) >>= setGlueVariable v global
+                        readOnState (evaluateGlue tgt) >>= Com.setGlueVariable v global
                     HP.MathGlueVariableAssignment v tgt  ->
-                        readOnState (evaluateMathGlue tgt) >>= setMathGlueVariable v global
+                        readOnState (evaluateMathGlue tgt) >>= Com.setMathGlueVariable v global
                     HP.TokenListVariableAssignment v tgt ->
                         do
                         eTgt <- readOnState $ case tgt of
                             HP.TokenListAssignmentVar tgtVar   -> evaluateTokenListVariable tgtVar
                             HP.TokenListAssignmentText tgtText -> pure tgtText
-                        setTokenListVariable v global eTgt
+                        Com.setTokenListVariable v global eTgt
                     HP.SpecialIntegerVariableAssignment v tgt ->
                         readOnState (evaluateNumber tgt) >>= (\en -> modify $ setSpecialInteger v en)
                     HP.SpecialLengthVariableAssignment v tgt ->
@@ -310,19 +161,19 @@ handleModeIndep = \case
                     HP.AdvanceIntegerVariable var plusVal ->
                         do
                         newVarVal <- readOnState $ (+) <$> evaluateIntegerVariable var <*> evaluateNumber plusVal
-                        setIntegerVariable var global newVarVal
+                        Com.setIntegerVariable var global newVarVal
                     HP.AdvanceLengthVariable var plusVal ->
                         do
                         newVarVal <- readOnState $ (+) <$> evaluateLengthVariable var <*> evaluateLength plusVal
-                        setLengthVariable var global newVarVal
+                        Com.setLengthVariable var global newVarVal
                     HP.AdvanceGlueVariable var plusVal ->
                         do
                         newVarVal <- readOnState $ mappend <$> evaluateGlueVariable var <*> evaluateGlue plusVal
-                        setGlueVariable var global newVarVal
+                        Com.setGlueVariable var global newVarVal
                     HP.AdvanceMathGlueVariable var plusVal ->
                         do
                         newVarVal <- readOnState $ mappend <$> evaluateMathGlueVariable var <*> evaluateMathGlue plusVal
-                        setMathGlueVariable var global newVarVal
+                        Com.setMathGlueVariable var global newVarVal
                     -- Division of a positive integer by a positive integer
                     -- discards the remainder, and the sign of the result
                     -- changes if you change the sign of either operand.
@@ -336,21 +187,21 @@ handleModeIndep = \case
                                 let op = case vDir of
                                         Upward -> (*)
                                         Downward -> quot
-                                setIntegerVariable var global $ op eVar eScaleVal
+                                Com.setIntegerVariable var global $ op eVar eScaleVal
                             HP.LengthNumericVariable var ->
                                 do
                                 eVar <- readOnState $ evaluateLengthVariable var
                                 let op = case vDir of
                                         Upward -> (*)
                                         Downward -> quot
-                                setLengthVariable var global $ op eVar eScaleVal
+                                Com.setLengthVariable var global $ op eVar eScaleVal
                             HP.GlueNumericVariable var ->
                                 do
                                 eVar <- readOnState $ evaluateGlueVariable var
                                 let op = case vDir of
                                         Upward -> BL.multiplyGlue
                                         Downward -> BL.divGlue
-                                setGlueVariable var global $ op eVar eScaleVal
+                                Com.setGlueVariable var global $ op eVar eScaleVal
                 pure []
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
@@ -364,7 +215,7 @@ handleModeIndep = \case
                 pure []
             HP.SelectFont fNr ->
                 do
-                fontSel <- HP.runConfState $ selectFont fNr global
+                fontSel <- HP.runConfState $ Com.selectFont fNr global
                 pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
             HP.SetFamilyMember fm fontRef ->
                 do
@@ -391,14 +242,14 @@ handleModeIndep = \case
         liftReadOnConfState $ do
         en <- evaluateNumber n
         fStreams <- asks outFileStreams
-        let txtStr = showExpandedBalancedText eTxt
+        let txtStr = Com.showExpandedBalancedText eTxt
         -- Write to:
         -- if stream number corresponds to existing, open file:
         --     file
         -- otherwise:
         --     log
         --     unless stream number is negative: terminal
-        case getStream fStreams en of
+        case Com.getStream fStreams en of
             Just fStream ->
                  liftIO $ hPutStrLn fStream txtStr
             Nothing ->
@@ -420,12 +271,6 @@ handleModeIndep = \case
     retElems els = pure $ Just els
 
     noElems = retElems []
-
-getStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
-getStream strms n =
-    do
-    fourBitn <- newFourBitInt n
-    HMap.lookup fourBitn strms
 
 processHCommand
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
@@ -451,7 +296,7 @@ processHCommand oldStream acc inRestricted = \case
     HP.AddCharacter c ->
         liftConfigError $ do
         charCode <- readOnConfState $ evaluateCharCodeRef c
-        hCharBox <- (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ characterBox charCode)
+        hCharBox <- (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ Com.characterBox charCode)
         modAccum $ hCharBox : acc
     HP.HAllModesCommand aCom -> case aCom of
         -- \indent: An empty box of width \parindent is appended to the current
@@ -470,7 +315,7 @@ processHCommand oldStream acc inRestricted = \case
                 else pure (acc, False)
         HP.AddSpace ->
             liftConfigError $ do
-            hGlue <- (BL.HVListElem . BL.ListGlue) <$> readOnConfState spaceGlue
+            hGlue <- (BL.HVListElem . BL.ListGlue) <$> readOnConfState Com.spaceGlue
             modAccum $ hGlue : acc
         HP.AddRule HP.Rule { HP.width, HP.height, HP.depth } ->
             liftReadOnConfState $ do
@@ -495,35 +340,6 @@ processHCommand oldStream acc inRestricted = \case
     modAccum newAcc = pure (newAcc, True)
 
     continueUnchanged = pure (acc, True)
-
-data BuildError s
-  = ParseError s
-  | ConfigError Text
-
-liftConfigError :: Monad m => ExceptT Text m a -> ExceptBuildT s m a
-liftConfigError f = withExceptT ConfigError f
-
-liftConfState
-    :: (HP.InhibitableStream s, MonadState s m)
-    => StateT Config (ExceptT Text m) a
-    -> ExceptBuildT s m a
-liftConfState x = liftConfigError $ HP.runConfState x
-
-liftReadOnConfState
-    :: (HP.InhibitableStream s, MonadState s m)
-    => ReaderT Config (StateT Config (ExceptT Text m)) a
-    -> ExceptBuildT s m a
-liftReadOnConfState x = liftConfigError $ readOnConfState x
-
-throwConfigError :: MonadError (BuildError s) m => Text -> m a
-throwConfigError s = throwError $ ConfigError s
-
-liftMaybeConfigError
-    :: MonadError (BuildError s) m
-    => Text -> Maybe a -> m a
-liftMaybeConfigError s = liftMaybe (ConfigError s)
-
-type ExceptBuildT s m a = ExceptT (BuildError (HP.ParseErrorBundle s)) m a
 
 extractHList
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
@@ -558,78 +374,7 @@ extractBreakAndSetHList indentFlag =
         desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
         lineTol <- asks $ IntParamVal . lookupIntegerParameter HP.Tolerance
         linePen <- asks $ IntParamVal . lookupIntegerParameter HP.LinePenalty
-        liftEither $ ConfigError `mapLeft` breakAndSetParagraph desiredW lineTol linePen hList
-
-data CurrentPage = CurrentPage
-    { items :: [BL.BreakableVListElem]
-    , bestPointAndCost :: Maybe (Int, Int)
-    }
-
-runPageBuilder
-    :: MonadState Config m
-    => CurrentPage
-    -> [BL.BreakableVListElem]
-    -> m [B.Page]
-runPageBuilder (CurrentPage cur _) [] =
-    do
-    desiredH <- gets $ LenParamVal . lookupLengthParameter HP.VSize
-    pure [setPage desiredH $ reverse cur]
-runPageBuilder (CurrentPage cur _bestPointAndCost) (x:xs)
-    -- If the current vlist has no boxes, we discard a discardable item.
-    | not $ any BL.isBox cur =
-        let nextXs = if BL.isDiscardable x then cur else x:cur
-        in runPageBuilder (CurrentPage nextXs _bestPointAndCost) xs
-    -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
-    -- the cost c of breaking at this point.
-    | BL.isDiscardable x =
-        do
-        desiredH <- gets $ LenParamVal . lookupLengthParameter HP.VSize
-        case BL.toBreakItem Adj { adjPre = headMay cur, adjVal = x, adjPost = headMay xs } of
-            -- If we can't break here, just add it to the list and continue.
-            Nothing ->
-                usualContinue
-            Just brk ->
-                case (pageBreakJudgment cur brk desiredH, _bestPointAndCost) of
-                    (DoNotBreak, _) ->
-                        usualContinue
-                    -- I don't think this condition will ever be satisfied, but if we
-                    -- decide to break before any valid break-point has been considered,
-                    -- just carry on.
-                    (BreakPageAtBest, Nothing) ->
-                        usualContinue
-                    -- If c = ∞, we break at the best breakpoint so far.
-                    -- The current vlist material following that best breakpoint is
-                    -- returned to the recent contributions, to consider again.
-                    (BreakPageAtBest, Just (iBest, _)) ->
-                        -- the `reverse` will put both of these into reading order.
-                        let (curNewPage, toReturn) = splitAt iBest $ reverse cur
-                            newPage = setPage desiredH curNewPage
-                        -- xs is also in reading order
-                        -- We didn't actually split at x: x was just what made us compute
-                        -- cost and notice we'd gone too far. So add it to the left-overs
-                        -- to return.
-                        in  (newPage :) <$> runPageBuilder newCurrentPage (toReturn <> (x:xs))
-                    -- If p ≤ −10000, we know the best breakpoint is this one, so break
-                    -- here.
-                    (BreakPageHere, _) ->
-                        -- the `reverse` will put this into reading order.
-                        let newPage = setPage desiredH $ reverse cur
-                        in  (newPage :) <$> runPageBuilder newCurrentPage xs
-                    -- If the resulting cost <= the smallest cost seen so far, remember
-                    -- the current breakpoint as the best so far.
-                    (TrackCost cHere, _) ->
-                        let thisPointAndCost = Just (length cur, cHere)
-                            newBestPointAndCost = case _bestPointAndCost of
-                                Nothing ->
-                                    thisPointAndCost
-                                Just (_, cBest) ->
-                                    if cHere > cBest then _bestPointAndCost else thisPointAndCost
-                        in  runPageBuilder (CurrentPage (x:cur) newBestPointAndCost) xs
-    -- If we can't break here, just add it to the list and continue.
-    | otherwise = usualContinue
-  where
-    usualNextPage = CurrentPage (x:cur) _bestPointAndCost
-    usualContinue = runPageBuilder usualNextPage xs
+        liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph desiredW lineTol linePen hList
 
 -- Assume we are adding a non-rule box of height h to the vertical list.
 -- Let \prevdepth = p, \lineskiplimit = l, \baselineskip = (b plus y minus z).
@@ -742,9 +487,6 @@ processVCommand oldStream acc inInternal = \case
         -- Continue iff not in internal mode.
         pure (newAcc, not inInternal)
 
-newCurrentPage :: CurrentPage
-newCurrentPage = CurrentPage [] Nothing
-
 extractVList
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
     => Bool
@@ -769,4 +511,5 @@ extractBreakAndSetVList
 extractBreakAndSetVList = do
     vList <- extractVList False
     liftIO $ print $ length vList
-    HP.runConfState $ runPageBuilder newCurrentPage $ reverse vList
+    desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
+    pure $ BL.runPageBuilder desiredH BL.newCurrentPage $ reverse vList

@@ -13,7 +13,7 @@ import           Data.HashMap.Strict            ( HashMap )
 
 import qualified TFM
 
-import           HeX.Type
+
 import qualified HeX.Lex                       as Lex
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
@@ -319,7 +319,6 @@ showInternalQuantity = \case
         eg <- evaluateInternalGlue g
         notImplemented
     AST.InternalMathGlueQuantity mg ->
-        do
         notImplemented
         -- emg <- evaluateInternalMathGlue mg
     AST.FontQuantity f ->

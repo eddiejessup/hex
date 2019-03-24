@@ -1,69 +1,67 @@
 module HeX.Parse.Stream where
 
-import HeXlude
+import           HeXlude
 
-import           Control.Monad.Except           ( Except
-                                                , runExcept )
-import           Control.Monad.State.Lazy       ( MonadState
-                                                , StateT
-                                                , gets
-                                                , modify
-                                                , runStateT
-                                                )
-import           Control.Monad.Reader           ( ReaderT
-                                                , runReaderT
-                                                )
-import           Data.Char                      ( chr )
-import qualified Data.Foldable                 as Fold
-import qualified Data.List.NonEmpty            as NE
-import qualified Data.Map.Strict               as Map
-import           Data.Map.Strict                ( (!?) )
-import qualified Data.Set                      as Set
-import qualified Text.Megaparsec               as P
+import           Control.Monad.Except     ( Except, runExcept )
+import           Control.Monad.Reader     ( ReaderT, runReaderT )
+import           Control.Monad.State.Lazy ( MonadState
+                                          , StateT
+                                          , gets
+                                          , modify
+                                          , runStateT
+                                          )
+import           Data.Char                ( chr )
+import qualified Data.Foldable            as Fold
+import qualified Data.List.NonEmpty       as NE
+import qualified Data.Map.Strict          as Map
+import           Data.Map.Strict          ( (!?) )
+import qualified Data.Set                 as Set
 
-import           HeX.Type
-import           HeX.Categorise                 ( CharCode )
-import qualified HeX.Categorise                as Cat
-import qualified HeX.Lex                       as Lex
+import qualified Text.Megaparsec          as P
+
+import           HeX.Categorise           ( CharCode )
+import qualified HeX.Categorise           as Cat
+import qualified HeX.Config               as Conf
 import           HeX.Evaluate
-import qualified HeX.Config                    as Conf
-import           HeX.Parse.Helpers
-import           HeX.Parse.Token
+import qualified HeX.Lex                  as Lex
 import           HeX.Parse.Command
 import           HeX.Parse.Condition
+import           HeX.Parse.Helpers
 import           HeX.Parse.Inhibited
-import           HeX.Parse.SyntaxCommand
 import           HeX.Parse.Resolve
+import           HeX.Parse.SyntaxCommand
+import           HeX.Parse.Token
 
-data ExpandedStream = ExpandedStream
-    { codes         :: [Cat.CharCode]
-    , lexTokens     :: [Lex.Token]
-    , lexState      :: Lex.LexState
-    , expansionMode :: ExpansionMode
-    , config        :: Conf.Config
-    , skipState     :: [ConditionBodyState]
-    } deriving (Show)
+data ExpandedStream =
+    ExpandedStream { codes         :: [Cat.CharCode]
+                   , lexTokens     :: [Lex.Token]
+                   , lexState      :: Lex.LexState
+                   , expansionMode :: ExpansionMode
+                   , config        :: Conf.Config
+                   , skipState     :: [ConditionBodyState]
+                   }
+    deriving ( Show )
 
-runConfState :: (InhibitableStream s, MonadState s m) => StateT Conf.Config m a -> m a
-runConfState f =
-    do
+runConfState :: (InhibitableStream s, MonadState s m)
+             => StateT Conf.Config m a
+             -> m a
+runConfState f = do
     conf <- gets getConfig
     (v, conf') <- runStateT f conf
     modify $ setConfig conf'
     pure v
 
 newExpandStream :: [Cat.CharCode] -> IO ExpandedStream
-newExpandStream cs =
-    do
+newExpandStream cs = do
     conf <- Conf.newConfig
-    pure $ ExpandedStream
-        { codes         = cs
-        , lexTokens     = []
-        , lexState      = Lex.LineBegin
-        , expansionMode = Expanding
-        , config        = conf
-        , skipState     = []
-        }
+    pure $
+        ExpandedStream { codes         = cs
+                       , lexTokens     = []
+                       , lexState      = Lex.LineBegin
+                       , expansionMode = Expanding
+                       , config        = conf
+                       , skipState     = []
+                       }
 
 -- Expanding syntax commands.
 
@@ -71,47 +69,52 @@ expandCSName :: () -> [CharCode] -> Either Text [Lex.Token]
 expandCSName _ charToks =
     -- TODO: if control sequence doesn't exist, define one that holds
     -- '\relax'.
-    Right [Lex.ControlSequenceToken $ Lex.ControlSequence charToks]
+    Right [ Lex.ControlSequenceToken $ Lex.ControlSequence charToks ]
 
-expandString :: Conf.IntParamVal Conf.EscapeChar -> Lex.Token -> Either Text [Lex.Token]
-expandString (Conf.IntParamVal escapeCharCode) tok = Right $ case tok of
-    Lex.CharCatToken _ -> [tok]
-    Lex.ControlSequenceToken (Lex.ControlSequence s) ->
-        stringAsMadeTokens $ escape <> s
+expandString :: Conf.IntParamVal Conf.EscapeChar
+             -> Lex.Token
+             -> Either Text [Lex.Token]
+expandString (Conf.IntParamVal escapeCharCode) tok = Right $
+    case tok of
+        Lex.CharCatToken _ -> [ tok ]
+        Lex.ControlSequenceToken (Lex.ControlSequence s) ->
+            stringAsMadeTokens $ escape <> s
   where
     escape = if (escapeCharCode < 0) || (escapeCharCode > 255)
-        then []
-        else [chr escapeCharCode]
+             then []
+             else [ chr escapeCharCode ]
 
-expandMacro :: MacroContents -> Map.Map Digit MacroArgument -> Either Text [Lex.Token]
-expandMacro MacroContents{replacementTokens=(MacroText replaceToks)} args =
+expandMacro :: MacroContents
+            -> Map.Map Digit MacroArgument
+            -> Either Text [Lex.Token]
+expandMacro MacroContents{replacementTokens = (MacroText replaceToks)} args =
     renderMacroText replaceToks
   where
-    renderMacroText []     = Right []
-    renderMacroText (t:ts) =
-        do
+    renderMacroText []       = Right []
+    renderMacroText (t : ts) = do
         rest <- renderMacroText ts
         case t of
-            (MacroTextLexToken x) -> Right (x:rest)
+            (MacroTextLexToken x)     -> Right (x : rest)
             (MacroTextParamToken dig) -> case args !? dig of
                 Nothing -> Left "No such parameter"
                 Just (MacroArgument arg) -> Right $ arg <> rest
 
 -- Change the case of the parsed tokens.
-expandChangeCase :: (VDirection, Conf.Config) -> BalancedText -> Either Text [Lex.Token]
+-- Set the character code of each character token to its
+-- \uccode or \lccode value, if that value is non-zero.
+-- Don't change the category code.
+expandChangeCase :: (VDirection, Conf.Config)
+                 -> BalancedText
+                 -> Either Text [Lex.Token]
 expandChangeCase (direction, conf) (BalancedText caseToks) =
     Right $ changeCase <$> caseToks
-  where
-    -- Set the character code of each character token to its
-    -- \uccode or \lccode value, if that value is non-zero.
-    -- Don't change the category code.
-    changeCase = \case
-        Lex.CharCatToken (Lex.CharCat char cat) ->
-            Lex.CharCatToken $ Lex.CharCat (switch char) cat
-        t -> t
+      where
+        changeCase  = \case
+            Lex.CharCatToken (Lex.CharCat char cat) -> Lex.CharCatToken $
+                Lex.CharCat (switch char) cat
+            t -> t
 
-    switch char =
-        case Conf.lookupChangeCaseCode direction char conf of
+        switch char = case Conf.lookupChangeCaseCode direction char conf of
             Conf.NoCaseChange       -> char
             Conf.ChangeToCode char' -> char'
 
@@ -119,8 +122,7 @@ skipToIfDelim :: IfBodyState -> ExpandedStream -> Maybe ExpandedStream
 skipToIfDelim blk stream = go stream 1
   where
     go :: ExpandedStream -> Int -> Maybe ExpandedStream
-    go _stream n =
-        do
+    go _stream n = do
         (_, rt, _stream') <- fetchResolvedToken _stream
         let cont = go _stream'
         case rt of
@@ -128,57 +130,64 @@ skipToIfDelim blk stream = go stream 1
             SyntaxCommandHeadToken (ConditionTok (ConditionHeadTok _)) ->
                 cont $ succ n
             -- If we see an 'end-if'...
+            -- ...and are at top condition depth, we are finished with the
+            -- condition block altogether.
+            -- ...otherwise, decrement the condition depth.
             SyntaxCommandHeadToken (ConditionTok (ConditionBodyTok EndIf))
-                -- ...and are at top condition depth, we are finished with the
-                -- condition block altogether.
-                | n == 1 -> Just _stream'
-                -- ...otherwise, decrement the condition depth.
-                | otherwise -> cont $ pred n
-            -- If we see an 'else'...
-            SyntaxCommandHeadToken (ConditionTok (ConditionBodyTok Else))
-                -- ...and are at top condition depth, and our target block is
-                -- post-else, we are done skipping tokens. Push a state to prepare
-                -- for the later 'end-if'.
-                | n == 1, IfPreElse <- blk ->
-                    Just _stream'{skipState = (IfBodyState IfPostElse):(skipState _stream')}
-                -- (we ignore 'else's even if it is syntactically wrong, if it's
-                -- ourside our block of interest.)
-            -- Any other token, just skip and continue unchanged.
-            _ ->
-                cont n
 
-skipUpToCaseBlock ::  Int -> ExpandedStream -> Maybe ExpandedStream
+                    | n == 1 -> Just _stream'
+                    | otherwise -> cont $ pred n
+            -- If we see an 'else' and are at top condition depth, and our
+            -- target block is post-else, we are done skipping tokens. Push a
+            -- state to prepare for the later 'end-if'.
+            SyntaxCommandHeadToken (ConditionTok (ConditionBodyTok Else))
+
+                    | n == 1, IfPreElse <- blk ->
+                        Just _stream' { skipState = (IfBodyState IfPostElse)
+                                            : (skipState _stream')
+                                      }
+            -- (we ignore 'else's even if it is syntactically wrong, if it's
+            -- ourside our block of interest.)
+            -- Any other token, just skip and continue unchanged.
+            _ -> cont n
+
+skipUpToCaseBlock :: Int -> ExpandedStream -> Maybe ExpandedStream
 skipUpToCaseBlock tgt stream = go stream 0 1
   where
     go :: ExpandedStream -> Int -> Int -> Maybe ExpandedStream
     go _stream cur n
-        -- If we are at top condition depth,
-        | n == 1, cur == tgt =
-            Just _stream{skipState = (CaseBodyState CasePostOr):(skipState _stream)}
-        | otherwise =
-            do
-            (_, rt, _stream') <- fetchResolvedToken _stream
-            let cont = go _stream'
-            case rt of
-                SyntaxCommandHeadToken (ConditionTok (ConditionHeadTok _)) ->
-                    cont cur $ succ n
-                SyntaxCommandHeadToken (ConditionTok (ConditionBodyTok EndIf))
-                    | n == 1 -> Just _stream'
-                    | otherwise -> cont cur $ pred n
-                SyntaxCommandHeadToken (ConditionTok (ConditionBodyTok Else))
-                    | n == 1 ->
-                        Just _stream'{skipState = (CaseBodyState CasePostElse):(skipState _stream')}
-                SyntaxCommandHeadToken (ConditionTok (ConditionBodyTok Or))
-                    | n == 1 ->
-                        cont (succ cur) n
-                _ ->
-                    cont cur n
+
+            | n == 1, cur == tgt =
+                -- If we are at top condition depth,
+                Just _stream { skipState = (CaseBodyState CasePostOr)
+                                   : (skipState _stream)
+                             }
+            | otherwise = do
+                (_, rt, _stream') <- fetchResolvedToken _stream
+                let cont = go _stream'
+                case rt of
+                    SyntaxCommandHeadToken (ConditionTok (ConditionHeadTok _)) ->
+                        cont cur $ succ n
+                    SyntaxCommandHeadToken (ConditionTok (ConditionBodyTok EndIf ))
+                        | n == 1 -> Just _stream'
+                        | otherwise -> cont cur $ pred n
+                    SyntaxCommandHeadToken (ConditionTok (ConditionBodyTok Else))
+                        | n == 1 ->
+                            Just _stream' { skipState =
+                                                (CaseBodyState CasePostElse)
+                                                : (skipState _stream')
+                                          }
+                    SyntaxCommandHeadToken (ConditionTok (ConditionBodyTok Or))
+                        | n == 1 -> cont (succ cur) n
+                    _ -> cont cur n
+
 
 runRead
     :: ExpandedStream
     -> ReaderT Conf.Config (Except e) a
     -> Either e a
 runRead s f = runExcept $ runReaderT f (config s)
+
 
 expandConditionToken :: ExpandedStream -> ConditionTok -> (Maybe Text, ExpandedStream)
 expandConditionToken strm = \case

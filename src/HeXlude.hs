@@ -1,6 +1,7 @@
 module HeXlude
     ( module Protolude
     , module Readable
+    , module HeX.Type
     , id
     , liftMaybe
     , liftThrow
@@ -29,6 +30,8 @@ import           Control.Monad.Trans.Maybe      ( MaybeT
                                                 )
 
 import           Debug.Readable                as Readable
+
+import           HeX.Type
 
 liftMaybe :: MonadError e m => e -> Maybe a -> m a
 liftMaybe e = \case

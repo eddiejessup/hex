@@ -1,6 +1,6 @@
 module HeX.Type where
 
-import HeXlude
+import           Protolude
 
 import           Control.Applicative           ( Alternative
                                                , empty
@@ -71,19 +71,19 @@ data MoveMode
     | Set
     deriving (Show)
 
-data TypoDim
-     = Width
-     | Height
-     | Depth
+data BoxDim
+     = BoxWidth
+     | BoxHeight
+     | BoxDepth
      deriving (Show, Eq)
 
 class Dimensioned a where
-    naturalLength :: TypoDim -> a -> LenVal
+    naturalLength :: BoxDim -> a -> LenVal
 
 naturalWidth, naturalHeight, naturalDepth :: Dimensioned a => a -> LenVal
-naturalWidth  = naturalLength Width
-naturalHeight = naturalLength Height
-naturalDepth  = naturalLength Depth
+naturalWidth  = naturalLength BoxWidth
+naturalHeight = naturalLength BoxHeight
+naturalDepth  = naturalLength BoxDepth
 
 axisNaturalSpan :: Dimensioned a => Axis -> a -> LenVal
 axisNaturalSpan Vertical   a = naturalHeight a + naturalDepth a

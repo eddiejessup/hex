@@ -1,16 +1,12 @@
 module HeX.BreakList.Glue where
 
-import HeXlude
+import           HeXlude
 
-import qualified HeX.Unit                      as UN
-import           HeX.Type
+import qualified HeX.Unit as UN
 
 -- Flex.
-
-data GlueFlex = GlueFlex
-    { factor :: !Rational
-    , order :: !Int
-    } deriving (Show, Eq)
+data GlueFlex = GlueFlex { factor :: !Rational, order :: !Int }
+    deriving ( Show, Eq )
 
 instance Readable GlueFlex where
     describe (GlueFlex 0 0) = "0"
@@ -18,11 +14,10 @@ instance Readable GlueFlex where
     describe (GlueFlex f n) = show f <> " fil" <> show n
 
 instance Semigroup GlueFlex where
-    a@(GlueFlex fA oA) <> b@(GlueFlex fB oB) =
-        case compare oA oB of
-            GT -> a
-            LT -> b
-            EQ -> GlueFlex (fA + fB) oA
+    a@(GlueFlex fA oA) <> b@(GlueFlex fB oB) = case compare oA oB of
+        GT -> a
+        LT -> b
+        EQ -> GlueFlex (fA + fB) oA
 
 instance Monoid GlueFlex where
     mempty = GlueFlex 0 0
@@ -43,12 +38,9 @@ filFlex :: GlueFlex
 filFlex = GlueFlex 1 1
 
 -- Glue.
-
-data Glue = Glue
-    { dimen :: !IntVal
-    , stretch :: !GlueFlex
-    , shrink :: !GlueFlex
-    } deriving (Show, Eq)
+data Glue =
+    Glue { dimen :: !IntVal, stretch :: !GlueFlex, shrink :: !GlueFlex }
+    deriving ( Show, Eq )
 
 instance Readable Glue where
     describe (Glue d (GlueFlex 0 0) (GlueFlex 0 0)) =
@@ -69,20 +61,19 @@ multiplyGlue (Glue dim str shr) i =
 
 -- \divide <glue> by 2’ halves all three components of <glue>.
 divGlue :: Glue -> Int -> Glue
-divGlue (Glue dim str shr) i =
-    Glue (dim * i) (divFlex str i) (divFlex shr i)
+divGlue (Glue dim str shr) i = Glue (dim * i) (divFlex str i) (divFlex shr i)
 
 negateGlue :: Glue -> Glue
 negateGlue (Glue d str shr) = Glue (-d) str shr
 
 filGlue :: Glue
-filGlue = Glue {dimen = 0, stretch = filFlex, shrink = noFlex}
+filGlue = Glue { dimen = 0, stretch = filFlex, shrink = noFlex }
 
 fixedGlue :: IntVal -> Glue
 fixedGlue d = Glue d noFlex noFlex
 
-newtype MathGlue = MathGlue {unMathGlue :: Glue}
-    deriving (Show, Eq, Semigroup, Monoid)
+newtype MathGlue = MathGlue { unMathGlue :: Glue }
+    deriving ( Show, Eq, Semigroup, Monoid )
 
 negateMathGlue :: MathGlue -> MathGlue
 negateMathGlue (MathGlue g) = MathGlue $ negateGlue g

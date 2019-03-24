@@ -1,8 +1,8 @@
 module HeX.BreakList.Set where
 
-import HeXlude
+import           HeXlude
 
-import           Data.Maybe                     ( mapMaybe )
+import           Data.Maybe          ( mapMaybe )
 
 import           HeX.Box
 import           HeX.BreakList.Elem

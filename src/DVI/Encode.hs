@@ -1,8 +1,8 @@
 module DVI.Encode where
 
-import HeXlude
+import           HeXlude
 
-import qualified Data.ByteString          as BS
+import qualified Data.ByteString as BS
 
 class Encodable a where
     encode :: a -> ByteString

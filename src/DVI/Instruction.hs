@@ -1,65 +1,62 @@
 module DVI.Instruction where
 
-import HeXlude hiding (U1)
+import           HeXlude              hiding ( U1 )
 
-import           Data.Ascii                     ( Ascii )
-import qualified Data.Ascii                    as Asc
-import qualified Data.Binary                   as B
-import qualified Data.ByteString               as BS
-import qualified Data.ByteString.Lazy          as BS.L
-import qualified Data.Int                      as I
-import qualified Data.Word                     as W
-import           Path                           ( Path )
-import qualified Path                          as Path
-import           Data.Path                      ( stripExtension' )
+import           Data.Ascii           ( Ascii )
+import qualified Data.Ascii           as Asc
+import qualified Data.Binary          as B
 import           Data.Byte
-
-import           HeX.Type
+import qualified Data.ByteString      as BS
+import qualified Data.ByteString.Lazy as BS.L
+import qualified Data.Int             as I
+import           Data.Path            ( stripExtension' )
+import qualified Data.Word            as W
+import           Path                 ( Path )
+import qualified Path                 as Path
 
 import           DVI.Encode
 import           DVI.Operation
 
-data ArgVal
-    = IntArgVal IntArgVal
-    | StringArgVal Ascii
-    deriving (Show)
+data ArgVal = IntArgVal IntArgVal | StringArgVal Ascii
+    deriving ( Show )
 
 instance Encodable ArgVal where
-    encode (IntArgVal    v) = encode v
+    encode (IntArgVal v) = encode v
     encode (StringArgVal v) = Asc.toByteString v
 
-data IntArgVal
-    = U1 W.Word8
+data IntArgVal =
+      U1 W.Word8
     | U2 W.Word16
     | U4 W.Word32
     | S1 I.Int8
     | S2 I.Int16
     | S4 I.Int32
-    deriving (Show)
+    deriving ( Show )
 
 intArgValFromSignableInt :: SignableInt -> Either Text IntArgVal
 intArgValFromSignableInt n@(SignableInt s i) = case (s, bytesNeeded n) of
-    (Signed  , 1) -> pure $ S1 $ fromIntegral i
-    (Signed  , 2) -> pure $ S2 $ fromIntegral i
-    (Signed  , 3) -> pure $ S4 $ fromIntegral i
-    (Signed  , 4) -> pure $ S4 $ fromIntegral i
+    (Signed, 1)   -> pure $ S1 $ fromIntegral i
+    (Signed, 2)   -> pure $ S2 $ fromIntegral i
+    (Signed, 3)   -> pure $ S4 $ fromIntegral i
+    (Signed, 4)   -> pure $ S4 $ fromIntegral i
     (Unsigned, 1) -> pure $ U1 $ fromIntegral i
     (Unsigned, 2) -> pure $ U2 $ fromIntegral i
     (Unsigned, 3) -> pure $ U4 $ fromIntegral i
     (Unsigned, 4) -> pure $ U4 $ fromIntegral i
-    (_       , b) -> Left $ "Cannot handle " <> show b <> " bytes"
+    (_, b)        -> Left $ "Cannot handle " <> show b <> " bytes"
 
 instance Encodable IntArgVal where
-    encode a = BS.L.toStrict $ case a of
-        U1 v -> B.encode v
-        U2 v -> B.encode v
-        U4 v -> B.encode v
-        S1 v -> B.encode v
-        S2 v -> B.encode v
-        S4 v -> B.encode v
+    encode a = BS.L.toStrict $
+        case a of
+            U1 v -> B.encode v
+            U2 v -> B.encode v
+            U4 v -> B.encode v
+            S1 v -> B.encode v
+            S2 v -> B.encode v
+            S4 v -> B.encode v
 
 data EncodableInstruction = EncodableInstruction Operation [ArgVal]
-    deriving (Show)
+    deriving ( Show )
 
 instance Encodable EncodableInstruction where
     encode (EncodableInstruction op args) = encode op `BS.append` encode args
@@ -73,12 +70,10 @@ opByteLength v = case v of
     (S4 _) -> FourByte
     (U4 _) -> FourByte
 
-getVariByteOpAndArg
-    :: (ByteLength -> Operation)
-    -> SignableInt
-    -> Either Text (Operation, ArgVal)
-getVariByteOpAndArg f sI =
-    do
+getVariByteOpAndArg :: (ByteLength -> Operation)
+                    -> SignableInt
+                    -> Either Text (Operation, ArgVal)
+getVariByteOpAndArg f sI = do
     iArgVal <- intArgValFromSignableInt sI
     pure (f $ opByteLength iArgVal, IntArgVal iArgVal)
 
@@ -86,124 +81,139 @@ getVariByteInstruction
     :: (ByteLength -> Operation)
     -> SignableInt
     -> Either Text EncodableInstruction
-getVariByteInstruction f sI =
-    do
+getVariByteInstruction f sI = do
     (op, arg) <- getVariByteOpAndArg f sI
-    pure $ EncodableInstruction op [arg]
+    pure $ EncodableInstruction op [ arg ]
 
 getSimpleEncInstruction :: Operation -> EncodableInstruction
 getSimpleEncInstruction _op = EncodableInstruction _op []
 
 getSelectFontNrInstruction :: Int -> Either Text EncodableInstruction
 getSelectFontNrInstruction fNr
-    | fNr < 64 =
-        pure $ getSimpleEncInstruction $ SelectFontNr $ FastSelectFontOp $ fromIntegral fNr
-    | otherwise =
-        do
+    | fNr < 64 = pure $
+        getSimpleEncInstruction $
+        SelectFontNr $
+        FastSelectFontOp $
+        fromIntegral fNr
+    | otherwise = do
         arg <- toUnsignedInt fNr
         getVariByteInstruction (\b -> SelectFontNr $ ArgSelectFontOp b) arg
 
 endPageInstruction, pushInstruction, popInstruction :: EncodableInstruction
 endPageInstruction = getSimpleEncInstruction EndPage
+
 pushInstruction = getSimpleEncInstruction Push
+
 popInstruction = getSimpleEncInstruction Pop
 
 getBeginPageInstruction :: Int -> EncodableInstruction
 getBeginPageInstruction lastBeginPoint =
-    let
-        boringArgs = fmap (IntArgVal . S4 . fromIntegral) ([0 .. 9] :: [Int])
+    let boringArgs = fmap (IntArgVal . S4 . fromIntegral) ([ 0 .. 9 ] :: [Int])
         lastBeginPointArg = (IntArgVal . S4 . fromIntegral) lastBeginPoint
-        args = boringArgs <> [lastBeginPointArg]
+        args = boringArgs <> [ lastBeginPointArg ]
     in
         EncodableInstruction BeginPage args
 
 getDefineFontInstruction
-  :: Int
-  -> Path b Path.File
-  -> Int
-  -> Int
-  -> Int
-  -> Either Text EncodableInstruction
-getDefineFontInstruction fNr path scaleFactor designSize fontChecksum =
-    do
+    :: Int
+    -> Path b Path.File
+    -> Int
+    -> Int
+    -> Int
+    -> Either Text EncodableInstruction
+getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
     sI <- toUnsignedInt fNr
     (_op, fontNrArgVal) <- getVariByteOpAndArg DefineFontNr sI
     dirPathStr <- stripLeadingDot <$> (pathToAscii $ Path.parent path)
-    fileNameStr <- (maybeToRight "Could not strip extension"
-                    $ stripExtension'
-                    $ Path.filename path) >>= pathToAscii
-    let args = [ fontNrArgVal  -- font_nr
-               , (IntArgVal . U4 . fromIntegral) fontChecksum  -- checksum
-               , (IntArgVal . S4 . fromIntegral) scaleFactor  -- scale_factor
-               , (IntArgVal . S4 . fromIntegral) designSize  -- design_size
-               , (IntArgVal . U1 . fromIntegral . asciiLength) dirPathStr  -- dir_path_length
-               , (IntArgVal . U1 . fromIntegral . asciiLength) fileNameStr  -- file_name_length
-               , StringArgVal $ dirPathStr <> fileNameStr  -- font_path
-               ]
+    fileNameStr <- (maybeToRight "Could not strip extension" $
+                    stripExtension' $
+                    Path.filename path)
+        >>= pathToAscii
+    let args =
+            [ fontNrArgVal  -- font_nr
+            , (IntArgVal . U4 . fromIntegral) fontChecksum  -- checksum
+            , (IntArgVal . S4 . fromIntegral) scaleFactor  -- scale_factor
+            , (IntArgVal . S4 . fromIntegral) designSize  -- design_size
+            , (IntArgVal . U1 . fromIntegral . asciiLength) dirPathStr  -- dir_path_length
+            , (IntArgVal . U1 . fromIntegral . asciiLength) fileNameStr  -- file_name_length
+            , StringArgVal $ dirPathStr <> fileNameStr  -- font_path
+            ]
     pure $ EncodableInstruction _op args
   where
-    pathToAscii p = maybeToRight
-        ("Could not represent path as ASCII: " <> show p)
-        (Asc.fromChars $ Path.toFilePath p)
+    pathToAscii p =
+        maybeToRight ("Could not represent path as ASCII: " <> show p)
+                     (Asc.fromChars $ Path.toFilePath p)
 
     asciiLength = BS.length . Asc.toByteString
 
     stripLeadingDot x = if Asc.toText x == "./"
-        then Asc.unsafeFromText ""
-        else x
+                        then Asc.unsafeFromText ""
+                        else x
 
 getCharacterInstruction :: Int -> MoveMode -> Either Text EncodableInstruction
-getCharacterInstruction code mode =
-    case mode of
-        Set | code < 128 ->
-            pure $ getSimpleEncInstruction $ AddChar $ FastCharOp $ fromIntegral code
-        _ ->
-            do
-            arg <- toUnsignedInt code
-            getVariByteInstruction (\b -> AddChar $ ArgCharOp mode b) arg
+getCharacterInstruction code mode = case mode of
+    Set
+        | code < 128 -> pure $
+            getSimpleEncInstruction $
+            AddChar $
+            FastCharOp $
+            fromIntegral code
+    _   -> do
+        arg <- toUnsignedInt code
+        getVariByteInstruction (\b -> AddChar $ ArgCharOp mode b) arg
 
 getRuleInstruction :: MoveMode -> Int -> Int -> EncodableInstruction
-getRuleInstruction mode h w =
-  EncodableInstruction (AddRule mode) $ fmap (IntArgVal . U4 . fromIntegral) [h, w]
+getRuleInstruction mode h w = EncodableInstruction (AddRule mode) args
+  where
+    args = (IntArgVal . U4 . fromIntegral) <$> [ h, w ]
 
 getMoveInstruction :: Axis -> Int -> Either Text EncodableInstruction
-getMoveInstruction ax dist =
-    do
+getMoveInstruction ax dist = do
     arg <- toSignedInt dist
     getVariByteInstruction (\b -> Move ax $ ArgMoveOp b) arg
 
 dviFormatArg, numeratorArg, denominatorArg :: ArgVal
 dviFormatArg = IntArgVal $ U1 2
+
 -- Define a fraction by which all dimensions should be multiplied to get
 -- lengths in units of 10^(-7) meters.
 numeratorArg = IntArgVal $ S4 $ 254 * (10 ^ (5 :: Int))
+
 denominatorArg = IntArgVal $ S4 $ 7227 * (2 ^ (16 :: Int))
 
-magnificationArg :: Int -> ArgVal
-magnificationArg = IntArgVal . S4 . fromIntegral
-
 ambleArgs :: Int -> [ArgVal]
-ambleArgs mag = [numeratorArg, denominatorArg, magnificationArg mag]
+ambleArgs mag =
+    [ numeratorArg, denominatorArg, (IntArgVal . S4 . fromIntegral) mag ]
 
 getPreambleInstr :: Int -> EncodableInstruction
-getPreambleInstr mag =
-    EncodableInstruction Preamble $
-        [dviFormatArg] <> ambleArgs mag <> [IntArgVal $ U1 0, StringArgVal ""]
+getPreambleInstr mag = EncodableInstruction Preamble args
+  where
+    args = [ dviFormatArg ]
+        <> ambleArgs mag
+        <> [ IntArgVal $ U1 0, StringArgVal "" ]
 
 getPostambleInstr :: [Int] -> Int -> Int -> Int -> Int -> EncodableInstruction
-getPostambleInstr beginPagePointers mag maxPageHeightPlusDepth maxPageWidth maxStackDepth =
-    EncodableInstruction Postamble $
-        [lastPointerArg] <>
-        ambleArgs mag <>
-        [ (IntArgVal . S4 . fromIntegral) maxPageHeightPlusDepth
-        , (IntArgVal . S4 . fromIntegral) maxPageWidth
-        , (IntArgVal . U2 . fromIntegral) maxStackDepth
-        , (IntArgVal . U2 . fromIntegral . length) beginPagePointers
-        ]
+getPostambleInstr beginPagePointers
+                  mag
+                  maxPageHeightPlusDepth
+                  maxPageWidth
+                  maxStackDepth = EncodableInstruction Postamble args
   where
-    lastPointerArg = (IntArgVal . S4 . fromIntegral) $ lastDef (-1) beginPagePointers
+    args = [ (IntArgVal . S4 . fromIntegral) lastPointerArg ]
+        <> ambleArgs mag
+        <> [ (IntArgVal . S4 . fromIntegral) maxPageHeightPlusDepth
+           , (IntArgVal . S4 . fromIntegral) maxPageWidth
+           , (IntArgVal . U2 . fromIntegral) maxStackDepth
+           , (IntArgVal . U2 . fromIntegral . length) beginPagePointers
+           ]
+
+    lastPointerArg = lastDef (-1) beginPagePointers
 
 getPostPostambleInstr :: Int -> EncodableInstruction
 getPostPostambleInstr postamblePointer =
-    EncodableInstruction PostPostamble $
-        [(IntArgVal . S4 . fromIntegral) postamblePointer, dviFormatArg] <> replicate 4 (IntArgVal $ U1 223)
+    EncodableInstruction PostPostamble args
+  where
+    args = [ (IntArgVal . S4 . fromIntegral) postamblePointer, dviFormatArg ]
+        <> signature
+
+    signature = replicate 4 (IntArgVal $ U1 223)

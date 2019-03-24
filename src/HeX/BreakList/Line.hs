@@ -1,36 +1,38 @@
 module HeX.BreakList.Line where
 
-import HeXlude
+import           HeXlude
 
-import           Control.Applicative            ( empty )
-import           Control.Monad                  ( guard )
+import           Control.Applicative     ( empty )
+import           Control.Monad           ( guard )
+import           Data.Adjacent           ( Adj(..) )
+import qualified Data.Adjacent           as Adj
 
-import           Data.Adjacent                  ( Adj(..) )
-import qualified Data.Adjacent                 as Adj
-import qualified HeX.Box                       as B
-import           HeX.Unit                       ( tenK )
-import           HeX.Config
-import           HeX.BreakList
+import qualified HeX.Box                 as B
+import           HeX.BreakList.BreakList
+import           HeX.BreakList.Elem
+import           HeX.BreakList.Glue
+import           HeX.BreakList.Judge
+import           HeX.BreakList.Set
+import           HeX.Config.Parameters
+import           HeX.Unit                ( tenK )
 
 newtype BadnessSize = BadnessSize { unBadnessSize :: Int }
-    deriving (Eq, Show, Num)
+    deriving ( Eq, Show, Num )
 
 newtype Demerit = Demerit { unDemerit :: Int }
-    deriving (Show, Eq, Ord, Num)
+    deriving ( Show, Eq, Ord, Num )
 
 newtype IsDiscarding = IsDiscarding Bool
-    deriving (Show)
+    deriving ( Show )
 
 type ElemAdj = Adj BreakableHListElem
 
 data Node = Root | Branch !Int
-    deriving (Show)
+    deriving ( Show )
 
-data InEdge = InEdge
-    { elems :: ![ElemAdj]
-    , src :: !Node
-    , discarding :: !IsDiscarding
-    } deriving (Show)
+data InEdge =
+    InEdge { elems :: ![ElemAdj], src :: !Node, discarding :: !IsDiscarding }
+    deriving ( Show )
 
 -- Set this edge to 'discarding' so that later discardable items won't be
 -- added.
@@ -46,13 +48,14 @@ inEdgeConcat :: [ElemAdj] -> InEdge -> InEdge
 inEdgeConcat xs e = foldr inEdgeCons e xs
 
 edgeStatus :: LenParamVal HSize -> InEdge -> GlueStatus
-edgeStatus (LenParamVal dw) (InEdge v _ _) = listGlueStatus dw $ Adj.fromAdjacencies v
+edgeStatus (LenParamVal dw) (InEdge v _ _) =
+    listGlueStatus dw $ Adj.fromAdjacencies v
 
 withStatus :: LenParamVal HSize -> InEdge -> (InEdge, GlueStatus)
 withStatus dw e = (e, edgeStatus dw e)
 
 data Route = Route ![[B.HBoxElem]] !Demerit
-    deriving (Show)
+    deriving ( Show )
 
 instance Eq Route where
     (Route _ distA) == (Route _ distB) = distA == distB
@@ -65,8 +68,7 @@ routeCons (Route subLns sA) ln sB = Route (ln : subLns) (sA + sB)
 
 lineDemerit :: IntParamVal LinePenalty -> BadnessSize -> BreakItem -> Demerit
 lineDemerit (IntParamVal lp) b br =
-    let
-        breakDemerit = breakPenalty br ^ (2 :: Int)
+    let breakDemerit = breakPenalty br ^ (2 :: Int)
         listDemerit = (lp + unBadnessSize b) ^ (2 :: Int)
     in
         Demerit $ breakDemerit + listDemerit
@@ -87,29 +89,29 @@ toOnlyAcceptables (IntParamVal tol) lp br ds = do
             pure (edge, st, _demerit)
 
 isPromising :: LenParamVal HSize -> InEdge -> Bool
-isPromising dw e =
-    case edgeStatus dw e of
-        FixablyBad Overfull _ -> False
-        _ -> True
+isPromising dw e = case edgeStatus dw e of
+    FixablyBad Overfull _ -> False
+    _ -> True
 
 finaliseInEdge :: ElemAdj -> InEdge -> InEdge
--- If the break-point is at glue, then the line doesn't include that glue.
-finaliseInEdge Adj { adjVal = HVListElem (ListGlue _) } e = e
--- If the break is at some other type of break, the line includes it.
-finaliseInEdge x (InEdge cs n discard) = InEdge (x:cs) n discard
 
-data BreakingState = BreakingState
-    { accEdges        :: !([InEdge])
-    , nodeToBestRoute :: !([Route])
-    , chunk           :: !([ElemAdj])
-    }
+-- If the break-point is at glue, then the line doesn't include that glue.
+finaliseInEdge Adj{adjVal = HVListElem (ListGlue _)} e = e
+-- If the break is at some other type of break, the line includes it.
+finaliseInEdge x (InEdge cs n discard) = InEdge (x : cs) n discard
+
+data BreakingState =
+    BreakingState { accEdges        :: !([InEdge])
+                  , nodeToBestRoute :: !([Route])
+                  , chunk           :: !([ElemAdj])
+                  }
 
 initialBreakingState :: BreakingState
-initialBreakingState = BreakingState
-    { accEdges        = [InEdge [] Root (IsDiscarding False)]
-    , nodeToBestRoute = []
-    , chunk           = []
-    }
+initialBreakingState =
+    BreakingState { accEdges        = [ InEdge [] Root (IsDiscarding False) ]
+                  , nodeToBestRoute = []
+                  , chunk           = []
+                  }
 
 -- Notation:
 -- - An 'Acceptable' line is one that can be realistically considered as being
@@ -120,78 +122,85 @@ initialBreakingState = BreakingState
 --   and will never become acceptable. We can remove such edges from
 --   consideration, because we know that once a line is not promising, it will
 --   never become acceptable.
-appendEntry
-    :: LenParamVal HSize
-    -> IntParamVal Tolerance
-    -> IntParamVal LinePenalty
-    -> BreakingState
-    -> ElemAdj
-    -> Either Text BreakingState
-appendEntry dw tol lp st@BreakingState { accEdges, nodeToBestRoute, chunk } x =
-    case toBreakItem x of
-        -- If we see a non-break item, the new state is the same as the old,
-        -- but with the item appended to the accumulated items 'chunk'.
-        Nothing ->
-            pure st{ chunk = x : chunk }
-        Just br ->
-            let
-                -- Extend the accumulating edges with the normal-items 'chunk',
-                -- accumulated since seeing the last break item.
-                inEdges = inEdgeConcat chunk <$> accEdges
-                -- Here, just consider the in-edges 'unfinalised', i.e. without each
-                -- edge's lines stripped to the form used in an actual break. This is
-                -- because the edges may be passed on to later calls, in such form, to
-                -- build up longer lines.
-                promisingInEdges = filter (isPromising dw) inEdges
-                -- 'finalise' the promising edges to get 'candidate' edges to actually
-                -- break.
-                candidateBrokenDInEdges = withStatus dw . finaliseInEdge x <$> promisingInEdges
-            in
-                -- Filter the candidates to those we could actually accept.
-                case toOnlyAcceptables tol lp br candidateBrokenDInEdges of
-                    -- If we can't break at this point acceptably somehow, just treat
-                    -- the break item like a non-break item.
-                    [] ->
-                        pure $ BreakingState promisingInEdges nodeToBestRoute [x]
-                    -- If some edges are acceptable, explore this fruitful avenue.
-                    acceptableDInEdges ->
-                        let
-                            -- For later calls, build up the still-promising edges with
-                            -- the break item added.
-                            grownPromisingInEdges = inEdgeCons x <$> promisingInEdges
-                            -- Add an edge representing the chance to break here.
-                            newInEdge = newEdge $ length nodeToBestRoute
-                            -- Add that new edge to the existing, now-grown, edges.
-                            newAccEdges = newInEdge : grownPromisingInEdges
-                            -- Find the best way to reach this break-point, given the
-                            -- acceptable previous lines and the known best ways to
-                            -- reach those lines.
-                        in
-                            do
-                            newRoute <- shortestRoute acceptableDInEdges nodeToBestRoute
+appendEntry :: LenParamVal HSize
+            -> IntParamVal Tolerance
+            -> IntParamVal LinePenalty
+            -> BreakingState
+            -> ElemAdj
+            -> Either Text BreakingState
+appendEntry dw
+            tol
+            lp
+            st@BreakingState{accEdges, nodeToBestRoute, chunk}
+            x = case toBreakItem x of
+    -- If we see a non-break item, the new state is the same as the old,
+    -- but with the item appended to the accumulated items 'chunk'.
+    Nothing -> pure st { chunk = x : chunk }
+    Just br ->
+        let
+            -- Extend the accumulating edges with the normal-items 'chunk',
+            -- accumulated since seeing the last break item.
+            inEdges = inEdgeConcat chunk <$> accEdges
+            -- Here, just consider the in-edges 'unfinalised', i.e. without each
+            -- edge's lines stripped to the form used in an actual break. This is
+            -- because the edges may be passed on to later calls, in such form, to
+            -- build up longer lines.
+            promisingInEdges = filter (isPromising dw) inEdges
+            -- 'finalise' the promising edges to get 'candidate' edges to actually
+            -- break.
+            candidateBrokenDInEdges =
+                withStatus dw . finaliseInEdge x <$> promisingInEdges
+        in
+            -- Filter the candidates to those we could actually accept.
+            case toOnlyAcceptables tol lp br candidateBrokenDInEdges of
+                -- If we can't break at this point acceptably somehow, just treat
+                -- the break item like a non-break item.
+                [] ->
+                    pure $ BreakingState promisingInEdges nodeToBestRoute [ x ]
+                -- If some edges are acceptable, explore this fruitful avenue.
+                acceptableDInEdges ->
+                    let
+                        -- For later calls, build up the still-promising edges with
+                        -- the break item added.
+                        grownPromisingInEdges =
+                            inEdgeCons x <$> promisingInEdges
+                        -- Add an edge representing the chance to break here.
+                        newInEdge = newEdge $ length nodeToBestRoute
+                        -- Add that new edge to the existing, now-grown, edges.
+                        newAccEdges = newInEdge : grownPromisingInEdges
+                    in
+                        -- Find the best way to reach this break-point, given the
+                        -- acceptable previous lines and the known best ways to
+                        -- reach those lines.
+                        do
+                            newRoute <- shortestRoute acceptableDInEdges
+                                                      nodeToBestRoute
                             -- The new state should contain:
                             -- - The ongoing edges that are still promising
-                            -- - The optimal route to reach this break, appended to the list of
-                            --   node best-routes.
-                            -- - A new empty chunk, to accumulate the contents we see until the
-                            --   next break.
-                            pure $ BreakingState newAccEdges (newRoute : nodeToBestRoute) []
+                            -- - The optimal route to reach this break,
+                            --   appended to the list of node best-routes.
+                            -- - A new empty chunk, to accumulate the contents
+                            --   we see until the next break.
+                            pure $
+                                BreakingState newAccEdges
+                                              (newRoute : nodeToBestRoute)
+                                              []
 
-shortestRoute :: [(InEdge, GlueStatus, Demerit)] -> [Route] -> Either Text Route
-shortestRoute es rs =
-    do
+shortestRoute :: [(InEdge, GlueStatus, Demerit)]
+              -> [Route]
+              -> Either Text Route
+shortestRoute es rs = do
     subRs <- mapM bestSubroute es
     pure $ minimumDef (Route [] (Demerit 0)) subRs
   where
     bestSubroute (InEdge ev n _, st, ed) =
         let boxes = setHList st (reverse $ Adj.fromAdjacencies ev)
-        in  case n of
-            Root      ->
-                pure $ Route [boxes] ed
-            Branch sn ->
-                do
-                subR <- atEith "route" rs (length rs - sn - 1)
-                pure $ routeCons subR boxes ed
+        in
+            case n of
+                Root      -> pure $ Route [ boxes ] ed
+                Branch sn -> do
+                    subR <- atEith "route" rs (length rs - sn - 1)
+                    pure $ routeCons subR boxes ed
 
 -- Expects contents in reverse order.
 -- Returns lines in reading order.
@@ -201,18 +210,16 @@ breakAndSetParagraph
     -> IntParamVal LinePenalty
     -> [BreakableHListElem]
     -> Either Text [[B.HBoxElem]]
-breakAndSetParagraph _ _ _ [] =
-    pure []
+breakAndSetParagraph _ _ _ [] = pure []
 breakAndSetParagraph dw tol lp (x : xs) =
     let
         -- Remove the final item if it's glue.
         xsTrimmed = case x of
             HVListElem (ListGlue _) -> xs
-            _                       -> x : xs
+            _ -> x : xs
         -- Add extra bits to finish the list.
         -- Append \penalty10k \hfil \penalty-10k.
-        xsFinished =
-            (HVListElem $ ListPenalty $ Penalty $ -tenK)
+        xsFinished = (HVListElem $ ListPenalty $ Penalty $ -tenK)
             : (HVListElem $ ListGlue filGlue)
             : (HVListElem $ ListPenalty $ Penalty tenK)
             : xsTrimmed
@@ -220,10 +227,12 @@ breakAndSetParagraph dw tol lp (x : xs) =
         go $ reverse xsFinished
   where
     go :: [BreakableHListElem] -> Either Text [[B.HBoxElem]]
-    go _xs =
-        do
-        BreakingState { accEdges, nodeToBestRoute, chunk } <- foldM (appendEntry dw tol lp) initialBreakingState $ Adj.toAdjacents _xs
+    go _xs = do
+        BreakingState{accEdges, nodeToBestRoute, chunk}
+            <- foldM (appendEntry dw tol lp) initialBreakingState $
+            Adj.toAdjacents _xs
         let inEdges = inEdgeConcat chunk <$> accEdges
-            acceptableDInEdges = toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
+            acceptableDInEdges =
+                toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
         (Route rawLns _) <- shortestRoute acceptableDInEdges nodeToBestRoute
         pure $ reverse rawLns

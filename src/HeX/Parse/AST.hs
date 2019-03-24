@@ -1,183 +1,164 @@
 module HeX.Parse.AST where
 
-import HeXlude
+import           HeXlude
 
-import           Path                           ( File
-                                                , Path
-                                                , Rel
-                                                )
+import           Path            ( File, Path, Rel )
 
-import           HeX.Type
-import           HeX.Categorise                 ( CharCode )
-import qualified HeX.Lex                       as Lex
-import           HeX.Unit                       ( PhysicalUnit(..) )
-import qualified HeX.Parse.Token               as T
+import           HeX.Categorise  ( CharCode )
+import qualified HeX.Lex         as Lex
+import qualified HeX.Parse.Token as T
+import           HeX.Unit        ( PhysicalUnit(..) )
 
 -- Number.
-
 data Number = Number T.Sign UnsignedNumber
-    deriving (Show)
+    deriving ( Show )
 
 constNumber :: IntVal -> Number
 constNumber n = Number (T.Sign True) $ constUNumber n
 
-data UnsignedNumber
-    = NormalIntegerAsUNumber NormalInteger
-    | CoercedInteger CoercedInteger
-    deriving (Show)
+data UnsignedNumber =
+    NormalIntegerAsUNumber NormalInteger | CoercedInteger CoercedInteger
+    deriving ( Show )
 
 constUNumber :: IntVal -> UnsignedNumber
 constUNumber n = NormalIntegerAsUNumber $ IntegerConstant n
 
 -- Think: 'un-coerced integer'.
-data NormalInteger
-    = IntegerConstant Int
-    | InternalInteger InternalInteger
-    deriving (Show)
+data NormalInteger = IntegerConstant Int | InternalInteger InternalInteger
+    deriving ( Show )
 
 zeroInteger, oneInteger :: NormalInteger
 zeroInteger = IntegerConstant 0
+
 oneInteger = IntegerConstant 1
 
-data CoercedInteger
-    = InternalLengthAsInt InternalLength
-    | InternalGlueAsInt InternalGlue
-    deriving (Show)
+data CoercedInteger =
+    InternalLengthAsInt InternalLength | InternalGlueAsInt InternalGlue
+    deriving ( Show )
 
 -- Length.
-
 data Length = Length T.Sign UnsignedLength
-    deriving (Show)
+    deriving ( Show )
 
 zeroLength :: Length
-zeroLength = Length (T.Sign True) $ NormalLengthAsULength $ LengthSemiConstant zeroFactor scaledPointUnit
+zeroLength = Length (T.Sign True) $
+    NormalLengthAsULength $
+    LengthSemiConstant zeroFactor scaledPointUnit
 
-data UnsignedLength
-    = NormalLengthAsULength NormalLength
-    | CoercedLength CoercedLength
-    deriving (Show)
+data UnsignedLength =
+    NormalLengthAsULength NormalLength | CoercedLength CoercedLength
+    deriving ( Show )
 
 -- Think: 'un-coerced length'.
-data NormalLength
-    -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
-    = LengthSemiConstant Factor Unit
+data NormalLength =
+      -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
+      LengthSemiConstant Factor Unit
     | InternalLength InternalLength
-    deriving (Show)
+    deriving ( Show )
 
-data Factor
-    = NormalIntegerFactor NormalInteger
-    -- Badly named 'decimal constant' in the TeXbook. Granted, it is specified
-    -- with decimal digits, but its main feature is that it can represent
-    -- non-integers.
+data Factor =
+      NormalIntegerFactor NormalInteger
+      -- Badly named 'decimal constant' in the TeXbook. Granted, it is specified
+      -- with decimal digits, but its main feature is that it can represent
+      -- non-integers.
     | RationalConstant Rational
-    deriving (Show)
+    deriving ( Show )
 
 zeroFactor, oneFactor :: Factor
 zeroFactor = NormalIntegerFactor zeroInteger
+
 oneFactor = NormalIntegerFactor oneInteger
 
-data Unit
-    = PhysicalUnit PhysicalUnitFrame PhysicalUnit
-    | InternalUnit InternalUnit
-    deriving (Show)
+data Unit =
+    PhysicalUnit PhysicalUnitFrame PhysicalUnit | InternalUnit InternalUnit
+    deriving ( Show )
 
 scaledPointUnit :: Unit
 scaledPointUnit = PhysicalUnit MagnifiedFrame ScaledPoint
 
-data InternalUnit
-    = Em
+data InternalUnit =
+      Em
     | Ex
     | InternalIntegerUnit InternalInteger
     | InternalLengthUnit InternalLength
     | InternalGlueUnit InternalGlue
-    deriving (Show)
+    deriving ( Show )
 
-data PhysicalUnitFrame
-    = MagnifiedFrame
-    | TrueFrame
-    deriving (Show)
+data PhysicalUnitFrame = MagnifiedFrame | TrueFrame
+    deriving ( Show )
 
-data CoercedLength
-    = InternalGlueAsLength InternalGlue
-    deriving (Show)
+data CoercedLength = InternalGlueAsLength InternalGlue
+    deriving ( Show )
 
 -- Math-length.
-
 data MathLength = MathLength T.Sign UnsignedMathLength
-    deriving (Show)
+    deriving ( Show )
 
-data UnsignedMathLength
-    = NormalMathLengthAsUMathLength NormalMathLength
-    | CoercedMathLength CoercedMathLength
-    deriving (Show)
+data UnsignedMathLength = NormalMathLengthAsUMathLength NormalMathLength
+                        | CoercedMathLength CoercedMathLength
+    deriving ( Show )
 
 -- Think: 'un-coerced length'.
-data NormalMathLength
+data NormalMathLength =
     -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
-    = MathLengthSemiConstant Factor MathUnit
-    deriving (Show)
+    MathLengthSemiConstant Factor MathUnit
+    deriving ( Show )
 
-data MathUnit
-    = Mu
-    | InternalMathGlueAsUnit InternalMathGlue
-    deriving (Show)
+data MathUnit = Mu | InternalMathGlueAsUnit InternalMathGlue
+    deriving ( Show )
 
-data CoercedMathLength
-    = InternalMathGlueAsMathLength InternalMathGlue
-    deriving (Show)
+data CoercedMathLength = InternalMathGlueAsMathLength InternalMathGlue
+    deriving ( Show )
 
 -- Glue.
+data Glue = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
+          | InternalGlue T.Sign InternalGlue
+    deriving ( Show )
 
-data Glue
-    = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
-    | InternalGlue T.Sign InternalGlue
-    deriving (Show)
-
-data Flex
-    = FiniteFlex Length
-    | FilFlex FilLength
-    deriving (Show)
+data Flex = FiniteFlex Length | FilFlex FilLength
+    deriving ( Show )
 
 oneFilFlex, minusOneFilFlex, oneFillFlex :: Flex
 oneFilFlex = FilFlex oneFil
+
 minusOneFilFlex = FilFlex minusOneFil
+
 oneFillFlex = FilFlex oneFill
 
 data FilLength = FilLength T.Sign Factor Int
-    deriving (Show)
+    deriving ( Show )
 
 oneFil, minusOneFil, oneFill :: FilLength
 oneFil = FilLength (T.Sign True) oneFactor 1
+
 minusOneFil = FilLength (T.Sign False) oneFactor 1
+
 oneFill = FilLength (T.Sign True) oneFactor 2
 
 -- Math glue.
+data MathGlue = ExplicitMathGlue MathLength (Maybe MathFlex) (Maybe MathFlex)
+              | InternalMathGlue T.Sign InternalMathGlue
+    deriving ( Show )
 
-data MathGlue
-    = ExplicitMathGlue MathLength (Maybe MathFlex) (Maybe MathFlex)
-    | InternalMathGlue T.Sign InternalMathGlue
-    deriving (Show)
-
-data MathFlex
-    = FiniteMathFlex MathLength
-    | FilMathFlex FilLength
-    deriving (Show)
+data MathFlex = FiniteMathFlex MathLength | FilMathFlex FilLength
+    deriving ( Show )
 
 -- Internal quantities.
-
-data QuantVariable a
-    = ParamVar a
-    | RegisterVar Number
-    deriving (Show)
+data QuantVariable a = ParamVar a | RegisterVar Number
+    deriving ( Show )
 
 type IntegerVariable = QuantVariable T.IntegerParameter
+
 type LengthVariable = QuantVariable T.LengthParameter
+
 type GlueVariable = QuantVariable T.GlueParameter
+
 type MathGlueVariable = QuantVariable T.MathGlueParameter
+
 type TokenListVariable = QuantVariable T.TokenListParameter
 
-data InternalInteger
-    = InternalIntegerVariable IntegerVariable
+data InternalInteger =
+      InternalIntegerVariable IntegerVariable
     | InternalSpecialInteger T.SpecialInteger
     | InternalCodeTableRef CodeTableRef
     | InternalCharToken IntVal
@@ -187,65 +168,57 @@ data InternalInteger
     | ParShape
     | InputLineNr
     | Badness
-    deriving (Show)
+    deriving ( Show )
 
 data CodeTableRef = CodeTableRef T.CodeType Number
-    deriving (Show)
+    deriving ( Show )
 
 data FontCharRef = FontCharRef T.FontChar FontRef
-    deriving (Show)
+    deriving ( Show )
 
-data FontRef
-    = FontTokenRef Int
-    | CurrentFontRef
-    | FamilyMemberFontRef FamilyMember
-    deriving (Show)
+data FontRef =
+    FontTokenRef Int | CurrentFontRef | FamilyMemberFontRef FamilyMember
+    deriving ( Show )
 
 data FamilyMember = FamilyMember T.FontRange Number
-    deriving (Show)
+    deriving ( Show )
 
-data BoxDimensionRef = BoxDimensionRef Number TypoDim
-    deriving (Show)
+data BoxDimensionRef = BoxDimensionRef Number BoxDim
+    deriving ( Show )
 
 data FontDimensionRef = FontDimensionRef Number FontRef
-    deriving (Show)
+    deriving ( Show )
 
-data InternalLength
-    = InternalLengthVariable LengthVariable
+data InternalLength =
+      InternalLengthVariable LengthVariable
     | InternalSpecialLength T.SpecialLength
     | InternalFontDimensionRef FontDimensionRef
     | InternalBoxDimensionRef BoxDimensionRef
     | LastKern
-    deriving (Show)
+    deriving ( Show )
 
-data InternalGlue
-    = InternalGlueVariable GlueVariable
-    | LastGlue
-    deriving (Show)
+data InternalGlue = InternalGlueVariable GlueVariable | LastGlue
+    deriving ( Show )
 
-data InternalMathGlue
-    = InternalMathGlueVariable MathGlueVariable
-    | LastMathGlue
-    deriving (Show)
+data InternalMathGlue =
+    InternalMathGlueVariable MathGlueVariable | LastMathGlue
+    deriving ( Show )
 
 -- Assignments.
+data Assignment = Assignment { body :: AssignmentBody, global :: T.GlobalFlag }
+    deriving ( Show )
 
-data Assignment = Assignment
-  { body   :: AssignmentBody
-  , global :: T.GlobalFlag
-  } deriving (Show)
-
-data ControlSequenceTarget
-    = MacroTarget T.MacroContents
+data ControlSequenceTarget =
+      MacroTarget T.MacroContents
     | LetTarget Lex.Token
     | FutureLetTarget Lex.Token Lex.Token
     | ShortDefineTarget T.QuantityType Number
     | ReadTarget Number
     | FontTarget FontSpecification (Path Rel File)
-    deriving (Show)
+    deriving ( Show )
 
-data AssignmentBody
-    = DefineControlSequence Lex.ControlSequenceLike ControlSequenceTarget
+data AssignmentBody =
+      DefineControlSequence Lex.ControlSequenceLike ControlSequenceTarget
     | SetVariable VariableAssignment
     | ModifyVariable VariableModification
     | AssignCode CodeAssignment
@@ -253,99 +226,86 @@ data AssignmentBody
     | SetFamilyMember FamilyMember FontRef
     | SetParShape [(Length, Length)]
     | SetBoxRegister Number Box
-    -- -- Global assignments.
+      -- -- Global assignments.
     | SetFontDimension FontDimensionRef Length
     | SetFontChar FontCharRef Number
     | SetHyphenation T.BalancedText
     | SetHyphenationPatterns T.BalancedText
     | SetBoxDimension BoxDimensionRef Length
     | SetInteractionMode T.InteractionMode
-    deriving (Show)
+    deriving ( Show )
 
-data TokenListAssignmentTarget
-    = TokenListAssignmentVar TokenListVariable
-    | TokenListAssignmentText T.BalancedText
-    deriving (Show)
+data TokenListAssignmentTarget = TokenListAssignmentVar TokenListVariable
+                               | TokenListAssignmentText T.BalancedText
+    deriving ( Show )
 
-data VariableAssignment
-    = IntegerVariableAssignment IntegerVariable Number
+data VariableAssignment =
+      IntegerVariableAssignment IntegerVariable Number
     | LengthVariableAssignment LengthVariable Length
     | GlueVariableAssignment GlueVariable Glue
     | MathGlueVariableAssignment MathGlueVariable MathGlue
     | TokenListVariableAssignment TokenListVariable TokenListAssignmentTarget
     | SpecialIntegerVariableAssignment T.SpecialInteger Number
     | SpecialLengthVariableAssignment T.SpecialLength Length
-    deriving (Show)
+    deriving ( Show )
 
-data VariableModification
-    = AdvanceIntegerVariable IntegerVariable Number
+data VariableModification =
+      AdvanceIntegerVariable IntegerVariable Number
     | AdvanceLengthVariable LengthVariable Length
     | AdvanceGlueVariable GlueVariable Glue
     | AdvanceMathGlueVariable MathGlueVariable MathGlue
     | ScaleVariable VDirection NumericVariable Number
-    deriving (Show)
+    deriving ( Show )
 
-data NumericVariable
-    = IntegerNumericVariable IntegerVariable
-    | LengthNumericVariable LengthVariable
-    | GlueNumericVariable GlueVariable
-    | MathGlueNumericVariable MathGlueVariable
-    deriving (Show)
+data NumericVariable = IntegerNumericVariable IntegerVariable
+                     | LengthNumericVariable LengthVariable
+                     | GlueNumericVariable GlueVariable
+                     | MathGlueNumericVariable MathGlueVariable
+    deriving ( Show )
 
 data CodeAssignment = CodeAssignment CodeTableRef Number
-    deriving (Show)
+    deriving ( Show )
 
-data FontSpecification
-    = NaturalFont
-    | FontAt Length
-    | FontScaled Number
-    deriving (Show)
+data FontSpecification = NaturalFont | FontAt Length | FontScaled Number
+    deriving ( Show )
 
 -- Box specification.
+data Box = FetchedRegisterBox T.BoxFetchMode Number
+         | LastBox
+         | VSplitBox Number Length
+         | ExplicitBox BoxSpecification T.ExplicitBox
+    deriving ( Show )
 
-data Box
-    = FetchedRegisterBox T.BoxFetchMode Number
-    | LastBox
-    | VSplitBox Number Length
-    | ExplicitBox BoxSpecification T.ExplicitBox
-    deriving (Show)
+data BoxSpecification = Natural | To Length | Spread Length
+    deriving ( Show )
 
-data BoxSpecification
-    = Natural
-    | To Length
-    | Spread Length
-    deriving (Show)
-
-data BoxOrRule
-    = BoxOrRuleBox Box
-    | BoxOrRuleRule Rule
-    deriving (Show)
+data BoxOrRule = BoxOrRuleBox Box | BoxOrRuleRule Rule
+    deriving ( Show )
 
 -- Commands.
-
-data AllModesCommand
-    = ShowToken Lex.Token
+data AllModesCommand =
+      ShowToken Lex.Token
     | ShowBox Number
     | ShowLists
     | ShowTheInternalQuantity InternalQuantity
     | ShipOut Box
     | AddMark T.BalancedText
-    -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
-    -- -- then can 'migrate' out.
-    -- \| AddInsertion Number VModeMaterial
-    -- \| AddAdjustment VModeMaterial
+      -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
+      -- -- then can 'migrate' out.
+      -- \| AddInsertion Number VModeMaterial
+      -- \| AddAdjustment VModeMaterial
     | AddSpace
     | StartParagraph T.IndentFlag
     | EndParagraph
     | AddLeaders T.LeadersType BoxOrRule Glue
     | AddUnwrappedFetchedBox Number T.BoxFetchMode -- \un{v,h}{box,copy}
     | AddRule Rule
-    -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
+      -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
     | ModeIndependentCommand ModeIndependentCommand
-    deriving (Show)
+    deriving ( Show )
 
-data ModeIndependentCommand
-    = Assign Assignment
+data ModeIndependentCommand =
+      Assign Assignment
     | ChangeScope T.Sign CommandTrigger
     | Relax
     | IgnoreSpaces
@@ -361,17 +321,13 @@ data ModeIndependentCommand
     | WriteToStream Number WriteText
     | DoSpecial T.ExpandedBalancedText
     | AddBox BoxPlacement Box
-    deriving (Show)
+    deriving ( Show )
 
-data VModeCommand
-    = VAllModesCommand AllModesCommand
-    | End
-    | Dump
-    | EnterHMode
-    deriving (Show)
+data VModeCommand = VAllModesCommand AllModesCommand | End | Dump | EnterHMode
+    deriving ( Show )
 
-data HModeCommand
-    = HAllModesCommand AllModesCommand
+data HModeCommand =
+      HAllModesCommand AllModesCommand
     | AddControlSpace
     | AddCharacter CharCodeRef
     | AddAccentedCharacter Number [Assignment] (Maybe CharCodeRef)
@@ -380,61 +336,46 @@ data HModeCommand
     | AddDiscretionaryHyphen
     | EnterMathMode
     | LeaveHMode
-    deriving (Show)
+    deriving ( Show )
 
-data CommandTrigger
-    = CharCommandTrigger
-    | CSCommandTrigger
-    deriving (Show, Eq)
+data CommandTrigger = CharCommandTrigger | CSCommandTrigger
+    deriving ( Show, Eq )
 
-data InternalQuantity
-    = InternalIntegerQuantity InternalInteger
+data InternalQuantity =
+      InternalIntegerQuantity InternalInteger
     | InternalLengthQuantity InternalLength
     | InternalGlueQuantity InternalGlue
     | InternalMathGlueQuantity InternalMathGlue
     | FontQuantity FontRef
     | TokenListVariableQuantity TokenListVariable
-    deriving (Show)
+    deriving ( Show )
 
-data WriteText
-    = ImmediateWriteText T.ExpandedBalancedText
-    | DeferredWriteText T.BalancedText
-    deriving (Show)
+data WriteText = ImmediateWriteText T.ExpandedBalancedText
+               | DeferredWriteText T.BalancedText
+    deriving ( Show )
 
-data WritePolicy
-    = Immediate
-    | Deferred
-    deriving (Show)
+data WritePolicy = Immediate | Deferred
+    deriving ( Show )
 
-data Rule = Rule
-    { width, height, depth :: Maybe Length }
-    deriving (Show)
+data Rule = Rule { width, height, depth :: Maybe Length }
+    deriving ( Show )
 
-data FileStreamAction
-    = Open (Path Rel File)
-    | Close
-    deriving (Show)
+data FileStreamAction = Open (Path Rel File) | Close
+    deriving ( Show )
 
-data FileStreamType
-    = FileInput
-    | FileOutput WritePolicy
-    deriving (Show)
+data FileStreamType = FileInput | FileOutput WritePolicy
+    deriving ( Show )
 
-data BoxPlacement
-    = NaturalPlacement
-    | ShiftedPlacement Direction Length
-    deriving (Show)
+data BoxPlacement = NaturalPlacement | ShiftedPlacement Direction Length
+    deriving ( Show )
 
-data CharCodeRef
-    = CharRef CharCode
-    | CharTokenRef IntVal
-    | CharCodeNrRef Number
-    deriving (Show)
+data CharCodeRef =
+    CharRef CharCode | CharTokenRef IntVal | CharCodeNrRef Number
+    deriving ( Show )
 
 -- Condition heads.
-
-data IfConditionHead
-    = IfIntegerPairTest Number Ordering Number -- \ifnum
+data IfConditionHead =
+      IfIntegerPairTest Number Ordering Number -- \ifnum
     | IfLengthPairTest Length Ordering Length -- \ifdim
     | IfIntegerOdd Number -- \ifodd
     | IfInMode T.ModeAttribute -- \ifvmode, \ifhmode, \ifmmode, \ifinner
@@ -443,9 +384,7 @@ data IfConditionHead
     | IfBoxRegisterIs T.BoxRegisterAttribute Number -- \ifvoid, \ifhbox, \ifvbox
     | IfInputEnded Number -- \ifeof
     | IfConst Bool -- \iftrue, \iffalse
-    deriving (Show)
+    deriving ( Show )
 
-data ConditionHead
-    = IfConditionHead IfConditionHead
-    | CaseConditionHead Number
-    deriving (Show)
+data ConditionHead = IfConditionHead IfConditionHead | CaseConditionHead Number
+    deriving ( Show )

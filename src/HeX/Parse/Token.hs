@@ -6,7 +6,7 @@ import           GHC.Generics                   ( Generic )
 import           Data.Hashable                  ( Hashable )
 import qualified Data.Map.Strict               as Map
 
-import           HeX.Type
+
 import qualified HeX.Lex                       as Lex
 import           HeX.Box                        ( VBoxAlignType )
 
@@ -448,7 +448,7 @@ data PrimitiveToken
     -- Internal lengths.
     | LastKernTok -- \lastkern
     | FontDimensionTok -- \fontdimen
-    | BoxDimensionTok TypoDim -- \ht, \wd, \dp
+    | BoxDimensionTok BoxDim -- \ht, \wd, \dp
     -- Internal glues.
     | LastGlueTok -- \lastskip
     -- Specifying boxes.
