@@ -316,7 +316,7 @@ data ModeIndependentCommand =
     | AddGlue Glue
     | SetAfterAssignmentToken Lex.Token
     | AddToAfterGroupTokens Lex.Token
-    | Message T.MessageStream T.ExpandedBalancedText
+    | Message T.StandardOutputStream T.ExpandedBalancedText
     | ModifyFileStream FileStreamType FileStreamAction Number
     | WriteToStream Number WriteText
     | DoSpecial T.ExpandedBalancedText

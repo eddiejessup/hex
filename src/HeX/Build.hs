@@ -74,9 +74,12 @@ handleModeIndep = \case
                             retElems []
                         ExplicitBoxGroup ->
                             pure Nothing
-    HP.Message HP.Out eTxt ->
+    HP.Message stdOutStream eTxt ->
         do
-        liftIO $ putStrLn $ Com.showExpandedBalancedText eTxt
+        let _handle = case stdOutStream of
+                HP.StdOut -> stdout
+                HP.StdErr -> stderr
+        liftIO $ hPutStrLn _handle $ Com.showExpandedBalancedText eTxt
         noElems
     HP.Relax ->
         noElems
@@ -231,6 +234,8 @@ handleModeIndep = \case
                     Nothing -> delBoxRegister eIdx global
                     Just b -> setBoxRegister eIdx b global
                 pure []
+            oth ->
+                panic $ show oth
         HP.runConfState (gets afterAssignmentToken) >>= \case
             Nothing -> pure ()
             Just lt ->
@@ -266,6 +271,8 @@ handleModeIndep = \case
         retElems $ case mayBox of
             Nothing -> []
             Just b  -> [(BL.VListBaseElem . B.ElemBox) b]
+    oth ->
+        panic $ show oth
 
   where
     retElems els = pure $ Just els

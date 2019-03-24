@@ -193,9 +193,9 @@ data GlobalFlag
     | Local
     deriving (Show, Eq)
 
-data MessageStream
-    = Out
-    | Err
+data StandardOutputStream
+    = StdOut
+    | StdErr
     deriving (Show, Eq)
 
 data BoxFetchMode
@@ -374,7 +374,7 @@ data PrimitiveToken
     | IgnoreSpacesTok -- \ignorespaces
     | SetAfterAssignmentTokenTok -- \afterassignment
     | AddToAfterGroupTokensTok -- \aftergroup
-    | MessageTok MessageStream -- \message, \errmessage
+    | MessageTok StandardOutputStream -- \message, \errmessage
     | ImmediateTok -- \immediate
     | OpenInputTok -- \openin
     | CloseInputTok -- \closein

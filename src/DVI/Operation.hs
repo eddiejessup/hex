@@ -12,10 +12,11 @@ data ByteLength = OneByte | TwoByte | ThreeByte | FourByte
     deriving ( Show )
 
 toWord :: ByteLength -> W.Word8
-toWord OneByte = 0
-toWord TwoByte = 1
-toWord ThreeByte = 2
-toWord FourByte = 3
+toWord = \case
+    OneByte -> 0
+    TwoByte -> 1
+    ThreeByte -> 2
+    FourByte -> 3
 
 data CharOp = FastCharOp W.Word8 | ArgCharOp MoveMode ByteLength
     deriving ( Show )
