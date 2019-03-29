@@ -365,19 +365,17 @@ extractHList
 extractHList indentFlag inRestricted =
     do
     indentBox <- readOnConfState $ asks parIndentBox
-    extractParagraphInner [indentBox | indentFlag == HP.Indent]
-  where
-    -- We build a paragraph list in reverse order.
-    extractParagraphInner acc =
-        do
-        oldStream <- get
-        (PS.State { PS.stateInput = newStream }, com) <- liftEither $ ParseError `mapLeft` HP.extractHModeCommand oldStream
-        put newStream
-        -- liftIO $ putStrLn $ (if inRestricted then "Restricted" else "Unrestricted") <> " horizontal mode, processing command: " <> showT com
-        (procAcc, continue) <- processHCommand oldStream acc inRestricted com
-        if continue
-            then extractParagraphInner procAcc
-            else pure procAcc
+    extractList HP.extractHModeCommand (\s ac c -> processHCommand s ac inRestricted c) [indentBox | indentFlag == HP.Indent]
+
+extractList extract process acc =
+    do
+    oldStream <- get
+    (PS.State { PS.stateInput = newStream }, com) <- liftEither $ ParseError `mapLeft` extract oldStream
+    put newStream
+    (procAcc, continue) <- process oldStream acc com
+    if continue
+        then extractList extract process procAcc
+        else pure procAcc
 
 extractBreakAndSetHList
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
@@ -508,18 +506,7 @@ extractVList
     => Bool
     -> ExceptBuildT s m [BL.BreakableVListElem]
 extractVList inInternal =
-    extractVListInner []
-  where
-    extractVListInner acc =
-        do
-        oldStream <- get
-        (PS.State { PS.stateInput = newStream }, com) <- liftEither $ ParseError `mapLeft` HP.extractVModeCommand oldStream
-        put newStream
-        -- liftIO $ putStrLn $ (if inInternal then "Internal" else "Outer") <> " vertical mode, processing command: " <> showT com
-        (procAcc, continue) <- processVCommand oldStream acc inInternal com
-        if continue
-            then extractVListInner procAcc
-            else pure procAcc
+    extractList HP.extractVModeCommand (\s ac c -> processVCommand s ac inInternal c) []
 
 extractBreakAndSetVList
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
