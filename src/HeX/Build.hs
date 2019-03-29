@@ -234,6 +234,15 @@ handleModeIndep = \case
                     Nothing -> delBoxRegister eIdx global
                     Just b -> setBoxRegister eIdx b global
                 pure []
+            HP.SetFontChar (HP.FontCharRef fontChar fontRef) charRef ->
+                do
+                fNr <- liftReadOnConfState $ evaluateFontRef fontRef
+                eCharRef <- liftReadOnConfState $ evaluateNumber charRef
+                let updateFontChar f = case fontChar of
+                        HP.SkewChar -> f { skewChar = eCharRef }
+                        HP.HyphenChar -> f { hyphenChar = eCharRef }
+                HP.runConfState $ modifyFont fNr updateFontChar
+                pure []
             oth ->
                 panic $ show oth
         HP.runConfState (gets afterAssignmentToken) >>= \case

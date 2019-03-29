@@ -8,8 +8,8 @@ import           Control.Monad.Reader     ( MonadReader, asks )
 import           Control.Monad.State.Lazy ( MonadState, gets, liftIO, modify )
 import qualified Data.HashMap.Strict      as HMap
 import           Data.Maybe               ( fromMaybe )
-import qualified Data.Vector              as V
-import           Data.Vector              ( (!?) )
+import qualified Data.IntMap.Strict       as IntMap
+import           Data.IntMap.Strict       ( IntMap, (!?) )
 import           Path
 import           System.Directory
 import           System.IO                ( Handle
@@ -115,7 +115,7 @@ newLocalScope =
           }
 
 data Config =
-    Config { fontInfos :: V.Vector FontInfo
+    Config { fontInfos :: IntMap FontInfo
            , searchDirectories :: [Path Abs Dir]
            , specialIntegers :: HMap.HashMap SpecialInteger IntVal
            , specialLengths :: HMap.HashMap SpecialLength IntVal
@@ -138,7 +138,7 @@ newConfig = do
                 , cwdRaw
                 ]
     logHandle <- openFile "hex.log" WriteMode
-    pure Config { fontInfos = V.empty
+    pure Config { fontInfos = IntMap.empty
                 , searchDirectories = _searchDirectories
                 , specialIntegers = newSpecialIntegers
                 , specialLengths = newSpecialLengths
@@ -153,6 +153,7 @@ finaliseConfig config = do
     hClose $ logStream config
 
 -- Fonts info (global).
+
 data FontInfo =
     FontInfo { fontMetrics :: TexFont, hyphenChar, skewChar :: IntVal }
     deriving ( Show )
@@ -176,9 +177,16 @@ lookupFontInfo fNr = (!? fNr) <$> asks fontInfos
 addFont :: MonadState Config m => FontInfo -> m Int
 addFont newInfo = do
     infos <- gets fontInfos
-    let newInfos = V.snoc infos newInfo
+    let newKey = case IntMap.lookupMax infos of
+            Nothing -> 0
+            Just (i, _) -> succ i
+        newInfos = IntMap.insert newKey newInfo infos
     modify (\conf -> conf { fontInfos = newInfos })
-    pure $ V.length newInfos - 1
+    pure newKey
+
+modifyFont :: MonadState Config m => Int -> (FontInfo -> FontInfo) -> m ()
+modifyFont fNr f = modify (\c@Config{fontInfos} ->
+                           c { fontInfos = IntMap.adjust f fNr fontInfos })
 
 -- Scopes.
 
