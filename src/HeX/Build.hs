@@ -178,8 +178,8 @@ handleModeIndep = \case
                 pure []
             HP.SelectFont fNr ->
                 do
-                fontSel <- HP.runConfState $ Com.selectFont fNr global
-                pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
+                HP.runConfState $ Com.selectFont fNr global
+                pure [BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr]
             HP.SetFamilyMember fm fontRef ->
                 do
                 eFm <- liftEvalOnConfState fm

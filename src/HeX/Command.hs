@@ -98,10 +98,8 @@ loadFont relPath fontSpec = do
 
     extractFontName p = stripExtension p <&> fileName
 
-selectFont :: MonadState Config m => Int -> HP.GlobalFlag -> m B.FontSelection
-selectFont n globalFlag = do
-    modify $ selectFontNr n globalFlag
-    pure $ B.FontSelection n
+selectFont :: MonadState Config m => Int -> HP.GlobalFlag -> m ()
+selectFont n globalFlag = modify $ selectFontNr n globalFlag
 
 getFileStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
 getFileStream strms n = do

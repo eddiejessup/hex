@@ -13,11 +13,7 @@ import           HeX.Config
 import           HeX.Evaluate
 import qualified HeX.Parse                     as HP
 
-class ( TeXEvaluable a
-      , TeXEvaluable (TeXValueAST a)
-      , EvalTarget a ~ EvalTarget (TeXValueAST a)
-      ) => TeXVariable a where
-    type TeXValueAST a
+class TeXVariable a where
 
     setValue
         :: (MonadState Config m, MonadError Text m)
@@ -26,18 +22,18 @@ class ( TeXEvaluable a
         -> EvalTarget a
         -> m ()
 
-    setValueFromAST
-        :: (MonadState Config m, MonadError Text m)
-        => a
-        -> HP.GlobalFlag
-        -> TeXValueAST a
-        -> m ()
-    setValueFromAST var globalFlag astVal =
-        readOnState (texEvaluate astVal) >>= setValue var globalFlag
+setValueFromAST
+    :: (MonadState Config m, MonadError Text m
+       , TeXVariable a, TeXEvaluable b
+       , EvalTarget a ~ EvalTarget b)
+    => a
+    -> HP.GlobalFlag
+    -> b
+    -> m ()
+setValueFromAST var globalFlag astVal =
+    readOnState (texEvaluate astVal) >>= setValue var globalFlag
 
 instance TeXVariable HP.IntegerVariable where
-    type TeXValueAST HP.IntegerVariable = HP.Number
-
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setIntegerParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
@@ -45,8 +41,6 @@ instance TeXVariable HP.IntegerVariable where
                 >>= (\i -> modify $ setIntegerRegister i tgt globalFlag)
 
 instance TeXVariable HP.LengthVariable where
-    type TeXValueAST HP.LengthVariable = HP.Length
-
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setLengthParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
@@ -54,8 +48,6 @@ instance TeXVariable HP.LengthVariable where
                 >>= (\i -> modify $ setLengthRegister i tgt globalFlag)
 
 instance TeXVariable HP.GlueVariable where
-    type TeXValueAST HP.GlueVariable = HP.Glue
-
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setGlueParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
@@ -63,8 +55,6 @@ instance TeXVariable HP.GlueVariable where
                 >>= (\i -> modify $ setGlueRegister i tgt globalFlag)
 
 instance TeXVariable HP.MathGlueVariable where
-    type TeXValueAST HP.MathGlueVariable = HP.MathGlue
-
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setMathGlueParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
@@ -72,8 +62,6 @@ instance TeXVariable HP.MathGlueVariable where
                 >>= (\i -> modify $ setMathGlueRegister i tgt globalFlag)
 
 instance TeXVariable HP.TokenListVariable where
-    type TeXValueAST HP.TokenListVariable = HP.TokenListAssignmentTarget
-
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setTokenListParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
@@ -81,27 +69,26 @@ instance TeXVariable HP.TokenListVariable where
                 >>= (\i -> modify $ setTokenListRegister i tgt globalFlag)
 
 instance TeXVariable HP.SpecialInteger where
-    type TeXValueAST HP.SpecialInteger = HP.Number
-
     setValue p _ tgt =
         modify $ setSpecialInteger p tgt
 
 instance TeXVariable HP.SpecialLength where
-    type TeXValueAST HP.SpecialLength = HP.Length
-
     setValue p _ tgt =
         modify $ setSpecialLength p tgt
 
-class (TeXVariable a) => TeXNumericVariable a where
+-- Numeric variables.
+
+class TeXVariable a => TeXNumericVariable a where
     advanceOp :: Proxy a -> EvalTarget a -> EvalTarget a -> EvalTarget a
     scaleUpOp :: Proxy a -> EvalTarget a -> IntVal -> EvalTarget a
     scaleDownOp :: Proxy a -> EvalTarget a -> IntVal -> EvalTarget a
 
     advanceValueFromAST
-        :: (MonadState Config m, MonadError Text m)
+        :: (MonadState Config m, MonadError Text m
+           , TeXEvaluable a, TeXEvaluable b, EvalTarget b ~ EvalTarget a)
         => a
         -> HP.GlobalFlag
-        -> TeXValueAST a
+        -> b
         -> m ()
     advanceValueFromAST var globalFlag astPlusVal =
         do
@@ -109,7 +96,8 @@ class (TeXVariable a) => TeXNumericVariable a where
         setValue var globalFlag newVal
 
     scaleValueFromAST
-        :: (MonadState Config m, MonadError Text m)
+        :: (MonadState Config m, MonadError Text m
+           , TeXEvaluable a)
         => a
         -> HP.GlobalFlag
         -> VDirection
