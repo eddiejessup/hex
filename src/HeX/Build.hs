@@ -142,9 +142,9 @@ handleModeIndep = \case
                     HP.TokenListVariableAssignment v tgt ->
                         Var.setValueFromAST v global tgt
                     HP.SpecialIntegerVariableAssignment v tgt ->
-                        readOnState (texEvaluate tgt) >>= (\en -> modify $ setSpecialInteger v en)
+                        Var.setValueFromAST v global tgt
                     HP.SpecialLengthVariableAssignment v tgt ->
-                        readOnState (texEvaluate tgt) >>= (\en -> modify $ setSpecialLength v en)
+                        Var.setValueFromAST v global tgt
                 pure []
             HP.ModifyVariable modCommand ->
                 do

@@ -80,6 +80,18 @@ instance TeXVariable HP.TokenListVariable where
             readOnState (texEvaluate iRaw)
                 >>= (\i -> modify $ setTokenListRegister i tgt globalFlag)
 
+instance TeXVariable HP.SpecialInteger where
+    type TeXValueAST HP.SpecialInteger = HP.Number
+
+    setValue p _ tgt =
+        modify $ setSpecialInteger p tgt
+
+instance TeXVariable HP.SpecialLength where
+    type TeXValueAST HP.SpecialLength = HP.Length
+
+    setValue p _ tgt =
+        modify $ setSpecialLength p tgt
+
 class (TeXVariable a) => TeXNumericVariable a where
     advanceOp :: Proxy a -> EvalTarget a -> EvalTarget a -> EvalTarget a
     scaleUpOp :: Proxy a -> EvalTarget a -> IntVal -> EvalTarget a
