@@ -21,6 +21,9 @@ import           HeX.Unit            ( PhysicalUnit(..) )
 parseNumber :: InhibitableStream s => SimpParser s Number
 parseNumber = Number <$> parseSigns <*> parseUnsignedNumber
 
+parseEightBitNumber :: InhibitableStream s => SimpParser s EightBitNumber
+parseEightBitNumber = EightBitNumber <$> parseNumber
+
 parseSigns :: InhibitableStream s => SimpParser s T.Sign
 parseSigns = mconcat <$> parseOptionalSigns
   where
@@ -308,10 +311,11 @@ parseQuantityVariable getParam rTyp =
     parseShortRegRef = satisfyThen $
         \case
             T.IntRefTok (T.RegQuantity typ) n
-                | typ == rTyp -> Just $ constNumber n
+                | typ == rTyp -> Just $ EightBitNumber $ constNumber n
             _ -> Nothing
 
-    parseRegRef = skipSatisfied (== T.RegisterVariableTok rTyp) >> parseNumber
+    parseRegRef =
+        skipSatisfied (== T.RegisterVariableTok rTyp) >> parseEightBitNumber
 
 parseIntegerVariable :: InhibitableStream s => SimpParser s IntegerVariable
 parseIntegerVariable = parseQuantityVariable getParam T.RegInt
@@ -456,7 +460,7 @@ parseBox = P.choice [ parseRegisterBox
                     ]
 
 parseRegisterBox :: InhibitableStream s => SimpParser s Box
-parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseNumber
+parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseEightBitNumber
   where
     parseFetchMode = satisfyThen $
         \case

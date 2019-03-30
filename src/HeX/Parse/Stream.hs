@@ -195,7 +195,7 @@ expandConditionToken strm = \case
         (P.State resultStream _ _, Left err) ->
             (Just $ show err, resultStream)
         (P.State resultStream _ _, Right a)  ->
-            case runRead resultStream (evaluateConditionHead a) of
+            case runRead resultStream (texEvaluate a) of
                 Left err ->
                     (Just $ show err, resultStream)
                 Right (IfBlockTarget IfPreElse) ->
@@ -300,7 +300,7 @@ expandSyntaxCommand strm = \case
         (P.State resultStream _ _, Left err) ->
             (Left $ show err, resultStream)
         (P.State resultStream _ _, Right q)  ->
-            case runRead resultStream (showInternalQuantity q) of
+            case runRead resultStream (texEvaluate q) of
                 Left err ->
                     (Left $ show err, resultStream)
                 Right showS ->

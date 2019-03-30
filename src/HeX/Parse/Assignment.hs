@@ -12,7 +12,7 @@ import           Path                 ( File, Path, Rel, parseRelFile )
 import qualified Text.Megaparsec      as P
 import           Text.Megaparsec      ( (<|>) )
 
-import           HeX.Evaluate         ( evaluateNumber )
+import           HeX.Evaluate
 import qualified HeX.Lex              as Lex
 import           HeX.Parse.AST
 import           HeX.Parse.Common
@@ -230,7 +230,7 @@ parseSetParShape = do
     nrPairs <- parseNumber
     stream <- P.getInput
     eNrPairs
-        <- runExceptT (runReaderT (evaluateNumber nrPairs) (getConfig stream))
+        <- runExceptT (runReaderT (texEvaluate nrPairs) (getConfig stream))
         >>= \case
             Left _  -> P.failure Nothing Set.empty
             Right v -> pure v
@@ -251,7 +251,7 @@ parseReadToControlSequence = do
 parseSetBoxRegister :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetBoxRegister = do
     skipSatisfiedEquals T.SetBoxRegisterTok
-    parseVarEqVal (parseNumber, skipFiller >> parseBox) SetBoxRegister
+    parseVarEqVal (parseEightBitNumber, skipFiller >> parseBox) SetBoxRegister
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
 parseFileName :: InhibitableStream s => SimpParser s (Path Rel File)

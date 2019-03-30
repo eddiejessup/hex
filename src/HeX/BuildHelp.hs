@@ -13,6 +13,7 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 , modify
                                                 )
 import           HeX.Config
+import           HeX.Evaluate
 import qualified HeX.Parse                     as HP
 
 data BuildError s
@@ -54,3 +55,8 @@ readOnConfState f = HP.runConfState $ readOnState f
 modConfState
     :: (MonadState s m, HP.InhibitableStream s) => (Config -> Config) -> m ()
 modConfState x = HP.runConfState $ modify $ x
+
+liftEvalOnConfState
+    :: (HP.InhibitableStream s, MonadState s m, TeXEvaluable v)
+    => v -> ExceptBuildT s m (EvalTarget v)
+liftEvalOnConfState v = liftReadOnConfState $ texEvaluate v

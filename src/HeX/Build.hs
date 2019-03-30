@@ -27,7 +27,7 @@ constructBox
 constructBox = \case
     HP.ExplicitBox spec boxType ->
         do
-        eSpec <- liftReadOnConfState $ evaluateBoxSpecification spec
+        eSpec <- liftEvalOnConfState spec
         modConfState $ pushGroup ExplicitBoxGroup
         b <- case boxType of
             HP.ExplicitHBox ->
@@ -37,7 +37,7 @@ constructBox = \case
         pure $ Just $ B.Box b eSpec
     HP.FetchedRegisterBox fetchMode idx ->
         do
-        eIdx <- liftReadOnConfState $ evaluateEightBitInt idx
+        eIdx <- liftEvalOnConfState idx
         box <- readOnConfState $ asks $ lookupBoxRegister eIdx
         case fetchMode of
             HP.Lookup -> pure ()
@@ -89,15 +89,15 @@ handleModeIndep = \case
         noElems
     HP.AddPenalty n ->
         do
-        p <- liftReadOnConfState $ evaluatePenalty n
-        retElems [BL.ListPenalty p]
+        p <- liftEvalOnConfState n
+        retElems [BL.ListPenalty $ BL.Penalty p]
     HP.AddKern ln ->
         do
-        k <- liftReadOnConfState $ evaluateKern ln
-        retElems [BL.VListBaseElem $ B.ElemKern k]
+        k <- liftEvalOnConfState ln
+        retElems [BL.VListBaseElem $ B.ElemKern $ B.Kern k]
     HP.AddGlue g ->
         do
-        eG <- liftReadOnConfState $ evaluateGlue g
+        eG <- liftEvalOnConfState g
         retElems [BL.ListGlue eG]
     HP.Assign HP.Assignment { HP.global, HP.body } ->
         do
@@ -117,7 +117,7 @@ handleModeIndep = \case
                         pure ([], resTok)
                     HP.ShortDefineTarget q n ->
                         do
-                        en <- evaluateNumber n
+                        en <- texEvaluate n
                         pure ([], HP.primTok $ HP.IntRefTok q en)
                     HP.FontTarget fontSpec fPath ->
                         do
@@ -144,7 +144,7 @@ handleModeIndep = \case
                     HP.SpecialIntegerVariableAssignment v tgt ->
                         readOnState (texEvaluate tgt) >>= (\en -> modify $ setSpecialInteger v en)
                     HP.SpecialLengthVariableAssignment v tgt ->
-                        readOnState (evaluateLength tgt) >>= (\en -> modify $ setSpecialLength v en)
+                        readOnState (texEvaluate tgt) >>= (\en -> modify $ setSpecialLength v en)
                 pure []
             HP.ModifyVariable modCommand ->
                 do
@@ -168,8 +168,8 @@ handleModeIndep = \case
                 pure []
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
-                eIdx <- liftReadOnConfState $ evaluateNumber idx
-                eVal <- liftReadOnConfState $ evaluateNumber val
+                eIdx <- liftEvalOnConfState idx
+                eVal <- liftEvalOnConfState val
                 liftIO $ putStrLn $ "Evaluated code table index " <> showT idx <> " to " <> showT eIdx
                 liftIO $ putStrLn $ "Evaluated code table value " <> showT val <> " to " <> showT eVal
                 idxChar <- liftMaybeConfigError ("Invalid character code index: " <> showT eIdx) (toEnumMay eIdx)
@@ -182,13 +182,13 @@ handleModeIndep = \case
                 pure [BL.VListBaseElem $ B.ElemFontSelection fontSel]
             HP.SetFamilyMember fm fontRef ->
                 do
-                eFm <- liftReadOnConfState $ evaluateFamilyMember fm
-                fNr <- liftReadOnConfState $ evaluateFontRef fontRef
+                eFm <- liftEvalOnConfState fm
+                fNr <- liftEvalOnConfState fontRef
                 modConfState $ setFamilyMemberFont eFm fNr global
                 pure []
             HP.SetBoxRegister idx box ->
                 do
-                eIdx <- liftReadOnConfState $ evaluateEightBitInt idx
+                eIdx <- liftEvalOnConfState idx
                 mayBox <- constructBox box
                 modConfState $ case mayBox of
                     Nothing -> delBoxRegister eIdx global
@@ -196,8 +196,8 @@ handleModeIndep = \case
                 pure []
             HP.SetFontChar (HP.FontCharRef fontChar fontRef) charRef ->
                 do
-                fNr <- liftReadOnConfState $ evaluateFontRef fontRef
-                eCharRef <- liftReadOnConfState $ evaluateNumber charRef
+                fNr <- liftEvalOnConfState fontRef
+                eCharRef <- liftEvalOnConfState charRef
                 let updateFontChar f = case fontChar of
                         HP.SkewChar -> f { skewChar = eCharRef }
                         HP.HyphenChar -> f { hyphenChar = eCharRef }
@@ -214,7 +214,7 @@ handleModeIndep = \case
         retElems assignElems
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
         liftReadOnConfState $ do
-        en <- evaluateNumber n
+        en <- texEvaluate n
         fStreams <- asks outFileStreams
         let txtStr = Com.showExpandedBalancedText eTxt
         -- Write to:
@@ -271,7 +271,7 @@ processHCommand oldStream acc inRestricted = \case
                 continueUnchanged
     HP.AddCharacter c ->
         liftConfigError $ do
-        charCode <- readOnConfState $ evaluateCharCodeRef c
+        charCode <- readOnConfState $ texEvaluate c
         hCharBox <- (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ Com.characterBox charCode)
         modAccum $ hCharBox : acc
     HP.HAllModesCommand aCom -> case aCom of
@@ -297,13 +297,13 @@ processHCommand oldStream acc inRestricted = \case
             liftReadOnConfState $ do
             evalW <- case width of
                 Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> evaluateLength ln
+                Just ln -> texEvaluate ln
             evalH <- case height of
                 Nothing -> pure $ Unit.toScaledPointApprox (10 :: Int) Unit.Point
-                Just ln -> evaluateLength ln
+                Just ln -> texEvaluate ln
             evalD <- case depth of
                 Nothing -> pure 0
-                Just ln -> evaluateLength ln
+                Just ln -> texEvaluate ln
             let rule = B.Rule { B.ruleWidth = evalW, B.ruleHeight = evalH, B.ruleDepth = evalD }
             modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
         HP.ModeIndependentCommand mcom ->
@@ -426,14 +426,14 @@ processVCommand oldStream acc inInternal = \case
             do
             evalW <- case width of
                 Nothing -> readOnConfState $ gets $ lookupLengthParameter HP.HSize
-                Just ln -> liftReadOnConfState $ evaluateLength ln
+                Just ln -> liftEvalOnConfState ln
             evalH <- case height of
                 -- TODO.
                 Nothing -> readOnConfState $ pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> liftReadOnConfState $ evaluateLength ln
+                Just ln -> liftEvalOnConfState ln
             evalD <- case depth of
                 Nothing -> readOnConfState $ pure 0
-                Just ln -> liftReadOnConfState $ evaluateLength ln
+                Just ln -> liftEvalOnConfState ln
             let rule = B.Rule { B.ruleWidth = evalW, B.ruleHeight = evalH, B.ruleDepth = evalD }
             modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
         HP.ModeIndependentCommand mcom ->

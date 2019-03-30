@@ -41,7 +41,7 @@ instance TeXVariable HP.IntegerVariable where
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setIntegerParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
-            readOnState (evaluateEightBitInt iRaw)
+            readOnState (texEvaluate iRaw)
                 >>= (\i -> modify $ setIntegerRegister i tgt globalFlag)
 
 instance TeXVariable HP.LengthVariable where
@@ -50,7 +50,7 @@ instance TeXVariable HP.LengthVariable where
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setLengthParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
-            readOnState (evaluateEightBitInt iRaw)
+            readOnState (texEvaluate iRaw)
                 >>= (\i -> modify $ setLengthRegister i tgt globalFlag)
 
 instance TeXVariable HP.GlueVariable where
@@ -59,7 +59,7 @@ instance TeXVariable HP.GlueVariable where
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setGlueParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
-            readOnState (evaluateEightBitInt iRaw)
+            readOnState (texEvaluate iRaw)
                 >>= (\i -> modify $ setGlueRegister i tgt globalFlag)
 
 instance TeXVariable HP.MathGlueVariable where
@@ -68,7 +68,7 @@ instance TeXVariable HP.MathGlueVariable where
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setMathGlueParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
-            readOnState (evaluateEightBitInt iRaw)
+            readOnState (texEvaluate iRaw)
                 >>= (\i -> modify $ setMathGlueRegister i tgt globalFlag)
 
 instance TeXVariable HP.TokenListVariable where
@@ -77,7 +77,7 @@ instance TeXVariable HP.TokenListVariable where
     setValue v globalFlag tgt = case v of
         HP.ParamVar p -> modify $ setTokenListParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
-            readOnState (evaluateEightBitInt iRaw)
+            readOnState (texEvaluate iRaw)
                 >>= (\i -> modify $ setTokenListRegister i tgt globalFlag)
 
 class (TeXVariable a) => TeXNumericVariable a where

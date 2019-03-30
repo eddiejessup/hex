@@ -13,6 +13,9 @@ import           HeX.Unit        ( PhysicalUnit(..) )
 data Number = Number T.Sign UnsignedNumber
     deriving ( Show )
 
+newtype EightBitNumber = EightBitNumber Number
+    deriving ( Show )
+
 constNumber :: IntVal -> Number
 constNumber n = Number (T.Sign True) $ constUNumber n
 
@@ -144,7 +147,7 @@ data MathFlex = FiniteMathFlex MathLength | FilMathFlex FilLength
     deriving ( Show )
 
 -- Internal quantities.
-data QuantVariable a = ParamVar a | RegisterVar Number
+data QuantVariable a = ParamVar a | RegisterVar EightBitNumber
     deriving ( Show )
 
 type IntegerVariable = QuantVariable T.IntegerParameter
@@ -225,7 +228,7 @@ data AssignmentBody =
     | SelectFont IntVal
     | SetFamilyMember FamilyMember FontRef
     | SetParShape [(Length, Length)]
-    | SetBoxRegister Number Box
+    | SetBoxRegister EightBitNumber Box
       -- -- Global assignments.
     | SetFontDimension FontDimensionRef Length
     | SetFontChar FontCharRef Number
@@ -270,7 +273,7 @@ data FontSpecification = NaturalFont | FontAt Length | FontScaled Number
     deriving ( Show )
 
 -- Box specification.
-data Box = FetchedRegisterBox T.BoxFetchMode Number
+data Box = FetchedRegisterBox T.BoxFetchMode EightBitNumber
          | LastBox
          | VSplitBox Number Length
          | ExplicitBox BoxSpecification T.ExplicitBox
