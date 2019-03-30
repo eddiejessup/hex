@@ -23,6 +23,68 @@ import qualified HeX.Parse.AST                 as AST
 import qualified HeX.Parse.Token               as T
 import qualified HeX.Unit                      as Unit
 
+class TeXEvaluable a where
+    type EvalTarget a
+
+    texEvaluate
+        :: (MonadReader Config m, MonadError Text m)
+        => a
+        -> m (EvalTarget a)
+
+instance TeXEvaluable AST.Number where
+    type EvalTarget AST.Number = IntVal
+
+    texEvaluate = evaluateNumber
+
+instance TeXEvaluable AST.Length where
+    type EvalTarget AST.Length = LenVal
+
+    texEvaluate = evaluateLength
+
+instance TeXEvaluable AST.Glue where
+    type EvalTarget AST.Glue = BL.Glue
+
+    texEvaluate = evaluateGlue
+
+instance TeXEvaluable AST.MathGlue where
+    type EvalTarget AST.MathGlue = BL.MathGlue
+
+    texEvaluate = evaluateMathGlue
+
+instance TeXEvaluable AST.TokenListAssignmentTarget where
+    type EvalTarget AST.TokenListAssignmentTarget = T.BalancedText
+
+    texEvaluate = \case
+        AST.TokenListAssignmentVar tgtVar ->
+            evaluateTokenListVariable tgtVar
+        AST.TokenListAssignmentText tgtText ->
+            pure tgtText
+
+instance TeXEvaluable AST.IntegerVariable where
+    type EvalTarget AST.IntegerVariable = IntVal
+
+    texEvaluate = evaluateIntegerVariable
+
+instance TeXEvaluable AST.LengthVariable where
+    type EvalTarget AST.LengthVariable = LenVal
+
+    texEvaluate = evaluateLengthVariable
+
+instance TeXEvaluable AST.GlueVariable where
+    type EvalTarget AST.GlueVariable = BL.Glue
+
+    texEvaluate = evaluateGlueVariable
+
+instance TeXEvaluable AST.MathGlueVariable where
+    type EvalTarget AST.MathGlueVariable = BL.MathGlue
+
+    texEvaluate = evaluateMathGlueVariable
+
+instance TeXEvaluable AST.TokenListVariable where
+    type EvalTarget AST.TokenListVariable = T.BalancedText
+
+    texEvaluate = evaluateTokenListVariable
+
 -- Integer.
 
 evaluateNumber :: (MonadReader Config m, MonadError Text m) => AST.Number -> m Int

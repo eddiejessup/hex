@@ -2,15 +2,9 @@ module HeX.Command where
 
 import           HeXlude
 
-import           Control.Monad.Except           ( ExceptT
-                                                , MonadError
-                                                , throwError
-                                                , withExceptT
-                                                )
+import           Control.Monad.Except           ( MonadError )
 import           Control.Monad.IO.Class         ( MonadIO )
 import           Control.Monad.State.Lazy       ( MonadState
-                                                , StateT
-                                                , get
                                                 , liftIO
                                                 , modify
                                                 )
@@ -31,10 +25,11 @@ import qualified HeX.BreakList                 as BL
 import           HeX.Categorise                 ( CharCode )
 import           HeX.Config
 import           HeX.Evaluate
+import           HeX.BuildHelp
 import qualified HeX.Lex                       as Lex
 import qualified HeX.Parse                     as HP
 
--- Horizontal mode.
+-- Horizontal mode commands.
 
 characterBox
     :: (MonadReader Config m, MonadError Text m) => CharCode -> m B.Character
@@ -108,78 +103,12 @@ selectFont n globalFlag = do
     modify $ selectFontNr n globalFlag
     pure $ B.FontSelection n
 
-readOnState :: MonadState r m => ReaderT r m b -> m b
-readOnState f = get >>= runReaderT f
+getFileStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
+getFileStream strms n = do
+    fourBitn <- newFourBitInt n
+    HMap.lookup fourBitn strms
 
-readOnConfState
-    :: (HP.InhibitableStream s, MonadState s m)
-    => ReaderT Config (StateT Config m) a
-    -> m a
-readOnConfState f = HP.runConfState $ readOnState f
-
-modConfState
-    :: (MonadState s m, HP.InhibitableStream s) => (Config -> Config) -> m ()
-modConfState x = HP.runConfState $ modify $ x
-
-setIntegerVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.IntegerVariable
-    -> HP.GlobalFlag
-    -> IntVal
-    -> m ()
-setIntegerVariable v globalFlag tgt = case v of
-    HP.ParamVar p -> modify $ setIntegerParameter p tgt globalFlag
-    HP.RegisterVar iRaw ->
-        readOnState (evaluateEightBitInt iRaw)
-            >>= (\i -> modify $ setIntegerRegister i tgt globalFlag)
-
-setLengthVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.LengthVariable
-    -> HP.GlobalFlag
-    -> LenVal
-    -> m ()
-setLengthVariable v globalFlag tgt = case v of
-    HP.ParamVar p -> modify $ setLengthParameter p tgt globalFlag
-    HP.RegisterVar iRaw ->
-        readOnState (evaluateEightBitInt iRaw)
-            >>= (\i -> modify $ setLengthRegister i tgt globalFlag)
-
-setGlueVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.GlueVariable
-    -> HP.GlobalFlag
-    -> BL.Glue
-    -> m ()
-setGlueVariable v globalFlag tgt = case v of
-    HP.ParamVar p -> modify $ setGlueParameter p tgt globalFlag
-    HP.RegisterVar iRaw ->
-        readOnState (evaluateEightBitInt iRaw)
-            >>= (\i -> modify $ setGlueRegister i tgt globalFlag)
-
-setMathGlueVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.MathGlueVariable
-    -> HP.GlobalFlag
-    -> BL.MathGlue
-    -> m ()
-setMathGlueVariable v globalFlag tgt = case v of
-    HP.ParamVar p -> modify $ setMathGlueParameter p tgt globalFlag
-    HP.RegisterVar iRaw ->
-        readOnState (evaluateEightBitInt iRaw)
-            >>= (\i -> modify $ setMathGlueRegister i tgt globalFlag)
-
-setTokenListVariable
-    :: (MonadState Config m, MonadError Text m)
-    => HP.TokenListVariable
-    -> HP.GlobalFlag
-    -> HP.BalancedText
-    -> m ()
-setTokenListVariable v globalFlag tgt = case v of
-    HP.ParamVar p -> modify $ setTokenListParameter p tgt globalFlag
-    HP.RegisterVar iRaw ->
-        readOnState (evaluateEightBitInt iRaw)
-            >>= (\i -> modify $ setTokenListRegister i tgt globalFlag)
+-- Showing things.
 
 showLexTok :: Lex.Token -> Text
 showLexTok = \case
@@ -205,35 +134,3 @@ showBalancedText (HP.BalancedText txt) = Text.concat $ showLexTok <$> txt
 showExpandedBalancedText :: HP.ExpandedBalancedText -> Text
 showExpandedBalancedText (HP.ExpandedBalancedText txt) =
     Text.concat $ showPrimTok <$> txt
-
-getStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
-getStream strms n = do
-    fourBitn <- newFourBitInt n
-    HMap.lookup fourBitn strms
-
-data BuildError s
-  = ParseError s
-  | ConfigError Text
-
-liftConfigError :: Monad m => ExceptT Text m a -> ExceptBuildT s m a
-liftConfigError = withExceptT ConfigError
-
-liftConfState
-    :: (HP.InhibitableStream s, MonadState s m)
-    => StateT Config (ExceptT Text m) a
-    -> ExceptBuildT s m a
-liftConfState x = liftConfigError $ HP.runConfState x
-
-liftReadOnConfState
-    :: (HP.InhibitableStream s, MonadState s m)
-    => ReaderT Config (StateT Config (ExceptT Text m)) a
-    -> ExceptBuildT s m a
-liftReadOnConfState x = liftConfigError $ readOnConfState x
-
-throwConfigError :: MonadError (BuildError s) m => Text -> m a
-throwConfigError s = throwError $ ConfigError s
-
-liftMaybeConfigError :: MonadError (BuildError s) m => Text -> Maybe a -> m a
-liftMaybeConfigError s = liftMaybe (ConfigError s)
-
-type ExceptBuildT s m a = ExceptT (BuildError (HP.ParseErrorBundle s)) m a

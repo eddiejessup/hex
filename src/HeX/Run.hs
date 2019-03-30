@@ -19,7 +19,7 @@ import           DVI.Encode                     ( encode )
 import           HeX.BreakList
 import           HeX.Box
 import           HeX.Build
-import           HeX.Command
+import           HeX.BuildHelp
 import           HeX.Categorise
 import           HeX.Lex                        ( LexState(..)
                                                 , extractToken

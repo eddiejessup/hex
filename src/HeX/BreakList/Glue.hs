@@ -61,7 +61,7 @@ multiplyGlue (Glue dim str shr) i =
 
 -- \divide <glue> by 2’ halves all three components of <glue>.
 divGlue :: Glue -> Int -> Glue
-divGlue (Glue dim str shr) i = Glue (dim * i) (divFlex str i) (divFlex shr i)
+divGlue (Glue dim str shr) i = Glue (dim `quot` i) (divFlex str i) (divFlex shr i)
 
 negateGlue :: Glue -> Glue
 negateGlue (Glue d str shr) = Glue (-d) str shr
@@ -74,6 +74,12 @@ fixedGlue d = Glue d noFlex noFlex
 
 newtype MathGlue = MathGlue { unMathGlue :: Glue }
     deriving ( Show, Eq, Semigroup, Monoid )
+
+multiplyMathGlue :: MathGlue -> Int -> MathGlue
+multiplyMathGlue (MathGlue g) i = MathGlue (multiplyGlue g i)
+
+divMathGlue :: MathGlue -> Int -> MathGlue
+divMathGlue (MathGlue g) i = MathGlue (divGlue g i)
 
 negateMathGlue :: MathGlue -> MathGlue
 negateMathGlue (MathGlue g) = MathGlue $ negateGlue g

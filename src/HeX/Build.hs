@@ -12,22 +12,14 @@ import qualified Text.Megaparsec               as PS
 
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
+import           HeX.BuildHelp
 import           HeX.Config
 import qualified HeX.Lex                       as Lex
 import           HeX.Evaluate
 import qualified HeX.Parse                     as HP
 import qualified HeX.Unit                      as Unit
-import           HeX.Command                    ( ExceptBuildT
-                                                , liftReadOnConfState
-                                                , readOnConfState
-                                                , modConfState
-                                                , throwConfigError
-                                                , liftConfState
-                                                , readOnState
-                                                , liftMaybeConfigError
-                                                , liftConfigError
-                                                , BuildError(..) )
 import qualified HeX.Command                   as Com
+import qualified HeX.Variable                  as Var
 
 constructBox
     :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
@@ -140,21 +132,17 @@ handleModeIndep = \case
                 do
                 liftConfState $ case ass of
                     HP.IntegerVariableAssignment v tgt ->
-                        readOnState (evaluateNumber tgt) >>= Com.setIntegerVariable v global
+                        Var.setValueFromAST v global tgt
                     HP.LengthVariableAssignment v tgt  ->
-                        readOnState (evaluateLength tgt) >>= Com.setLengthVariable v global
+                        Var.setValueFromAST v global tgt
                     HP.GlueVariableAssignment v tgt    ->
-                        readOnState (evaluateGlue tgt) >>= Com.setGlueVariable v global
+                        Var.setValueFromAST v global tgt
                     HP.MathGlueVariableAssignment v tgt  ->
-                        readOnState (evaluateMathGlue tgt) >>= Com.setMathGlueVariable v global
+                        Var.setValueFromAST v global tgt
                     HP.TokenListVariableAssignment v tgt ->
-                        do
-                        eTgt <- readOnState $ case tgt of
-                            HP.TokenListAssignmentVar tgtVar   -> evaluateTokenListVariable tgtVar
-                            HP.TokenListAssignmentText tgtText -> pure tgtText
-                        Com.setTokenListVariable v global eTgt
+                        Var.setValueFromAST v global tgt
                     HP.SpecialIntegerVariableAssignment v tgt ->
-                        readOnState (evaluateNumber tgt) >>= (\en -> modify $ setSpecialInteger v en)
+                        readOnState (texEvaluate tgt) >>= (\en -> modify $ setSpecialInteger v en)
                     HP.SpecialLengthVariableAssignment v tgt ->
                         readOnState (evaluateLength tgt) >>= (\en -> modify $ setSpecialLength v en)
                 pure []
@@ -162,49 +150,21 @@ handleModeIndep = \case
                 do
                 liftConfState $ case modCommand of
                     HP.AdvanceIntegerVariable var plusVal ->
-                        do
-                        newVarVal <- readOnState $ (+) <$> evaluateIntegerVariable var <*> evaluateNumber plusVal
-                        Com.setIntegerVariable var global newVarVal
+                        Var.advanceValueFromAST var global plusVal
                     HP.AdvanceLengthVariable var plusVal ->
-                        do
-                        newVarVal <- readOnState $ (+) <$> evaluateLengthVariable var <*> evaluateLength plusVal
-                        Com.setLengthVariable var global newVarVal
+                        Var.advanceValueFromAST var global plusVal
                     HP.AdvanceGlueVariable var plusVal ->
-                        do
-                        newVarVal <- readOnState $ mappend <$> evaluateGlueVariable var <*> evaluateGlue plusVal
-                        Com.setGlueVariable var global newVarVal
+                        Var.advanceValueFromAST var global plusVal
                     HP.AdvanceMathGlueVariable var plusVal ->
-                        do
-                        newVarVal <- readOnState $ mappend <$> evaluateMathGlueVariable var <*> evaluateMathGlue plusVal
-                        Com.setMathGlueVariable var global newVarVal
-                    -- Division of a positive integer by a positive integer
-                    -- discards the remainder, and the sign of the result
-                    -- changes if you change the sign of either operand.
+                        Var.advanceValueFromAST var global plusVal
                     HP.ScaleVariable vDir numVar scaleVal ->
-                        do
-                        eScaleVal <- readOnState $ evaluateNumber scaleVal
                         case numVar of
                             HP.IntegerNumericVariable var ->
-                                do
-                                eVar <- readOnState $ evaluateIntegerVariable var
-                                let op = case vDir of
-                                        Upward -> (*)
-                                        Downward -> quot
-                                Com.setIntegerVariable var global $ op eVar eScaleVal
+                                Var.scaleValueFromAST var global vDir scaleVal
                             HP.LengthNumericVariable var ->
-                                do
-                                eVar <- readOnState $ evaluateLengthVariable var
-                                let op = case vDir of
-                                        Upward -> (*)
-                                        Downward -> quot
-                                Com.setLengthVariable var global $ op eVar eScaleVal
+                                Var.scaleValueFromAST var global vDir scaleVal
                             HP.GlueNumericVariable var ->
-                                do
-                                eVar <- readOnState $ evaluateGlueVariable var
-                                let op = case vDir of
-                                        Upward -> BL.multiplyGlue
-                                        Downward -> BL.divGlue
-                                Com.setGlueVariable var global $ op eVar eScaleVal
+                                Var.scaleValueFromAST var global vDir scaleVal
                 pure []
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
@@ -263,7 +223,7 @@ handleModeIndep = \case
         -- otherwise:
         --     log
         --     unless stream number is negative: terminal
-        case Com.getStream fStreams en of
+        case Com.getFileStream fStreams en of
             Just fStream ->
                  liftIO $ hPutStrLn fStream txtStr
             Nothing ->
@@ -513,6 +473,5 @@ extractBreakAndSetVList
     => ExceptBuildT s m [B.Page]
 extractBreakAndSetVList = do
     vList <- extractVList False
-    liftIO $ print $ length vList
     desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
     pure $ BL.runPageBuilder desiredH BL.newCurrentPage $ reverse vList
