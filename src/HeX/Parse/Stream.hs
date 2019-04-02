@@ -42,15 +42,6 @@ data ExpandedStream =
                    }
     deriving ( Show )
 
-runConfState :: (InhibitableStream s, MonadState s m)
-             => StateT Conf.Config m a
-             -> m a
-runConfState f = do
-    conf <- gets getConfig
-    (v, conf') <- runStateT f conf
-    modify $ setConfig conf'
-    pure v
-
 newExpandStream :: [Cat.CharCode] -> IO ExpandedStream
 newExpandStream cs = do
     conf <- Conf.newConfig

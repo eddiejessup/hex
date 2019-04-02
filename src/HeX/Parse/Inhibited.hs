@@ -3,6 +3,11 @@ module HeX.Parse.Inhibited where
 import           HeXlude
 
 import           Control.Monad     ( foldM, guard )
+import           Control.Monad.State.Lazy   ( MonadState
+                                            , StateT
+                                            , runStateT
+                                            , modify
+                                            )
 import           Data.Char         ( ord )
 import qualified Data.Foldable     as Fold
 import           Data.Functor      ( ($>) )
@@ -49,6 +54,15 @@ parseInhibited p = do
     inhibitExpansion
     v <- p
     enableExpansion
+    pure v
+
+runConfState :: (InhibitableStream s, MonadState s m)
+             => StateT Config m a
+             -> m a
+runConfState f = do
+    conf <- gets getConfig
+    (v, conf') <- runStateT f conf
+    modify $ setConfig conf'
     pure v
 
 -- Cases where expansion is inhibited:
