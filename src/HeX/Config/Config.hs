@@ -122,7 +122,8 @@ data Config =
              -- File streams.
            , logStream :: Handle
            , outFileStreams :: HMap.HashMap FourBitInt Handle
-           , scopedConfig :: (Scope, [(Group, Scope)])
+           , globalScope :: Scope
+           , scopedConfig :: [(Group, Scope)]
            , afterAssignmentToken :: Maybe Lex.Token
            }
     deriving ( Show )
@@ -144,7 +145,8 @@ newConfig = do
                 , specialLengths = newSpecialLengths
                 , logStream = logHandle
                 , outFileStreams = HMap.empty
-                , scopedConfig = (newGlobalScope, [])
+                , globalScope = newGlobalScope
+                , scopedConfig = []
                 , afterAssignmentToken = Nothing
                 }
 
@@ -190,18 +192,19 @@ modifyFont fNr f = modify (\c@Config{fontInfos} ->
 
 -- Scopes.
 
-modLocalScope :: (s, [(t, s)]) -> (s -> s) -> (s, [(t, s)])
-modLocalScope (gS, (t, lS) : tLS) f = (gS, (t, f lS) : tLS)
-modLocalScope (gS, []) f = (f gS, [])
+modLocalScope :: Config -> (Scope -> Scope) -> Config
+modLocalScope c@Config { globalScope, scopedConfig } f = case scopedConfig of
+    [] -> c { globalScope = f globalScope }
+    (t, lS) : tLS -> c { scopedConfig = (t, f lS) : tLS }
 
 pushGroup :: Group -> Config -> Config
-pushGroup grp c@Config{scopedConfig = (g, locs)} =
-    c { scopedConfig = (g, (grp, newLocalScope) : locs) }
+pushGroup grp c@Config { scopedConfig } =
+    c { scopedConfig = (grp, newLocalScope) : scopedConfig }
 
 popGroup :: Config -> Maybe (Group, Config)
-popGroup c@Config{scopedConfig = (g, locs)} = case locs of
+popGroup c@Config { scopedConfig } = case scopedConfig of
     [] -> Nothing
-    (grp, _) : locs' -> Just (grp, c { scopedConfig = (g, locs') })
+    (grp, _) : scopedConfigRest -> Just (grp, c { scopedConfig = scopedConfigRest })
 
 data KeyOperation v = InsertVal v | DeleteVal
 
@@ -213,13 +216,13 @@ modifyKey :: (Eq k, Hashable k)
           -> GlobalFlag
           -> Config
           -> Config
-modifyKey getMap upD k keyOp globalFlag conf =
-    conf { scopedConfig = insertToScopes $ scopedConfig conf }
+modifyKey getMap upD k keyOp globalFlag conf@Config { scopedConfig, globalScope } =
+    case globalFlag of
+        Global -> conf { globalScope = modOp globalScope
+                       , scopedConfig = (\(t, sc) -> (t, deleteKeyFromScope sc)) <$> scopedConfig
+                       }
+        Local -> modLocalScope conf modOp
   where
-    insertToScopes scopes@(g, locs) = case globalFlag of
-        Global -> (modOp g, (\(t, sc) -> (t, deleteKeyFromScope sc)) <$> locs)
-        Local  -> modLocalScope scopes modOp
-
     modOp = case keyOp of
         DeleteVal   -> deleteKeyFromScope
         InsertVal v -> insertKeyToScope v
@@ -247,11 +250,12 @@ deleteKey :: (Eq k, Hashable k)
           -> Config
 deleteKey getMap upD k = modifyKey getMap upD k DeleteVal
 
-scopedLookup :: (k -> Maybe v) -> (k, [(a, k)]) -> Maybe v
-scopedLookup f (g, []) = f g
-scopedLookup f (g, (_, loc) : locs) = case f loc of
-    Nothing -> scopedLookup f (g, locs)
-    Just v  -> Just v
+scopedLookup :: (Scope -> Maybe v) -> Config -> Maybe v
+scopedLookup f c@Config { globalScope, scopedConfig } = case scopedConfig of
+    [] -> f globalScope
+    (_, lS) : tLS -> case f lS of
+        Nothing -> scopedLookup f c { scopedConfig = tLS }
+        Just v  -> Just v
 
 scopedMapLookup
     :: (Eq k, Hashable k)
@@ -259,13 +263,11 @@ scopedMapLookup
     -> k
     -> Config
     -> Maybe v
-scopedMapLookup getMap k = lkp . scopedConfig
-  where
-    lkp = scopedLookup ((HMap.lookup k) . getMap)
+scopedMapLookup getMap k = scopedLookup ((HMap.lookup k) . getMap)
 
 -- Font number (scoped).
 lookupCurrentFontNr :: Config -> Maybe Int
-lookupCurrentFontNr = scopedLookup currentFontNr . scopedConfig
+lookupCurrentFontNr = scopedLookup currentFontNr
 
 mLookupCurrentFontNr :: (MonadReader Config m, MonadError Text m) => m Int
 mLookupCurrentFontNr =
@@ -278,15 +280,13 @@ currentFontMetrics :: (MonadReader Config m, MonadError Text m) => m TexFont
 currentFontMetrics = fontMetrics <$> currentFontInfo
 
 selectFontNr :: Int -> GlobalFlag -> Config -> Config
-selectFontNr n globalFlag conf =
-    conf { scopedConfig = insertToScopes $ scopedConfig conf }
+selectFontNr n globalFlag c@Config { globalScope, scopedConfig } =
+    case globalFlag of
+        Global -> c { globalScope = selectFontInScope globalScope
+                    , scopedConfig = (\(t, sc) -> (t, deselectFontInScope sc)) <$> scopedConfig
+                    }
+        Local -> modLocalScope c selectFontInScope
   where
-    insertToScopes scopes@(g, locs) = case globalFlag of
-        Global -> ( selectFontInScope g
-                  , (\(t, sc) -> (t, deselectFontInScope sc)) <$> locs
-                  )
-        Local  -> modLocalScope scopes selectFontInScope
-
     deselectFontInScope sc = sc { currentFontNr = Nothing }
 
     selectFontInScope sc = sc { currentFontNr = Just n }

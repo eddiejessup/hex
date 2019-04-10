@@ -2,8 +2,10 @@ module HeX.BuildHelp where
 
 import           HeXlude
 
+import qualified Text.Megaparsec               as PS
 import           Control.Monad.Except           ( ExceptT
                                                 , MonadError
+                                                , liftEither
                                                 , throwError
                                                 , withExceptT
                                                 )
@@ -12,6 +14,8 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 , get
                                                 , modify
                                                 )
+import           Data.Either.Combinators        ( mapLeft )
+
 import           HeX.Config
 import           HeX.Evaluate
 import qualified HeX.Parse                     as HP
@@ -20,7 +24,14 @@ data BuildError s
   = ParseError s
   | ConfigError Text
 
+type ER s a = StateT s IO a
+
+newtype VM s a = VM { unVM :: ER s a }
+    deriving (Functor, Applicative, Monad, MonadState s, MonadIO)
+
 type ExceptBuildT s m a = ExceptT (BuildError (HP.ParseErrorBundle s)) m a
+
+type ExceptBuildVM s a = ExceptBuildT s (VM s) a
 
 liftConfigError :: Monad m => ExceptT Text m a -> ExceptBuildT s m a
 liftConfigError = withExceptT ConfigError
@@ -60,3 +71,19 @@ liftEvalOnConfState
     :: (HP.InhibitableStream s, MonadState s m, TeXEvaluable v)
     => v -> ExceptBuildT s m (EvalTarget v)
 liftEvalOnConfState v = liftReadOnConfState $ texEvaluate v
+
+extractList
+    :: HP.InhibitableStream s
+    => (s -> HP.ExtractResult s t)
+    -> (s -> a -> t -> ExceptBuildVM s (a, Bool))
+    -> a
+    -> ExceptBuildVM s a
+extractList extract process acc =
+    do
+    oldStream <- get
+    (PS.State { PS.stateInput = newStream }, com) <- liftEither $ ParseError `mapLeft` extract oldStream
+    put newStream
+    (procAcc, continue) <- process oldStream acc com
+    if continue
+        then extractList extract process procAcc
+        else pure procAcc

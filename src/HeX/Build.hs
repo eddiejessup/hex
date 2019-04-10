@@ -5,10 +5,8 @@ import HeXlude
 import           Control.Monad                  ( foldM
                                                 , when )
 import           Control.Monad.Except           ( liftEither )
-import           Control.Monad.IO.Class         ( MonadIO )
 import           Data.Either.Combinators        ( mapLeft )
 import           Safe                           ( toEnumMay )
-import qualified Text.Megaparsec               as PS
 
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
@@ -21,9 +19,7 @@ import qualified HeX.Unit                      as Unit
 import qualified HeX.Command                   as Com
 import qualified HeX.Variable                  as Var
 
-constructBox
-    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
-    => HP.Box -> ExceptBuildT s m (Maybe B.Box)
+constructBox :: HP.InhibitableStream s => HP.Box -> ExceptBuildVM s (Maybe B.Box)
 constructBox = \case
     HP.ExplicitBox spec boxType ->
         do
@@ -45,8 +41,8 @@ constructBox = \case
         pure box
 
 handleModeIndep
-    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
-    => HP.ModeIndependentCommand -> ExceptBuildT s m (Maybe [BL.BreakableVListElem])
+    :: HP.InhibitableStream s
+    => HP.ModeIndependentCommand -> ExceptBuildVM s (Maybe [BL.BreakableVListElem])
 handleModeIndep = \case
     HP.ChangeScope (HP.Sign True) trig ->
         do
@@ -125,7 +121,7 @@ handleModeIndep = \case
                         let fontRefTok = HP.primTok $ HP.FontRefToken fontNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure ([boxElem], fontRefTok)
-                liftIO $ putStrLn $ "Setting CS " <> showT cs <> " to token: " <> showT newCSTok <> (if global == HP.Global then " globally" else " locally")
+                liftIO $ putText $ "Setting CS " <> showT cs <> " to token: " <> showT newCSTok <> (if global == HP.Global then " globally" else " locally")
                 modConfState $ setControlSequence cs newCSTok global
                 pure acc
             HP.SetVariable ass ->
@@ -170,10 +166,10 @@ handleModeIndep = \case
                 do
                 eIdx <- liftEvalOnConfState idx
                 eVal <- liftEvalOnConfState val
-                liftIO $ putStrLn $ "Evaluated code table index " <> showT idx <> " to " <> showT eIdx
-                liftIO $ putStrLn $ "Evaluated code table value " <> showT val <> " to " <> showT eVal
+                liftIO $ putText $ "Evaluated code table index " <> showT idx <> " to " <> showT eIdx
+                liftIO $ putText $ "Evaluated code table value " <> showT val <> " to " <> showT eVal
                 idxChar <- liftMaybeConfigError ("Invalid character code index: " <> showT eIdx) (toEnumMay eIdx)
-                liftIO $ putStrLn $ "Setting " <> showT codeType <> "@" <> showT eIdx <> " (" <> showT idxChar <> ") to " <> showT eVal
+                liftIO $ putText $ "Setting " <> showT codeType <> "@" <> showT eIdx <> " (" <> showT idxChar <> ") to " <> showT eVal
                 liftConfState $ updateCharCodeMap codeType idxChar eVal global
                 pure []
             HP.SelectFont fNr ->
@@ -229,7 +225,7 @@ handleModeIndep = \case
             Nothing ->
                 do
                 -- Write to terminal.
-                when (en >= 0) $ liftIO $ putStrLn txtStr
+                when (en >= 0) $ liftIO $ putText txtStr
                 -- Write to log
                 logHandle <- asks logStream
                 liftIO $ hPutStrLn logHandle txtStr
@@ -249,12 +245,12 @@ handleModeIndep = \case
     noElems = retElems []
 
 processHCommand
-    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    :: HP.InhibitableStream s
     => s
     -> [BL.BreakableHListElem]
     -> Bool  -- restricted?
     -> HP.HModeCommand
-    -> ExceptBuildT s m ([BL.BreakableHListElem], Bool)
+    -> ExceptBuildVM s ([BL.BreakableHListElem], Bool)
 processHCommand oldStream acc inRestricted = \case
     HP.LeaveHMode ->
         -- Inner mode: forbidden. TODO.
@@ -318,29 +314,27 @@ processHCommand oldStream acc inRestricted = \case
     continueUnchanged = pure (acc, True)
 
 extractHList
-    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    :: HP.InhibitableStream s
     => HP.IndentFlag
     -> Bool
-    -> ExceptBuildT s m [BL.BreakableHListElem]
+    -> ExceptBuildVM s [BL.BreakableHListElem]
 extractHList indentFlag inRestricted =
     do
     indentBox <- readOnConfState $ asks parIndentBox
-    extractList HP.extractHModeCommand (\s ac c -> processHCommand s ac inRestricted c) [indentBox | indentFlag == HP.Indent]
-
-extractList extract process acc =
-    do
-    oldStream <- get
-    (PS.State { PS.stateInput = newStream }, com) <- liftEither $ ParseError `mapLeft` extract oldStream
-    put newStream
-    (procAcc, continue) <- process oldStream acc com
-    if continue
-        then extractList extract process procAcc
-        else pure procAcc
+    extractList HP.extractHModeCommand processCommand [indentBox | indentFlag == HP.Indent]
+  where
+    processCommand s ac c =
+        do
+        let subModeTxt = if inRestricted
+            then "restricted"
+            else "unrestricted"
+        putText $ "In " <> subModeTxt <> " H-mode, saw command: " <> show c
+        processHCommand s ac inRestricted c
 
 extractBreakAndSetHList
-    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    :: HP.InhibitableStream s
     => HP.IndentFlag
-    -> ExceptBuildT s m [[B.HBoxElem]]
+    -> ExceptBuildVM s [[B.HBoxElem]]
 extractBreakAndSetHList indentFlag =
     do
     hList <- extractHList indentFlag False
@@ -390,12 +384,12 @@ addVListElem acc e = case e of
                 in  e : glue : acc
 
 processVCommand
-    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    :: HP.InhibitableStream s
     => s
     -> [BL.BreakableVListElem]
     -> Bool -- internal?
     -> HP.VModeCommand
-    -> ExceptBuildT s m ([BL.BreakableVListElem], Bool)
+    -> ExceptBuildVM s ([BL.BreakableVListElem], Bool)
 processVCommand oldStream acc inInternal = \case
     -- End recursion.
     HP.End ->
@@ -404,7 +398,7 @@ processVCommand oldStream acc inInternal = \case
         else
             do
             readOnConfState $ asks scopedConfig >>= \case
-                (_, []) -> pure ()
+                [] -> pure ()
                 _ -> throwConfigError "Cannot end: not in global scope"
             gets HP.getConditionBodyState >>= \case
                 Nothing -> pure ()
@@ -462,15 +456,21 @@ processVCommand oldStream acc inInternal = \case
         pure (newAcc, not inInternal)
 
 extractVList
-    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
+    :: HP.InhibitableStream s
     => Bool
-    -> ExceptBuildT s m [BL.BreakableVListElem]
+    -> ExceptBuildVM s [BL.BreakableVListElem]
 extractVList inInternal =
-    extractList HP.extractVModeCommand (\s ac c -> processVCommand s ac inInternal c) []
+    extractList HP.extractVModeCommand processCommand []
+  where
+    processCommand s ac c =
+        do
+        let subModeTxt = if inInternal
+            then "internal"
+            else "outer"
+        putText $ "In " <> subModeTxt <> " V-mode, saw command: " <> show c
+        processVCommand s ac inInternal c
 
-extractBreakAndSetVList
-    :: (HP.InhibitableStream s, MonadState s m, MonadIO m)
-    => ExceptBuildT s m [B.Page]
+extractBreakAndSetVList :: HP.InhibitableStream s => ExceptBuildVM s [B.Page]
 extractBreakAndSetVList = do
     vList <- extractVList False
     desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize

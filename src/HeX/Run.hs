@@ -2,10 +2,8 @@ module HeX.Run where
 
 import HeXlude
 
-import           Control.Monad.Except           ( ExceptT
-                                                , runExceptT )
-import           Control.Monad.State.Lazy       ( StateT
-                                                , evalStateT
+import           Control.Monad.Except           ( runExceptT )
+import           Control.Monad.State.Lazy       ( evalStateT
                                                 )
 import qualified Data.HashMap.Strict           as HMap
 import           Data.List                      ( intercalate )
@@ -119,12 +117,13 @@ buildEitherToIO (Left (ConfigError s))        = panic $ "Bad semantics: " <> s
 buildEitherToIO (Right v)                     = pure v
 
 codesToSth
-    :: P.ShowErrorComponent s
-    => [CharCode]
-    -> ExceptT (BuildError s) (StateT ExpandedStream IO) a
+    :: [CharCode]
+    -> ExceptBuildT ExpandedStream (VM ExpandedStream) a
     -> IO a
 codesToSth xs f =
-    newExpandStream xs >>= evalStateT (runExceptT f) >>= buildEitherToIO
+    newExpandStream xs
+    >>= evalStateT (unVM $ runExceptT f)
+    >>= buildEitherToIO
 
 -- Paragraph list.
 
