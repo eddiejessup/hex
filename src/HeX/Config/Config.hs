@@ -33,8 +33,23 @@ import qualified HeX.Parse.AST            as AST
 import           HeX.Parse.Resolve
 import           HeX.Parse.Token
 
-data Group = LocalStructureGroup AST.CommandTrigger | ExplicitBoxGroup
-    deriving ( Show )
+type HList = [BL.BreakableHListElem]
+type VList = [BL.BreakableVListElem]
+
+data ExplicitBoxGroup
+    = HModeGroup HList
+    | VModeGroup VList
+    deriving (Show)
+
+data Group
+    = ExplicitBoxGroup ExplicitBoxGroup
+    | LocalStructureGroup AST.CommandTrigger Scope
+    deriving (Show)
+
+isBoxGroup :: Group -> Bool
+isBoxGroup = \case
+    ExplicitBoxGroup _ -> True
+    _ -> False
 
 type RegisterMap v = HMap.HashMap EightBitInt v
 
@@ -123,8 +138,10 @@ data Config =
            , logStream :: Handle
            , outFileStreams :: HMap.HashMap FourBitInt Handle
            , globalScope :: Scope
-           , scopedConfig :: [(Group, Scope)]
            , afterAssignmentToken :: Maybe Lex.Token
+           , mainVList :: VList
+           , mainHList :: Maybe HList
+           , groups :: [Group]
            }
     deriving ( Show )
 
@@ -146,8 +163,10 @@ newConfig = do
                 , logStream = logHandle
                 , outFileStreams = HMap.empty
                 , globalScope = newGlobalScope
-                , scopedConfig = []
                 , afterAssignmentToken = Nothing
+                , mainVList = []
+                , mainHList = Nothing
+                , groups = []
                 }
 
 finaliseConfig :: Config -> IO ()
@@ -193,18 +212,33 @@ modifyFont fNr f = modify (\c@Config{fontInfos} ->
 -- Scopes.
 
 modLocalScope :: Config -> (Scope -> Scope) -> Config
-modLocalScope c@Config { globalScope, scopedConfig } f = case scopedConfig of
-    [] -> c { globalScope = f globalScope }
-    (t, lS) : tLS -> c { scopedConfig = (t, f lS) : tLS }
+modLocalScope c@Config { globalScope, groups } f =
+    let (modGlobalScope, modGroups) = go groups
+    in c { globalScope = modGlobalScope, groups = modGroups }
+  where
+    go = \case
+        -- If there are no groups, modify the global scope.
+        [] ->
+            (f globalScope, [])
+        -- If the top group provides local scope, modify that scope.
+        (LocalStructureGroup trig sc):otherGroups ->
+            (globalScope, LocalStructureGroup trig (f sc):otherGroups)
+        -- If the top group doesn't provide local scope, push that top group
+        -- onto the result of changing the config as if this group didn't
+        -- exist.
+        topGroup:otherGroups ->
+            let (restGlobalScope, restGroups) = go otherGroups
+            in (restGlobalScope, topGroup:restGroups)
 
 pushGroup :: Group -> Config -> Config
-pushGroup grp c@Config { scopedConfig } =
-    c { scopedConfig = (grp, newLocalScope) : scopedConfig }
+pushGroup newGroup c@Config { groups } = c { groups = newGroup:groups }
 
 popGroup :: Config -> Maybe (Group, Config)
-popGroup c@Config { scopedConfig } = case scopedConfig of
-    [] -> Nothing
-    (grp, _) : scopedConfigRest -> Just (grp, c { scopedConfig = scopedConfigRest })
+popGroup c@Config { groups } = case groups of
+    [] ->
+        Nothing
+    topGroup : otherGroups ->
+        Just (topGroup, c { groups = otherGroups })
 
 data KeyOperation v = InsertVal v | DeleteVal
 
@@ -216,10 +250,10 @@ modifyKey :: (Eq k, Hashable k)
           -> GlobalFlag
           -> Config
           -> Config
-modifyKey getMap upD k keyOp globalFlag conf@Config { scopedConfig, globalScope } =
+modifyKey getMap upD k keyOp globalFlag conf@Config { groups, globalScope } =
     case globalFlag of
         Global -> conf { globalScope = modOp globalScope
-                       , scopedConfig = (\(t, sc) -> (t, deleteKeyFromScope sc)) <$> scopedConfig
+                       , groups = deleteKeyFromGroup <$> groups
                        }
         Local -> modLocalScope conf modOp
   where
@@ -228,6 +262,12 @@ modifyKey getMap upD k keyOp globalFlag conf@Config { scopedConfig, globalScope 
         InsertVal v -> insertKeyToScope v
 
     insertKeyToScope v c = upD c $ HMap.insert k v $ getMap c
+
+    deleteKeyFromGroup = \case
+        LocalStructureGroup trig scope ->
+            LocalStructureGroup trig (deleteKeyFromScope scope)
+        nonScopeGroup ->
+            nonScopeGroup
 
     deleteKeyFromScope c = upD c $ HMap.delete k $ getMap c
 
@@ -251,11 +291,12 @@ deleteKey :: (Eq k, Hashable k)
 deleteKey getMap upD k = modifyKey getMap upD k DeleteVal
 
 scopedLookup :: (Scope -> Maybe v) -> Config -> Maybe v
-scopedLookup f c@Config { globalScope, scopedConfig } = case scopedConfig of
+scopedLookup f c@Config { globalScope, groups } = case groups of
     [] -> f globalScope
-    (_, lS) : tLS -> case f lS of
-        Nothing -> scopedLookup f c { scopedConfig = tLS }
+    (LocalStructureGroup _ topScope) : otherGroups -> case f topScope of
+        Nothing -> scopedLookup f c { groups = otherGroups }
         Just v  -> Just v
+    _:otherGroups -> scopedLookup f c { groups = otherGroups }
 
 scopedMapLookup
     :: (Eq k, Hashable k)
@@ -280,16 +321,22 @@ currentFontMetrics :: (MonadReader Config m, MonadError Text m) => m TexFont
 currentFontMetrics = fontMetrics <$> currentFontInfo
 
 selectFontNr :: Int -> GlobalFlag -> Config -> Config
-selectFontNr n globalFlag c@Config { globalScope, scopedConfig } =
+selectFontNr n globalFlag c@Config { globalScope, groups } =
     case globalFlag of
         Global -> c { globalScope = selectFontInScope globalScope
-                    , scopedConfig = (\(t, sc) -> (t, deselectFontInScope sc)) <$> scopedConfig
+                    , groups = deselectFontInGroup <$> groups
                     }
         Local -> modLocalScope c selectFontInScope
   where
-    deselectFontInScope sc = sc { currentFontNr = Nothing }
+    deselectFontInScope scope = scope { currentFontNr = Nothing }
 
-    selectFontInScope sc = sc { currentFontNr = Just n }
+    deselectFontInGroup = \case
+        LocalStructureGroup trig scope ->
+            LocalStructureGroup trig (deselectFontInScope scope)
+        nonScopeGroup ->
+            nonScopeGroup
+
+    selectFontInScope scope = scope { currentFontNr = Just n }
 
 setFamilyMemberFont
     :: (FontRange, Int)

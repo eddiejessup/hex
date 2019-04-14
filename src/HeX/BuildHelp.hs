@@ -81,9 +81,21 @@ extractList
 extractList extract process acc =
     do
     oldStream <- get
-    (PS.State { PS.stateInput = newStream }, com) <- liftEither $ ParseError `mapLeft` extract oldStream
-    put newStream
+    com <- sth extract
     (procAcc, continue) <- process oldStream acc com
     if continue
         then extractList extract process procAcc
         else pure procAcc
+
+sth
+    :: (HP.InhibitableStream s, MonadState s m)
+    => (s -> HP.ExtractResult s t)
+    -> ExceptBuildT s m t
+sth extract =
+    do
+    (PS.State { PS.stateInput = newStream }, v) <-
+        gets extract
+        <&> (ParseError `mapLeft`)
+        >>= liftEither
+    put newStream
+    pure v

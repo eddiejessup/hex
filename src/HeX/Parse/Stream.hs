@@ -4,12 +4,6 @@ import           HeXlude
 
 import           Control.Monad.Except     ( Except, runExcept )
 import           Control.Monad.Reader     ( ReaderT, runReaderT )
-import           Control.Monad.State.Lazy ( MonadState
-                                          , StateT
-                                          , gets
-                                          , modify
-                                          , runStateT
-                                          )
 import           Data.Char                ( chr )
 import qualified Data.Foldable            as Fold
 import qualified Data.List.NonEmpty       as NE

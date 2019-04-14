@@ -127,40 +127,40 @@ codesToSth xs f =
 
 -- Paragraph list.
 
-codesToParaList :: [CharCode] -> IO [BreakableHListElem]
-codesToParaList xs =
-    reverse <$> codesToSth xs (extractHList Indent False)
+-- codesToParaList :: [CharCode] -> IO [BreakableHListElem]
+-- codesToParaList xs =
+--     reverse <$> codesToSth xs (extractHList Indent False)
 
-runPara :: [CharCode] -> IO ()
-runPara xs = codesToParaList xs >>= putStrLn . intercalate "\n" . fmap show
+-- runPara :: [CharCode] -> IO ()
+-- runPara xs = codesToParaList xs >>= putStrLn . intercalate "\n" . fmap show
 
 -- Paragraph boxes.
 
-codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
-codesToParaBoxes xs =
-    reverse <$> codesToSth xs (extractBreakAndSetHList Indent)
+-- codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
+-- codesToParaBoxes xs =
+--     reverse <$> codesToSth xs (extractBreakAndSetHList Indent)
 
-runSetPara :: [CharCode] -> IO ()
-runSetPara xs =
-    codesToParaBoxes xs >>= putStrLn . intercalate "\n\n" . fmap showLine
-  where
-    showLine = intercalate "\n" . fmap show
+-- runSetPara :: [CharCode] -> IO ()
+-- runSetPara xs =
+--     codesToParaBoxes xs >>= putStrLn . intercalate "\n\n" . fmap showLine
+--   where
+    -- showLine = intercalate "\n" . fmap show
 
 -- Pages list.
 
 codesToPages :: [CharCode] -> IO [Page]
 codesToPages xs = codesToSth xs extractBreakAndSetVList
 
-printList :: Show a => [a] -> IO ()
-printList = putStrLn . intercalate "\n" . fmap show
+-- printList :: Show a => [a] -> IO ()
+-- printList = putStrLn . intercalate "\n" . fmap show
 
-runPages :: [CharCode] -> IO ()
-runPages xs = codesToPages xs >>= printList
+-- runPages :: [CharCode] -> IO ()
+-- runPages xs = codesToPages xs >>= printList
 
 -- DVI instructions.
 
-runDVI :: [CharCode] -> IO ()
-runDVI xs = pagesToDVI <$> codesToPages xs >>= printList
+-- runDVI :: [CharCode] -> IO ()
+-- runDVI xs = pagesToDVI <$> codesToPages xs >>= printList
 
 -- Raw DVI instructions.
 
@@ -173,8 +173,8 @@ codesToDVIRaw xs = do
     encInstrs <- strEitherToIO $ parseInstructions instrs _mag
     pure $ reverse encInstrs
 
-runDVIRaw :: [CharCode] -> IO ()
-runDVIRaw xs = codesToDVIRaw xs >>= printList
+-- runDVIRaw :: [CharCode] -> IO ()
+-- runDVIRaw xs = codesToDVIRaw xs >>= printList
 
 -- DVI byte strings.
 

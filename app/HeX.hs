@@ -92,9 +92,9 @@ main = do
         ResolveMode  -> runResolved input
         ExpandMode   -> runExpand input
         CommandMode  -> runCommand input
-        ParaListMode -> runPara input
-        ParaSetMode  -> runSetPara input
-        PageMode     -> runPages input
-        DVIMode      -> runDVI input
-        RawDVIMode   -> runDVIRaw input
+        -- ParaListMode -> runPara input
+        -- ParaSetMode  -> runSetPara input
+        -- PageMode     -> runPages input
+        -- DVIMode      -> runDVI input
+        -- RawDVIMode   -> runDVIRaw input
         DVIWriteMode -> codesToDVIBytes input >>= BS.writeFile dest
