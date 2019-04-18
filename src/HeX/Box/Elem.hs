@@ -17,27 +17,27 @@ import           DVI.Document ( Character(..)
 import qualified HeX.Unit     as Unit
 
 data DesiredLength = Natural | Spread LenVal | To LenVal
-    deriving ( Show )
+    deriving (Show)
 
 data VBoxAlignType = DefaultAlign -- \vbox
                    | TopAlign -- \vtop
-    deriving ( Show, Eq )
+    deriving (Show, Eq)
 
 newtype Kern = Kern { kernDimen :: LenVal }
-    deriving ( Show )
+    deriving (Show)
 
 newtype SetGlue = SetGlue { glueDimen :: LenVal }
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable SetGlue where
-    describe SetGlue{glueDimen} = "[" <> Unit.showSP glueDimen <> "]"
+    describe SetGlue { glueDimen } = "[" <> Unit.showSP glueDimen <> "]"
 
 data BoxContents =
     HBoxContents [HBoxElem] | VBoxContents [VBoxElem] VBoxAlignType
-    deriving ( Show )
+    deriving (Show)
 
 data Box = Box { contents :: BoxContents, desiredLength :: DesiredLength }
-    deriving ( Show )
+    deriving (Show)
 
 instance Dimensioned Box where
     naturalLength dim b = case (dim, b) of
@@ -108,7 +108,7 @@ data BaseElem = ElemBox Box
               | ElemFontDefinition FontDefinition
               | ElemFontSelection FontSelection
               | ElemKern Kern
-    deriving ( Show )
+    deriving (Show)
 
 spacerNaturalLength :: Axis -> BoxDim -> Int -> Int
 spacerNaturalLength ax dim d = case (ax, dim) of
@@ -125,7 +125,7 @@ axisBaseElemNaturalLength ax dim e = case e of
     ElemKern k -> spacerNaturalLength ax dim $ kernDimen k
 
 data VBoxElem = VBoxBaseElem BaseElem | BoxGlue SetGlue
-    deriving ( Show )
+    deriving (Show)
 
 axisVBoxElemNaturalLength :: Axis -> BoxDim -> VBoxElem -> Int
 axisVBoxElemNaturalLength ax dim e = case e of
@@ -137,13 +137,13 @@ instance Dimensioned VBoxElem where
 
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 data HBaseElem = ElemCharacter Character
-    deriving ( Show )
+    deriving (Show)
 
 instance Dimensioned HBaseElem where
     naturalLength dim (ElemCharacter c) = naturalLength dim c
 
 data HBoxElem = HVBoxElem VBoxElem | HBoxHBaseElem HBaseElem
-    deriving ( Show )
+    deriving (Show)
 
 instance Dimensioned HBoxElem where
     naturalLength dim (HVBoxElem e) =
@@ -151,4 +151,4 @@ instance Dimensioned HBoxElem where
     naturalLength dim (HBoxHBaseElem e) = naturalLength dim e
 
 newtype Page = Page [VBoxElem]
-    deriving ( Show )
+    deriving (Show)

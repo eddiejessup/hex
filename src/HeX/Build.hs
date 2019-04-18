@@ -50,15 +50,20 @@ maySetBoxRegister idx global = \case
 data ModeIndependentResult
     = AddElems VList
     | LeaveExplicitBoxGroup ExplicitBoxGroup
-    | StartExplicitBox B.DesiredLength HP.ExplicitBox ExplicitBoxContext
+    | StartExplicitB  ox B.DesiredLength HP.ExplicitBox ExplicitBoxContext
 
 data ExplicitBoxContext
     = SetBoxRegister HP.GlobalFlag EightBitInt
     | AddBox
 
-handleModeIndep
-    :: HP.InhibitableStream s
-    => HP.ModeIndependentCommand -> ExceptBuildVM s ModeIndependentResult
+class MonadBuild m where
+    modConf :: (Config -> Config) -> m ()
+
+instance HP.InhibitableStream s => MonadBuild (VM s) where
+    modConf = modConfState
+
+handleModeIndep :: (HP.InhibitableStream s, MonadState s m, MonadIO m, MonadBuild m)
+                => HP.ModeIndependentCommand -> ExceptBuildT s m ModeIndependentResult
 handleModeIndep = \case
     HP.ChangeScope (HP.Sign True) trig ->
         do
@@ -395,11 +400,10 @@ handleModeIndep = \case
 -- Otherwise:
 --    \lineskip
 -- Then set \prevdepth to the depth of the new box.
-addVListElem
-    :: MonadState Config m
-    => VList
-    -> BL.BreakableVListElem
-    -> m VList
+addVListElem :: MonadState Config m
+             => VList
+             -> BL.BreakableVListElem
+             -> m VList
 addVListElem acc e = case e of
     (BL.VListBaseElem (B.ElemBox b)) -> addVListBox b
     _                                -> pure $ e : acc
