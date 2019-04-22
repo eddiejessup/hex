@@ -13,7 +13,7 @@ module HeXlude
     )
 where
 
-import           Protolude
+import           Protolude               hiding ( group )
 import           Prelude                        ( id )
 
 import           Control.Arrow                  ( (>>>) )

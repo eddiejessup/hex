@@ -87,14 +87,14 @@ main = do
         mode = lastDef DVIWriteMode [ m | (Mode m) <- flags ]
         dest = lastDef "out.dvi" [ f | (Output f) <- flags ]
     case mode of
-        CatMode      -> runCat input
-        LexMode      -> runLex input
-        ResolveMode  -> runResolved input
-        ExpandMode   -> runExpand input
-        CommandMode  -> runCommand input
-        ParaListMode -> runPara input
-        ParaSetMode  -> runSetPara input
-        PageMode     -> runPages input
-        DVIMode      -> runDVI input
-        RawDVIMode   -> runDVIRaw input
+    --     CatMode      -> runCat input
+    --     LexMode      -> runLex input
+    --     ResolveMode  -> runResolved input
+    --     ExpandMode   -> runExpand input
+    --     CommandMode  -> runCommand input
+    --     ParaListMode -> runPara input
+    --     ParaSetMode  -> runSetPara input
+    --     PageMode     -> runPages input
+    --     DVIMode      -> runDVI input
+    --     RawDVIMode   -> runDVIRaw input
         DVIWriteMode -> codesToDVIBytes input >>= BS.writeFile dest

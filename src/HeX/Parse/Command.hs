@@ -5,7 +5,6 @@ import           HeXlude
 import           Data.Functor         ( ($>) )
 
 import qualified Text.Megaparsec      as P
-import           Text.Megaparsec      ( (<|>) )
 
 import qualified HeX.Lex              as Lex
 import           HeX.Parse.AST
@@ -25,38 +24,10 @@ extractResult p stream = do
     com <- eCom
     pure (parseState, com)
 
-extractHModeCommand :: InhibitableStream s => s -> ExtractResult s HModeCommand
-extractHModeCommand = extractResult parseHModeCommand
-
-extractVModeCommand :: InhibitableStream s => s -> ExtractResult s VModeCommand
-extractVModeCommand = extractResult parseVModeCommand
+extractCommand :: InhibitableStream s => s -> ExtractResult s Command
+extractCommand = extractResult parseCommand
 
 -- Parse.
--- All-mode Commands.
-parseAllModeCommand :: InhibitableStream s
-                    => Axis
-                    -> SimpParser s AllModesCommand
-parseAllModeCommand mode =
-    P.choice [ skipSatisfiedEquals T.ShowTokenTok
-                   >> (ShowToken <$> parseLexToken)
-             , skipSatisfiedEquals T.ShowBoxTok >> (ShowBox <$> parseNumber)
-             , skipSatisfiedEquals T.ShowListsTok $> ShowLists
-             , skipSatisfiedEquals T.ShowTheInternalQuantityTok
-                   >> (ShowTheInternalQuantity <$> parseInternalQuantity)
-             , skipSatisfiedEquals T.ShipOutTok >> (ShipOut <$> parseBox)
-             , skipSatisfiedEquals T.MarkTok >> (AddMark <$> parseGeneralText)
-               -- , parseInsert
-               -- , parseVAdjust
-             , skipSatisfied isSpace $> AddSpace
-             , parseStartParagraph
-             , skipSatisfiedEquals T.EndParagraphTok $> EndParagraph
-               -- Mode-parametrised.
-             , parseAddLeaders mode
-             , parseAddUnwrappedFetchedBox mode
-             , AddRule <$> parseRule mode
-               -- , parseAlign mode
-             , ModeIndependentCommand <$> parseModeIndependentCommand mode
-             ]
 
 parseInternalQuantity :: InhibitableStream s => SimpParser s InternalQuantity
 parseInternalQuantity =
@@ -68,15 +39,15 @@ parseInternalQuantity =
              , TokenListVariableQuantity <$> parseTokenListVariable
              ]
 
-parseStartParagraph :: InhibitableStream s => SimpParser s AllModesCommand
+parseStartParagraph :: InhibitableStream s => SimpParser s Command
 parseStartParagraph = satisfyThen $
     \case
         (T.StartParagraphTok _indent) -> Just $ StartParagraph _indent
         _ -> Nothing
 
-parseAddLeaders :: InhibitableStream s => Axis -> SimpParser s AllModesCommand
-parseAddLeaders mode =
-    AddLeaders <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue mode
+parseAddLeaders :: InhibitableStream s => SimpParser s Command
+parseAddLeaders =
+    AddLeaders <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue
   where
     parseLeaders = satisfyThen $
         \case
@@ -85,31 +56,30 @@ parseAddLeaders mode =
 
 parseAddUnwrappedFetchedBox
     :: InhibitableStream s
-    => Axis
-    -> SimpParser s AllModesCommand
-parseAddUnwrappedFetchedBox mode = do
-    fetchMode <- satisfyThen $
-        \case
-            T.ModedCommand mode2 (T.UnwrappedFetchedBoxTok fm)
-                | (mode == mode2) -> Just fm
-            _ -> Nothing
+    => SimpParser s Command
+parseAddUnwrappedFetchedBox = do
+    (axis, fetchMode) <- satisfyThen $ \case
+        T.ModedCommand axis (T.UnwrappedFetchedBoxTok fm) ->
+            Just (axis, fm)
+        _ ->
+            Nothing
     n <- parseNumber
-    pure $ AddUnwrappedFetchedBox n fetchMode
+    pure $ AddUnwrappedFetchedBox axis n fetchMode
 
 parseBoxOrRule :: InhibitableStream s => SimpParser s BoxOrRule
 parseBoxOrRule = P.choice [ BoxOrRuleBox <$> parseBox
-                          , BoxOrRuleRule <$> parseRule Vertical
-                          , BoxOrRuleRule <$> parseRule Horizontal
+                          , BoxOrRuleRule <$> parseRule
                           ]
 
 -- \hrule and such.
-parseRule :: InhibitableStream s => Axis -> SimpParser s Rule
-parseRule mode = do
-    skipSatisfied $ checkModeAndToken mode T.RuleTok
-    parseRuleSpecification Rule { width  = Nothing
-                                , height = Nothing
-                                , depth  = Nothing
-                                }
+parseRule :: InhibitableStream s => SimpParser s ModedRule
+parseRule =
+    ModedRule
+        <$> satisfyThenGetMode T.RuleTok
+        <*> parseRuleSpecification Rule{ width  = Nothing
+                                       , height = Nothing
+                                       , depth  = Nothing
+                                       }
   where
     parseRuleSpecification rule = do
         skipOptionalSpaces
@@ -140,37 +110,37 @@ parseRule mode = do
 
 parseModeIndependentCommand
     :: InhibitableStream s
-    => Axis
-    -> SimpParser s ModeIndependentCommand
-parseModeIndependentCommand mode =
-    P.choice [ parseChangeScope
-             , skipSatisfiedEquals T.RelaxTok $> Relax
-             , skipSatisfiedEquals T.IgnoreSpacesTok
-                   >> skipOptionalSpaces $> IgnoreSpaces
-             , skipSatisfiedEquals T.PenaltyTok >> (AddPenalty <$> parseNumber)
-             , skipSatisfiedEquals T.KernTok >> (AddKern <$> parseLength)
-             , skipSatisfiedEquals T.MathKernTok
-                   >> (AddMathKern <$> parseMathLength)
-             , parseRemoveItem
-             , AddGlue <$> parseModedGlue mode
-             , Assign <$> parseAssignment
-             , skipSatisfiedEquals T.SetAfterAssignmentTokenTok
-                   >> (SetAfterAssignmentToken <$> parseLexToken)
-             , skipSatisfiedEquals T.AddToAfterGroupTokensTok
-                   >> (AddToAfterGroupTokens <$> parseLexToken)
-             , parseMessage
-             , parseOpenInput
-             , skipSatisfiedEquals T.CloseInputTok
-                   >> (ModifyFileStream FileInput Close <$> parseNumber)
-               -- Need a 'try' because all these can start with '\immediate'.
-             , P.try parseOpenOutput
-             , P.try parseCloseOutput
-             , P.try parseWriteToStream
-             , skipSatisfiedEquals T.DoSpecialTok
-                   >> (DoSpecial <$> parseExpandedGeneralText)
-             , parseAddShiftedBox mode
-             , AddBox NaturalPlacement <$> parseBox
-             ]
+    => SimpParser s ModeIndependentCommand
+parseModeIndependentCommand =
+    P.choice
+        [ skipSatisfiedEquals T.RelaxTok $> Relax
+        , skipSatisfiedEquals T.IgnoreSpacesTok
+              >> skipOptionalSpaces $> IgnoreSpaces
+        , skipSatisfiedEquals T.PenaltyTok >> (AddPenalty <$> parseNumber)
+        , skipSatisfiedEquals T.KernTok >> (AddKern <$> parseLength)
+        , skipSatisfiedEquals T.MathKernTok
+              >> (AddMathKern <$> parseMathLength)
+        , parseRemoveItem
+        , AddGlue <$> parseModedGlue
+        , Assign <$> parseAssignment
+        , skipSatisfiedEquals T.SetAfterAssignmentTokenTok
+              >> (SetAfterAssignmentToken <$> parseLexToken)
+        , skipSatisfiedEquals T.AddToAfterGroupTokensTok
+              >> (AddToAfterGroupTokens <$> parseLexToken)
+        , parseMessage
+        , parseOpenInput
+        , skipSatisfiedEquals T.CloseInputTok
+              >> (ModifyFileStream FileInput Close <$> parseNumber)
+          -- Need a 'try' because all these can start with '\immediate'.
+        , P.try parseOpenOutput
+        , P.try parseCloseOutput
+        , P.try parseWriteToStream
+        , skipSatisfiedEquals T.DoSpecialTok
+              >> (DoSpecial <$> parseExpandedGeneralText)
+        , parseAddShiftedBox
+        , AddBox NaturalPlacement <$> parseBox
+        , parseChangeScope
+        ]
 
 parseChangeScope :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseChangeScope = satisfyThen $
@@ -183,57 +153,50 @@ parseChangeScope = satisfyThen $
             <- t -> Just $ ChangeScope sign CSCommandTrigger
         | otherwise -> Nothing
 
-checkModeAndToken
-    :: Axis
-    -> T.ModedCommandPrimitiveToken
-    -> T.PrimitiveToken
-    -> Bool
-checkModeAndToken m1 tok1 (T.ModedCommand m2 tok2) = (m1 == m2)
-    && (tok1 == tok2)
-checkModeAndToken _ _ _ = False
+satisfyThenGetMode
+    :: (P.Stream s, P.Token s ~ T.PrimitiveToken)
+    => T.ModedCommandPrimitiveToken -> SimpParser s Axis
+satisfyThenGetMode validTok = satisfyThen $ \case
+    T.ModedCommand axis seenTok | seenTok == validTok ->
+        Just axis
+    _ ->
+        Nothing
 
 parseRemoveItem :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseRemoveItem =
-    RemoveItem <$> (satisfyThen $
-                    \case
+    RemoveItem <$> (satisfyThen $ \case
                         T.RemoveItemTok i -> Just i
                         _ -> Nothing)
 
-parseModedGlue :: InhibitableStream s => Axis -> SimpParser s Glue
-parseModedGlue mode =
-    P.choice [ parseSpecifiedGlue mode
-             , parsePresetGlue mode T.Fil
-             , parsePresetGlue mode T.Fill
-             , parsePresetGlue mode T.StretchOrShrink
-             , parsePresetGlue mode T.FilNeg
+parseModedGlue :: InhibitableStream s => SimpParser s ModedGlue
+parseModedGlue =
+    P.choice [ parseSpecifiedGlue
+             , parsePresetGlue T.Fil
+             , parsePresetGlue T.Fill
+             , parsePresetGlue T.StretchOrShrink
+             , parsePresetGlue T.FilNeg
              ]
-
--- \hskip 10pt and such.
-parseSpecifiedGlue :: InhibitableStream s => Axis -> SimpParser s Glue
-parseSpecifiedGlue mode = do
-    skipSatisfied $ checkModeAndToken mode T.SpecifiedGlueTok
-    parseGlue
-
--- \{v,h}fil:    0pt plus 1fil
--- \{v,h}fill:   0pt plus 1fill
--- \{v,h}ss:     0pt plus 1fil minus 1fil
--- \{v,h}filneg: 0pt plus -1fil
-presetToSpecifiedGlue :: T.PresetGlueType -> Glue
-presetToSpecifiedGlue = \case
-    T.Fil -> f (Just oneFilFlex) Nothing
-    T.Fill -> f (Just oneFillFlex) Nothing
-    T.StretchOrShrink -> f (Just oneFilFlex) (Just oneFilFlex)
-    T.FilNeg -> f (Just minusOneFilFlex) Nothing
   where
-    f = ExplicitGlue zeroLength
+    -- \hskip 10pt and such.
+    parseSpecifiedGlue =
+        ModedGlue <$> satisfyThenGetMode T.SpecifiedGlueTok <*> parseGlue
 
-parsePresetGlue :: InhibitableStream s
-                => Axis
-                -> T.PresetGlueType
-                -> SimpParser s Glue
-parsePresetGlue mode t = do
-    skipSatisfied $ checkModeAndToken mode (T.PresetGlueTok t)
-    pure $ presetToSpecifiedGlue t
+    parsePresetGlue t =
+        do
+        axis <- satisfyThenGetMode (T.PresetGlueTok t)
+        pure $ ModedGlue axis (presetToSpecifiedGlue t)
+
+    -- \{v,h}fil:    0pt plus 1fil
+    -- \{v,h}fill:   0pt plus 1fill
+    -- \{v,h}ss:     0pt plus 1fil minus 1fil
+    -- \{v,h}filneg: 0pt plus -1fil
+    presetToSpecifiedGlue = \case
+        T.Fil -> noLengthGlue (Just oneFilFlex) Nothing
+        T.Fill -> noLengthGlue (Just oneFillFlex) Nothing
+        T.StretchOrShrink -> noLengthGlue (Just oneFilFlex) (Just oneFilFlex)
+        T.FilNeg -> noLengthGlue (Just minusOneFilFlex) Nothing
+
+    noLengthGlue = ExplicitGlue zeroLength
 
 parseMessage :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
@@ -282,59 +245,84 @@ parseWriteToStream = do
     pure $ WriteToStream n txt
 
 parseAddShiftedBox :: InhibitableStream s
-                   => Axis
-                   -> SimpParser s ModeIndependentCommand
-parseAddShiftedBox mode = AddBox <$> parsePlacement <*> parseBox
+                   => SimpParser s ModeIndependentCommand
+parseAddShiftedBox = AddBox <$> parsePlacement <*> parseBox
   where
-    parseDirection = satisfyThen $
-        \case
-            T.ModedCommand mode2 (T.ShiftedBoxTok d)
-                | (mode == mode2) -> Just d
-            _ -> Nothing
+    parseDirection = satisfyThen $ \case
+        T.ModedCommand axis (T.ShiftedBoxTok d) ->
+            Just (axis, d)
+        _ ->
+            Nothing
 
-    parsePlacement = ShiftedPlacement <$> parseDirection <*> parseLength
+    parsePlacement =
+        do
+        (axis, direction) <- parseDirection
+        ShiftedPlacement axis direction <$> parseLength
 
 -- VMode.
-parseVModeCommand :: InhibitableStream s => SimpParser s VModeCommand
-parseVModeCommand = P.choice [ skipSatisfiedEquals T.EndTok $> End
-                             , skipSatisfiedEquals T.DumpTok $> Dump
-                             , parseEnterHMode
-                             ]
-    <|> (VAllModesCommand <$> parseAllModeCommand Vertical)
 
-parseEnterHMode :: InhibitableStream s => SimpParser s VModeCommand
-parseEnterHMode = skipSatisfied startsHMode $> EnterHMode
-  where
-    startsHMode t = case t of
-        T.ModedCommand Horizontal _ -> True
-        T.ControlCharTok -> True
-        T.IntRefTok T.CharQuantity _ -> True
-        T.AccentTok -> True
-        T.DiscretionaryTextTok -> True
-        T.DiscretionaryHyphenTok -> True
-        T.ControlSpaceTok -> True
-        T.ToggleMathModeTok -> True
-        _
-            | primTokHasCategory Lex.Letter t -> True
-        _
-            | primTokHasCategory Lex.Other t -> True
-        _ -> False
+-- parseEnterHMode :: InhibitableStream s => SimpParser s VModeCommand
+-- parseEnterHMode = skipSatisfied startsHMode $> EnterHMode
+--   where
+--     startsHMode t = case t of
+--         T.ModedCommand Horizontal _ -> True
+--         T.ControlCharTok -> True
+--         T.IntRefTok T.CharQuantity _ -> True
+--         T.AccentTok -> True
+--         T.DiscretionaryTextTok -> True
+--         T.DiscretionaryHyphenTok -> True
+--         T.ControlSpaceTok -> True
+--         T.ToggleMathModeTok -> True
+--         _
+--             | primTokHasCategory Lex.Letter t -> True
+--         _
+--             | primTokHasCategory Lex.Other t -> True
+--         _ -> False
 
 -- HMode.
-parseHModeCommand :: InhibitableStream s => SimpParser s HModeCommand
-parseHModeCommand =
-    P.choice [ skipSatisfiedEquals T.ControlSpaceTok $> AddControlSpace
-             , AddCharacter <$> parseCharCodeRef
-             , parseAddAccentedCharacter
-             , skipSatisfiedEquals T.ItalicCorrectionTok $> AddItalicCorrection
-             , parseAddDiscretionaryText
-             , skipSatisfiedEquals T.DiscretionaryHyphenTok
-                   $> AddDiscretionaryHyphen
-             , skipSatisfied (primTokHasCategory Lex.MathShift)
-                   $> EnterMathMode
-             , parseLeaveHMode
-             ]
-    <|> (HAllModesCommand <$> parseAllModeCommand Horizontal)
+parseCommand :: InhibitableStream s => SimpParser s Command
+parseCommand =
+    P.choice
+        [ HModeCommand <$> parseHModeCommand
+        , VModeCommand <$> parseVModeCommand
+
+        , skipSatisfiedEquals T.ShowTokenTok
+               >> (ShowToken <$> parseLexToken)
+        , skipSatisfiedEquals T.ShowBoxTok >> (ShowBox <$> parseNumber)
+        , skipSatisfiedEquals T.ShowListsTok $> ShowLists
+        , skipSatisfiedEquals T.ShowTheInternalQuantityTok
+              >> (ShowTheInternalQuantity <$> parseInternalQuantity)
+        , skipSatisfiedEquals T.ShipOutTok >> (ShipOut <$> parseBox)
+        , skipSatisfiedEquals T.MarkTok >> (AddMark <$> parseGeneralText)
+          -- , parseInsert
+          -- , parseVAdjust
+        , skipSatisfied isSpace $> AddSpace
+        , parseStartParagraph
+        , skipSatisfiedEquals T.EndParagraphTok $> EndParagraph
+          -- Mode-parametrised.
+        , parseAddLeaders
+        , parseAddUnwrappedFetchedBox
+        , AddRule <$> parseRule
+          -- , parseAlign mode
+        , ModeIndependentCommand <$> parseModeIndependentCommand
+        ]
+  where
+    parseHModeCommand =
+        P.choice
+            [ skipSatisfiedEquals T.ControlSpaceTok $> AddControlSpace
+            , AddCharacter <$> parseCharCodeRef
+            , parseAddAccentedCharacter
+            , skipSatisfiedEquals T.ItalicCorrectionTok $> AddItalicCorrection
+            , parseAddDiscretionaryText
+            , skipSatisfiedEquals T.DiscretionaryHyphenTok $> AddDiscretionaryHyphen
+            , skipSatisfied (primTokHasCategory Lex.MathShift) $> EnterMathMode
+            ]
+
+    parseVModeCommand =
+        P.choice
+            [ skipSatisfiedEquals T.EndTok $> End
+            , skipSatisfiedEquals T.DumpTok $> Dump
+            ]
 
 parseCharCodeRef :: InhibitableStream s => SimpParser s CharCodeRef
 parseCharCodeRef =
@@ -373,11 +361,11 @@ parseAddDiscretionaryText = do
         <*> parseGeneralText
         <*> parseGeneralText
 
-parseLeaveHMode :: InhibitableStream s => SimpParser s HModeCommand
-parseLeaveHMode = skipSatisfied endsHMode $> LeaveHMode
-  where
-    endsHMode = \case
-        T.ModedCommand Vertical _ -> True
-        T.EndTok -> True
-        T.DumpTok -> True
-        _ -> False
+-- parseLeaveHMode :: InhibitableStream s => SimpParser s HModeCommand
+-- parseLeaveHMode = skipSatisfied endsHMode $> LeaveHMode
+--   where
+--     endsHMode = \case
+--         T.ModedCommand Vertical _ -> True
+--         T.EndTok -> True
+--         T.DumpTok -> True
+--         _ -> False

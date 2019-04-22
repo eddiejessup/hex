@@ -13,8 +13,10 @@ import           HeX.BreakList.BreakList ( BreakItem(..)
 import           HeX.BreakList.Glue
 
 -- Vertical list.
-data BreakableVListElem =
-    VListBaseElem BaseElem | ListGlue Glue | ListPenalty Penalty
+data BreakableVListElem
+    = VListBaseElem BaseElem
+    | ListGlue Glue
+    | ListPenalty Penalty
     deriving ( Show )
 
 instance BreakableListElem BreakableVListElem where

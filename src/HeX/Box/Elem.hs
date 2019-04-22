@@ -32,8 +32,9 @@ newtype SetGlue = SetGlue { glueDimen :: LenVal }
 instance Readable SetGlue where
     describe SetGlue{glueDimen} = "[" <> Unit.showSP glueDimen <> "]"
 
-data BoxContents =
-    HBoxContents [HBoxElem] | VBoxContents [VBoxElem] VBoxAlignType
+data BoxContents
+    = HBoxContents [HBoxElem]
+    | VBoxContents [VBoxElem] VBoxAlignType
     deriving ( Show )
 
 data Box = Box { contents :: BoxContents, desiredLength :: DesiredLength }

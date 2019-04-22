@@ -7,6 +7,7 @@ import           Control.Monad                  ( foldM
 import           Control.Monad.Except           ( liftEither )
 import           Data.Either.Combinators        ( mapLeft )
 import           Safe                           ( toEnumMay )
+import qualified Text.Megaparsec               as P
 
 import qualified HeX.Box                       as B
 import qualified HeX.BreakList                 as BL
@@ -19,49 +20,16 @@ import qualified HeX.Unit                      as Unit
 import qualified HeX.Command                   as Com
 import qualified HeX.Variable                  as Var
 
-constructBox :: HP.InhibitableStream s => HP.Box -> ExceptBuildVM s (Maybe B.Box)
-constructBox = \case
-    HP.ExplicitBox spec boxType ->
-        do
-        eSpec <- liftEvalOnConfState spec
-        modConfState $ pushGroup ExplicitBoxGroup
-        b <- case boxType of
-            HP.ExplicitHBox ->
-                (B.HBoxContents . BL.setHList BL.NaturallyGood . reverse) <$> extractHList HP.DoNotIndent True
-            HP.ExplicitVBox alignType ->
-                ((\els -> B.VBoxContents els alignType) . BL.setVList BL.NaturallyGood . reverse) <$> extractVList True
-        pure $ Just $ B.Box b eSpec
-    HP.FetchedRegisterBox fetchMode idx ->
-        do
-        eIdx <- liftEvalOnConfState idx
-        box <- readOnConfState $ asks $ lookupBoxRegister eIdx
-        case fetchMode of
-            HP.Lookup -> pure ()
-            HP.Pop -> HP.runConfState $ modify $ delBoxRegister eIdx HP.Local
-        pure box
+data ModeIndependentResult
+    = AddElems [BL.BreakableVListElem]
+    | EnterBoxMode HP.ExplicitBox
+    | FinishBoxMode B.DesiredLength
 
-handleModeIndep
+handleModeIndependentCommand
     :: HP.InhibitableStream s
-    => HP.ModeIndependentCommand -> ExceptBuildVM s (Maybe [BL.BreakableVListElem])
-handleModeIndep = \case
-    HP.ChangeScope (HP.Sign True) trig ->
-        do
-        modConfState $ pushGroup $ LocalStructureGroup trig
-        noElems
-    HP.ChangeScope (HP.Sign False) trig ->
-        HP.runConfState $
-            gets popGroup >>= \case
-                Nothing -> throwConfigError "No group to leave"
-                Just (grp, conf') ->
-                    do
-                    put conf'
-                    case grp of
-                        LocalStructureGroup trigConf ->
-                            do
-                            when (trigConf /= trig) $ throwConfigError $ "Entry and exit group triggers differ: " <> showT (trig, trigConf)
-                            retElems []
-                        ExplicitBoxGroup ->
-                            pure Nothing
+    => Axis
+    -> HP.ModeIndependentCommand -> ExceptBuildVM s ModeIndependentResult
+handleModeIndependentCommand mode = \case
     HP.Message stdOutStream eTxt ->
         do
         let _handle = case stdOutStream of
@@ -86,15 +54,16 @@ handleModeIndep = \case
     HP.AddPenalty n ->
         do
         p <- liftEvalOnConfState n
-        retElems [BL.ListPenalty $ BL.Penalty p]
+        pure $ AddElems [BL.ListPenalty $ BL.Penalty p]
     HP.AddKern ln ->
         do
         k <- liftEvalOnConfState ln
-        retElems [BL.VListBaseElem $ B.ElemKern $ B.Kern k]
-    HP.AddGlue g ->
+        pure $ AddElems [BL.VListBaseElem $ B.ElemKern $ B.Kern k]
+    HP.AddGlue (HP.ModedGlue cmdMode g) ->
         do
+        checkMode cmdMode
         eG <- liftEvalOnConfState g
-        retElems [BL.ListGlue eG]
+        pure $ AddElems [BL.ListGlue eG]
     HP.Assign HP.Assignment { HP.global, HP.body } ->
         do
         assignElems <- case body of
@@ -182,14 +151,14 @@ handleModeIndep = \case
                 fNr <- liftEvalOnConfState fontRef
                 modConfState $ setFamilyMemberFont eFm fNr global
                 pure []
-            HP.SetBoxRegister idx box ->
-                do
-                eIdx <- liftEvalOnConfState idx
-                mayBox <- constructBox box
-                modConfState $ case mayBox of
-                    Nothing -> delBoxRegister eIdx global
-                    Just b -> setBoxRegister eIdx b global
-                pure []
+            -- HP.SetBoxRegister idx box ->
+            --     do
+            --     eIdx <- liftEvalOnConfState idx
+            --     mayBox <- constructBox box
+            --     modConfState $ case mayBox of
+            --         Nothing -> delBoxRegister eIdx global
+            --         Just b -> setBoxRegister eIdx b global
+            --     pure []
             HP.SetFontChar (HP.FontCharRef fontChar fontRef) charRef ->
                 do
                 fNr <- liftEvalOnConfState fontRef
@@ -207,142 +176,103 @@ handleModeIndep = \case
                 do
                 modify $ \s -> HP.insertLexToken s lt
                 modConfState $ \c -> c{afterAssignmentToken = Nothing}
-        retElems assignElems
+        pure $ AddElems assignElems
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
-        liftReadOnConfState $ do
-        en <- texEvaluate n
-        fStreams <- asks outFileStreams
-        let txtStr = Com.showExpandedBalancedText eTxt
-        -- Write to:
-        -- if stream number corresponds to existing, open file:
-        --     file
-        -- otherwise:
-        --     log
-        --     unless stream number is negative: terminal
-        case Com.getFileStream fStreams en of
-            Just fStream ->
-                 liftIO $ hPutStrLn fStream txtStr
-            Nothing ->
-                do
-                -- Write to terminal.
-                when (en >= 0) $ liftIO $ putText txtStr
-                -- Write to log
-                logHandle <- asks logStream
-                liftIO $ hPutStrLn logHandle txtStr
-        retElems []
-    HP.AddBox HP.NaturalPlacement box ->
+        liftReadOnConfState $
+            do
+            en <- texEvaluate n
+            fStreams <- asks outFileStreams
+            let txtStr = Com.showExpandedBalancedText eTxt
+            -- Write to:
+            -- if stream number corresponds to existing, open file:
+            --     file
+            -- otherwise:
+            --     log
+            --     unless stream number is negative: terminal
+            case Com.getFileStream fStreams en of
+                Just fStream ->
+                     liftIO $ hPutStrLn fStream txtStr
+                Nothing ->
+                    do
+                    -- Write to terminal.
+                    when (en >= 0) $ liftIO $ putText txtStr
+                    -- Write to log
+                    logHandle <- asks logStream
+                    liftIO $ hPutStrLn logHandle txtStr
+            pure $ AddElems []
+    -- Start a new level of grouping.
+    HP.ChangeScope (HP.Sign True) trig ->
         do
-        mayBox <- constructBox box
-        retElems $ case mayBox of
+        modConfState $ pushGroup $ ScopeGroup newLocalScope (LocalStructureGroup trig)
+        noElems
+    -- Do the appropriate finishing actions, undo the
+    -- effects of non-global assignments, and leave the
+    -- group. Maybe leave the current mode.
+    HP.ChangeScope (HP.Sign False) trig ->
+        HP.runConfState $ gets popGroup >>= \case
+            Nothing ->
+                throwConfigError "No group to leave"
+            Just (group, poppedConfig) ->
+                do
+                put poppedConfig
+                case group of
+                    -- Undo the effects of non-global
+                    -- assignments without leaving the
+                    -- current mode.
+                    ScopeGroup _ (LocalStructureGroup trigConf) ->
+                        do
+                        when (trigConf /= trig) $ throwConfigError $ "Entry and exit group triggers differ: " <> showT (trig, trigConf)
+                        pure $ AddElems []
+                    -- - Undo the effects of non-global
+                    --   assignments
+                    -- - package the [box] using the size
+                    --   that was saved on the stack
+                    -- - complete the \setbox command
+                    -- - return to the mode we were in at
+                    --   the time of the \setbox.
+                    ScopeGroup _ (ExplicitBoxGroup desiredLength) ->
+                        pure $ FinishBoxMode desiredLength
+                -- HP.ExplicitVBox alignType ->
+                --     ((\els -> B.VBoxContents els alignType) . BL.setVList BL.NaturallyGood . reverse) <$> extractVList True
+    HP.AddBox HP.NaturalPlacement (HP.FetchedRegisterBox fetchMode idx) ->
+        do
+        eIdx <- liftEvalOnConfState idx
+        fetchedMaybeBox <- readOnConfState $ asks $ lookupBoxRegister eIdx
+        case fetchMode of
+            HP.Lookup -> pure ()
+            HP.Pop -> HP.runConfState $ modify $ delBoxRegister eIdx HP.Local
+        pure $ AddElems $ case fetchedMaybeBox of
             Nothing -> []
             Just b  -> [(BL.VListBaseElem . B.ElemBox) b]
+    HP.AddBox HP.NaturalPlacement (HP.ExplicitBox spec boxType) ->
+        -- Initiate a new level of grouping. Enter inner mode.
+        do
+        eSpec <- liftEvalOnConfState spec
+        modConfState $ pushGroup (ScopeGroup newLocalScope (ExplicitBoxGroup eSpec))
+        pure $ EnterBoxMode boxType
     oth ->
         panic $ show oth
 
   where
-    retElems els = pure $ Just els
+    noElems = pure $ AddElems []
 
-    noElems = retElems []
+    checkMode cmdMode =
+        when (cmdMode /= mode) (throwConfigError "Command for wrong mode")
 
-processHCommand
-    :: HP.InhibitableStream s
-    => s
-    -> [BL.BreakableHListElem]
-    -> Bool  -- restricted?
-    -> HP.HModeCommand
-    -> ExceptBuildVM s ([BL.BreakableHListElem], Bool)
-processHCommand oldStream acc inRestricted = \case
-    HP.LeaveHMode ->
-        -- Inner mode: forbidden. TODO.
-        if inRestricted
-            then throwConfigError "Should not see vertical command in restricted horizontal mode"
-            -- Outer mode: insert the rol sequence "\par" into the input. The control
-            -- sequence's current meaning will be used, which might no longer be the \par
-            -- primitive.
-            -- (Note that we use oldStream.)
-            else
-                do
-                let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
-                put $ HP.insertLexToken oldStream parToken
-                continueUnchanged
-    HP.AddCharacter c ->
-        liftConfigError $ do
-        charCode <- readOnConfState $ texEvaluate c
-        hCharBox <- (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ Com.characterBox charCode)
-        modAccum $ hCharBox : acc
-    HP.HAllModesCommand aCom -> case aCom of
-        -- \indent: An empty box of width \parindent is appended to the current
-        -- list, and the space factor is set to 1000.
-        -- TODO: Space factor.
-        HP.StartParagraph HP.DoNotIndent ->
-            continueUnchanged
-        HP.StartParagraph HP.Indent ->
-            liftConfigError $ do
-            indentBox <- readOnConfState $ asks parIndentBox
-            modAccum (indentBox : acc)
-        -- \par: Restricted: does nothing. Unrestricted: ends mode.
-        HP.EndParagraph ->
-            if inRestricted
-                then continueUnchanged
-                else pure (acc, False)
-        HP.AddSpace ->
-            liftConfigError $ do
-            hGlue <- (BL.HVListElem . BL.ListGlue) <$> readOnConfState Com.spaceGlue
-            modAccum $ hGlue : acc
-        HP.AddRule HP.Rule { HP.width, HP.height, HP.depth } ->
-            liftReadOnConfState $ do
-            evalW <- case width of
-                Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> texEvaluate ln
-            evalH <- case height of
-                Nothing -> pure $ Unit.toScaledPointApprox (10 :: Int) Unit.Point
-                Just ln -> texEvaluate ln
-            evalD <- case depth of
-                Nothing -> pure 0
-                Just ln -> texEvaluate ln
-            let rule = B.Rule { B.ruleWidth = evalW, B.ruleHeight = evalH, B.ruleDepth = evalD }
-            modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
-        HP.ModeIndependentCommand mcom ->
-            handleModeIndep mcom >>= \case
-                Nothing ->
-                    pure (acc, False)
-                Just extraAcc ->
-                    modAccum $ (BL.HVListElem <$> extraAcc) <> acc
-  where
-    modAccum newAcc = pure (newAcc, True)
+    -- HP.LeaveHMode ->
+    --     -- Inner mode: forbidden. TODO.
+    --     if inRestricted
+    --         then throwConfigError "Should not see vertical command in restricted horizontal mode"
+    --         -- Outer mode: insert the rol sequence "\par" into the input. The control
+    --         -- sequence's current meaning will be used, which might no longer be the \par
+    --         -- primitive.
+    --         -- (Note that we use oldStream.)
+    --         else
+    --             do
+    --             let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
+    --             put $ HP.insertLexToken oldStream parToken
+    --             continueUnchanged
 
-    continueUnchanged = pure (acc, True)
-
-extractHList
-    :: HP.InhibitableStream s
-    => HP.IndentFlag
-    -> Bool
-    -> ExceptBuildVM s [BL.BreakableHListElem]
-extractHList indentFlag inRestricted =
-    do
-    indentBox <- readOnConfState $ asks parIndentBox
-    extractList HP.extractHModeCommand processCommand [indentBox | indentFlag == HP.Indent]
-  where
-    processCommand s ac c =
-        do
-        let subModeTxt = if inRestricted
-            then "restricted"
-            else "unrestricted"
-        putText $ "In " <> subModeTxt <> " H-mode, saw command: " <> show c
-        processHCommand s ac inRestricted c
-
-extractBreakAndSetHList
-    :: HP.InhibitableStream s
-    => HP.IndentFlag
-    -> ExceptBuildVM s [[B.HBoxElem]]
-extractBreakAndSetHList indentFlag =
-    do
-    hList <- extractHList indentFlag False
-    readOnConfState $ do
-        desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
-        lineTol <- asks $ IntParamVal . lookupIntegerParameter HP.Tolerance
-        linePen <- asks $ IntParamVal . lookupIntegerParameter HP.LinePenalty
-        liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph desiredW lineTol linePen hList
 
 -- Assume we are adding a non-rule box of height h to the vertical list.
 -- Let \prevdepth = p, \lineskiplimit = l, \baselineskip = (b plus y minus z).
@@ -383,95 +313,340 @@ addVListElem acc e = case e of
                         else skip
                 in  e : glue : acc
 
-processVCommand
-    :: HP.InhibitableStream s
-    => s
-    -> [BL.BreakableVListElem]
-    -> Bool -- internal?
-    -> HP.VModeCommand
-    -> ExceptBuildVM s ([BL.BreakableVListElem], Bool)
-processVCommand oldStream acc inInternal = \case
-    -- End recursion.
-    HP.End ->
-        if inInternal
-            then throwConfigError "End not allowed in internal vertical mode"
-        else
-            do
-            readOnConfState $ asks scopedConfig >>= \case
-                [] -> pure ()
-                _ -> throwConfigError "Cannot end: not in global scope"
-            gets HP.getConditionBodyState >>= \case
-                Nothing -> pure ()
-                Just _condState -> throwConfigError $ "Cannot end: in condition block: " <> showT _condState
-            readOnConfState (asks finaliseConfig) >>= liftIO
-            pure (acc, False)
-    HP.EnterHMode ->
-        addParagraphToPage HP.Indent
-    HP.VAllModesCommand aCom -> case aCom of
-        HP.StartParagraph indentFlag ->
-            addParagraphToPage indentFlag
-        -- \par does nothing in vertical mode.
-        HP.EndParagraph ->
-            continueUnchanged
-        -- <space token> has no effect in vertical modes.
-        HP.AddSpace ->
-            continueUnchanged
-        HP.AddRule HP.Rule { HP.width, HP.height, HP.depth } ->
-            do
-            evalW <- case width of
-                Nothing -> readOnConfState $ gets $ lookupLengthParameter HP.HSize
-                Just ln -> liftEvalOnConfState ln
-            evalH <- case height of
-                -- TODO.
-                Nothing -> readOnConfState $ pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-                Just ln -> liftEvalOnConfState ln
-            evalD <- case depth of
-                Nothing -> readOnConfState $ pure 0
-                Just ln -> liftEvalOnConfState ln
-            let rule = B.Rule { B.ruleWidth = evalW, B.ruleHeight = evalH, B.ruleDepth = evalD }
-            modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
-        HP.ModeIndependentCommand mcom ->
-            handleModeIndep mcom >>= \case
-                Nothing ->
-                    pure (acc, False)
-                Just extraAcc ->
-                    modAccum $ extraAcc <> acc
+-- A mode-state always has a main vertical list, and maybe a child.
+data VModeContents
+    = VModeContents VList (Maybe VModeChild)
+    deriving ( Show )
+
+-- A VList's child is either an HList (for a para or box), or a VList for a vbox.
+data VModeChild
+    = VModeChildHMode HModeType HModeContents
+    | VModeChildVBoxMode VBoxModeContents
+    deriving ( Show )
+
+data HModeType
+    = ParaHMode
+    | BoxHMode
+    deriving ( Show )
+
+-- Regardless of whether an HList is for a paragraph or an hbox, its child can be either
+-- an HList for an hbox, or a VList for a vbox.
+data HModeContents = HModeContents HList (Maybe HModeChild)
+    deriving ( Show )
+
+data HModeChild
+    = HModeChildHBoxMode HModeContents
+    | HModeChildVBoxMode VBoxModeContents
+    deriving ( Show )
+
+data VBoxModeContents
+    = VBoxModeContents B.VBoxAlignType VModeContents
+    deriving ( Show )
+
+emptyHModeContents = HModeContents [] Nothing
+
+emptyVModeContents = VModeContents [] Nothing
+
+boxTypeToFreshVChild = \case
+    HP.ExplicitHBox ->
+        VModeChildHMode
+            BoxHMode
+            emptyHModeContents
+    HP.ExplicitVBox alignType ->
+        VModeChildVBoxMode
+            (VBoxModeContents alignType emptyVModeContents)
+
+boxTypeToFreshHChild = \case
+    HP.ExplicitHBox ->
+        HModeChildHBoxMode emptyHModeContents
+    HP.ExplicitVBox alignType ->
+        HModeChildVBoxMode
+            (VBoxModeContents alignType emptyVModeContents)
+
+data ParaParentResult
+    = ParaLeaveMode (Maybe B.DesiredLength)
+    | ModifyPara HModeContents
+
+handleCommandInParaMode (HModeContents paraHList maybeChild) command =
+    case maybeChild of
+        Nothing ->
+            case command of
+                HP.HModeCommand (HP.AddCharacter c) ->
+                    do
+                    hCharBox <- liftConfigError $ do
+                        charCode <- readOnConfState $ texEvaluate c
+                        (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ Com.characterBox charCode)
+                    addElems [hCharBox]
+                HP.AddSpace ->
+                    do
+                    hGlue <- liftConfigError $
+                        (BL.HVListElem . BL.ListGlue) <$> readOnConfState Com.spaceGlue
+                    addElems [hGlue]
+                HP.StartParagraph HP.DoNotIndent ->
+                    addElems []
+                -- \indent: An empty box of width \parindent is appended to the current
+                -- list, and the space factor is set to 1000.
+                -- TODO: Space factor.
+                HP.StartParagraph HP.Indent ->
+                    do
+                    indentBox <- liftConfigError $ readOnConfState $ asks parIndentBox
+                    addElems [indentBox]
+                -- \par: Restricted: does nothing. Unrestricted: ends mode.
+                HP.EndParagraph ->
+                    pure (ParaLeaveMode Nothing)
+            --         -- HP.AddRule HP.Rule { HP.width, HP.height, HP.depth } ->
+            --         --     liftReadOnConfState $ do
+            --         --     evalW <- case width of
+            --         --         Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+            --         --         Just ln -> texEvaluate ln
+            --         --     evalH <- case height of
+            --         --         Nothing -> pure $ Unit.toScaledPointApprox (10 :: Int) Unit.Point
+            --         --         Just ln -> texEvaluate ln
+            --         --     evalD <- case depth of
+            --         --         Nothing -> pure 0
+            --         --         Just ln -> texEvaluate ln
+            --         --     let rule = B.Rule { B.ruleWidth = evalW, B.ruleHeight = evalH, B.ruleDepth = evalD }
+            --         --     modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
+                HP.ModeIndependentCommand modeIndependentCommand ->
+                    do
+                    modeIndependentResult <- handleModeIndependentCommand Horizontal modeIndependentCommand
+                    case modeIndependentResult of
+                        AddElems extraElems ->
+                            addElems ((BL.HVListElem <$> extraElems))
+                        EnterBoxMode boxType ->
+                            pure $ ModifyPara
+                                (HModeContents
+                                    paraHList
+                                    (Just
+                                        (boxTypeToFreshHChild boxType)))
+                        FinishBoxMode desiredLength ->
+                            pure (ParaLeaveMode (Just desiredLength))
+        -- Just (HModeChildHBoxMode hModeContents) ->
+        --     handleCommandInHBoxMode hModeContents command >>= \case
+        --         ParaLeaveMode finalBoxHList ->
+        --             do
+        --             let toBox elemList = B.Box (B.HBoxContents elemList) B.Natural
+        --             paraHListWithHBox <- paraHList $ BL.VListBaseElem . B.ElemBox . toBox) finalBoxHList
+        --             extractBreakAndSetVList (VModeContents paraHListWithHBox Nothing)
+        --         ModifyPara hModeContents ->
+        --             extractBreakAndSetVList
+        --                 (VModeContents
+        --                     mainVList
+        --                     (Just
+        --                         (VModeChildHMode
+        --                             ParaHMode
+        --                             hModeContents)))
   where
-    modAccum newAcc = pure (newAcc, True)
+    addElems elems =
+        pure $ ModifyPara
+            (HModeContents
+                (elems <> paraHList)
+                Nothing)
 
-    continueUnchanged = pure (acc, True)
+data HBoxParentResult
+    = LeaveHBoxMode B.DesiredLength
+    | ModifyHBox HModeContents
 
-    addParagraphToPage indentFlag =
-        do
-        -- If the command shifts to horizontal mode, run '\indent', and re-read the
-        -- stream as if the commands just seen hadn't been read.
-        -- (Note that we set "oldStream", not "newStream".)
-        -- Paraboxes are returned in reading order.
-        put oldStream
-        lineBoxes <- extractBreakAndSetHList indentFlag
-        desiredW <- readOnConfState $ asks $ lookupLengthParameter HP.HSize
-        let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
-        newAcc <- HP.runConfState $ foldM addVListElem acc $ BL.VListBaseElem . B.ElemBox . toBox <$> lineBoxes
-        -- Continue iff not in internal mode.
-        pure (newAcc, not inInternal)
-
-extractVList
-    :: HP.InhibitableStream s
-    => Bool
-    -> ExceptBuildVM s [BL.BreakableVListElem]
-extractVList inInternal =
-    extractList HP.extractVModeCommand processCommand []
+handleCommandInHBoxMode (HModeContents boxHList maybeChild) command =
+    case maybeChild of
+        Nothing ->
+            case command of
+                HP.HModeCommand (HP.AddCharacter c) ->
+                    do
+                    hCharBox <- liftConfigError $ do
+                        charCode <- readOnConfState $ texEvaluate c
+                        (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ Com.characterBox charCode)
+                    addElems [hCharBox]
+                HP.AddSpace ->
+                    do
+                    hGlue <- liftConfigError $
+                        (BL.HVListElem . BL.ListGlue) <$> readOnConfState Com.spaceGlue
+                    addElems [hGlue]
+                HP.StartParagraph HP.DoNotIndent ->
+                    addElems []
+                -- \indent: An empty box of width \parindent is appended to the current
+                -- list, and the space factor is set to 1000.
+                -- TODO: Space factor.
+                HP.StartParagraph HP.Indent ->
+                    do
+                    indentBox <- liftConfigError $ readOnConfState $ asks parIndentBox
+                    addElems [indentBox]
+                -- \par: Restricted: does nothing. Unrestricted: ends mode.
+                HP.EndParagraph ->
+                    addElems []
+            --         -- HP.AddRule HP.Rule { HP.width, HP.height, HP.depth } ->
+            --         --     liftReadOnConfState $ do
+            --         --     evalW <- case width of
+            --         --         Nothing -> pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+            --         --         Just ln -> texEvaluate ln
+            --         --     evalH <- case height of
+            --         --         Nothing -> pure $ Unit.toScaledPointApprox (10 :: Int) Unit.Point
+            --         --         Just ln -> texEvaluate ln
+            --         --     evalD <- case depth of
+            --         --         Nothing -> pure 0
+            --         --         Just ln -> texEvaluate ln
+            --         --     let rule = B.Rule { B.ruleWidth = evalW, B.ruleHeight = evalH, B.ruleDepth = evalD }
+            --         --     modAccum $ (BL.HVListElem $ BL.VListBaseElem $ B.ElemRule rule) : acc
+                HP.ModeIndependentCommand modeIndependentCommand ->
+                    do
+                    modeIndependentResult <- handleModeIndependentCommand Horizontal modeIndependentCommand
+                    case modeIndependentResult of
+                        AddElems extraElems ->
+                            addElems ((BL.HVListElem <$> extraElems))
+                        EnterBoxMode boxType ->
+                            pure $ ModifyHBox
+                                (HModeContents
+                                    boxHList
+                                    (Just
+                                        (boxTypeToFreshHChild boxType)))
+                        FinishBoxMode desiredLength ->
+                            pure (LeaveHBoxMode desiredLength)
+        -- Just (HModeChildHBoxMode hModeContents) ->
+        --     handleCommandInHBoxMode hModeContents command >>= \case
+        --         LeaveHBoxMode finalBoxHList ->
+        --             do
+        --             let toBox elemList = B.Box (B.HBoxContents elemList) B.Natural
+        --             paraHListWithHBox <- boxHList $ BL.VListBaseElem . B.ElemBox . toBox) finalBoxHList
+        --             extractBreakAndSetVList (VModeContents paraHListWithHBox Nothing)
+        --         ModifyHBox hModeContents ->
+        --             extractBreakAndSetVList
+        --                 (VModeContents
+        --                     mainVList
+        --                     (Just
+        --                         (VModeChildHMode
+        --                             ParaHMode
+        --                             hModeContents)))
   where
-    processCommand s ac c =
-        do
-        let subModeTxt = if inInternal
-            then "internal"
-            else "outer"
-        putText $ "In " <> subModeTxt <> " V-mode, saw command: " <> show c
-        processVCommand s ac inInternal c
+    addElems elems =
+        pure $ ModifyHBox
+            (HModeContents
+                (elems <> boxHList)
+                Nothing)
 
-extractBreakAndSetVList :: HP.InhibitableStream s => ExceptBuildVM s [B.Page]
-extractBreakAndSetVList = do
-    vList <- extractVList False
-    desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
-    pure $ BL.runPageBuilder desiredH BL.newCurrentPage $ reverse vList
+extractBreakAndSetVList :: HP.InhibitableStream s => VModeContents -> ExceptBuildVM s [B.Page]
+extractBreakAndSetVList modeState@(VModeContents mainVList maybeMainChild) =
+    do
+    oldStream <- get
+    (P.State { P.stateInput = newStream }, command) <- liftEither $ ParseError `mapLeft` HP.extractCommand oldStream
+    put newStream
+    case maybeMainChild of
+        -- Outer vertical mode.
+        Nothing ->
+            do
+            let inInternal = False
+            case command of
+                -- End recursion.
+                HP.VModeCommand HP.End ->
+                    if inInternal
+                        then throwConfigError "End not allowed in internal vertical mode"
+                    else
+                        do
+                        gets HP.getConditionBodyState >>= \case
+                            Nothing -> pure ()
+                            Just _condState -> throwConfigError $ "Cannot end: in condition block: " <> showT _condState
+                        readOnConfState (asks finaliseConfig) >>= liftIO
+                        desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
+                        pure $ BL.runPageBuilder desiredH BL.newCurrentPage $ reverse mainVList
+                HP.HModeCommand _ ->
+                    startParagraph HP.Indent
+                HP.StartParagraph indentFlag ->
+                    startParagraph indentFlag
+                -- \par does nothing in vertical mode.
+                HP.EndParagraph ->
+                    extractBreakAndSetVList modeState
+                -- <space token> has no effect in vertical modes.
+                HP.AddSpace ->
+                    extractBreakAndSetVList modeState
+                -- HP.AddRule HP.Rule { HP.width, HP.height, HP.depth } ->
+                --     do
+                --     evalW <- case width of
+                --         Nothing -> readOnConfState $ gets $ lookupLengthParameter HP.HSize
+                --         Just ln -> liftEvalOnConfState ln
+                --     evalH <- case height of
+                --         -- TODO.
+                --         Nothing -> readOnConfState $ pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+                --         Just ln -> liftEvalOnConfState ln
+                --     evalD <- case depth of
+                --         Nothing -> readOnConfState $ pure 0
+                --         Just ln -> liftEvalOnConfState ln
+                --     let rule = B.Rule { B.ruleWidth = evalW, B.ruleHeight = evalH, B.ruleDepth = evalD }
+                --     modAccum $ (BL.VListBaseElem $ B.ElemRule rule) : acc
+                HP.ModeIndependentCommand modeIndependentCommand ->
+                    do
+                    modeIndependentResult <- handleModeIndependentCommand Vertical modeIndependentCommand
+                    extractBreakAndSetVList $ case modeIndependentResult of
+                        AddElems extraElems ->
+                            VModeContents (extraElems <> mainVList) maybeMainChild
+                        EnterBoxMode boxType ->
+                            VModeContents mainVList (Just (boxTypeToFreshVChild boxType))
+                oth ->
+                    panic $ "Not implemented, outer V mode: " <> show command
+              where
+                startParagraph indentFlag =
+                    do
+                    -- If the command shifts to horizontal mode, run
+                    -- '\indent', and re-read the stream as if the
+                    -- command hadn't been read. (Note that we set
+                    -- "oldStream", not "newStream".)
+                    put oldStream
+                    paraHList <- case indentFlag of
+                        HP.Indent ->
+                            do
+                            b <- readOnConfState $ asks parIndentBox
+                            pure [b]
+                        HP.DoNotIndent ->
+                            pure []
+                    extractBreakAndSetVList
+                        (VModeContents
+                            mainVList
+                            (Just
+                                (VModeChildHMode
+                                    ParaHMode
+                                    (HModeContents paraHList Nothing))))
+        Just (VModeChildHMode ParaHMode hModeContents@(HModeContents paraHList _)) ->
+            handleCommandInParaMode hModeContents command >>= \case
+                ParaLeaveMode maybeDesiredLength ->
+                    do
+                    desiredW <- readOnConfState $ asks $ lookupLengthParameter HP.HSize
+                    lineBoxes <- readOnConfState $
+                        do
+                        lineTol <- asks $ IntParamVal . lookupIntegerParameter HP.Tolerance
+                        linePen <- asks $ IntParamVal . lookupIntegerParameter HP.LinePenalty
+                        liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph (LenParamVal desiredW) lineTol linePen paraHList
+                    let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
+                    mainVListWithParagraph <- HP.runConfState $
+                        foldM addVListElem mainVList $ BL.VListBaseElem . B.ElemBox . toBox <$> lineBoxes
+
+                    case maybeDesiredLength of
+                        Nothing ->
+                            extractBreakAndSetVList (VModeContents mainVListWithParagraph Nothing)
+                        (Just desiredLength) ->
+                            notImplemented
+                ModifyPara hModeContents ->
+                    extractBreakAndSetVList
+                        (VModeContents
+                            mainVList
+                            (Just
+                                (VModeChildHMode
+                                    ParaHMode
+                                    hModeContents)))
+        Just (VModeChildHMode BoxHMode hModeContents@(HModeContents boxHList _)) ->
+            handleCommandInHBoxMode hModeContents command >>= \case
+                LeaveHBoxMode desiredLength ->
+                    do
+                    -- TODO: I think glue status and desired length
+                    -- duplicate some meaning.
+                    let hBoxElems = (BL.setHList BL.NaturallyGood . reverse) boxHList
+                        hBox = BL.VListBaseElem $ B.ElemBox $ B.Box (B.HBoxContents hBoxElems) desiredLength
+                    extractBreakAndSetVList
+                        (VModeContents
+                            (hBox : mainVList)
+                            Nothing)
+                ModifyHBox hModeContents ->
+                    extractBreakAndSetVList
+                        (VModeContents
+                            mainVList
+                            (Just
+                                (VModeChildHMode
+                                    BoxHMode
+                                    hModeContents)))
