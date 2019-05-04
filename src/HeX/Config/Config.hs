@@ -35,11 +35,12 @@ import           HeX.Parse.Token
 
 data Group
     = ScopeGroup Scope ScopeGroup
+    | NonScopeGroup
     deriving ( Show )
 
 data ScopeGroup
     = LocalStructureGroup AST.CommandTrigger
-    | ExplicitBoxGroup B.DesiredLength
+    | ExplicitBoxGroup
     deriving ( Show )
 
 type HList = [BL.BreakableHListElem]
@@ -160,7 +161,7 @@ newConfig = do
                 }
 
 finaliseConfig :: Config -> IO ()
-finaliseConfig config = do
+finaliseConfig config =
     hClose $ logStream config
 
 -- Unscoped.
@@ -248,6 +249,7 @@ popGroup c@Config{ groups } =
 
 data KeyOperation v = InsertVal v | DeleteVal
 
+modGroupScope :: (Scope -> Scope) -> Group -> Group
 modGroupScope f = \case
     ScopeGroup scope scopeGroupType ->
         ScopeGroup (f scope) scopeGroupType
@@ -300,7 +302,7 @@ scopedLookup :: (Scope -> Maybe v) -> Config -> Maybe v
 scopedLookup f c@Config{ globalScope, groups } =
     case groups of
         [] -> f globalScope
-        ScopeGroup scope scopeGroupType : outerGroups ->
+        ScopeGroup scope _ : outerGroups ->
             case f scope of
                 Nothing -> scopedLookup f c{ groups = outerGroups }
                 Just v  -> Just v
@@ -518,7 +520,7 @@ lookupTokenListRegister p conf =
     fromMaybe mempty $ scopedMapLookup tokenListRegister p conf
 
 lookupBoxRegister :: EightBitInt -> Config -> Maybe B.Box
-lookupBoxRegister p conf = scopedMapLookup boxRegister p conf
+lookupBoxRegister = scopedMapLookup boxRegister
 
 setIntegerRegister :: EightBitInt -> IntVal -> GlobalFlag -> Config -> Config
 setIntegerRegister =
@@ -554,6 +556,15 @@ setBoxRegister = insertKey boxRegister $ \c _map -> c { boxRegister = _map }
 
 delBoxRegister :: EightBitInt -> GlobalFlag -> Config -> Config
 delBoxRegister = deleteKey boxRegister $ \c _map -> c { boxRegister = _map }
+
+setBoxRegisterNullable :: EightBitInt
+                            -> GlobalFlag -> Maybe B.Box -> Config -> Config
+setBoxRegisterNullable idx global = \case
+    -- If the fetched box is null, delete the left-hand
+    -- register's contents. Otherwise set the register to
+    -- the fetched box's contents.
+    Nothing -> delBoxRegister idx global
+    Just b -> setBoxRegister idx b global
 
 -- Scoped, but with unscoped references.
 

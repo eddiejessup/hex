@@ -45,38 +45,41 @@ parseStartParagraph = satisfyThen $
         (T.StartParagraphTok _indent) -> Just $ StartParagraph _indent
         _ -> Nothing
 
-parseAddLeaders :: InhibitableStream s => SimpParser s Command
-parseAddLeaders =
-    AddLeaders <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue
+parseLeadersSpec :: InhibitableStream s => Axis -> SimpParser s LeadersSpec
+parseLeadersSpec axis =
+    LeadersSpec <$> parseLeaders <*> parseBoxOrRule <*> (parseModedGlue axis)
   where
     parseLeaders = satisfyThen $
         \case
             T.LeadersTok t -> Just t
             _ -> Nothing
 
-parseAddUnwrappedFetchedBox
+parseFetchedBoxRef
     :: InhibitableStream s
-    => SimpParser s Command
-parseAddUnwrappedFetchedBox = do
-    (axis, fetchMode) <- satisfyThen $ \case
-        T.ModedCommand axis (T.UnwrappedFetchedBoxTok fm) ->
-            Just (axis, fm)
+    => Axis
+    -> SimpParser s FetchedBoxRef
+parseFetchedBoxRef tgtAxis = do
+    fetchMode <- satisfyThen $ \case
+        T.ModedCommand seenAxis (T.UnwrappedFetchedBoxTok fm) | tgtAxis == seenAxis ->
+            Just fm
         _ ->
             Nothing
     n <- parseNumber
-    pure $ AddUnwrappedFetchedBox axis n fetchMode
+    pure $ FetchedBoxRef n fetchMode
 
 parseBoxOrRule :: InhibitableStream s => SimpParser s BoxOrRule
 parseBoxOrRule = P.choice [ BoxOrRuleBox <$> parseBox
-                          , BoxOrRuleRule <$> parseRule
+                          , (BoxOrRuleRule Horizontal) <$> (parseModedRule Horizontal)
+                          , (BoxOrRuleRule Vertical) <$> (parseModedRule Vertical)
                           ]
 
+parseModedRule :: InhibitableStream s => Axis -> SimpParser s Rule
+parseModedRule axis =
+    skipSatisfiedEquals (T.ModedCommand axis T.RuleTok) >> parseRule
+
 -- \hrule and such.
-parseRule :: InhibitableStream s => SimpParser s ModedRule
-parseRule =
-    ModedRule
-        <$> satisfyThenGetMode T.RuleTok
-        <*> parseRuleSpecification Rule{ width  = Nothing
+parseRule :: InhibitableStream s => SimpParser s Rule
+parseRule = parseRuleSpecification Rule{ width  = Nothing
                                        , height = Nothing
                                        , depth  = Nothing
                                        }
@@ -121,7 +124,6 @@ parseModeIndependentCommand =
         , skipSatisfiedEquals T.MathKernTok
               >> (AddMathKern <$> parseMathLength)
         , parseRemoveItem
-        , AddGlue <$> parseModedGlue
         , Assign <$> parseAssignment
         , skipSatisfiedEquals T.SetAfterAssignmentTokenTok
               >> (SetAfterAssignmentToken <$> parseLexToken)
@@ -168,8 +170,8 @@ parseRemoveItem =
                         T.RemoveItemTok i -> Just i
                         _ -> Nothing)
 
-parseModedGlue :: InhibitableStream s => SimpParser s ModedGlue
-parseModedGlue =
+parseModedGlue :: InhibitableStream s => Axis -> SimpParser s Glue
+parseModedGlue axis =
     P.choice [ parseSpecifiedGlue
              , parsePresetGlue T.Fil
              , parsePresetGlue T.Fill
@@ -179,12 +181,13 @@ parseModedGlue =
   where
     -- \hskip 10pt and such.
     parseSpecifiedGlue =
-        ModedGlue <$> satisfyThenGetMode T.SpecifiedGlueTok <*> parseGlue
+        skipSatisfiedEquals (T.ModedCommand axis T.SpecifiedGlueTok)
+        >> parseGlue
 
     parsePresetGlue t =
         do
-        axis <- satisfyThenGetMode (T.PresetGlueTok t)
-        pure $ ModedGlue axis (presetToSpecifiedGlue t)
+        skipSatisfiedEquals (T.ModedCommand axis (T.PresetGlueTok t))
+        $> (presetToSpecifiedGlue t)
 
     -- \{v,h}fil:    0pt plus 1fil
     -- \{v,h}fill:   0pt plus 1fill
@@ -259,27 +262,6 @@ parseAddShiftedBox = AddBox <$> parsePlacement <*> parseBox
         (axis, direction) <- parseDirection
         ShiftedPlacement axis direction <$> parseLength
 
--- VMode.
-
--- parseEnterHMode :: InhibitableStream s => SimpParser s VModeCommand
--- parseEnterHMode = skipSatisfied startsHMode $> EnterHMode
---   where
---     startsHMode t = case t of
---         T.ModedCommand Horizontal _ -> True
---         T.ControlCharTok -> True
---         T.IntRefTok T.CharQuantity _ -> True
---         T.AccentTok -> True
---         T.DiscretionaryTextTok -> True
---         T.DiscretionaryHyphenTok -> True
---         T.ControlSpaceTok -> True
---         T.ToggleMathModeTok -> True
---         _
---             | primTokHasCategory Lex.Letter t -> True
---         _
---             | primTokHasCategory Lex.Other t -> True
---         _ -> False
-
--- HMode.
 parseCommand :: InhibitableStream s => SimpParser s Command
 parseCommand =
     P.choice
@@ -299,10 +281,6 @@ parseCommand =
         , skipSatisfied isSpace $> AddSpace
         , parseStartParagraph
         , skipSatisfiedEquals T.EndParagraphTok $> EndParagraph
-          -- Mode-parametrised.
-        , parseAddLeaders
-        , parseAddUnwrappedFetchedBox
-        , AddRule <$> parseRule
           -- , parseAlign mode
         , ModeIndependentCommand <$> parseModeIndependentCommand
         ]
@@ -316,12 +294,20 @@ parseCommand =
             , parseAddDiscretionaryText
             , skipSatisfiedEquals T.DiscretionaryHyphenTok $> AddDiscretionaryHyphen
             , skipSatisfied (primTokHasCategory Lex.MathShift) $> EnterMathMode
+            , AddHGlue <$> (parseModedGlue Horizontal)
+            , AddHLeaders <$> (parseLeadersSpec Horizontal)
+            , AddHRule <$> (parseModedRule Horizontal)
+            , AddUnwrappedFetchedHBox <$> (parseFetchedBoxRef Horizontal)
             ]
 
     parseVModeCommand =
         P.choice
             [ skipSatisfiedEquals T.EndTok $> End
             , skipSatisfiedEquals T.DumpTok $> Dump
+            , AddVGlue <$> (parseModedGlue Vertical)
+            , AddVLeaders <$> (parseLeadersSpec Vertical)
+            , AddVRule <$> (parseModedRule Vertical)
+            , AddUnwrappedFetchedVBox <$> (parseFetchedBoxRef Vertical)
             ]
 
 parseCharCodeRef :: InhibitableStream s => SimpParser s CharCodeRef
@@ -360,12 +346,3 @@ parseAddDiscretionaryText = do
     AddDiscretionaryText <$> parseGeneralText
         <*> parseGeneralText
         <*> parseGeneralText
-
--- parseLeaveHMode :: InhibitableStream s => SimpParser s HModeCommand
--- parseLeaveHMode = skipSatisfied endsHMode $> LeaveHMode
---   where
---     endsHMode = \case
---         T.ModedCommand Vertical _ -> True
---         T.EndTok -> True
---         T.DumpTok -> True
---         _ -> False

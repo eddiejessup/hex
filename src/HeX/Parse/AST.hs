@@ -282,7 +282,7 @@ data Box = FetchedRegisterBox T.BoxFetchMode EightBitNumber
 data BoxSpecification = Natural | To Length | Spread Length
     deriving ( Show )
 
-data BoxOrRule = BoxOrRuleBox Box | BoxOrRuleRule ModedRule
+data BoxOrRule = BoxOrRuleBox Box | BoxOrRuleRule Axis Rule
     deriving ( Show )
 
 -- Commands.
@@ -295,7 +295,6 @@ data ModeIndependentCommand
     | AddKern Length
     | AddMathKern MathLength
     | RemoveItem T.RemovableItem
-    | AddGlue ModedGlue
     | SetAfterAssignmentToken Lex.Token
     | AddToAfterGroupTokens Lex.Token
     | Message T.StandardOutputStream T.ExpandedBalancedText
@@ -320,9 +319,6 @@ data Command
     | AddSpace
     | StartParagraph T.IndentFlag
     | EndParagraph
-    | AddLeaders T.LeadersType BoxOrRule ModedGlue
-    | AddUnwrappedFetchedBox Axis Number T.BoxFetchMode -- \un{v,h}{box,copy}
-    | AddRule ModedRule
       -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
     | HModeCommand HModeCommand
     | VModeCommand VModeCommand
@@ -333,6 +329,10 @@ data VModeCommand
     = End
     | Dump
     | EnterHMode
+    | AddVGlue Glue
+    | AddVLeaders LeadersSpec
+    | AddVRule Rule
+    | AddUnwrappedFetchedVBox FetchedBoxRef -- \unv{box,copy}
     deriving ( Show )
 
 data HModeCommand =
@@ -343,12 +343,16 @@ data HModeCommand =
     | AddDiscretionaryText { preBreak, postBreak, noBreak :: T.BalancedText }
     | AddDiscretionaryHyphen
     | EnterMathMode
+    | AddHGlue Glue
+    | AddHLeaders LeadersSpec
+    | AddHRule Rule
+    | AddUnwrappedFetchedHBox FetchedBoxRef -- \unh{box,copy}
     deriving ( Show )
 
-data ModedGlue = ModedGlue Axis Glue
+data FetchedBoxRef = FetchedBoxRef Number T.BoxFetchMode
     deriving ( Show )
 
-data ModedRule = ModedRule Axis Rule
+data LeadersSpec = LeadersSpec T.LeadersType BoxOrRule Glue
     deriving ( Show )
 
 data CommandTrigger = CharCommandTrigger | CSCommandTrigger

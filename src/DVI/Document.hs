@@ -52,7 +52,7 @@ data Instruction =
     | SelectFont !FontSelection
     | PushStack
     | PopStack
--- | DoSpecial !Text
+-- \| DoSpecial !Text
     deriving ( Show )
 
 data ParseState =

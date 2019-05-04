@@ -1,6 +1,6 @@
 module HeX.Categorise where
 
-import HeXlude
+import           HeXlude
 
 import           Data.Foldable                  ( foldl' )
 import           Data.Maybe                     ( fromMaybe )
@@ -35,41 +35,35 @@ data CharCat = CharCat
     } deriving (Show)
 
 instance Readable CharCat where
-    describe (CharCat c ct) = showT ct <> " '" <> Text.singleton c <> "'"
+  describe (CharCat c ct) = showT ct <> " '" <> Text.singleton c <> "'"
 
 type CharCodeMap v = HMap.HashMap CharCode v
 
 type CatCodes = CharCodeMap CatCode
 
 newCatCode :: CharCode -> CatCode
-newCatCode c
-    | c == '\\'             = Escape
-    | c == ' '              = Space
-    | c == '%'              = Comment
-    | c == toEnum 0         = Ignored -- Null
-    -- NON-STANDARD
-    | c == '\n'             = EndOfLine
-    | c == '\r'             = EndOfLine
-    | c == toEnum 127       = Invalid
-    | c `elem` ['a' .. 'z'] = Letter
-    | c `elem` ['A' .. 'Z'] = Letter
-    | otherwise             = Other
+newCatCode c | c == '\\'             = Escape
+             | c == ' '              = Space
+             | c == '%'              = Comment
+             | c == toEnum 0         = Ignored  -- Null.
+             | c == '\n'             = EndOfLine  -- Non-Standard.
+             | c == '\r'             = EndOfLine
+             | c == toEnum 127       = Invalid
+             | c `elem` ['a' .. 'z'] = Letter
+             | c `elem` ['A' .. 'Z'] = Letter
+             | otherwise             = Other
 
 newCatCodes :: CatCodes
 newCatCodes =
-    HMap.fromList $ fmap (\n -> (toEnum n, newCatCode $ toEnum n)) [0 .. 127]
+  HMap.fromList $ fmap (\n -> (toEnum n, newCatCode $ toEnum n)) [0 .. 127]
 
 -- Add in some useful extras beyond the technical defaults.
 extras :: [(CharCode, CatCode)]
-extras = [ ('^', Superscript)
-         , ('{', BeginGroup)
-         , ('}', EndGroup)
-         , ('#', Parameter)
-         ]
+extras =
+  [('^', Superscript), ('{', BeginGroup), ('}', EndGroup), ('#', Parameter)]
 
 usableCatCodes :: CatCodes
-usableCatCodes =
-    foldl' (\m (k, v) -> HMap.insert k v m) newCatCodes extras
+usableCatCodes = foldl' (\m (k, v) -> HMap.insert k v m) newCatCodes extras
 
 catDefault :: Maybe CatCode -> CatCode
 catDefault = fromMaybe Invalid
@@ -78,19 +72,15 @@ catLookup :: CatCodes -> CharCode -> CatCode
 catLookup m n = catDefault $ HMap.lookup n m
 
 extractCharCat
-    :: (CharCode -> CatCode)
-    -> [CharCode]
-    -> Maybe (CharCat, [CharCode])
+  :: (CharCode -> CatCode) -> [CharCode] -> Maybe (CharCat, [CharCode])
 extractCharCat _ [] = Nothing
-extractCharCat charToCat (n1:n2:n3:rest) =
+extractCharCat charToCat (n1 : n2 : n3 : rest) =
     -- Next two characters must be identical, and have category
     -- 'Superscript', and triod character mustn't have category 'EndOfLine'.
-    let cat1 = charToCat n1
-        n3Triod = toEnum $ fromEnum n3 + if fromEnum n3 < 64
-            then 64
-            else (-64)
-    in  Just $ if (cat1 == Superscript) && (n1 == n2) && (charToCat n3 /= EndOfLine)
+  let cat1    = charToCat n1
+      n3Triod = toEnum $ fromEnum n3 + if fromEnum n3 < 64 then 64 else (-64)
+  in  Just
+        $ if (cat1 == Superscript) && (n1 == n2) && (charToCat n3 /= EndOfLine)
             then (CharCat n3Triod $ charToCat n3Triod, rest)
             else (CharCat n1 cat1, n2 : n3 : rest)
-extractCharCat charToCat (n1:rest) =
-    Just (CharCat n1 $ charToCat n1, rest)
+extractCharCat charToCat (n1 : rest) = Just (CharCat n1 $ charToCat n1, rest)

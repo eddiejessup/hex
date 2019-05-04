@@ -416,22 +416,23 @@ instance TeXEvaluable AST.InternalQuantity where
             pure $ show en
         AST.InternalLengthQuantity d ->
             do
-            ed <- texEvaluate d
+            _ <- texEvaluate d
             notImplemented
         AST.InternalGlueQuantity g ->
             do
-            eg <- texEvaluate g
+            _ <- texEvaluate g
             notImplemented
         AST.InternalMathGlueQuantity mg ->
+            do
+            _ <- texEvaluate mg
             notImplemented
-            -- emg <- texEvaluate mg
         AST.FontQuantity f ->
             do
-            ef <- texEvaluate f
+            _ <- texEvaluate f
             notImplemented
         AST.TokenListVariableQuantity tl ->
             do
-            etl <- texEvaluate tl
+            _ <- texEvaluate tl
             notImplemented
 
 -- Condition

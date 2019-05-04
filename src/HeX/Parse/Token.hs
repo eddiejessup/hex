@@ -403,7 +403,7 @@ data PrimitiveToken
     | ItalicCorrectionTok -- \/
     | DiscretionaryTextTok -- \discretionary
     | DiscretionaryHyphenTok -- \-
-    | ToggleMathModeTok -- $
+    | ToggleMathModeTok -- '$'
     -- > > Modifying how to apply assignments.
     | AssignPrefixTok AssignPrefixTok
     -- > > Modifying how to parse the macro.

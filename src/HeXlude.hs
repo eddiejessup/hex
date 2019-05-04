@@ -10,6 +10,7 @@ module HeXlude
     , atEith
     , fail
     , maybeToFail
+    , traceText
     )
 where
 
@@ -54,3 +55,6 @@ maybeToFail :: MonadFail m => Text -> Maybe a -> m a
 maybeToFail err = \case
     Nothing -> fail $ toS err
     Just v -> pure v
+
+traceText :: Text -> a -> a
+traceText = trace

@@ -1,4 +1,4 @@
-module HeX.Run where
+module HeX.Command.Run where
 
 import HeXlude
 
@@ -16,8 +16,8 @@ import           DVI.Encode                     ( encode )
 
 import           HeX.BreakList
 import           HeX.Box
-import           HeX.Build
-import           HeX.BuildHelp
+import           HeX.Command.Build
+import           HeX.Command.Common
 import           HeX.Categorise
 import           HeX.Lex                        ( LexState(..)
                                                 , extractToken
@@ -26,7 +26,7 @@ import           HeX.Parse                      ( ExpandedStream
                                                 , ExpansionMode(..)
                                                 , IndentFlag(..)
                                                 , defaultCSMap
-                                                -- , extractHModeCommand
+                                                , extractCommand
                                                 , newExpandStream
                                                 , resolveToken
                                                 )
@@ -36,74 +36,74 @@ usableCatLookup = catLookup usableCatCodes
 
 -- Cat
 
--- runCat :: [CharCode] -> IO ()
--- runCat _xs = extractAndPrint _xs
---   where
---     extractAndPrint xs = case extractCharCat usableCatLookup xs of
---         Just (cc, xs') ->
---             do
---             print cc
---             extractAndPrint xs'
---         Nothing ->
---             pure ()
+runCat :: [CharCode] -> IO ()
+runCat _xs = extractAndPrint _xs
+  where
+    extractAndPrint xs = case extractCharCat usableCatLookup xs of
+        Just (cc, xs') ->
+            do
+            print cc
+            extractAndPrint xs'
+        Nothing ->
+            pure ()
 
 -- Lex.
 
--- runLex :: [CharCode] -> IO ()
--- runLex _xs = extractAndPrint (LineBegin, _xs)
---   where
---     extractAndPrint (lexState, xs) =
---         case extractToken usableCatLookup lexState xs of
---             Just (tok, lexState', s') ->
---                 do
---                 print tok
---                 extractAndPrint (lexState', s')
---             Nothing ->
---                 pure ()
+runLex :: [CharCode] -> IO ()
+runLex _xs = extractAndPrint (LineBegin, _xs)
+  where
+    extractAndPrint (lexState, xs) =
+        case extractToken usableCatLookup lexState xs of
+            Just (tok, lexState', s') ->
+                do
+                print tok
+                extractAndPrint (lexState', s')
+            Nothing ->
+                pure ()
 
 -- Resolve.
 
--- runResolved :: [CharCode] -> IO ()
--- runResolved _xs = extractAndPrint (LineBegin, _xs)
---   where
---     extractAndPrint (lexState, xs) =
---         case extractToken usableCatLookup lexState xs of
---             Just (tok, lexState', s') ->
---                 do
---                 print $ resolveToken lookupCS Expanding tok
---                 extractAndPrint (lexState', s')
---             Nothing ->
---                 pure ()
+runResolved :: [CharCode] -> IO ()
+runResolved _xs = extractAndPrint (LineBegin, _xs)
+  where
+    extractAndPrint (lexState, xs) =
+        case extractToken usableCatLookup lexState xs of
+            Just (tok, lexState', s') ->
+                do
+                print $ resolveToken lookupCS Expanding tok
+                extractAndPrint (lexState', s')
+            Nothing ->
+                pure ()
 
---     lookupCS cs = HMap.lookup cs defaultCSMap
+    lookupCS cs = HMap.lookup cs defaultCSMap
 
 -- Expand.
 
--- runExpand :: [CharCode] -> IO ()
--- runExpand xs = newExpandStream xs >>= extractAndPrint
---   where
---     extractAndPrint estream = case P.take1_ estream of
---         Just (tok, estream') ->
---             do
---             print tok
---             extractAndPrint estream'
---         Nothing ->
---             pure ()
+runExpand :: [CharCode] -> IO ()
+runExpand xs = newExpandStream xs >>= extractAndPrint
+  where
+    extractAndPrint estream = case P.take1_ estream of
+        Just (tok, estream') ->
+            do
+            print tok
+            extractAndPrint estream'
+        Nothing ->
+            pure ()
 
 -- Command.
 
--- runCommand :: [CharCode] -> IO ()
--- runCommand xs = newExpandStream xs >>= extractAndPrint
---   where
---     extractAndPrint estream = case extractHModeCommand estream of
---         Right (P.State {P.stateInput = estream'}, com) ->
---             do
---             print com
---             extractAndPrint estream'
---         Left (P.ParseErrorBundle ((P.TrivialError _ (Just P.EndOfInput) _) :| []) _) ->
---             pure ()
---         Left errs ->
---             panic $ show errs
+runCommand :: [CharCode] -> IO ()
+runCommand xs = newExpandStream xs >>= extractAndPrint
+  where
+    extractAndPrint estream = case extractCommand estream of
+        Right (P.State {P.stateInput = estream'}, com) ->
+            do
+            print com
+            extractAndPrint estream'
+        Left (P.ParseErrorBundle ((P.TrivialError _ (Just P.EndOfInput) _) :| []) _) ->
+            pure ()
+        Left errs ->
+            panic $ show errs
 
 -- Generic.
 
@@ -118,11 +118,11 @@ buildEitherToIO (Right v)                     = pure v
 
 codesToSth
     :: [CharCode]
-    -> ExceptBuildT ExpandedStream (VM ExpandedStream) a
+    -> ExceptMonadBuild ExpandedStream a
     -> IO a
 codesToSth xs f =
     newExpandStream xs
-    >>= evalStateT (unVM $ runExceptT f)
+    >>= evalStateT (unMonadBuild $ runExceptT f)
     >>= buildEitherToIO
 
 -- Paragraph list.
@@ -151,16 +151,16 @@ codesToSth xs f =
 codesToPages :: [CharCode] -> IO [Page]
 codesToPages xs = codesToSth xs (extractBreakAndSetVList (VModeContents [] Nothing))
 
--- printList :: Show a => [a] -> IO ()
--- printList = putStrLn . intercalate "\n" . fmap show
+printList :: Show a => [a] -> IO ()
+printList = putStrLn . intercalate "\n" . fmap show
 
--- runPages :: [CharCode] -> IO ()
--- runPages xs = codesToPages xs >>= printList
+runPages :: [CharCode] -> IO ()
+runPages xs = codesToPages xs >>= printList
 
 -- DVI instructions.
 
--- runDVI :: [CharCode] -> IO ()
--- runDVI xs = pagesToDVI <$> codesToPages xs >>= printList
+runDVI :: [CharCode] -> IO ()
+runDVI xs = pagesToDVI <$> codesToPages xs >>= printList
 
 -- Raw DVI instructions.
 
@@ -173,8 +173,8 @@ codesToDVIRaw xs = do
     encInstrs <- strEitherToIO $ parseInstructions instrs _mag
     pure $ reverse encInstrs
 
--- runDVIRaw :: [CharCode] -> IO ()
--- runDVIRaw xs = codesToDVIRaw xs >>= printList
+runDVIRaw :: [CharCode] -> IO ()
+runDVIRaw xs = codesToDVIRaw xs >>= printList
 
 -- DVI byte strings.
 
