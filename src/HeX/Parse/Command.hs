@@ -185,7 +185,6 @@ parseModedGlue axis =
         >> parseGlue
 
     parsePresetGlue t =
-        do
         skipSatisfiedEquals (T.ModedCommand axis (T.PresetGlueTok t))
         $> (presetToSpecifiedGlue t)
 

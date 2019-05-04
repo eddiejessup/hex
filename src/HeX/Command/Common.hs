@@ -4,6 +4,7 @@ import           HeXlude
 
 import           Control.Monad.Except           ( ExceptT
                                                 , MonadError
+                                                , liftEither
                                                 , throwError
                                                 , withExceptT
                                                 )
@@ -12,8 +13,9 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 , get
                                                 , modify
                                                 )
+import           Data.Either.Combinators     (mapLeft)
+import qualified Text.Megaparsec             as P
 
-import qualified HeX.Box                       as B
 import           HeX.Config
 import           HeX.Evaluate
 import qualified HeX.Parse                     as HP
@@ -68,73 +70,53 @@ liftEvalOnConfState
     => v -> ExceptMonadBuild s (EvalTarget v)
 liftEvalOnConfState v = liftReadOnConfState $ texEvaluate v
 
---
-
-data VModeContents = VModeContents VList (Maybe ParaOrBox)
-    deriving ( Show )
-
-vModeWithAddedElems :: VList -> VModeContents -> VModeContents
-vModeWithAddedElems elems (VModeContents vList maybeChild) =
-    VModeContents (elems <> vList) maybeChild
-
-vModeWithSetChild :: ParaOrBox -> VModeContents -> VModeContents
-vModeWithSetChild child (VModeContents vList _) =
-    VModeContents vList (Just child)
-
-vModeWithoutChild :: VModeContents -> VModeContents
-vModeWithoutChild (VModeContents vList _) =
-    VModeContents vList Nothing
-
--- A VList's child is either an HList (for a para or box), or a VList for a vbox.
-data ParaOrBox
-    = ParaOrBoxPara HModeContents
-    | ParaOrBoxBox HOrVBox
-    deriving ( Show )
-
--- Regardless of whether an HList is for a paragraph or an hbox, its child can be either
--- an HList for an hbox, or a VList for a vbox.
-data HModeContents = HModeContents HList (Maybe HOrVBox)
-    deriving ( Show )
-
-hModeWithAddedElems :: HList -> HModeContents -> HModeContents
-hModeWithAddedElems elems (HModeContents hList maybeChild) =
-    HModeContents (elems <> hList) maybeChild
-
-hModeWithSetChild :: HOrVBox -> HModeContents -> HModeContents
-hModeWithSetChild child (HModeContents hList _) =
-    HModeContents hList (Just child)
-
-hModeWithoutChild :: HModeContents -> HModeContents
-hModeWithoutChild (HModeContents hList _) =
-    HModeContents hList Nothing
-
-data HOrVBox = HOrVBox B.DesiredLength BoxModeIntent HOrVModeContents
-    deriving ( Show )
-
 data BoxModeIntent
     = IntentToAddBox
     | IntentToSetBoxRegister EightBitInt HP.GlobalFlag
     deriving ( Show )
 
-data HOrVModeContents
-    = HOrVModeContentsH HModeContents
-    | HOrVModeContentsV B.VBoxAlignType VModeContents
-    deriving ( Show )
 
-emptyHModeContents :: HModeContents
-emptyHModeContents = HModeContents [] Nothing
+data RecursionResult a b
+    = LoopAgain a
+    | EndLoop b
 
-emptyVModeContents :: VModeContents
-emptyVModeContents = VModeContents [] Nothing
+doNothing :: a -> RecursionResult a b
+doNothing = LoopAgain
 
-boxTypeToFreshVChild :: B.DesiredLength -> HP.ExplicitBox -> BoxModeIntent -> ParaOrBox
-boxTypeToFreshVChild desiredLength boxType boxIntent =
-    ParaOrBoxBox $ boxTypeToFreshHChild desiredLength boxType boxIntent
+addElem :: [a] -> a -> RecursionResult [a] b
+addElem a e = LoopAgain (e : a)
 
-boxTypeToFreshHChild :: B.DesiredLength -> HP.ExplicitBox -> BoxModeIntent -> HOrVBox
-boxTypeToFreshHChild desiredLength boxType boxIntent =
-    (HOrVBox desiredLength boxIntent) $ case boxType of
-        HP.ExplicitHBox ->
-            HOrVModeContentsH emptyHModeContents
-        HP.ExplicitVBox alignType ->
-            HOrVModeContentsV alignType emptyVModeContents
+addMaybeElem :: [a] -> Maybe a -> RecursionResult [a] b
+addMaybeElem a = \case
+    Nothing -> doNothing a
+    Just e -> addElem a e
+
+runLoop :: Monad m => (a -> m (RecursionResult a b)) -> a -> m b
+runLoop f initialState = go initialState
+  where
+    go state_ =
+        f state_ >>= \case
+            LoopAgain newState ->
+                go newState
+            EndLoop result ->
+                pure result
+
+runCommandLoop
+    :: HP.InhibitableStream s
+    => (st -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult st r))
+    -> st
+    -> ExceptMonadBuild s r
+runCommandLoop f s = runLoop g s
+  where
+    g elemList =
+        do
+        (oldStream, command) <- peekCommand
+        f elemList command oldStream
+
+    peekCommand :: HP.InhibitableStream s => ExceptMonadBuild s (s, HP.Command)
+    peekCommand =
+        do
+        oldStream <- get
+        (P.State { P.stateInput = newStream }, command) <- liftEither $ ParseError `mapLeft` HP.extractCommand oldStream
+        put newStream
+        pure (oldStream, command)

@@ -25,7 +25,7 @@ newtype Demerit = Demerit { unDemerit :: Int }
 newtype IsDiscarding = IsDiscarding Bool
     deriving ( Show )
 
-type ElemAdj = Adj BreakableHListElem
+type ElemAdj = Adj HListElem
 
 data Node = Root | Branch !Int
     deriving ( Show )
@@ -208,7 +208,7 @@ breakAndSetParagraph
     :: LenParamVal HSize
     -> IntParamVal Tolerance
     -> IntParamVal LinePenalty
-    -> [BreakableHListElem]
+    -> HList
     -> Either Text [[B.HBoxElem]]
 breakAndSetParagraph _ _ _ [] = pure []
 breakAndSetParagraph dw tol lp (x : xs) =
@@ -226,7 +226,7 @@ breakAndSetParagraph dw tol lp (x : xs) =
     in
         go $ reverse xsFinished
   where
-    go :: [BreakableHListElem] -> Either Text [[B.HBoxElem]]
+    go :: HList -> Either Text [[B.HBoxElem]]
     go _xs = do
         BreakingState{accEdges, nodeToBestRoute, chunk}
             <- foldM (appendEntry dw tol lp) initialBreakingState $

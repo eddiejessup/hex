@@ -43,9 +43,6 @@ data ScopeGroup
     | ExplicitBoxGroup
     deriving ( Show )
 
-type HList = [BL.BreakableHListElem]
-type VList = [BL.BreakableVListElem]
-
 type RegisterMap v = HMap.HashMap EightBitInt v
 
 data Scope =
@@ -490,7 +487,7 @@ setTokenListParameter
 setTokenListParameter =
     insertKey tokenListParameters $ \c _map -> c { tokenListParameters = _map }
 
-parIndentBox :: Config -> BL.BreakableHListElem
+parIndentBox :: Config -> BL.HListElem
 parIndentBox conf = BL.HVListElem $
     BL.VListBaseElem $
     B.ElemBox $

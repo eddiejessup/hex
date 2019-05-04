@@ -11,6 +11,7 @@ module HeXlude
     , fail
     , maybeToFail
     , traceText
+    , monoidIntercalate
     )
 where
 
@@ -58,3 +59,10 @@ maybeToFail err = \case
 
 traceText :: Text -> a -> a
 traceText = trace
+
+monoidIntercalate :: Monoid a => a -> [a] -> a
+monoidIntercalate d = go
+  where
+    go = \case
+        [] -> mempty
+        x:xs -> x <> d <> go xs

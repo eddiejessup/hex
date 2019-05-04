@@ -1,24 +1,25 @@
 module HeX.Command.ModeIndependent where
 
-import HeXlude
+import           HeXlude
 
-import           Control.Monad                  ( when )
-import           Safe                           ( toEnumMay )
+import           Control.Monad        (when)
+import           Safe                 (toEnumMay)
 
-import qualified HeX.Box                       as B
-import qualified HeX.BreakList                 as BL
+import qualified HeX.Box              as B
+import qualified HeX.BreakList        as BL
+import qualified HeX.Command.Commands as Com
 import           HeX.Command.Common
 import           HeX.Config
-import qualified HeX.Lex                       as Lex
 import           HeX.Evaluate
-import qualified HeX.Parse                     as HP
-import qualified HeX.Command.Commands          as Com
-import qualified HeX.Variable                  as Var
+import qualified HeX.Lex              as Lex
+import qualified HeX.Parse            as HP
+import qualified HeX.Variable         as Var
 
 data ModeIndependentResult
-    = AddElems [BL.BreakableVListElem]
+    = AddElem BL.VListElem
     | EnterBoxMode B.DesiredLength HP.ExplicitBox BoxModeIntent
     | FinishBoxMode
+    | DoNothing
 
 fetchBox
     :: HP.InhibitableStream s
@@ -31,7 +32,7 @@ fetchBox fetchMode idx =
     fetchedMaybeBox <- readOnConfState $ asks $ lookupBoxRegister eIdx
     case fetchMode of
         HP.Lookup -> pure ()
-        HP.Pop -> HP.runConfState $ modify $ delBoxRegister eIdx HP.Local
+        HP.Pop    -> HP.runConfState $ modify $ delBoxRegister eIdx HP.Local
     pure fetchedMaybeBox
 
 handleModeIndependentCommand
@@ -44,11 +45,11 @@ handleModeIndependentCommand = \case
                 HP.StdOut -> stdout
                 HP.StdErr -> stderr
         liftIO $ hPutStrLn _handle $ Com.showExpandedBalancedText eTxt
-        noElems
+        pure DoNothing
     HP.Relax ->
-        noElems
+        pure DoNothing
     HP.IgnoreSpaces ->
-        noElems
+        pure DoNothing
     -- Re-insert the ⟨token⟩ into the input just after running the next
     -- assignment command. Later \afterassignment commands override earlier
     -- commands. If the assignment is a \setbox, and if the assigned ⟨box⟩ is
@@ -58,44 +59,40 @@ handleModeIndependentCommand = \case
     HP.SetAfterAssignmentToken lt ->
         do
         modConfState $ \conf -> conf{afterAssignmentToken = Just lt}
-        noElems
+        pure DoNothing
     HP.AddPenalty n ->
-        do
-        p <- liftEvalOnConfState n
-        pure $ AddElems [BL.ListPenalty $ BL.Penalty p]
+        (AddElem . BL.ListPenalty . BL.Penalty) <$> liftEvalOnConfState n
     HP.AddKern ln ->
-        do
-        k <- liftEvalOnConfState ln
-        pure $ AddElems [BL.VListBaseElem $ B.ElemKern $ B.Kern k]
+        (AddElem . BL.VListBaseElem . B.ElemKern . B.Kern) <$> liftEvalOnConfState ln
     HP.Assign HP.Assignment { HP.global, HP.body } ->
         do
         assignResult <- case body of
             HP.DefineControlSequence cs tgt ->
                 do
-                (acc, newCSTok) <- liftReadOnConfState $ case tgt of
+                (maybeElem, newCSTok) <- liftReadOnConfState $ case tgt of
                     HP.MacroTarget macro ->
-                        pure ([], HP.syntaxTok $ HP.MacroTok macro)
+                        pure (Nothing, HP.syntaxTok $ HP.MacroTok macro)
                     -- TODO: If a \let target is an active character, should we
                     -- treat it as a control sequence, or a char-cat pair?
                     HP.LetTarget (Lex.CharCatToken tgtCC) ->
-                        pure ([], HP.primTok $ HP.LetCharCat tgtCC)
+                        pure (Nothing, HP.primTok $ HP.LetCharCat tgtCC)
                     HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                         do
                         resTok <- fromMaybe (HP.PrimitiveToken HP.RelaxTok) <$> asks (lookupCSProper tgtCS)
-                        pure ([], resTok)
+                        pure (Nothing, resTok)
                     HP.ShortDefineTarget q n ->
                         do
                         en <- texEvaluate n
-                        pure ([], HP.primTok $ HP.IntRefTok q en)
+                        pure (Nothing, HP.primTok $ HP.IntRefTok q en)
                     HP.FontTarget fontSpec fPath ->
                         do
                         fontDef@B.FontDefinition { B.fontNr } <- Com.loadFont fPath fontSpec
                         let fontRefTok = HP.primTok $ HP.FontRefToken fontNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
-                        pure ([boxElem], fontRefTok)
+                        pure (Just boxElem, fontRefTok)
                 liftIO $ putText $ "Setting CS " <> showT cs <> " to token: " <> showT newCSTok <> (if global == HP.Global then " globally" else " locally")
                 modConfState $ setControlSequence cs newCSTok global
-                pure $ AddElems acc
+                pure $ maybe DoNothing AddElem maybeElem
             HP.SetVariable ass ->
                 do
                 liftConfState $ case ass of
@@ -113,7 +110,7 @@ handleModeIndependentCommand = \case
                         Var.setValueFromAST v global tgt
                     HP.SpecialLengthVariableAssignment v tgt ->
                         Var.setValueFromAST v global tgt
-                noElems
+                pure DoNothing
             HP.ModifyVariable modCommand ->
                 do
                 liftConfState $ case modCommand of
@@ -135,7 +132,7 @@ handleModeIndependentCommand = \case
                                 Var.scaleValueFromAST var global vDir scaleVal
                             HP.MathGlueNumericVariable var ->
                                 Var.scaleValueFromAST var global vDir scaleVal
-                noElems
+                pure DoNothing
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
                 eIdx <- liftEvalOnConfState idx
@@ -145,17 +142,17 @@ handleModeIndependentCommand = \case
                 idxChar <- liftMaybeConfigError ("Invalid character code index: " <> showT eIdx) (toEnumMay eIdx)
                 liftIO $ putText $ "Setting " <> showT codeType <> "@" <> showT eIdx <> " (" <> showT idxChar <> ") to " <> showT eVal
                 liftConfState $ updateCharCodeMap codeType idxChar eVal global
-                noElems
+                pure DoNothing
             HP.SelectFont fNr ->
                 do
                 HP.runConfState $ Com.selectFont fNr global
-                pure $ AddElems [BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr]
+                pure $ AddElem $ BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr
             HP.SetFamilyMember fm fontRef ->
                 do
                 eFm <- liftEvalOnConfState fm
                 fNr <- liftEvalOnConfState fontRef
                 modConfState $ setFamilyMemberFont eFm fNr global
-                noElems
+                pure DoNothing
             -- Start a new level of grouping. Enter inner mode.
             HP.SetBoxRegister lhsIdx box ->
                 do
@@ -165,7 +162,7 @@ handleModeIndependentCommand = \case
                         do
                         fetchedMaybeBox <- fetchBox fetchMode rhsIdx
                         modConfState $ setBoxRegisterNullable eLhsIdx global fetchedMaybeBox
-                        noElems
+                        pure DoNothing
                     HP.LastBox ->
                         notImplemented
                     HP.VSplitBox _ _ ->
@@ -180,10 +177,10 @@ handleModeIndependentCommand = \case
                 fNr <- liftEvalOnConfState fontRef
                 eCharRef <- liftEvalOnConfState charRef
                 let updateFontChar f = case fontChar of
-                        HP.SkewChar -> f { skewChar = eCharRef }
+                        HP.SkewChar   -> f { skewChar = eCharRef }
                         HP.HyphenChar -> f { hyphenChar = eCharRef }
                 HP.runConfState $ modifyFont fNr updateFontChar
-                noElems
+                pure DoNothing
             oth ->
                 panic $ show oth
         HP.runConfState (gets afterAssignmentToken) >>= \case
@@ -215,12 +212,12 @@ handleModeIndependentCommand = \case
                     -- Write to log
                     logHandle <- asks logStream
                     liftIO $ hPutStrLn logHandle txtStr
-            pure $ AddElems []
+            pure DoNothing
     -- Start a new level of grouping.
     HP.ChangeScope (HP.Sign True) trig ->
         do
         modConfState $ pushGroup $ ScopeGroup newLocalScope (LocalStructureGroup trig)
-        noElems
+        pure DoNothing
     -- Do the appropriate finishing actions, undo the
     -- effects of non-global assignments, and leave the
     -- group. Maybe leave the current mode.
@@ -238,7 +235,7 @@ handleModeIndependentCommand = \case
                     ScopeGroup _ (LocalStructureGroup trigConf) ->
                         do
                         when (trigConf /= trig) $ throwConfigError $ "Entry and exit group triggers differ: " <> showT (trig, trigConf)
-                        pure $ AddElems []
+                        pure DoNothing
                     -- - Undo the effects of non-global assignments
                     -- - package the [box] using the size that was saved on the
                     --   stack
@@ -248,13 +245,11 @@ handleModeIndependentCommand = \case
                     ScopeGroup _ ExplicitBoxGroup ->
                         pure FinishBoxMode
                     NonScopeGroup ->
-                        pure $ AddElems []
+                        pure DoNothing
     HP.AddBox HP.NaturalPlacement (HP.FetchedRegisterBox fetchMode idx) ->
-        (AddElems . maybeBoxToElems) <$> fetchBox fetchMode idx
-      where
-        maybeBoxToElems = \case
-            Nothing -> []
-            Just b -> [BL.VListBaseElem $ B.ElemBox b]
+        do
+        maybeBox <- fetchBox fetchMode idx
+        pure $ addMaybeElem' $ (\b -> BL.VListBaseElem $ B.ElemBox b) <$> maybeBox
     HP.AddBox HP.NaturalPlacement (HP.ExplicitBox spec boxType) ->
         -- Start a new level of grouping. Enter inner mode.
         do
@@ -263,6 +258,7 @@ handleModeIndependentCommand = \case
         pure $ EnterBoxMode eSpec boxType IntentToAddBox
     oth ->
         panic $ show oth
-
   where
-    noElems = pure $ AddElems []
+    addMaybeElem' = \case
+        Nothing -> DoNothing
+        Just e -> AddElem e

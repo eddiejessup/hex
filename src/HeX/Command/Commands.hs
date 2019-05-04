@@ -15,6 +15,7 @@ import qualified TFM
 import           TFM                            ( TexFont(..) )
 
 import qualified HeX.Box          as B
+import           HeX.BreakList                  ( HListElem, VListElem )
 import qualified HeX.BreakList    as BL
 import           HeX.Categorise                 ( CharCode )
 import           HeX.Command.Common
@@ -24,7 +25,7 @@ import qualified HeX.Lex                       as Lex
 import qualified HeX.Parse        as HP
 import qualified HeX.Unit         as Unit
 
-glueToElem :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s BL.BreakableVListElem
+glueToElem :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s BL.VListElem
 glueToElem g =
     do
     eG <- liftEvalOnConfState g
@@ -36,7 +37,7 @@ ruleToElem
     -> ReaderT Config (StateT Config (ExceptT Text (MonadBuild s))) LenVal
     -> ReaderT Config (StateT Config (ExceptT Text (MonadBuild s))) LenVal
     -> ReaderT Config (StateT Config (ExceptT Text (MonadBuild s))) LenVal
-    -> ExceptMonadBuild s BL.BreakableVListElem
+    -> ExceptMonadBuild s BL.VListElem
 ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD =
     do
     rule <- liftReadOnConfState $ B.Rule
@@ -57,14 +58,14 @@ ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD 
 -- Then set \prevdepth to the depth of the new box.
 addVListElem
     :: MonadState Config m
-    => [BL.BreakableVListElem]
-    -> BL.BreakableVListElem
-    -> m [BL.BreakableVListElem]
+    => [BL.VListElem]
+    -> BL.VListElem
+    -> m [BL.VListElem]
 addVListElem acc e = case e of
     (BL.VListBaseElem (B.ElemBox b)) -> addVListBox b
     _                                -> pure $ e : acc
   where
-    addVListBox :: MonadState Config m => B.Box -> m [BL.BreakableVListElem]
+    addVListBox :: MonadState Config m => B.Box -> m [BL.VListElem]
     addVListBox b =
         do
         _prevDepth <- gets $ lookupSpecialLength HP.PrevDepth
@@ -84,28 +85,22 @@ addVListElem acc e = case e of
                         else skip
                 in  e : glue : acc
 
-hModeAddHGlue :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s (HModeContents -> HModeContents)
+hModeAddHGlue :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s HListElem
 hModeAddHGlue g =
-    do
-    newElem <- glueToElem g
-    pure $ hModeWithAddedElems [BL.HVListElem newElem]
+    BL.HVListElem <$> glueToElem g
 
-hModeAddCharacter :: HP.InhibitableStream s => HP.CharCodeRef -> ExceptMonadBuild s (HModeContents -> HModeContents)
+hModeAddCharacter :: HP.InhibitableStream s => HP.CharCodeRef -> ExceptMonadBuild s HListElem
 hModeAddCharacter c =
-    do
-    hCharBox <- liftConfigError $
+    liftConfigError $
         do
         charCode <- readOnConfState $ texEvaluate c
         (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ characterBox charCode)
-    pure $ hModeWithAddedElems [hCharBox]
 
-hModeAddSpace :: HP.InhibitableStream s => ExceptMonadBuild s (HModeContents -> HModeContents)
+hModeAddSpace :: HP.InhibitableStream s => ExceptMonadBuild s HListElem
 hModeAddSpace =
-    do
-    hGlue <- liftConfigError $ (BL.HVListElem . BL.ListGlue) <$> readOnConfState spaceGlue
-    pure $ hModeWithAddedElems [hGlue]
+    liftConfigError $ (BL.HVListElem . BL.ListGlue) <$> readOnConfState spaceGlue
 
-hModeAddRule :: HP.InhibitableStream s => HP.Rule -> ExceptMonadBuild s (HModeContents -> HModeContents)
+hModeAddRule :: HP.InhibitableStream s => HP.Rule -> ExceptMonadBuild s HListElem
 hModeAddRule rule =
     do
     let
@@ -113,39 +108,30 @@ hModeAddRule rule =
         defaultHeight = pure (Unit.toScaledPointApprox (10 :: Int) Unit.Point)
         defaultDepth = pure 0
     ruleElem <- ruleToElem rule defaultWidth defaultHeight defaultDepth
-    pure $ hModeWithAddedElems [BL.HVListElem ruleElem]
+    pure $ BL.HVListElem ruleElem
 
-hModeStartParagraph :: HP.InhibitableStream s => HP.IndentFlag -> ExceptMonadBuild s (HModeContents -> HModeContents)
-hModeStartParagraph indentFlag =
-    do
-    newElems <- case indentFlag of
-        HP.DoNotIndent ->
-            pure []
-        -- \indent: An empty box of width \parindent is appended to the current
-        -- list, and the space factor is set to 1000.
-        -- TODO: Space factor.
-        HP.Indent ->
-            do
-            indentBox <- liftConfigError $ readOnConfState $ asks parIndentBox
-            pure [indentBox]
-    pure $ hModeWithAddedElems newElems
+hModeStartParagraph :: HP.InhibitableStream s => HP.IndentFlag -> ExceptMonadBuild s (Maybe HListElem)
+hModeStartParagraph = \case
+    HP.DoNotIndent ->
+        pure Nothing
+    -- \indent: An empty box of width \parindent is appended to the current
+    -- list, and the space factor is set to 1000.
+    -- TODO: Space factor.
+    HP.Indent ->
+        Just <$> (liftConfigError $ readOnConfState $ asks parIndentBox)
 
-vModeAddVGlue :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s (VModeContents -> VModeContents)
+vModeAddVGlue :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s VListElem
 vModeAddVGlue g =
-    do
-    newElem <- glueToElem g
-    pure $ vModeWithAddedElems [newElem]
+    glueToElem g
 
-vModeAddRule :: HP.InhibitableStream s => HP.Rule -> ExceptMonadBuild s (VModeContents -> VModeContents)
+vModeAddRule :: HP.InhibitableStream s => HP.Rule -> ExceptMonadBuild s VListElem
 vModeAddRule rule =
     do
     let
         defaultWidth = gets $ lookupLengthParameter HP.HSize
         defaultHeight = pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
         defaultDepth = pure 0
-    ruleElem <- ruleToElem rule defaultWidth defaultHeight defaultDepth
-    pure $ vModeWithAddedElems [ruleElem]
-
+    ruleToElem rule defaultWidth defaultHeight defaultDepth
 
 -- Horizontal mode commands.
 

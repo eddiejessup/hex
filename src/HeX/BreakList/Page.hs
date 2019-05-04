@@ -17,7 +17,7 @@ data PageBreakJudgment =
     deriving ( Show )
 
 pageBreakJudgment
-    :: [BreakableVListElem]
+    :: [VListElem]
     -> BreakItem
     -> LenParamVal VSize
     -> PageBreakJudgment
@@ -35,10 +35,10 @@ pageBreakJudgment cs breakItem (LenParamVal h) =
                     | b == tenK -> TrackCost hunK
                     | otherwise -> TrackCost $ b + p + q
 
-setPage :: LenParamVal VSize -> [BreakableVListElem] -> B.Page
+setPage :: LenParamVal VSize -> [VListElem] -> B.Page
 setPage (LenParamVal h) cs = B.Page $ setVList (listGlueStatus h cs) cs
 
-data CurrentPage = CurrentPage { items :: [BreakableVListElem]
+data CurrentPage = CurrentPage { items :: [VListElem]
                                , bestPointAndCost :: Maybe (Int, Int)
                                }
 
@@ -47,7 +47,7 @@ newCurrentPage = CurrentPage [] Nothing
 
 runPageBuilder :: LenParamVal VSize
                -> CurrentPage
-               -> [BreakableVListElem]
+               -> [VListElem]
                -> [B.Page]
 runPageBuilder desiredV (CurrentPage cur _) [] =
     [ setPage desiredV $ reverse cur ]

@@ -12,14 +12,17 @@ import           HeX.BreakList.BreakList ( BreakItem(..)
                                          )
 import           HeX.BreakList.Glue
 
+type HList = [HListElem]
+type VList = [VListElem]
+
 -- Vertical list.
-data BreakableVListElem
+data VListElem
     = VListBaseElem BaseElem
     | ListGlue Glue
     | ListPenalty Penalty
     deriving ( Show )
 
-instance BreakableListElem BreakableVListElem where
+instance BreakableListElem VListElem where
     toGlue (ListGlue g) = Just g
     toGlue _ = Nothing
 
@@ -44,23 +47,23 @@ instance BreakableListElem BreakableVListElem where
 
     naturalSpan = naturalHeight
 
-axisVListElemNaturalLength :: Axis -> BoxDim -> BreakableVListElem -> Int
+axisVListElemNaturalLength :: Axis -> BoxDim -> VListElem -> Int
 axisVListElemNaturalLength ax dim e = case e of
     VListBaseElem be -> axisBaseElemNaturalLength ax dim be
     ListGlue g       -> spacerNaturalLength ax dim $ dimen g
     ListPenalty _    -> 0
 
-instance Dimensioned BreakableVListElem where
+instance Dimensioned VListElem where
     naturalLength = axisVListElemNaturalLength Vertical
 
 -- Horizontal list.
 -- TODO: WhatsIt, Leaders, Mark, Insertion
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
-data BreakableHListElem =
-    HVListElem BreakableVListElem | HListHBaseElem HBaseElem
+data HListElem =
+    HVListElem VListElem | HListHBaseElem HBaseElem
     deriving ( Show )
 
-instance BreakableListElem BreakableHListElem where
+instance BreakableListElem HListElem where
     toGlue (HVListElem e) = toGlue e
     toGlue _ = Nothing
 
@@ -83,17 +86,17 @@ instance BreakableListElem BreakableHListElem where
 
     naturalSpan = naturalWidth
 
-instance Dimensioned BreakableHListElem where
+instance Dimensioned HListElem where
     naturalLength dim (HVListElem e) =
         axisVListElemNaturalLength Horizontal dim e
     naturalLength dim (HListHBaseElem e) = naturalLength dim e
 
 -- Display.
 -- Just used to show an HList more compactly.
-data CondensedHListElem = Sentence Text | NonSentence BreakableHListElem
+data CondensedHListElem = Sentence Text | NonSentence HListElem
     deriving ( Show )
 
-condenseHList :: [BreakableHListElem] -> [CondensedHListElem]
+condenseHList :: [HListElem] -> [CondensedHListElem]
 condenseHList = foldr append []
   where
     append (HListHBaseElem (ElemCharacter Character{char})) [] =

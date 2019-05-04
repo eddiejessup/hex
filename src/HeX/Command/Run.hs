@@ -6,7 +6,6 @@ import           Control.Monad.Except           ( runExceptT )
 import           Control.Monad.State.Lazy       ( evalStateT
                                                 )
 import qualified Data.HashMap.Strict           as HMap
-import           Data.List                      ( intercalate )
 import           Data.List.NonEmpty             ( NonEmpty(..) )
 import qualified Text.Megaparsec               as P
 
@@ -25,6 +24,7 @@ import           HeX.Lex                        ( LexState(..)
 import           HeX.Parse                      ( ExpandedStream
                                                 , ExpansionMode(..)
                                                 , IndentFlag(..)
+                                                , InhibitableStream
                                                 , defaultCSMap
                                                 , extractCommand
                                                 , newExpandStream
@@ -37,15 +37,11 @@ usableCatLookup = catLookup usableCatCodes
 -- Cat
 
 runCat :: [CharCode] -> IO ()
-runCat _xs = extractAndPrint _xs
-  where
-    extractAndPrint xs = case extractCharCat usableCatLookup xs of
-        Just (cc, xs') ->
-            do
-            print cc
-            extractAndPrint xs'
-        Nothing ->
-            pure ()
+runCat xs = case extractCharCat usableCatLookup xs of
+    Just (cc, xs') ->
+        print cc >> runCat xs'
+    Nothing ->
+        pure ()
 
 -- Lex.
 
@@ -127,32 +123,40 @@ codesToSth xs f =
 
 -- Paragraph list.
 
--- codesToParaList :: [CharCode] -> IO [BreakableHListElem]
--- codesToParaList xs =
---     reverse <$> codesToSth xs (extractHList Indent False)
+extractParaHList :: InhibitableStream s => ExceptMonadBuild s HList
+extractParaHList =
+    (\(ParaResult _ hList) -> reverse hList) <$> extractPara Indent
 
--- runPara :: [CharCode] -> IO ()
--- runPara xs = codesToParaList xs >>= putStrLn . intercalate "\n" . fmap show
+codesToParaList :: [CharCode] -> IO HList
+codesToParaList xs =
+    codesToSth xs extractParaHList
+
+runPara :: [CharCode] -> IO ()
+runPara xs = codesToParaList xs >>= printList
 
 -- Paragraph boxes.
 
--- codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
--- codesToParaBoxes xs =
---     reverse <$> codesToSth xs (extractBreakAndSetHList Indent)
+showIntercalatedList :: Show a => Text -> [a] -> Text
+showIntercalatedList d = monoidIntercalate d . (showT <$>)
 
--- runSetPara :: [CharCode] -> IO ()
--- runSetPara xs =
---     codesToParaBoxes xs >>= putStrLn . intercalate "\n\n" . fmap showLine
---   where
---     showLine = intercalate "\n" . fmap show
+showLine :: Show a => [a] -> Text
+showLine = showIntercalatedList "\n"
+
+codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
+codesToParaBoxes xs =
+    codesToSth xs (extractParaHList >>= readOnConfState . hListToParaLineBoxes)
+
+runSetPara :: [CharCode] -> IO ()
+runSetPara xs =
+    codesToParaBoxes xs >>= putStrLn . showIntercalatedList "\n\n"
 
 -- Pages list.
 
 codesToPages :: [CharCode] -> IO [Page]
-codesToPages xs = codesToSth xs (extractBreakAndSetVList (VModeContents [] Nothing))
+codesToPages xs = codesToSth xs extractBreakAndSetVList
 
 printList :: Show a => [a] -> IO ()
-printList = putStrLn . intercalate "\n" . fmap show
+printList = putStrLn . showLine
 
 runPages :: [CharCode] -> IO ()
 runPages xs = codesToPages xs >>= printList
