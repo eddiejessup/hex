@@ -39,5 +39,5 @@ hBoxElemToDVI (HVBoxElem e) = axisVBoxElemToDVI Horizontal e
 pageToDVI :: Page -> [D.Instruction]
 pageToDVI (Page vs) = D.BeginNewPage : concatMap vBoxElemToDVI vs
 
-pagesToDVI :: [Page] -> [D.Instruction]
+pagesToDVI :: Foldable t => t Page -> [D.Instruction]
 pagesToDVI = concatMap pageToDVI

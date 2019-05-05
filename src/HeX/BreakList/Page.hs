@@ -3,6 +3,7 @@ module HeX.BreakList.Page where
 import           HeXlude
 
 import           Data.Adjacent           ( Adj(..) )
+import qualified Data.Sequence             as Seq
 
 import qualified HeX.Box                 as B
 import           HeX.BreakList.BreakList
@@ -17,7 +18,7 @@ data PageBreakJudgment =
     deriving ( Show )
 
 pageBreakJudgment
-    :: [VListElem]
+    :: VList
     -> BreakItem
     -> LenParamVal VSize
     -> PageBreakJudgment
@@ -35,37 +36,37 @@ pageBreakJudgment cs breakItem (LenParamVal h) =
                     | b == tenK -> TrackCost hunK
                     | otherwise -> TrackCost $ b + p + q
 
-setPage :: LenParamVal VSize -> [VListElem] -> B.Page
+setPage :: LenParamVal VSize -> VList -> B.Page
 setPage (LenParamVal h) cs = B.Page $ setVList (listGlueStatus h cs) cs
 
-data CurrentPage = CurrentPage { items :: [VListElem]
+data CurrentPage = CurrentPage { items :: VList
                                , bestPointAndCost :: Maybe (Int, Int)
                                }
 
 newCurrentPage :: CurrentPage
-newCurrentPage = CurrentPage [] Nothing
+newCurrentPage = CurrentPage mempty Nothing
 
 runPageBuilder :: LenParamVal VSize
                -> CurrentPage
-               -> [VListElem]
-               -> [B.Page]
-runPageBuilder desiredV (CurrentPage cur _) [] =
-    [ setPage desiredV $ reverse cur ]
+               -> VList
+               -> Seq B.Page
+runPageBuilder desiredV (CurrentPage cur _) Empty =
+    pure (setPage desiredV (Seq.reverse cur))
 -- If the current vlist has no boxes, we discard a discardable item.
 -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
 -- the cost c of breaking at this point.
-runPageBuilder desiredV (CurrentPage cur _bestPointAndCost) (x : xs)
+runPageBuilder desiredV (CurrentPage cur _bestPointAndCost) (x :<| xs)
         | not $ any isBox cur =
             let nextXs = if isDiscardable x
                          then cur
-                         else x : cur
+                         else x <| cur
             in
                 runPageBuilder desiredV
                                (CurrentPage nextXs _bestPointAndCost)
                                xs
-        | isDiscardable x = case toBreakItem Adj { adjPre  = headMay cur
+        | isDiscardable x = case toBreakItem Adj { adjPre  = seqHeadMay cur
                                                  , adjVal  = x
-                                                 , adjPost = headMay xs
+                                                 , adjPost = seqHeadMay xs
                                                  } of
             -- If we can't break here, just add it to the list and continue.
             Nothing  -> usualContinue
@@ -81,25 +82,23 @@ runPageBuilder desiredV (CurrentPage cur _bestPointAndCost) (x : xs)
                 -- The current vlist material following that best breakpoint is
                 -- returned to the recent contributions, to consider again.
                 (BreakPageAtBest, Just (iBest, _)) ->
-                    -- the `reverse` will put both of these into reading order.
-                    let (curNewPage, toReturn) = splitAt iBest $ reverse cur
+                    let
+                        -- The `reverse` puts both parts into reading order.
+                        (curNewPage, toReturn) = Seq.splitAt iBest $ Seq.reverse cur
                         newPage = setPage desiredV curNewPage
                     in
-                        -- xs is also in reading order
+                        -- xs is also in reading order.
                         -- We didn't actually split at x: x was just what made us compute
                         -- cost and notice we'd gone too far. So add it to the left-overs
                         -- to return.
-                        (newPage :) $
-                        runPageBuilder desiredV
-                                       newCurrentPage
-                                       (toReturn <> (x : xs))
+                         newPage <| (runPageBuilder desiredV newCurrentPage (toReturn <> (x <| xs)))
                 -- If p ≤ −10000, we know the best breakpoint is this one, so break
                 -- here.
                 (BreakPageHere, _) ->
-                    -- the `reverse` will put this into reading order.
-                    let newPage = setPage desiredV $ reverse cur
+                    -- The `reverse` puts this into reading order.
+                    let newPage = setPage desiredV $ Seq.reverse cur
                     in
-                        (newPage :) $ runPageBuilder desiredV newCurrentPage xs
+                        newPage <| (runPageBuilder desiredV newCurrentPage xs)
                 -- If the resulting cost <= the smallest cost seen so far, remember
                 -- the current breakpoint as the best so far.
                 (TrackCost cHere, _) ->
@@ -110,13 +109,10 @@ runPageBuilder desiredV (CurrentPage cur _bestPointAndCost) (x : xs)
                                                then _bestPointAndCost
                                                else thisPointAndCost
                     in
-                        runPageBuilder desiredV
-                                       (CurrentPage (x : cur)
-                                                    newBestPointAndCost)
-                                       xs
+                        runPageBuilder desiredV (CurrentPage (x <| cur) newBestPointAndCost) xs
         -- If we can't break here, just add it to the list and continue.
         | otherwise = usualContinue
   where
-    usualNextPage = CurrentPage (x : cur) _bestPointAndCost
+    usualNextPage = CurrentPage (x <| cur) _bestPointAndCost
 
     usualContinue = runPageBuilder desiredV usualNextPage xs

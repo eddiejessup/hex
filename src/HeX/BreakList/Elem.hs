@@ -12,8 +12,8 @@ import           HeX.BreakList.BreakList ( BreakItem(..)
                                          )
 import           HeX.BreakList.Glue
 
-type HList = [HListElem]
-type VList = [VListElem]
+type HList = Seq HListElem
+type VList = Seq VListElem
 
 -- Vertical list.
 data VListElem
@@ -92,11 +92,23 @@ instance Dimensioned HListElem where
     naturalLength dim (HListHBaseElem e) = naturalLength dim e
 
 -- Display.
+
+instance Readable VListElem where
+    describe = \case
+        VListBaseElem baseElem -> describe baseElem
+        ListGlue g -> show g
+        ListPenalty p -> "Penalty " <> show p
+
+instance Readable HListElem where
+    describe = \case
+        HVListElem vListElem -> describe vListElem
+        HListHBaseElem hBaseElem -> describe hBaseElem
+
 -- Just used to show an HList more compactly.
 data CondensedHListElem = Sentence Text | NonSentence HListElem
     deriving ( Show )
 
-condenseHList :: [HListElem] -> [CondensedHListElem]
+condenseHList :: HList -> [CondensedHListElem]
 condenseHList = foldr append []
   where
     append (HListHBaseElem (ElemCharacter Character{char})) [] =

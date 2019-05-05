@@ -81,8 +81,7 @@ glueStatus excessLength
         | otherwise =
             FixablyBad Full FixParams { ratio = toRatio f, setOrder = o }
 
-
-listGlueStatus :: BreakableListElem a => Int -> [a] -> GlueStatus
+listGlueStatus :: (Foldable f, BreakableListElem a, Filterable f) => Int -> f a -> GlueStatus
 listGlueStatus desiredLength cs =
     glueStatus (naturalListSpan cs - desiredLength) (totalGlue cs)
 

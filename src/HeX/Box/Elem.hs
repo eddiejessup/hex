@@ -94,6 +94,13 @@ instance Dimensioned Box where
         (BoxDepth, Box (VBoxContents cs DefaultAlign) _) -> case lastMay cs of
             Nothing  -> 0
             Just lst -> naturalLength BoxDepth lst
+
+        (BoxHeight, Box (VBoxContents _ TopAlign) _) ->
+            undefined
+
+        (BoxDepth, Box (VBoxContents _ TopAlign) _) ->
+            undefined
+
       where
         subLengths :: Dimensioned a => [a] -> [LenVal]
         subLengths cs = naturalLength dim <$> cs
@@ -152,4 +159,43 @@ instance Dimensioned HBoxElem where
     naturalLength dim (HBoxHBaseElem e) = naturalLength dim e
 
 newtype Page = Page [VBoxElem]
-    deriving ( Show )
+    deriving ( Show, Readable )
+
+-- Display
+
+instance Readable BaseElem where
+    describe = \case
+        ElemBox box -> describe box
+        ElemRule rule -> show rule
+        ElemFontDefinition fontDef -> "Font at " <> show (fontPath fontDef)
+        ElemFontSelection (FontSelection n) -> "Select font " <> show n
+        ElemKern (Kern d) -> "Kern " <> Unit.showSP d
+
+instance Readable HBaseElem where
+    describe = \case
+        ElemCharacter c ->
+            "Char: " <> show c
+
+instance Readable VBoxElem where
+    describe = \case
+        VBoxBaseElem baseElem ->
+            describe baseElem
+        BoxGlue sg ->
+            show sg
+
+instance Readable HBoxElem where
+    describe = \case
+        HVBoxElem vBoxElem ->
+            describe vBoxElem
+        HBoxHBaseElem hBaseElem ->
+            describe hBaseElem
+
+instance Readable Box where
+    describe Box { contents, desiredLength } =
+        "Box @ "
+        <> show desiredLength
+        <> "\n"
+        <> show contents
+
+instance Readable BoxContents where
+    describe = show

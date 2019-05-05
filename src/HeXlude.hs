@@ -2,6 +2,11 @@ module HeXlude
     ( module Protolude
     , module Readable
     , module HeX.Type
+    , module Data.Sequence
+    , seqLookupEith
+    , seqLastMay
+    , seqHeadMay
+    , module Data.Witherable
     , id
     , liftMaybe
     , liftThrow
@@ -11,27 +16,28 @@ module HeXlude
     , fail
     , maybeToFail
     , traceText
-    , monoidIntercalate
+    , mconcat
     )
 where
 
-import           Protolude               hiding ( group )
-import           Prelude                        ( id )
+import           Prelude                   (id)
+import           Protolude                 hiding ( catMaybes
+                                                  , filter
+                                                  , group
+                                                  , mapMaybe
+                                                  , mconcat )
 
-import           Control.Arrow                  ( (>>>) )
-import           Control.Monad.Fail             ( MonadFail, fail )
-import           Data.Functor                   ( (<&>) )
-import           Data.Function                  ( (&) )
-import           Control.Monad.Except           ( liftIO
-                                                , MonadError
-                                                , throwError
-                                                )
-import           Control.Monad.IO.Class         ( MonadIO )
-import           Control.Monad.Trans.Maybe      ( MaybeT
-                                                , runMaybeT
-                                                )
-
-import           Debug.Readable                as Readable
+import           Control.Arrow             ((>>>))
+import           Control.Monad.Except      (MonadError, liftIO, throwError)
+import           Control.Monad.Fail        (MonadFail, fail)
+import           Control.Monad.IO.Class    (MonadIO)
+import           Control.Monad.Trans.Maybe (MaybeT, runMaybeT)
+import           Data.Function             ((&))
+import           Data.Functor              ((<&>))
+import qualified Data.Sequence             as Seq
+import           Data.Sequence             (Seq (..), (|>), (<|))
+import           Data.Witherable           (Filterable (..))
+import           Debug.Readable            as Readable
 
 import           HeX.Type
 
@@ -60,9 +66,21 @@ maybeToFail err = \case
 traceText :: Text -> a -> a
 traceText = trace
 
-monoidIntercalate :: Monoid a => a -> [a] -> a
-monoidIntercalate d = go
-  where
-    go = \case
-        [] -> mempty
-        x:xs -> x <> d <> go xs
+mconcat :: (Monoid a, Foldable t) => t a -> a
+mconcat xs = foldr (<>) mempty xs
+
+seqLookupEith :: Show a => Text -> Seq a -> Int -> Either Text a
+seqLookupEith str xs i = maybeToRight
+    ("No " <> str <> " at index " <> showT i <> ", values are: "
+     <> showT xs)
+    (Seq.lookup i xs)
+
+seqLastMay :: Seq a -> Maybe a
+seqLastMay = \case
+    _ :|> x -> Just x
+    _ -> Nothing
+
+seqHeadMay :: Seq a -> Maybe a
+seqHeadMay = \case
+    x :<| _ -> Just x
+    _ -> Nothing

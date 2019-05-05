@@ -1,35 +1,27 @@
 module HeX.Command.Run where
 
-import HeXlude
+import           HeXlude
 
-import           Control.Monad.Except           ( runExceptT )
-import           Control.Monad.State.Lazy       ( evalStateT
-                                                )
-import qualified Data.HashMap.Strict           as HMap
-import           Data.List.NonEmpty             ( NonEmpty(..) )
-import qualified Text.Megaparsec               as P
+import           Control.Monad.Except     (runExceptT)
+import           Control.Monad.State.Lazy (evalStateT)
+import qualified Data.HashMap.Strict      as HMap
+import           Data.List.NonEmpty       (NonEmpty (..))
+import qualified Data.Sequence            as Seq
+import           DVI.Document             (parseInstructions)
+import           DVI.Encode               (encode)
+import           DVI.Instruction          (EncodableInstruction)
+import qualified Text.Megaparsec          as P
 
-import           DVI.Instruction                ( EncodableInstruction )
-import           DVI.Document                   ( parseInstructions )
-import           DVI.Encode                     ( encode )
-
-import           HeX.BreakList
 import           HeX.Box
+import           HeX.BreakList
+import           HeX.Categorise
 import           HeX.Command.Build
 import           HeX.Command.Common
-import           HeX.Categorise
-import           HeX.Lex                        ( LexState(..)
-                                                , extractToken
-                                                )
-import           HeX.Parse                      ( ExpandedStream
-                                                , ExpansionMode(..)
-                                                , IndentFlag(..)
-                                                , InhibitableStream
-                                                , defaultCSMap
-                                                , extractCommand
-                                                , newExpandStream
-                                                , resolveToken
-                                                )
+import           HeX.Lex                  (LexState (..), extractToken)
+import           HeX.Parse                (ExpandedStream, ExpansionMode (..),
+                                           IndentFlag (..), InhibitableStream,
+                                           defaultCSMap, extractCommand,
+                                           newExpandStream, resolveToken)
 
 usableCatLookup :: CharCode -> CatCode
 usableCatLookup = catLookup usableCatCodes
@@ -125,46 +117,40 @@ codesToSth xs f =
 
 extractParaHList :: InhibitableStream s => ExceptMonadBuild s HList
 extractParaHList =
-    (\(ParaResult _ hList) -> reverse hList) <$> extractPara Indent
+    (\(ParaResult _ hList) -> Seq.reverse hList) <$> extractPara Indent
 
 codesToParaList :: [CharCode] -> IO HList
 codesToParaList xs =
     codesToSth xs extractParaHList
 
 runPara :: [CharCode] -> IO ()
-runPara xs = codesToParaList xs >>= printList
+runPara xs = codesToParaList xs >>= printLine
 
 -- Paragraph boxes.
 
-showIntercalatedList :: Show a => Text -> [a] -> Text
-showIntercalatedList d = monoidIntercalate d . (showT <$>)
-
-showLine :: Show a => [a] -> Text
-showLine = showIntercalatedList "\n"
-
-codesToParaBoxes :: [CharCode] -> IO [[HBoxElem]]
+codesToParaBoxes :: [CharCode] -> IO (Seq [HBoxElem])
 codesToParaBoxes xs =
     codesToSth xs (extractParaHList >>= readOnConfState . hListToParaLineBoxes)
 
 runSetPara :: [CharCode] -> IO ()
 runSetPara xs =
-    codesToParaBoxes xs >>= putStrLn . showIntercalatedList "\n\n"
+    codesToParaBoxes xs >>= putStrLn . describeDoubleLined
 
 -- Pages list.
 
-codesToPages :: [CharCode] -> IO [Page]
+codesToPages :: [CharCode] -> IO (Seq Page)
 codesToPages xs = codesToSth xs extractBreakAndSetVList
 
-printList :: Show a => [a] -> IO ()
-printList = putStrLn . showLine
+printLine :: (Readable a, Foldable t, Functor t) => t a -> IO ()
+printLine = putStrLn . describeLined
 
 runPages :: [CharCode] -> IO ()
-runPages xs = codesToPages xs >>= printList
+runPages xs = codesToPages xs >>= printLine
 
 -- DVI instructions.
 
 runDVI :: [CharCode] -> IO ()
-runDVI xs = pagesToDVI <$> codesToPages xs >>= printList
+runDVI xs = pagesToDVI <$> codesToPages xs >>= printLine
 
 -- Raw DVI instructions.
 
@@ -178,7 +164,7 @@ codesToDVIRaw xs = do
     pure $ reverse encInstrs
 
 runDVIRaw :: [CharCode] -> IO ()
-runDVIRaw xs = codesToDVIRaw xs >>= printList
+runDVIRaw xs = codesToDVIRaw xs >>= printLine
 
 -- DVI byte strings.
 

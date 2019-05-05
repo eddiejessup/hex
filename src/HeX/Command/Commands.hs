@@ -58,14 +58,14 @@ ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD 
 -- Then set \prevdepth to the depth of the new box.
 addVListElem
     :: MonadState Config m
-    => [BL.VListElem]
+    => BL.VList
     -> BL.VListElem
-    -> m [BL.VListElem]
+    -> m BL.VList
 addVListElem acc e = case e of
     (BL.VListBaseElem (B.ElemBox b)) -> addVListBox b
-    _                                -> pure $ e : acc
+    _                                -> pure (e <| acc)
   where
-    addVListBox :: MonadState Config m => B.Box -> m [BL.VListElem]
+    addVListBox :: MonadState Config m => B.Box -> m BL.VList
     addVListBox b =
         do
         _prevDepth <- gets $ lookupSpecialLength HP.PrevDepth
@@ -74,7 +74,7 @@ addVListElem acc e = case e of
         skip <- gets $ lookupGlueParameter HP.LineSkip
         modify $ setSpecialLength HP.PrevDepth $ naturalDepth e
         pure $ if _prevDepth <= -Unit.oneKPt
-            then e : acc
+            then e <| acc
             else
                 let proposedBaselineLength = blineLength - _prevDepth - naturalHeight b
                 -- Intuition: set the distance between baselines to \baselineskip, but no
@@ -83,7 +83,7 @@ addVListElem acc e = case e of
                     glue = BL.ListGlue $ if proposedBaselineLength >= skipLimit
                         then BL.Glue proposedBaselineLength blineStretch blineShrink
                         else skip
-                in  e : glue : acc
+                in e <| glue <| acc
 
 hModeAddHGlue :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s HListElem
 hModeAddHGlue g =

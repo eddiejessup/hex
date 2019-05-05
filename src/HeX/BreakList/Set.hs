@@ -2,8 +2,6 @@ module HeX.BreakList.Set where
 
 import           HeXlude
 
-import           Data.Maybe          ( mapMaybe )
-
 import           HeX.Box
 import           HeX.BreakList.Elem
 import           HeX.BreakList.Judge
@@ -19,8 +17,8 @@ setHListElem st e = case e of
     HVListElem ve     -> HVBoxElem <$> setVListElem st ve
     HListHBaseElem be -> Just $ HBoxHBaseElem be
 
-setHList :: GlueStatus -> [HListElem] -> [HBoxElem]
-setHList st = mapMaybe (setHListElem st)
+setHList :: GlueStatus -> HList -> [HBoxElem]
+setHList st elemList = toList $ mapMaybe (setHListElem st) elemList
 
-setVList :: GlueStatus -> [VListElem] -> [VBoxElem]
-setVList st = mapMaybe (setVListElem st)
+setVList :: GlueStatus -> VList -> [VBoxElem]
+setVList st elemList = toList $ mapMaybe (setVListElem st) elemList

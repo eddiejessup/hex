@@ -3,7 +3,6 @@ module HeX.BreakList.BreakList where
 import           HeXlude
 
 import qualified Data.Adjacent      as A
-import           Data.Maybe         ( mapMaybe )
 
 import qualified HeX.Box            as B
 import           HeX.BreakList.Glue
@@ -35,11 +34,11 @@ class BreakableListElem a where
 
     naturalSpan :: a -> Int
 
-naturalListSpan :: BreakableListElem a => [a] -> Int
+naturalListSpan :: (Functor f, Foldable f) => BreakableListElem a => f a -> Int
 naturalListSpan = sum . fmap naturalSpan
 
-glues :: BreakableListElem a => [a] -> [Glue]
+glues :: (Filterable f, BreakableListElem a) => f a -> f Glue
 glues = mapMaybe toGlue
 
-totalGlue :: BreakableListElem a => [a] -> Glue
+totalGlue :: (Filterable f, BreakableListElem a, Foldable f) => f a -> Glue
 totalGlue = mconcat . glues

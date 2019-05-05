@@ -90,6 +90,8 @@ handleModeIndependentCommand = \case
                         let fontRefTok = HP.primTok $ HP.FontRefToken fontNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure (Just boxElem, fontRefTok)
+                    _ ->
+                        notImplemented
                 liftIO $ putText $ "Setting CS " <> showT cs <> " to token: " <> showT newCSTok <> (if global == HP.Global then " globally" else " locally")
                 modConfState $ setControlSequence cs newCSTok global
                 pure $ maybe DoNothing AddElem maybeElem

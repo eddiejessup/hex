@@ -83,10 +83,10 @@ data RecursionResult a b
 doNothing :: a -> RecursionResult a b
 doNothing = LoopAgain
 
-addElem :: [a] -> a -> RecursionResult [a] b
-addElem a e = LoopAgain (e : a)
+addElem :: Seq a -> a -> RecursionResult (Seq a) b
+addElem a e = LoopAgain (e <| a)
 
-addMaybeElem :: [a] -> Maybe a -> RecursionResult [a] b
+addMaybeElem :: (Seq a) -> Maybe a -> RecursionResult (Seq a) b
 addMaybeElem a = \case
     Nothing -> doNothing a
     Just e -> addElem a e

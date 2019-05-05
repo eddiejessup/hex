@@ -55,6 +55,9 @@ data Instruction =
 -- \| DoSpecial !Text
     deriving ( Show )
 
+instance Readable Instruction where
+    describe = show
+
 data ParseState =
     ParseState { instrs :: ![EncodableInstruction]
                , curFontNr :: !(Maybe Int)

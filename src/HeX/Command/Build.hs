@@ -5,6 +5,7 @@ import           HeXlude
 import           Control.Monad               (foldM)
 import           Control.Monad.Except        (liftEither)
 import           Data.Either.Combinators     (mapLeft)
+import qualified Data.Sequence as Seq
 
 import qualified HeX.Box                     as B
 import           HeX.BreakList               (HList, VList)
@@ -63,7 +64,7 @@ handleCommandInParaMode hList command oldStream =
     doNothing' = doNothing hList
     addElem' = addElem hList
     addMaybeElem' = addMaybeElem hList
-    endLoop reason result = EndLoop $ ParaResult reason (reverse result)
+    endLoop reason result = EndLoop $ ParaResult reason (result)
 
 data HBoxResult = HBoxResult HList
 
@@ -105,7 +106,7 @@ handleCommandInHBoxMode hList command _ =
     doNothing' = doNothing hList
     addElem' = addElem hList
     addMaybeElem' = addMaybeElem hList
-    endLoop result = (EndLoop . HBoxResult . reverse) result
+    endLoop result = (EndLoop . HBoxResult . Seq.reverse) result
 
 data VBoxResult = VBoxResult VList
 
@@ -144,7 +145,7 @@ handleCommandInVBoxMode vList command oldStream =
     doNothing' = doNothing vList
     addElem' = addElem vList
     addMaybeElem' = addMaybeElem vList
-    endLoop result = (EndLoop . VBoxResult . reverse) result
+    endLoop result = (EndLoop . VBoxResult . Seq.reverse) result
 
     addPara indentFlag =
         do
@@ -169,7 +170,7 @@ appendParagraph paraHList vList =
 
 hListToParaLineBoxes
     :: (MonadReader Config m, MonadError (BuildError s) m)
-    => HList -> m [[B.HBoxElem]]
+    => HList -> m (Seq [B.HBoxElem])
 hListToParaLineBoxes hList =
     do
     desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
@@ -214,7 +215,7 @@ handleCommandInMainVMode vList command oldStream =
     doNothing' = doNothing vList
     addElem' = addElem vList
     addMaybeElem' = addMaybeElem vList
-    endLoop result = (EndLoop . MainVModeResult . reverse) result
+    endLoop result = (EndLoop . MainVModeResult . Seq.reverse) result
 
     addPara indentFlag =
         do
@@ -232,9 +233,9 @@ extractPara
 extractPara indentFlag =
     runCommandLoop handleCommandInParaMode =<< case indentFlag of
         HP.Indent ->
-            (:[]) <$> readOnConfState (asks parIndentBox)
+            Seq.singleton <$> readOnConfState (asks parIndentBox)
         HP.DoNotIndent ->
-            pure []
+            pure mempty
 
 extractParaFromVMode
     :: HP.InhibitableStream s
@@ -291,7 +292,7 @@ extractHSubBox desiredLength boxIntent boxType =
 extractMainVList :: HP.InhibitableStream s => ExceptMonadBuild s MainVModeResult
 extractMainVList = runCommandLoop handleCommandInMainVMode mempty
 
-extractBreakAndSetVList :: HP.InhibitableStream s => ExceptMonadBuild s [B.Page]
+extractBreakAndSetVList :: HP.InhibitableStream s => ExceptMonadBuild s (Seq B.Page)
 extractBreakAndSetVList =
     do
     MainVModeResult finalMainVList <- extractMainVList
