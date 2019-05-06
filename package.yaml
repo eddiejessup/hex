@@ -35,6 +35,7 @@ dependencies:
 - transformers
 - unordered-containers
 - vector
+- witherable
 
 library:
   source-dirs: src
@@ -48,6 +49,7 @@ ghc-options:
 - -Wredundant-constraints
 - -Wno-warnings-deprecations
 - -O0
+- +RTS -A128m -n2m -RTS
 
 executables:
   hex:

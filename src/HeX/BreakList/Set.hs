@@ -17,8 +17,8 @@ setHListElem st e = case e of
     HVListElem ve     -> HVBoxElem <$> setVListElem st ve
     HListHBaseElem be -> Just $ HBoxHBaseElem be
 
-setHList :: GlueStatus -> HList -> [HBoxElem]
-setHList st elemList = toList $ mapMaybe (setHListElem st) elemList
+setHList :: GlueStatus -> ForwardHList -> ForwardDirected [] HBoxElem
+setHList st elemList = taggedSeqtoList (mapMaybe (setHListElem st) elemList)
 
-setVList :: GlueStatus -> VList -> [VBoxElem]
-setVList st elemList = toList $ mapMaybe (setVListElem st) elemList
+setVList :: GlueStatus -> ForwardVList -> ForwardDirected [] VBoxElem
+setVList st elemList = taggedSeqtoList (mapMaybe (setVListElem st) elemList)

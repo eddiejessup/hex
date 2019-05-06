@@ -6,8 +6,7 @@ import           Control.Monad.Except     (runExceptT)
 import           Control.Monad.State.Lazy (evalStateT)
 import qualified Data.HashMap.Strict      as HMap
 import           Data.List.NonEmpty       (NonEmpty (..))
-import qualified Data.Sequence            as Seq
-import           DVI.Document             (parseInstructions)
+import           DVI.Document             (Instruction, parseInstructions)
 import           DVI.Encode               (encode)
 import           DVI.Instruction          (EncodableInstruction)
 import qualified Text.Megaparsec          as P
@@ -115,11 +114,11 @@ codesToSth xs f =
 
 -- Paragraph list.
 
-extractParaHList :: InhibitableStream s => ExceptMonadBuild s HList
+extractParaHList :: InhibitableStream s => ExceptMonadBuild s ForwardHList
 extractParaHList =
-    (\(ParaResult _ hList) -> Seq.reverse hList) <$> extractPara Indent
+    (\(ParaResult _ hList) -> hList) <$> extractPara Indent
 
-codesToParaList :: [CharCode] -> IO HList
+codesToParaList :: [CharCode] -> IO ForwardHList
 codesToParaList xs =
     codesToSth xs extractParaHList
 
@@ -128,7 +127,7 @@ runPara xs = codesToParaList xs >>= printLine
 
 -- Paragraph boxes.
 
-codesToParaBoxes :: [CharCode] -> IO (Seq [HBoxElem])
+codesToParaBoxes :: [CharCode] -> IO (ForwardDirected Seq (ForwardDirected [] HBoxElem))
 codesToParaBoxes xs =
     codesToSth xs (extractParaHList >>= readOnConfState . hListToParaLineBoxes)
 
@@ -138,7 +137,7 @@ runSetPara xs =
 
 -- Pages list.
 
-codesToPages :: [CharCode] -> IO (Seq Page)
+codesToPages :: [CharCode] -> IO (ForwardDirected Seq Page)
 codesToPages xs = codesToSth xs extractBreakAndSetVList
 
 printLine :: (Readable a, Foldable t, Functor t) => t a -> IO ()
@@ -149,19 +148,20 @@ runPages xs = codesToPages xs >>= printLine
 
 -- DVI instructions.
 
+codesToDVI :: [CharCode] -> IO (ForwardDirected [] Instruction)
+codesToDVI xs = codesToPages xs <&> pagesToDVI
+
 runDVI :: [CharCode] -> IO ()
-runDVI xs = pagesToDVI <$> codesToPages xs >>= printLine
+runDVI xs = codesToDVI xs >>= printLine
 
 -- Raw DVI instructions.
 
-codesToDVIRaw :: [CharCode] -> IO [EncodableInstruction]
+codesToDVIRaw :: [CharCode] -> IO (ForwardDirected Seq EncodableInstruction)
 codesToDVIRaw xs = do
-    pages <- codesToPages xs
     -- Who cares, it's for debugging
     let _mag = 1000
-        instrs = pagesToDVI pages
-    encInstrs <- strEitherToIO $ parseInstructions instrs _mag
-    pure $ reverse encInstrs
+    instrs <- codesToDVI xs
+    revBackwardSeq <$> (strEitherToIO $ parseInstructions instrs _mag)
 
 runDVIRaw :: [CharCode] -> IO ()
 runDVIRaw xs = codesToDVIRaw xs >>= printLine

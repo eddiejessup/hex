@@ -5,10 +5,10 @@ import           HeXlude
 import           Control.Monad               (foldM)
 import           Control.Monad.Except        (liftEither)
 import           Data.Either.Combinators     (mapLeft)
-import qualified Data.Sequence as Seq
 
 import qualified HeX.Box                     as B
-import           HeX.BreakList               (HList, VList)
+import           HeX.BreakList               (BackwardHList, BackwardVList,
+                                              ForwardHList, ForwardVList)
 import qualified HeX.BreakList               as BL
 import           HeX.Command.Commands
 import           HeX.Command.Common
@@ -17,13 +17,13 @@ import           HeX.Config
 import qualified HeX.Lex                     as Lex
 import qualified HeX.Parse                   as HP
 
-data ParaResult = ParaResult EndParaReason HList
+data ParaResult = ParaResult EndParaReason ForwardHList
 
 data EndParaReason
     = EndParaSawEndParaCommand
     | EndParaSawLeaveBox
 
-handleCommandInParaMode :: HP.InhibitableStream s => HList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult HList ParaResult)
+handleCommandInParaMode :: HP.InhibitableStream s => BackwardHList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult BackwardHList ParaResult)
 handleCommandInParaMode hList command oldStream =
     case command of
         HP.VModeCommand _ ->
@@ -64,15 +64,15 @@ handleCommandInParaMode hList command oldStream =
     doNothing' = doNothing hList
     addElem' = addElem hList
     addMaybeElem' = addMaybeElem hList
-    endLoop reason result = EndLoop $ ParaResult reason (result)
+    endLoop reason result = EndLoop $ ParaResult reason (revBackwardSeq result)
 
-data HBoxResult = HBoxResult HList
+data HBoxResult = HBoxResult ForwardHList
 
 handleCommandInHBoxMode :: HP.InhibitableStream s
-                        => HList
+                        => BackwardHList
                         -> HP.Command
                         -> s
-                        -> ExceptMonadBuild s (RecursionResult HList HBoxResult)
+                        -> ExceptMonadBuild s (RecursionResult BackwardHList HBoxResult)
 handleCommandInHBoxMode hList command _ =
     case command of
         HP.VModeCommand vModeCommand ->
@@ -106,11 +106,11 @@ handleCommandInHBoxMode hList command _ =
     doNothing' = doNothing hList
     addElem' = addElem hList
     addMaybeElem' = addMaybeElem hList
-    endLoop result = (EndLoop . HBoxResult . Seq.reverse) result
+    endLoop result = (EndLoop . HBoxResult . revBackwardSeq) result
 
-data VBoxResult = VBoxResult VList
+data VBoxResult = VBoxResult ForwardVList
 
-handleCommandInVBoxMode :: HP.InhibitableStream s => VList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult VList VBoxResult)
+handleCommandInVBoxMode :: HP.InhibitableStream s => BackwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult BackwardVList VBoxResult)
 handleCommandInVBoxMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
@@ -145,7 +145,7 @@ handleCommandInVBoxMode vList command oldStream =
     doNothing' = doNothing vList
     addElem' = addElem vList
     addMaybeElem' = addMaybeElem vList
-    endLoop result = (EndLoop . VBoxResult . Seq.reverse) result
+    endLoop result = (EndLoop . VBoxResult . revBackwardSeq) result
 
     addPara indentFlag =
         do
@@ -159,7 +159,7 @@ handleCommandInVBoxMode vList command oldStream =
 
 appendParagraph
     :: HP.InhibitableStream s
-    => HList -> VList -> ExceptMonadBuild s VList
+    => ForwardHList -> BackwardVList -> ExceptMonadBuild s BackwardVList
 appendParagraph paraHList vList =
     do
     lineBoxes <- readOnConfState (hListToParaLineBoxes paraHList)
@@ -170,17 +170,19 @@ appendParagraph paraHList vList =
 
 hListToParaLineBoxes
     :: (MonadReader Config m, MonadError (BuildError s) m)
-    => HList -> m (Seq [B.HBoxElem])
+    => ForwardHList
+    -> m (ForwardDirected Seq (ForwardDirected [] B.HBoxElem))
 hListToParaLineBoxes hList =
     do
     desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
     lineTol <- asks $ IntParamVal . lookupIntegerParameter HP.Tolerance
     linePen <- asks $ IntParamVal . lookupIntegerParameter HP.LinePenalty
-    liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph desiredW lineTol linePen hList
+    let bwdHList = revForwardSeq hList
+    liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph desiredW lineTol linePen bwdHList
 
-data MainVModeResult = MainVModeResult VList
+data MainVModeResult = MainVModeResult ForwardVList
 
-handleCommandInMainVMode :: HP.InhibitableStream s => VList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult VList MainVModeResult)
+handleCommandInMainVMode :: HP.InhibitableStream s => BackwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult BackwardVList MainVModeResult)
 handleCommandInMainVMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
@@ -213,9 +215,10 @@ handleCommandInMainVMode vList command oldStream =
             panic $ "Not implemented, outer V mode: " <> show oth
   where
     doNothing' = doNothing vList
-    addElem' = addElem vList
+    addElem' el = addElem vList el
+    -- addElem' = addElem vList
     addMaybeElem' = addMaybeElem vList
-    endLoop result = (EndLoop . MainVModeResult . Seq.reverse) result
+    endLoop result = (EndLoop . MainVModeResult . revBackwardSeq) result
 
     addPara indentFlag =
         do
@@ -233,7 +236,7 @@ extractPara
 extractPara indentFlag =
     runCommandLoop handleCommandInParaMode =<< case indentFlag of
         HP.Indent ->
-            Seq.singleton <$> readOnConfState (asks parIndentBox)
+            pure <$> readOnConfState (asks parIndentBox)
         HP.DoNotIndent ->
             pure mempty
 
@@ -292,7 +295,7 @@ extractHSubBox desiredLength boxIntent boxType =
 extractMainVList :: HP.InhibitableStream s => ExceptMonadBuild s MainVModeResult
 extractMainVList = runCommandLoop handleCommandInMainVMode mempty
 
-extractBreakAndSetVList :: HP.InhibitableStream s => ExceptMonadBuild s (Seq B.Page)
+extractBreakAndSetVList :: HP.InhibitableStream s => ExceptMonadBuild s (ForwardDirected Seq B.Page)
 extractBreakAndSetVList =
     do
     MainVModeResult finalMainVList <- extractMainVList

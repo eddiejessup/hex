@@ -491,7 +491,7 @@ parIndentBox :: Config -> BL.HListElem
 parIndentBox conf = BL.HVListElem $
     BL.VListBaseElem $
     B.ElemBox $
-    B.Box { B.contents      = B.HBoxContents []
+    B.Box { B.contents      = B.HBoxContents mempty
           , B.desiredLength = B.To . (lookupLengthParameter ParIndent) $ conf
           }
 

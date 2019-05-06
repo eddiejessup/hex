@@ -12,8 +12,11 @@ import           HeX.BreakList.BreakList ( BreakItem(..)
                                          )
 import           HeX.BreakList.Glue
 
-type HList = Seq HListElem
-type VList = Seq VListElem
+type ForwardHList = ForwardDirected Seq HListElem
+type ForwardVList = ForwardDirected Seq VListElem
+
+type BackwardHList = BackwardDirected Seq HListElem
+type BackwardVList = BackwardDirected Seq VListElem
 
 -- Vertical list.
 data VListElem
@@ -108,15 +111,17 @@ instance Readable HListElem where
 data CondensedHListElem = Sentence Text | NonSentence HListElem
     deriving ( Show )
 
-condenseHList :: HList -> [CondensedHListElem]
-condenseHList = foldr append []
+condenseHList :: ForwardHList -> ForwardDirected [] CondensedHListElem
+condenseHList elems = FDirected (foldr append mempty elems)
   where
     append (HListHBaseElem (ElemCharacter Character{char})) [] =
         [ Sentence $ Text.singleton char ]
-    append e [] = [ NonSentence e ]
+    append e [] =
+        [ NonSentence e ]
     append e r@(x : xs) = case (x, e) of
         (Sentence cs, HListHBaseElem (ElemCharacter Character{char})) ->
             Sentence (Text.cons char cs) : xs
         (_, HListHBaseElem (ElemCharacter Character{char})) ->
             Sentence (Text.singleton char) : r
-        _ -> NonSentence e : r
+        _ ->
+            NonSentence e : r

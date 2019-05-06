@@ -1,7 +1,8 @@
 module HeX.Unit where
 
-import HeXlude
+import Protolude
 
+import Data.Text (Text)
 import           Data.Ratio                     ( (%) )
 
 tenK :: Int
@@ -76,6 +77,9 @@ inScaledPoint u = case u of
     Cicero      -> 12 * inScaledPoint Didot
     ScaledPoint -> 1
 
+roundToDec :: RealFrac a => Int -> a -> a
+roundToDec n v = (fromInteger $ round $ v * (10 ^ n)) / (10.0 ^^ n)
+
 scaledPointIn :: PhysicalUnit -> Rational
 scaledPointIn = recip . inScaledPoint
 
@@ -89,7 +93,7 @@ fromScaledPoint :: PhysicalUnit -> Rational
 fromScaledPoint = recip . inScaledPoint
 
 showFrac :: Real n => n -> Text
-showFrac n = showT $ roundToDec 1 (realToFrac n :: Double)
+showFrac n = show $ roundToDec 1 (realToFrac n :: Double)
 
 showSP :: Real n => n -> Text
 showSP n =

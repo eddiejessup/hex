@@ -33,7 +33,7 @@ data Node = Root | Branch !Int
     deriving ( Show )
 
 data InEdge =
-    InEdge { elems :: !(Seq ElemAdj), src :: !Node, discarding :: !IsDiscarding }
+    InEdge { elems :: !(BackwardDirected Seq ElemAdj), src :: !Node, discarding :: !IsDiscarding }
     deriving ( Show )
 
 -- Set this edge to 'discarding' so that later discardable items won't be
@@ -43,8 +43,10 @@ newEdge n = InEdge mempty (Branch n) (IsDiscarding True)
 
 inEdgeCons :: ElemAdj -> InEdge -> InEdge
 inEdgeCons c e@(InEdge cs n (IsDiscarding _discarding))
-    | _discarding && isDiscardable (Adj.fromAdjacency c) = e
-    | otherwise = InEdge (c <| cs) n (IsDiscarding False)
+    | _discarding && isDiscardable (Adj.fromAdjacency c) =
+        e
+    | otherwise =
+        InEdge (c <<| cs) n (IsDiscarding False)
 
 inEdgeConcat :: Foldable f => f ElemAdj -> InEdge -> InEdge
 inEdgeConcat xs e = foldr inEdgeCons e xs
@@ -56,7 +58,7 @@ edgeStatus (LenParamVal dw) (InEdge v _ _) =
 withStatus :: LenParamVal HSize -> InEdge -> (InEdge, GlueStatus)
 withStatus dw e = (e, edgeStatus dw e)
 
-data Route = Route !(Seq [B.HBoxElem]) !Demerit
+data Route = Route !(BackwardDirected Seq (ForwardDirected [] B.HBoxElem)) !Demerit
     deriving ( Show )
 
 instance Eq Route where
@@ -65,8 +67,8 @@ instance Eq Route where
 instance Ord Route where
     compare (Route _ distA) (Route _ distB) = compare distA distB
 
-routeCons :: Route -> [B.HBoxElem] -> Demerit -> Route
-routeCons (Route subLns sA) ln sB = Route (ln <| subLns) (sA + sB)
+routeCons :: Route -> ForwardDirected [] B.HBoxElem -> Demerit -> Route
+routeCons (Route subLns sA) ln sB = Route (ln <<| subLns) (sA + sB)
 
 lineDemerit :: IntParamVal LinePenalty -> BadnessSize -> BreakItem -> Demerit
 lineDemerit (IntParamVal lp) b br =
@@ -100,7 +102,7 @@ finaliseInEdge :: ElemAdj -> InEdge -> InEdge
 -- If the break-point is at glue, then the line doesn't include that glue.
 finaliseInEdge Adj{adjVal = HVListElem (ListGlue _)} e = e
 -- If the break is at some other type of break, the line includes it.
-finaliseInEdge x (InEdge cs n discard) = InEdge (x <| cs) n discard
+finaliseInEdge x (InEdge cs n discard) = InEdge (x <<| cs) n discard
 
 data BreakingState =
     BreakingState { accEdges        :: !(Seq InEdge)
@@ -193,24 +195,25 @@ shortestRoute es rs = do
     pure $ Safe.F.minimumDef (Route mempty (Demerit 0)) subRs
   where
     bestSubroute (InEdge ev n _, st, ed) =
-        let boxes = setHList st (Seq.reverse $ Adj.fromAdjacencies ev)
+        let
+            boxes = setHList st (revBackwardSeq $ Adj.fromAdjacencies ev)
         in
             case n of
-                Root      -> pure $ Route (pure boxes) ed
+                Root ->
+                    pure $ Route (BDirected (Seq.singleton boxes)) ed
                 Branch sn -> do
                     subR <- seqLookupEith "route" rs (length rs - sn - 1)
                     pure $ routeCons subR boxes ed
 
--- Expects contents in reverse order.
--- Returns lines in reading order.
 breakAndSetParagraph
     :: LenParamVal HSize
     -> IntParamVal Tolerance
     -> IntParamVal LinePenalty
-    -> HList
-    -> Either Text (Seq [B.HBoxElem])
-breakAndSetParagraph _ _ _ Empty = pure mempty
-breakAndSetParagraph dw tol lp (x :<| xs) =
+    -> BackwardHList
+    -> Either Text (ForwardDirected Seq (ForwardDirected [] B.HBoxElem))
+breakAndSetParagraph _ _ _ (BDirected Empty) =
+    pure mempty
+breakAndSetParagraph dw tol lp (BDirected (x :<| xs)) =
     let
         -- Remove the final item if it's glue.
         xsTrimmed = case x of
@@ -224,9 +227,8 @@ breakAndSetParagraph dw tol lp (x :<| xs) =
          <| (HVListElem $ ListPenalty $ Penalty tenK)
          <| xsTrimmed
     in
-        go $ Seq.reverse xsFinished
+        go (Seq.reverse xsFinished)
   where
-    go :: HList -> Either Text (Seq [B.HBoxElem])
     go _xs = do
         BreakingState{accEdges, nodeToBestRoute, chunk}
             <- foldM (appendEntry dw tol lp) initialBreakingState $
@@ -235,4 +237,4 @@ breakAndSetParagraph dw tol lp (x :<| xs) =
             acceptableDInEdges =
                 toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
         (Route rawLns _) <- shortestRoute acceptableDInEdges nodeToBestRoute
-        pure $ Seq.reverse rawLns
+        pure $ revBackwardSeq rawLns

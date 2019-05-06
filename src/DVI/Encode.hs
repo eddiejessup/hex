@@ -10,5 +10,5 @@ class Encodable a where
 encLength :: Encodable a => a -> Int
 encLength = fromIntegral . BS.length . encode
 
-instance Encodable a => Encodable [a] where
-    encode = BS.concat . fmap encode
+instance (Encodable a, Foldable t) => Encodable (t a) where
+    encode = BS.concat . fmap encode . toList
