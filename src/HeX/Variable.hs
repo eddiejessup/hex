@@ -8,7 +8,7 @@ import           Control.Monad.State.Lazy       ( MonadState
                                                 )
 
 import qualified HeX.BreakList                 as BL
-import           HeX.BuildHelp
+import           HeX.Command.Common
 import           HeX.Config
 import           HeX.Evaluate
 import qualified HeX.Parse                     as HP

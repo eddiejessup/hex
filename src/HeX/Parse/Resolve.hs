@@ -36,10 +36,13 @@ syntaxTok = SyntaxCommandHeadToken
 primTok :: PrimitiveToken -> ResolvedToken
 primTok = PrimitiveToken
 
+condTok :: ConditionHeadTok -> ResolvedToken
 condTok e = syntaxTok $ ConditionTok $ ConditionHeadTok e
 
+vModeTok :: ModedCommandPrimitiveToken -> ResolvedToken
 vModeTok e = primTok $ ModedCommand Vertical e
 
+hModeTok :: ModedCommandPrimitiveToken -> ResolvedToken
 hModeTok e = primTok $ ModedCommand Horizontal e
 
 defaultCSMap :: CSMap

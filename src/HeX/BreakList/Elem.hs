@@ -12,12 +12,20 @@ import           HeX.BreakList.BreakList ( BreakItem(..)
                                          )
 import           HeX.BreakList.Glue
 
+type ForwardHList = ForwardDirected Seq HListElem
+type ForwardVList = ForwardDirected Seq VListElem
+
+type BackwardHList = BackwardDirected Seq HListElem
+type BackwardVList = BackwardDirected Seq VListElem
+
 -- Vertical list.
-data BreakableVListElem =
-    VListBaseElem BaseElem | ListGlue Glue | ListPenalty Penalty
+data VListElem
+    = VListBaseElem BaseElem
+    | ListGlue Glue
+    | ListPenalty Penalty
     deriving ( Show )
 
-instance BreakableListElem BreakableVListElem where
+instance BreakableListElem VListElem where
     toGlue (ListGlue g) = Just g
     toGlue _ = Nothing
 
@@ -42,23 +50,23 @@ instance BreakableListElem BreakableVListElem where
 
     naturalSpan = naturalHeight
 
-axisVListElemNaturalLength :: Axis -> BoxDim -> BreakableVListElem -> Int
+axisVListElemNaturalLength :: Axis -> BoxDim -> VListElem -> Int
 axisVListElemNaturalLength ax dim e = case e of
     VListBaseElem be -> axisBaseElemNaturalLength ax dim be
     ListGlue g       -> spacerNaturalLength ax dim $ dimen g
     ListPenalty _    -> 0
 
-instance Dimensioned BreakableVListElem where
+instance Dimensioned VListElem where
     naturalLength = axisVListElemNaturalLength Vertical
 
 -- Horizontal list.
 -- TODO: WhatsIt, Leaders, Mark, Insertion
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
-data BreakableHListElem =
-    HVListElem BreakableVListElem | HListHBaseElem HBaseElem
+data HListElem =
+    HVListElem VListElem | HListHBaseElem HBaseElem
     deriving ( Show )
 
-instance BreakableListElem BreakableHListElem where
+instance BreakableListElem HListElem where
     toGlue (HVListElem e) = toGlue e
     toGlue _ = Nothing
 
@@ -81,25 +89,39 @@ instance BreakableListElem BreakableHListElem where
 
     naturalSpan = naturalWidth
 
-instance Dimensioned BreakableHListElem where
+instance Dimensioned HListElem where
     naturalLength dim (HVListElem e) =
         axisVListElemNaturalLength Horizontal dim e
     naturalLength dim (HListHBaseElem e) = naturalLength dim e
 
 -- Display.
+
+instance Readable VListElem where
+    describe = \case
+        VListBaseElem baseElem -> describe baseElem
+        ListGlue g -> show g
+        ListPenalty p -> "Penalty " <> show p
+
+instance Readable HListElem where
+    describe = \case
+        HVListElem vListElem -> describe vListElem
+        HListHBaseElem hBaseElem -> describe hBaseElem
+
 -- Just used to show an HList more compactly.
-data CondensedHListElem = Sentence Text | NonSentence BreakableHListElem
+data CondensedHListElem = Sentence Text | NonSentence HListElem
     deriving ( Show )
 
-condenseHList :: [BreakableHListElem] -> [CondensedHListElem]
-condenseHList = foldr append []
+condenseHList :: ForwardHList -> ForwardDirected [] CondensedHListElem
+condenseHList elems = FDirected (foldr append mempty elems)
   where
     append (HListHBaseElem (ElemCharacter Character{char})) [] =
         [ Sentence $ Text.singleton char ]
-    append e [] = [ NonSentence e ]
+    append e [] =
+        [ NonSentence e ]
     append e r@(x : xs) = case (x, e) of
         (Sentence cs, HListHBaseElem (ElemCharacter Character{char})) ->
             Sentence (Text.cons char cs) : xs
         (_, HListHBaseElem (ElemCharacter Character{char})) ->
             Sentence (Text.singleton char) : r
-        _ -> NonSentence e : r
+        _ ->
+            NonSentence e : r

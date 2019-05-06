@@ -282,12 +282,31 @@ data Box = FetchedRegisterBox T.BoxFetchMode EightBitNumber
 data BoxSpecification = Natural | To Length | Spread Length
     deriving ( Show )
 
-data BoxOrRule = BoxOrRuleBox Box | BoxOrRuleRule Rule
+data BoxOrRule = BoxOrRuleBox Box | BoxOrRuleRule Axis Rule
     deriving ( Show )
 
 -- Commands.
-data AllModesCommand =
-      ShowToken Lex.Token
+
+data ModeIndependentCommand
+    = Assign Assignment
+    | Relax
+    | IgnoreSpaces
+    | AddPenalty Number
+    | AddKern Length
+    | AddMathKern MathLength
+    | RemoveItem T.RemovableItem
+    | SetAfterAssignmentToken Lex.Token
+    | AddToAfterGroupTokens Lex.Token
+    | Message T.StandardOutputStream T.ExpandedBalancedText
+    | ModifyFileStream FileStreamType FileStreamAction Number
+    | WriteToStream Number WriteText
+    | DoSpecial T.ExpandedBalancedText
+    | AddBox BoxPlacement Box
+    | ChangeScope T.Sign CommandTrigger
+    deriving ( Show )
+
+data Command
+    = ShowToken Lex.Token
     | ShowBox Number
     | ShowLists
     | ShowTheInternalQuantity InternalQuantity
@@ -300,45 +319,40 @@ data AllModesCommand =
     | AddSpace
     | StartParagraph T.IndentFlag
     | EndParagraph
-    | AddLeaders T.LeadersType BoxOrRule Glue
-    | AddUnwrappedFetchedBox Number T.BoxFetchMode -- \un{v,h}{box,copy}
-    | AddRule Rule
       -- \| AddAlignedMaterial DesiredLength AlignmentMaterial
+    | HModeCommand HModeCommand
+    | VModeCommand VModeCommand
     | ModeIndependentCommand ModeIndependentCommand
     deriving ( Show )
 
-data ModeIndependentCommand =
-      Assign Assignment
-    | ChangeScope T.Sign CommandTrigger
-    | Relax
-    | IgnoreSpaces
-    | AddPenalty Number
-    | AddKern Length
-    | AddMathKern MathLength
-    | RemoveItem T.RemovableItem
-    | AddGlue Glue
-    | SetAfterAssignmentToken Lex.Token
-    | AddToAfterGroupTokens Lex.Token
-    | Message T.StandardOutputStream T.ExpandedBalancedText
-    | ModifyFileStream FileStreamType FileStreamAction Number
-    | WriteToStream Number WriteText
-    | DoSpecial T.ExpandedBalancedText
-    | AddBox BoxPlacement Box
-    deriving ( Show )
-
-data VModeCommand = VAllModesCommand AllModesCommand | End | Dump | EnterHMode
+data VModeCommand
+    = End
+    | Dump
+    | EnterHMode
+    | AddVGlue Glue
+    | AddVLeaders LeadersSpec
+    | AddVRule Rule
+    | AddUnwrappedFetchedVBox FetchedBoxRef -- \unv{box,copy}
     deriving ( Show )
 
 data HModeCommand =
-      HAllModesCommand AllModesCommand
-    | AddControlSpace
+      AddControlSpace
     | AddCharacter CharCodeRef
     | AddAccentedCharacter Number [Assignment] (Maybe CharCodeRef)
     | AddItalicCorrection
     | AddDiscretionaryText { preBreak, postBreak, noBreak :: T.BalancedText }
     | AddDiscretionaryHyphen
     | EnterMathMode
-    | LeaveHMode
+    | AddHGlue Glue
+    | AddHLeaders LeadersSpec
+    | AddHRule Rule
+    | AddUnwrappedFetchedHBox FetchedBoxRef -- \unh{box,copy}
+    deriving ( Show )
+
+data FetchedBoxRef = FetchedBoxRef Number T.BoxFetchMode
+    deriving ( Show )
+
+data LeadersSpec = LeadersSpec T.LeadersType BoxOrRule Glue
     deriving ( Show )
 
 data CommandTrigger = CharCommandTrigger | CSCommandTrigger
@@ -369,7 +383,7 @@ data FileStreamAction = Open (Path Rel File) | Close
 data FileStreamType = FileInput | FileOutput WritePolicy
     deriving ( Show )
 
-data BoxPlacement = NaturalPlacement | ShiftedPlacement Direction Length
+data BoxPlacement = NaturalPlacement | ShiftedPlacement Axis Direction Length
     deriving ( Show )
 
 data CharCodeRef =

@@ -1,13 +1,13 @@
-import Test.Hspec
+import           Test.Hspec
 
 import qualified Prelude
-import Protolude
+import           Protolude
 
-import qualified Data.ByteString as BS
-import qualified Data.Text as Text
-import System.Directory ( listDirectory )
+import qualified Data.ByteString  as BS
+import qualified Data.Text        as Text
+import           System.Directory (listDirectory)
 
-import           HeX.Run                        ( codesToDVIBytes )
+import           HeX.Command.Run  (codesToDVIBytes)
 
 cmpFile :: Text -> IO ()
 cmpFile fname =

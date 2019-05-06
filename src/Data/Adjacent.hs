@@ -2,19 +2,32 @@ module Data.Adjacent where
 
 import           HeXlude
 
+import qualified Data.Sequence as Seq
+
 data Adj a = Adj { adjPre :: !(Maybe a), adjVal :: !a, adjPost :: !(Maybe a) }
     deriving ( Show )
 
-toAdjacents :: [a] -> [Adj a]
-toAdjacents = go Nothing
+data ToAdjState a
+     = VeryStart
+     | GotGoing a (Seq (Adj a))
+
+toAdjacents :: Foldable t => t a -> Seq (Adj a)
+toAdjacents xs =
+    case foldl' f VeryStart xs of
+        VeryStart -> Empty
+        GotGoing onlyElem Empty -> Seq.singleton (Adj Nothing onlyElem Nothing)
+        GotGoing finalElem acc@(_ :|> (Adj _ left _)) -> acc |> (Adj (Just left) finalElem Nothing)
   where
-    go _pre xs = case xs of
-        [] -> []
-        [ _v ] -> [ Adj _pre _v Nothing ]
-        (_v : ys@(_post : _)) -> (Adj _pre _v (Just _post)) : go (Just _v) ys
+    f fState right = GotGoing right $ case fState of
+        VeryStart -> Empty
+        GotGoing v acc ->
+            let maybeLeft = case acc of
+                    Empty -> Nothing
+                    (_ :|> (Adj _ left _)) -> Just left
+            in acc |> (Adj maybeLeft v (Just right))
 
 fromAdjacency :: Adj a -> a
 fromAdjacency = adjVal
 
-fromAdjacencies :: [Adj a] -> [a]
+fromAdjacencies :: Functor f => f (Adj a) -> f a
 fromAdjacencies = fmap fromAdjacency

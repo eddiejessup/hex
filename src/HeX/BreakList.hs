@@ -10,9 +10,9 @@ module HeX.BreakList
 where
 
 import           HeX.BreakList.BreakList
-import           HeX.BreakList.Judge
 import           HeX.BreakList.Elem
-import           HeX.BreakList.Set
 import           HeX.BreakList.Glue
+import           HeX.BreakList.Judge
 import           HeX.BreakList.Line
 import           HeX.BreakList.Page
+import           HeX.BreakList.Set

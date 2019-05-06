@@ -61,6 +61,9 @@ data EncodableInstruction = EncodableInstruction Operation [ArgVal]
 instance Encodable EncodableInstruction where
     encode (EncodableInstruction op args) = encode op `BS.append` encode args
 
+instance Readable EncodableInstruction where
+    describe = show
+
 opByteLength :: IntArgVal -> ByteLength
 opByteLength v = case v of
     (S1 _) -> OneByte

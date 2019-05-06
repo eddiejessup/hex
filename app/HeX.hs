@@ -9,7 +9,7 @@ import qualified System.Console.GetOpt          as Opt
 import           Control.Monad                  ( when )
 
 import           HeX.Categorise                 ( CharCode )
-import           HeX.Run
+import           HeX.Command.Run
 
 data Mode
     = CatMode

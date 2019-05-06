@@ -2,25 +2,23 @@ module HeX.BreakList.Set where
 
 import           HeXlude
 
-import           Data.Maybe          ( mapMaybe )
-
 import           HeX.Box
 import           HeX.BreakList.Elem
 import           HeX.BreakList.Judge
 
-setVListElem :: GlueStatus -> BreakableVListElem -> Maybe VBoxElem
+setVListElem :: GlueStatus -> VListElem -> Maybe VBoxElem
 setVListElem st e = case e of
     ListGlue g       -> Just $ BoxGlue $ setGlue st g
     VListBaseElem be -> Just $ VBoxBaseElem be
     ListPenalty _    -> Nothing
 
-setHListElem :: GlueStatus -> BreakableHListElem -> Maybe HBoxElem
+setHListElem :: GlueStatus -> HListElem -> Maybe HBoxElem
 setHListElem st e = case e of
     HVListElem ve     -> HVBoxElem <$> setVListElem st ve
     HListHBaseElem be -> Just $ HBoxHBaseElem be
 
-setHList :: GlueStatus -> [BreakableHListElem] -> [HBoxElem]
-setHList st = mapMaybe (setHListElem st)
+setHList :: GlueStatus -> ForwardHList -> ForwardDirected [] HBoxElem
+setHList st elemList = taggedSeqtoList (mapMaybe (setHListElem st) elemList)
 
-setVList :: GlueStatus -> [BreakableVListElem] -> [VBoxElem]
-setVList st = mapMaybe (setVListElem st)
+setVList :: GlueStatus -> ForwardVList -> ForwardDirected [] VBoxElem
+setVList st elemList = taggedSeqtoList (mapMaybe (setVListElem st) elemList)

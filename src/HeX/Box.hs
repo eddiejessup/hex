@@ -4,5 +4,5 @@ module HeX.Box
     )
 where
 
-import           HeX.Box.Elem
 import           HeX.Box.Draw
+import           HeX.Box.Elem

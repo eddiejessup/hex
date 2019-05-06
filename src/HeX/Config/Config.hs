@@ -33,23 +33,15 @@ import qualified HeX.Parse.AST            as AST
 import           HeX.Parse.Resolve
 import           HeX.Parse.Token
 
-type HList = [BL.BreakableHListElem]
-type VList = [BL.BreakableVListElem]
-
-data ExplicitBoxGroup
-    = HModeGroup HList
-    | VModeGroup VList
-    deriving (Show)
-
 data Group
-    = ExplicitBoxGroup ExplicitBoxGroup
-    | LocalStructureGroup AST.CommandTrigger Scope
-    deriving (Show)
+    = ScopeGroup Scope ScopeGroup
+    | NonScopeGroup
+    deriving ( Show )
 
-isBoxGroup :: Group -> Bool
-isBoxGroup = \case
-    ExplicitBoxGroup _ -> True
-    _ -> False
+data ScopeGroup
+    = LocalStructureGroup AST.CommandTrigger
+    | ExplicitBoxGroup
+    deriving ( Show )
 
 type RegisterMap v = HMap.HashMap EightBitInt v
 
@@ -137,10 +129,8 @@ data Config =
              -- File streams.
            , logStream :: Handle
            , outFileStreams :: HMap.HashMap FourBitInt Handle
-           , globalScope :: Scope
            , afterAssignmentToken :: Maybe Lex.Token
-           , mainVList :: VList
-           , mainHList :: Maybe HList
+           , globalScope :: Scope
            , groups :: [Group]
            }
     deriving ( Show )
@@ -162,18 +152,18 @@ newConfig = do
                 , specialLengths = newSpecialLengths
                 , logStream = logHandle
                 , outFileStreams = HMap.empty
-                , globalScope = newGlobalScope
                 , afterAssignmentToken = Nothing
-                , mainVList = []
-                , mainHList = Nothing
+                , globalScope = newGlobalScope
                 , groups = []
                 }
 
 finaliseConfig :: Config -> IO ()
-finaliseConfig config = do
+finaliseConfig config =
     hClose $ logStream config
 
--- Fonts info (global).
+-- Unscoped.
+
+-- Font info.
 
 data FontInfo =
     FontInfo { fontMetrics :: TexFont, hyphenChar, skewChar :: IntVal }
@@ -209,38 +199,59 @@ modifyFont :: MonadState Config m => Int -> (FontInfo -> FontInfo) -> m ()
 modifyFont fNr f = modify (\c@Config{fontInfos} ->
                            c { fontInfos = IntMap.adjust f fNr fontInfos })
 
--- Scopes.
+-- Special quantities.
+
+lookupSpecialInteger :: SpecialInteger -> Config -> IntVal
+lookupSpecialInteger p c = HMap.lookupDefault 0 p (specialIntegers c)
+
+lookupSpecialLength :: SpecialLength -> Config -> IntVal
+lookupSpecialLength p c = HMap.lookupDefault 0 p (specialLengths c)
+
+setSpecialInteger :: SpecialInteger -> IntVal -> Config -> Config
+setSpecialInteger p v c =
+    c{ specialIntegers = HMap.insert p v $ specialIntegers c }
+
+setSpecialLength :: SpecialLength -> IntVal -> Config -> Config
+setSpecialLength p v c =
+    c{ specialLengths = HMap.insert p v $ specialLengths c }
+
+-- Scoped.
 
 modLocalScope :: Config -> (Scope -> Scope) -> Config
-modLocalScope c@Config { globalScope, groups } f =
-    let (modGlobalScope, modGroups) = go groups
-    in c { globalScope = modGlobalScope, groups = modGroups }
-  where
-    go = \case
-        -- If there are no groups, modify the global scope.
-        [] ->
-            (f globalScope, [])
-        -- If the top group provides local scope, modify that scope.
-        (LocalStructureGroup trig sc):otherGroups ->
-            (globalScope, LocalStructureGroup trig (f sc):otherGroups)
-        -- If the top group doesn't provide local scope, push that top group
-        -- onto the result of changing the config as if this group didn't
-        -- exist.
-        topGroup:otherGroups ->
-            let (restGlobalScope, restGroups) = go otherGroups
-            in (restGlobalScope, topGroup:restGroups)
+modLocalScope c@Config{ globalScope, groups } f =
+    case groups of
+        [] -> c{ globalScope = f globalScope }
+        ScopeGroup scope scopeGroupType : outerGroups ->
+            c{ groups = (ScopeGroup (f scope) scopeGroupType) : outerGroups }
+        nonScopeGroup : outerGroups ->
+            let
+                -- Get result if this non-scoped group hadn't existed.
+                cWithoutGroup@Config{ groups = groupsWithoutGroup }
+                    = modLocalScope c{ groups = outerGroups } f
+            in
+                -- Append non-scope group to that result.
+                cWithoutGroup{ groups = nonScopeGroup:groupsWithoutGroup }
 
 pushGroup :: Group -> Config -> Config
-pushGroup newGroup c@Config { groups } = c { groups = newGroup:groups }
+pushGroup group c@Config{ groups } =
+    c{ groups = group : groups }
 
 popGroup :: Config -> Maybe (Group, Config)
-popGroup c@Config { groups } = case groups of
-    [] ->
-        Nothing
-    topGroup : otherGroups ->
-        Just (topGroup, c { groups = otherGroups })
+popGroup c@Config{ groups } =
+    case groups of
+        [] ->
+            Nothing
+        group : outerGroups ->
+            Just (group, c{ groups = outerGroups })
 
 data KeyOperation v = InsertVal v | DeleteVal
+
+modGroupScope :: (Scope -> Scope) -> Group -> Group
+modGroupScope f = \case
+    ScopeGroup scope scopeGroupType ->
+        ScopeGroup (f scope) scopeGroupType
+    nonScopeGroup ->
+        nonScopeGroup
 
 modifyKey :: (Eq k, Hashable k)
           => (Scope -> HMap.HashMap k v)
@@ -250,26 +261,20 @@ modifyKey :: (Eq k, Hashable k)
           -> GlobalFlag
           -> Config
           -> Config
-modifyKey getMap upD k keyOp globalFlag conf@Config { groups, globalScope } =
+modifyKey getMap upD k keyOp globalFlag c@Config{ groups, globalScope } =
     case globalFlag of
-        Global -> conf { globalScope = modOp globalScope
-                       , groups = deleteKeyFromGroup <$> groups
-                       }
-        Local -> modLocalScope conf modOp
+        Global ->
+            c{ globalScope = modOp globalScope
+             , groups = (modGroupScope deleteKeyFromScope) <$> groups }
+        Local ->
+            modLocalScope c modOp
   where
     modOp = case keyOp of
         DeleteVal   -> deleteKeyFromScope
         InsertVal v -> insertKeyToScope v
 
-    insertKeyToScope v c = upD c $ HMap.insert k v $ getMap c
-
-    deleteKeyFromGroup = \case
-        LocalStructureGroup trig scope ->
-            LocalStructureGroup trig (deleteKeyFromScope scope)
-        nonScopeGroup ->
-            nonScopeGroup
-
-    deleteKeyFromScope c = upD c $ HMap.delete k $ getMap c
+    insertKeyToScope v scope = upD scope $ HMap.insert k v $ getMap scope
+    deleteKeyFromScope scope = upD scope $ HMap.delete k $ getMap scope
 
 insertKey :: (Eq k, Hashable k)
           => (Scope -> HMap.HashMap k v)
@@ -291,12 +296,15 @@ deleteKey :: (Eq k, Hashable k)
 deleteKey getMap upD k = modifyKey getMap upD k DeleteVal
 
 scopedLookup :: (Scope -> Maybe v) -> Config -> Maybe v
-scopedLookup f c@Config { globalScope, groups } = case groups of
-    [] -> f globalScope
-    (LocalStructureGroup _ topScope) : otherGroups -> case f topScope of
-        Nothing -> scopedLookup f c { groups = otherGroups }
-        Just v  -> Just v
-    _:otherGroups -> scopedLookup f c { groups = otherGroups }
+scopedLookup f c@Config{ globalScope, groups } =
+    case groups of
+        [] -> f globalScope
+        ScopeGroup scope _ : outerGroups ->
+            case f scope of
+                Nothing -> scopedLookup f c{ groups = outerGroups }
+                Just v  -> Just v
+        _ : outerGroups ->
+            scopedLookup f c{ groups = outerGroups }
 
 scopedMapLookup
     :: (Eq k, Hashable k)
@@ -310,33 +318,24 @@ scopedMapLookup getMap k = scopedLookup ((HMap.lookup k) . getMap)
 lookupCurrentFontNr :: Config -> Maybe Int
 lookupCurrentFontNr = scopedLookup currentFontNr
 
-mLookupCurrentFontNr :: (MonadReader Config m, MonadError Text m) => m Int
+mLookupCurrentFontNr
+    :: (MonadReader Config m, MonadError Text m)
+    => m Int
 mLookupCurrentFontNr =
     asks lookupCurrentFontNr >>= liftMaybe "Font number isn't set"
 
-currentFontInfo :: (MonadReader Config m, MonadError Text m) => m FontInfo
-currentFontInfo = mLookupCurrentFontNr >>= lookupFontInfo
-
-currentFontMetrics :: (MonadReader Config m, MonadError Text m) => m TexFont
-currentFontMetrics = fontMetrics <$> currentFontInfo
-
 selectFontNr :: Int -> GlobalFlag -> Config -> Config
-selectFontNr n globalFlag c@Config { globalScope, groups } =
+selectFontNr n globalFlag c@Config{ globalScope, groups } =
     case globalFlag of
-        Global -> c { globalScope = selectFontInScope globalScope
-                    , groups = deselectFontInGroup <$> groups
-                    }
-        Local -> modLocalScope c selectFontInScope
+        Global ->
+            c{ globalScope = selectFontInScope globalScope
+             , groups = (modGroupScope deselectFontInScope) <$> groups
+             }
+        Local ->
+            modLocalScope c selectFontInScope
   where
-    deselectFontInScope scope = scope { currentFontNr = Nothing }
-
-    deselectFontInGroup = \case
-        LocalStructureGroup trig scope ->
-            LocalStructureGroup trig (deselectFontInScope scope)
-        nonScopeGroup ->
-            nonScopeGroup
-
-    selectFontInScope scope = scope { currentFontNr = Just n }
+    deselectFontInScope scope = scope{ currentFontNr = Nothing }
+    selectFontInScope scope = scope{ currentFontNr = Just n }
 
 setFamilyMemberFont
     :: (FontRange, Int)
@@ -448,12 +447,6 @@ lookupTokenListParameter :: TokenListParameter -> Config -> BalancedText
 lookupTokenListParameter p conf =
     fromMaybe mempty $ scopedMapLookup tokenListParameters p conf
 
-lookupSpecialInteger :: SpecialInteger -> Config -> IntVal
-lookupSpecialInteger p conf = HMap.lookupDefault 0 p (specialIntegers conf)
-
-lookupSpecialLength :: SpecialLength -> Config -> IntVal
-lookupSpecialLength p conf = HMap.lookupDefault 0 p (specialLengths conf)
-
 setIntegerParameter
     :: IntegerParameter
     -> IntVal
@@ -494,19 +487,11 @@ setTokenListParameter
 setTokenListParameter =
     insertKey tokenListParameters $ \c _map -> c { tokenListParameters = _map }
 
-setSpecialInteger :: SpecialInteger -> IntVal -> Config -> Config
-setSpecialInteger p v conf =
-    conf { specialIntegers = HMap.insert p v $ specialIntegers conf }
-
-setSpecialLength :: SpecialLength -> IntVal -> Config -> Config
-setSpecialLength p v conf =
-    conf { specialLengths = HMap.insert p v $ specialLengths conf }
-
-parIndentBox :: Config -> BL.BreakableHListElem
+parIndentBox :: Config -> BL.HListElem
 parIndentBox conf = BL.HVListElem $
     BL.VListBaseElem $
     B.ElemBox $
-    B.Box { B.contents      = B.HBoxContents []
+    B.Box { B.contents      = B.HBoxContents mempty
           , B.desiredLength = B.To . (lookupLengthParameter ParIndent) $ conf
           }
 
@@ -532,7 +517,7 @@ lookupTokenListRegister p conf =
     fromMaybe mempty $ scopedMapLookup tokenListRegister p conf
 
 lookupBoxRegister :: EightBitInt -> Config -> Maybe B.Box
-lookupBoxRegister p conf = scopedMapLookup boxRegister p conf
+lookupBoxRegister = scopedMapLookup boxRegister
 
 setIntegerRegister :: EightBitInt -> IntVal -> GlobalFlag -> Config -> Config
 setIntegerRegister =
@@ -568,3 +553,20 @@ setBoxRegister = insertKey boxRegister $ \c _map -> c { boxRegister = _map }
 
 delBoxRegister :: EightBitInt -> GlobalFlag -> Config -> Config
 delBoxRegister = deleteKey boxRegister $ \c _map -> c { boxRegister = _map }
+
+setBoxRegisterNullable :: EightBitInt
+                            -> GlobalFlag -> Maybe B.Box -> Config -> Config
+setBoxRegisterNullable idx global = \case
+    -- If the fetched box is null, delete the left-hand
+    -- register's contents. Otherwise set the register to
+    -- the fetched box's contents.
+    Nothing -> delBoxRegister idx global
+    Just b -> setBoxRegister idx b global
+
+-- Scoped, but with unscoped references.
+
+currentFontInfo :: (MonadReader Config m, MonadError Text m) => m FontInfo
+currentFontInfo = mLookupCurrentFontNr >>= lookupFontInfo
+
+currentFontMetrics :: (MonadReader Config m, MonadError Text m) => m TexFont
+currentFontMetrics = fontMetrics <$> currentFontInfo
