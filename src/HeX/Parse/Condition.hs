@@ -23,15 +23,15 @@ conditionHeadParser :: InhibitableStream s
                     => T.ConditionHeadTok
                     -> SimpParser s ConditionHead
 conditionHeadParser = \case
-    T.IfIntegerPairTestTok ->
-        IfConditionHead <$> (IfIntegerPairTest <$> parseNumber
+    T.IfTeXIntPairTestTok ->
+        IfConditionHead <$> (IfTeXIntPairTest <$> parseTeXInt
                              <*> parseRelation
-                             <*> parseNumber)
+                             <*> parseTeXInt)
     T.IfLengthPairTestTok ->
         IfConditionHead <$> (IfLengthPairTest <$> parseLength
                              <*> parseRelation
                              <*> parseLength)
-    T.IfIntegerOddTok -> IfConditionHead <$> (IfIntegerOdd <$> parseNumber)
+    T.IfTeXIntOddTok -> IfConditionHead <$> (IfTeXIntOdd <$> parseTeXInt)
     T.IfInModeTok a -> pure $ (IfConditionHead . IfInMode) a
     T.IfTokenAttributesEqualTok attr ->
         IfConditionHead <$> (IfTokenAttributesEqual attr <$> P.anySingle
@@ -39,7 +39,7 @@ conditionHeadParser = \case
     T.IfTokensEqualTok ->
         IfConditionHead <$> (IfTokensEqual <$> parseLexToken <*> parseLexToken)
     T.IfBoxRegisterIsTok attr ->
-        IfConditionHead <$> (IfBoxRegisterIs attr <$> parseNumber)
-    T.IfInputEndedTok -> IfConditionHead <$> (IfInputEnded <$> parseNumber)
+        IfConditionHead <$> (IfBoxRegisterIs attr <$> parseTeXInt)
+    T.IfInputEndedTok -> IfConditionHead <$> (IfInputEnded <$> parseTeXInt)
     T.IfConstTok b -> pure $ (IfConditionHead . IfConst) b
-    T.CaseTok -> CaseConditionHead <$> parseNumber
+    T.CaseTok -> CaseConditionHead <$> parseTeXInt

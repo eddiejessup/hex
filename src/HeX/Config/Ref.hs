@@ -3,7 +3,7 @@ module HeX.Config.Ref where
 import qualified HeX.Parse.Token                 as T
 import           HeXlude
 
-data IntegerVariable
-    = IntegerParameterVariable T.IntegerParameter
-    | IntegerRegisterVariable  EightBitInt
+data TeXIntVariable
+    = TeXIntParameterVariable T.TeXIntParameter
+    | TeXIntRegisterVariable  EightBitInt
     deriving ( Show )

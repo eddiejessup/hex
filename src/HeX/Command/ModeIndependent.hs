@@ -24,7 +24,7 @@ data ModeIndependentResult
 fetchBox
     :: HP.InhibitableStream s
     => HP.BoxFetchMode
-    -> HP.EightBitNumber
+    -> HP.EightBitTeXInt
     -> ExceptMonadBuild s (Maybe B.Box)
 fetchBox fetchMode idx =
     do
@@ -92,13 +92,13 @@ handleModeIndependentCommand = \case
                         pure (Just boxElem, fontRefTok)
                     _ ->
                         notImplemented
-                liftIO $ putText $ "Setting CS " <> showT cs <> " to token: " <> showT newCSTok <> (if global == HP.Global then " globally" else " locally")
+                liftIO $ putText $ "Setting CS " <> show cs <> " to token: " <> show newCSTok <> (if global == HP.Global then " globally" else " locally")
                 modConfState $ setControlSequence cs newCSTok global
                 pure $ maybe DoNothing AddElem maybeElem
             HP.SetVariable ass ->
                 do
                 liftConfState $ case ass of
-                    HP.IntegerVariableAssignment v tgt ->
+                    HP.TeXIntVariableAssignment v tgt ->
                         Var.setValueFromAST v global tgt
                     HP.LengthVariableAssignment v tgt  ->
                         Var.setValueFromAST v global tgt
@@ -108,7 +108,7 @@ handleModeIndependentCommand = \case
                         Var.setValueFromAST v global tgt
                     HP.TokenListVariableAssignment v tgt ->
                         Var.setValueFromAST v global tgt
-                    HP.SpecialIntegerVariableAssignment v tgt ->
+                    HP.SpecialTeXIntVariableAssignment v tgt ->
                         Var.setValueFromAST v global tgt
                     HP.SpecialLengthVariableAssignment v tgt ->
                         Var.setValueFromAST v global tgt
@@ -116,7 +116,7 @@ handleModeIndependentCommand = \case
             HP.ModifyVariable modCommand ->
                 do
                 liftConfState $ case modCommand of
-                    HP.AdvanceIntegerVariable var plusVal ->
+                    HP.AdvanceTeXIntVariable var plusVal ->
                         Var.advanceValueFromAST var global plusVal
                     HP.AdvanceLengthVariable var plusVal ->
                         Var.advanceValueFromAST var global plusVal
@@ -126,7 +126,7 @@ handleModeIndependentCommand = \case
                         Var.advanceValueFromAST var global plusVal
                     HP.ScaleVariable vDir numVar scaleVal ->
                         case numVar of
-                            HP.IntegerNumericVariable var ->
+                            HP.TeXIntNumericVariable var ->
                                 Var.scaleValueFromAST var global vDir scaleVal
                             HP.LengthNumericVariable var ->
                                 Var.scaleValueFromAST var global vDir scaleVal
@@ -139,10 +139,10 @@ handleModeIndependentCommand = \case
                 do
                 eIdx <- liftEvalOnConfState idx
                 eVal <- liftEvalOnConfState val
-                liftIO $ putText $ "Evaluated code table index " <> showT idx <> " to " <> showT eIdx
-                liftIO $ putText $ "Evaluated code table value " <> showT val <> " to " <> showT eVal
-                idxChar <- liftMaybeConfigError ("Invalid character code index: " <> showT eIdx) (toEnumMay eIdx)
-                liftIO $ putText $ "Setting " <> showT codeType <> "@" <> showT eIdx <> " (" <> showT idxChar <> ") to " <> showT eVal
+                liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
+                liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
+                idxChar <- liftMaybeConfigError ("Invalid character code index: " <> show eIdx) (toEnumMay eIdx)
+                liftIO $ putText $ "Setting " <> show codeType <> "@" <> show eIdx <> " (" <> show idxChar <> ") to " <> show eVal
                 liftConfState $ updateCharCodeMap codeType idxChar eVal global
                 pure DoNothing
             HP.SelectFont fNr ->
@@ -236,7 +236,7 @@ handleModeIndependentCommand = \case
                     -- current mode.
                     ScopeGroup _ (LocalStructureGroup trigConf) ->
                         do
-                        when (trigConf /= trig) $ throwConfigError $ "Entry and exit group triggers differ: " <> showT (trig, trigConf)
+                        when (trigConf /= trig) $ throwConfigError $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
                         pure DoNothing
                     -- - Undo the effects of non-global assignments
                     -- - package the [box] using the size that was saved on the

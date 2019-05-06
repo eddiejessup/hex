@@ -17,12 +17,13 @@ import           HeX.Parse.Inhibited
 import qualified HeX.Parse.Token     as T
 import           HeX.Unit            ( PhysicalUnit(..) )
 
--- Number.
-parseNumber :: InhibitableStream s => SimpParser s Number
-parseNumber = Number <$> parseSigns <*> parseUnsignedNumber
+-- TeXInt.
 
-parseEightBitNumber :: InhibitableStream s => SimpParser s EightBitNumber
-parseEightBitNumber = EightBitNumber <$> parseNumber
+parseTeXInt :: InhibitableStream s => SimpParser s TeXInt
+parseTeXInt = TeXInt <$> parseSigns <*> parseUnsignedTeXInt
+
+parseEightBitTeXInt :: InhibitableStream s => SimpParser s EightBitTeXInt
+parseEightBitTeXInt = EightBitTeXInt <$> parseTeXInt
 
 parseSigns :: InhibitableStream s => SimpParser s T.Sign
 parseSigns = mconcat <$> parseOptionalSigns
@@ -35,36 +36,36 @@ parseSigns = mconcat <$> parseOptionalSigns
         | matchOtherToken '-' t = Just $ T.Sign False
         | otherwise = Nothing
 
-parseUnsignedNumber :: InhibitableStream s => SimpParser s UnsignedNumber
-parseUnsignedNumber = P.choice [ NormalIntegerAsUNumber <$> parseNormalInteger
-                               , CoercedInteger <$> parseCoercedInteger
+parseUnsignedTeXInt :: InhibitableStream s => SimpParser s UnsignedTeXInt
+parseUnsignedTeXInt = P.choice [ NormalTeXIntAsUTeXInt <$> parseNormalTeXInt
+                               , CoercedTeXInt <$> parseCoercedTeXInt
                                ]
 
--- Restrict pure type, and therefore accumulator, to Integer, to disallow
+-- Restrict pure type, and therefore accumulator, to Int, to disallow
 -- overflow.
-digitsToInteger :: Integral n => n -> [n] -> Integer
-digitsToInteger base =
+digitsToTeXIntVal :: Integral n => n -> [n] -> TeXIntVal
+digitsToTeXIntVal base =
     foldl' (\a b -> a * fromIntegral base + fromIntegral b) 0
 
-parseNormalInteger :: InhibitableStream s => SimpParser s NormalInteger
-parseNormalInteger =
-    P.choice [ InternalInteger <$> parseInternalInteger
-             , IntegerConstant <$> parseConstantInt <* skipOneOptionalSpace
+parseNormalTeXInt :: InhibitableStream s => SimpParser s NormalTeXInt
+parseNormalTeXInt =
+    P.choice [ InternalTeXInt <$> parseInternalTeXInt
+             , TeXIntConstant <$> parseConstantInt <* skipOneOptionalSpace
              ]
   where
     parseConstantInt = P.choice [ parseConstant, parseCharacter ]
 
     parseConstant = do
-        (digits, base) <- P.choice [ (, 10) <$> P.some parseDecimalIntegerDigit
-                                   , (, 16) <$> parseHexadecimalIntegerDigits
-                                   , (, 8) <$> parseOctalIntegerDigits
+        (digits, base) <- P.choice [ (, 10) <$> P.some parseDecimalTeXIntDigit
+                                   , (, 16) <$> parseHexadecimalTeXIntDigits
+                                   , (, 8) <$> parseOctalTeXIntDigits
                                    ]
-        pure $ fromIntegral $ digitsToInteger base digits
+        pure $ fromIntegral $ digitsToTeXIntVal base digits
 
     parseCharacter = skipSatisfied (matchOtherToken '`') *> parseCharLike
 
-parseDecimalIntegerDigit :: InhibitableStream s => SimpParser s Int
-parseDecimalIntegerDigit = satisfyThen $
+parseDecimalTeXIntDigit :: InhibitableStream s => SimpParser s Int
+parseDecimalTeXIntDigit = satisfyThen $
     \case
         T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
             case c of
@@ -81,8 +82,8 @@ parseDecimalIntegerDigit = satisfyThen $
                 _   -> Nothing
         _ -> Nothing
 
-parseHexadecimalIntegerDigits :: InhibitableStream s => SimpParser s [Int]
-parseHexadecimalIntegerDigits = skipSatisfied (matchOtherToken '"')
+parseHexadecimalTeXIntDigits :: InhibitableStream s => SimpParser s [Int]
+parseHexadecimalTeXIntDigits = skipSatisfied (matchOtherToken '"')
     *> P.some (satisfyThen hexCharToInt)
   where
     hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
@@ -114,8 +115,8 @@ parseHexadecimalIntegerDigits = skipSatisfied (matchOtherToken '"')
             _   -> Nothing
     hexCharToInt _ = Nothing
 
-parseOctalIntegerDigits :: InhibitableStream s => SimpParser s [Int]
-parseOctalIntegerDigits = skipSatisfied (matchOtherToken '\'')
+parseOctalTeXIntDigits :: InhibitableStream s => SimpParser s [Int]
+parseOctalTeXIntDigits = skipSatisfied (matchOtherToken '\'')
     *> P.some (satisfyThen octCharToInt)
   where
     octCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
@@ -131,8 +132,8 @@ parseOctalIntegerDigits = skipSatisfied (matchOtherToken '\'')
             _   -> Nothing
     octCharToInt _ = Nothing
 
-parseCoercedInteger :: InhibitableStream s => SimpParser s CoercedInteger
-parseCoercedInteger = P.choice [ InternalLengthAsInt <$> parseInternalLength
+parseCoercedTeXInt :: InhibitableStream s => SimpParser s CoercedTeXInt
+parseCoercedTeXInt = P.choice [ InternalLengthAsInt <$> parseInternalLength
                                , InternalGlueAsInt <$> parseInternalGlue
                                ]
 
@@ -157,24 +158,24 @@ parseFactor :: InhibitableStream s => SimpParser s Factor
 -- ambiguity by prioritising the rational constant parser.
 parseFactor = P.choice $
     P.try <$> [ RationalConstant <$> parseRationalConstant
-              , NormalIntegerFactor <$> parseNormalInteger
+              , NormalTeXIntFactor <$> parseNormalTeXInt
               ]
 
 parseRationalConstant :: InhibitableStream s => SimpParser s Rational
 parseRationalConstant = do
-    wholeNr <- decDigitsToInteger <$> P.many parseDecimalIntegerDigit
+    wholeNr <- decDigitsToTeXInt <$> P.many parseDecimalTeXIntDigit
     skipSatisfied (\t -> (matchOtherToken ',' t) || (matchOtherToken '.' t))
     -- The fractional part represents its integer interpretation, divided by
     -- the next largest power of 10.
     -- TODO: If performance matters, maybe we can infer the denominator
     -- faster from the integer itself than the digits.
-    fracDigits <- P.many parseDecimalIntegerDigit
-    let fraction = fromIntegral (decDigitsToInteger fracDigits)
+    fracDigits <- P.many parseDecimalTeXIntDigit
+    let fraction = fromIntegral (decDigitsToTeXInt fracDigits)
             % (10 ^ length fracDigits)
     -- Convert the whole number to a rational, and add it to the fraction.
     pure $ fromIntegral wholeNr + fraction
   where
-    decDigitsToInteger = digitsToInteger 10
+    decDigitsToTeXInt = digitsToTeXIntVal 10
 
 parseUnit :: InhibitableStream s => SimpParser s Unit
 parseUnit =
@@ -186,7 +187,7 @@ parseUnit =
   where
     parseInternalUnit =
         P.choice [ parseInternalUnitLit <* skipOneOptionalSpace
-                 , InternalIntegerUnit <$> parseInternalInteger
+                 , InternalTeXIntUnit <$> parseInternalTeXInt
                  , InternalLengthUnit <$> parseInternalLength
                  , InternalGlueUnit <$> parseInternalGlue
                  ]
@@ -311,14 +312,14 @@ parseQuantityVariable getParam rTyp =
     parseShortRegRef = satisfyThen $
         \case
             T.IntRefTok (T.RegQuantity typ) n
-                | typ == rTyp -> Just $ EightBitNumber $ constNumber n
+                | typ == rTyp -> Just $ EightBitTeXInt $ constTeXInt n
             _ -> Nothing
 
     parseRegRef =
-        skipSatisfied (== T.RegisterVariableTok rTyp) >> parseEightBitNumber
+        skipSatisfied (== T.RegisterVariableTok rTyp) >> parseEightBitTeXInt
 
-parseIntegerVariable :: InhibitableStream s => SimpParser s IntegerVariable
-parseIntegerVariable = parseQuantityVariable getParam T.RegInt
+parseTeXIntVariable :: InhibitableStream s => SimpParser s TeXIntVariable
+parseTeXIntVariable = parseQuantityVariable getParam T.RegInt
   where
     getParam (T.IntParamVarTok p) = Just p
     getParam _ = Nothing
@@ -347,10 +348,10 @@ parseTokenListVariable = parseQuantityVariable getParam T.RegTokenList
     getParam (T.TokenListParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseInternalInteger :: InhibitableStream s => SimpParser s InternalInteger
-parseInternalInteger =
-    P.choice [ InternalIntegerVariable <$> parseIntegerVariable
-             , InternalSpecialInteger <$> parseSpecialInteger
+parseInternalTeXInt :: InhibitableStream s => SimpParser s InternalTeXInt
+parseInternalTeXInt =
+    P.choice [ InternalTeXIntVariable <$> parseTeXIntVariable
+             , InternalSpecialTeXInt <$> parseSpecialTeXInt
              , InternalCodeTableRef <$> parseCodeTableRef
              , InternalCharToken <$> parseCharToken
              , InternalMathCharToken <$> parseMathCharToken
@@ -361,26 +362,26 @@ parseInternalInteger =
              , skipSatisfiedEquals T.BadnessTok $> Badness
              ]
 
-parseCharToken :: InhibitableStream s => SimpParser s IntVal
+parseCharToken :: InhibitableStream s => SimpParser s TeXIntVal
 parseCharToken = satisfyThen $
     \case
         T.IntRefTok T.CharQuantity c -> Just c
         _ -> Nothing
 
-parseMathCharToken :: InhibitableStream s => SimpParser s IntVal
+parseMathCharToken :: InhibitableStream s => SimpParser s TeXIntVal
 parseMathCharToken = satisfyThen $
     \case
         T.IntRefTok T.MathCharQuantity c -> Just c
         _ -> Nothing
 
-parseSpecialInteger :: InhibitableStream s => SimpParser s T.SpecialInteger
-parseSpecialInteger = satisfyThen $
+parseSpecialTeXInt :: InhibitableStream s => SimpParser s T.SpecialTeXInt
+parseSpecialTeXInt = satisfyThen $
     \case
-        T.SpecialIntegerTok p -> Just p
+        T.SpecialTeXIntTok p -> Just p
         _ -> Nothing
 
 parseCodeTableRef :: InhibitableStream s => SimpParser s CodeTableRef
-parseCodeTableRef = CodeTableRef <$> satisfyThen tokToCodeType <*> parseNumber
+parseCodeTableRef = CodeTableRef <$> satisfyThen tokToCodeType <*> parseTeXInt
   where
     tokToCodeType (T.CodeTypeTok c) = Just c
     tokToCodeType _ = Nothing
@@ -397,7 +398,7 @@ parseFontRef = P.choice [ FontTokenRef <$> parseFontRefToken
                         , FamilyMemberFontRef <$> parseFamilyMember
                         ]
 
-parseFontRefToken :: InhibitableStream s => SimpParser s IntVal
+parseFontRefToken :: InhibitableStream s => SimpParser s TeXIntVal
 parseFontRefToken = satisfyThen $
     \case
         T.FontRefToken n -> Just n
@@ -405,7 +406,7 @@ parseFontRefToken = satisfyThen $
 
 parseFamilyMember :: InhibitableStream s => SimpParser s FamilyMember
 parseFamilyMember = FamilyMember <$> (satisfyThen tokToFontRange)
-    <*> parseNumber
+    <*> parseTeXInt
   where
     tokToFontRange (T.FontRangeTok r) = Just r
     tokToFontRange _ = Nothing
@@ -427,12 +428,12 @@ parseSpecialLength = satisfyThen $
 
 parseFontDimensionRef :: InhibitableStream s => SimpParser s FontDimensionRef
 parseFontDimensionRef = skipSatisfiedEquals T.FontDimensionTok
-    >> (FontDimensionRef <$> parseNumber <*> parseFontRef)
+    >> (FontDimensionRef <$> parseTeXInt <*> parseFontRef)
 
 parseBoxDimensionRef :: InhibitableStream s => SimpParser s BoxDimensionRef
 parseBoxDimensionRef = do
     dim <- parseBoxDimension
-    boxNr <- parseNumber
+    boxNr <- parseTeXInt
     pure $ BoxDimensionRef boxNr dim
 
 parseBoxDimension :: InhibitableStream s => SimpParser s BoxDim
@@ -460,7 +461,7 @@ parseBox = P.choice [ parseRegisterBox
                     ]
 
 parseRegisterBox :: InhibitableStream s => SimpParser s Box
-parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseEightBitNumber
+parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseEightBitTeXInt
   where
     parseFetchMode = satisfyThen $
         \case
@@ -470,7 +471,7 @@ parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseEightBitNumber
 parseVSplitBox :: InhibitableStream s => SimpParser s Box
 parseVSplitBox = do
     skipSatisfiedEquals T.SplitVBoxTok
-    nr <- parseNumber
+    nr <- parseTeXInt
     skipKeyword "to"
     VSplitBox nr <$> parseLength
 

@@ -58,13 +58,13 @@ data Scope =
           , spaceFactors :: Cat.CharCodeMap SpaceFactorCode
           , delimiterCodes :: Cat.CharCodeMap DelimiterCode
             -- Parameters.
-          , integerParameters :: HMap.HashMap IntegerParameter IntVal
+          , texIntParameters :: HMap.HashMap TeXIntParameter TeXIntVal
           , lengthParameters :: HMap.HashMap LengthParameter LenVal
           , glueParameters :: HMap.HashMap GlueParameter BL.Glue
           , mathGlueParameters :: HMap.HashMap MathGlueParameter BL.MathGlue
           , tokenListParameters :: HMap.HashMap TokenListParameter BalancedText
             -- Registers.
-          , integerRegister :: RegisterMap IntVal
+          , texIntRegister :: RegisterMap TeXIntVal
           , lengthRegister :: RegisterMap LenVal
           , glueRegister :: RegisterMap BL.Glue
           , mathGlueRegister :: RegisterMap BL.MathGlue
@@ -84,12 +84,12 @@ newGlobalScope =
           , uppercaseCodes = newUppercaseCodes
           , spaceFactors = newSpaceFactors
           , delimiterCodes = newDelimiterCodes
-          , integerParameters = usableIntegerParameters
+          , texIntParameters = usableTeXIntParameters
           , lengthParameters = usableLengthParameters
           , glueParameters = usableGlueParameters
           , mathGlueParameters = newMathGlueParameters
           , tokenListParameters = newTokenListParameters
-          , integerRegister = HMap.empty
+          , texIntRegister = HMap.empty
           , lengthRegister = HMap.empty
           , glueRegister = HMap.empty
           , mathGlueRegister = HMap.empty
@@ -108,12 +108,12 @@ newLocalScope =
           , uppercaseCodes = HMap.empty
           , spaceFactors = HMap.empty
           , delimiterCodes = HMap.empty
-          , integerParameters = HMap.empty
+          , texIntParameters = HMap.empty
           , lengthParameters = HMap.empty
           , glueParameters = HMap.empty
           , mathGlueParameters = HMap.empty
           , tokenListParameters = HMap.empty
-          , integerRegister = HMap.empty
+          , texIntRegister = HMap.empty
           , lengthRegister = HMap.empty
           , glueRegister = HMap.empty
           , mathGlueRegister = HMap.empty
@@ -124,8 +124,8 @@ newLocalScope =
 data Config =
     Config { fontInfos :: IntMap FontInfo
            , searchDirectories :: [Path Abs Dir]
-           , specialIntegers :: HMap.HashMap SpecialInteger IntVal
-           , specialLengths :: HMap.HashMap SpecialLength IntVal
+           , specialTeXInts :: HMap.HashMap SpecialTeXInt TeXIntVal
+           , specialLengths :: HMap.HashMap SpecialLength TeXIntVal
              -- File streams.
            , logStream :: Handle
            , outFileStreams :: HMap.HashMap FourBitInt Handle
@@ -148,7 +148,7 @@ newConfig = do
     logHandle <- openFile "hex.log" WriteMode
     pure Config { fontInfos = IntMap.empty
                 , searchDirectories = _searchDirectories
-                , specialIntegers = newSpecialIntegers
+                , specialTeXInts = newSpecialTeXInts
                 , specialLengths = newSpecialLengths
                 , logStream = logHandle
                 , outFileStreams = HMap.empty
@@ -166,7 +166,7 @@ finaliseConfig config =
 -- Font info.
 
 data FontInfo =
-    FontInfo { fontMetrics :: TexFont, hyphenChar, skewChar :: IntVal }
+    FontInfo { fontMetrics :: TexFont, hyphenChar, skewChar :: TeXIntVal }
     deriving ( Show )
 
 readFontInfo :: (MonadReader Config m, MonadIO m, MonadError Text m)
@@ -175,8 +175,8 @@ readFontInfo :: (MonadReader Config m, MonadIO m, MonadError Text m)
 readFontInfo fontPath = do
     eithFontMetrics <- liftIO $ TFM.readTFMFancy fontPath
     fontMetrics <- liftEither eithFontMetrics
-    hyphenChar <- asks $ lookupIntegerParameter DefaultHyphenChar
-    skewChar <- asks $ lookupIntegerParameter DefaultSkewChar
+    hyphenChar <- asks $ lookupTeXIntParameter DefaultHyphenChar
+    skewChar <- asks $ lookupTeXIntParameter DefaultSkewChar
     pure FontInfo { fontMetrics, hyphenChar, skewChar }
 
 lookupFontInfo :: (MonadReader Config m, MonadError Text m)
@@ -201,17 +201,17 @@ modifyFont fNr f = modify (\c@Config{fontInfos} ->
 
 -- Special quantities.
 
-lookupSpecialInteger :: SpecialInteger -> Config -> IntVal
-lookupSpecialInteger p c = HMap.lookupDefault 0 p (specialIntegers c)
+lookupSpecialTeXInt :: SpecialTeXInt -> Config -> TeXIntVal
+lookupSpecialTeXInt p c = HMap.lookupDefault 0 p (specialTeXInts c)
 
-lookupSpecialLength :: SpecialLength -> Config -> IntVal
+lookupSpecialLength :: SpecialLength -> Config -> TeXIntVal
 lookupSpecialLength p c = HMap.lookupDefault 0 p (specialLengths c)
 
-setSpecialInteger :: SpecialInteger -> IntVal -> Config -> Config
-setSpecialInteger p v c =
-    c{ specialIntegers = HMap.insert p v $ specialIntegers c }
+setSpecialTeXInt :: SpecialTeXInt -> TeXIntVal -> Config -> Config
+setSpecialTeXInt p v c =
+    c{ specialTeXInts = HMap.insert p v $ specialTeXInts c }
 
-setSpecialLength :: SpecialLength -> IntVal -> Config -> Config
+setSpecialLength :: SpecialLength -> TeXIntVal -> Config -> Config
 setSpecialLength p v c =
     c{ specialLengths = HMap.insert p v $ specialLengths c }
 
@@ -384,7 +384,7 @@ updateCharCodeMap
     :: (MonadError Text m, MonadState Config m)
     => CodeType
     -> Cat.CharCode
-    -> IntVal
+    -> TeXIntVal
     -> GlobalFlag
     -> m ()
 updateCharCodeMap t c n globalFlag = do
@@ -427,9 +427,9 @@ updateCharCodeMap t c n globalFlag = do
                          <> show n)
 
 -- Parameters and special quantities.
-lookupIntegerParameter :: IntegerParameter -> Config -> IntVal
-lookupIntegerParameter p conf =
-    fromMaybe 0 $ scopedMapLookup integerParameters p conf
+lookupTeXIntParameter :: TeXIntParameter -> Config -> TeXIntVal
+lookupTeXIntParameter p conf =
+    fromMaybe 0 $ scopedMapLookup texIntParameters p conf
 
 lookupLengthParameter :: LengthParameter -> Config -> LenVal
 lookupLengthParameter p conf =
@@ -447,14 +447,14 @@ lookupTokenListParameter :: TokenListParameter -> Config -> BalancedText
 lookupTokenListParameter p conf =
     fromMaybe mempty $ scopedMapLookup tokenListParameters p conf
 
-setIntegerParameter
-    :: IntegerParameter
-    -> IntVal
+setTeXIntParameter
+    :: TeXIntParameter
+    -> TeXIntVal
     -> GlobalFlag
     -> Config
     -> Config
-setIntegerParameter =
-    insertKey integerParameters $ \c _map -> c { integerParameters = _map }
+setTeXIntParameter =
+    insertKey texIntParameters $ \c _map -> c { texIntParameters = _map }
 
 setLengthParameter
     :: LengthParameter
@@ -496,9 +496,9 @@ parIndentBox conf = BL.HVListElem $
           }
 
 -- Registers.
-lookupIntegerRegister :: EightBitInt -> Config -> IntVal
-lookupIntegerRegister p conf =
-    fromMaybe 0 $ scopedMapLookup integerRegister p conf
+lookupTeXIntRegister :: EightBitInt -> Config -> TeXIntVal
+lookupTeXIntRegister p conf =
+    fromMaybe 0 $ scopedMapLookup texIntRegister p conf
 
 lookupLengthRegister :: EightBitInt -> Config -> LenVal
 lookupLengthRegister p conf =
@@ -519,9 +519,9 @@ lookupTokenListRegister p conf =
 lookupBoxRegister :: EightBitInt -> Config -> Maybe B.Box
 lookupBoxRegister = scopedMapLookup boxRegister
 
-setIntegerRegister :: EightBitInt -> IntVal -> GlobalFlag -> Config -> Config
-setIntegerRegister =
-    insertKey integerRegister $ \c _map -> c { integerRegister = _map }
+setTeXIntRegister :: EightBitInt -> TeXIntVal -> GlobalFlag -> Config -> Config
+setTeXIntRegister =
+    insertKey texIntRegister $ \c _map -> c { texIntRegister = _map }
 
 setLengthRegister :: EightBitInt -> LenVal -> GlobalFlag -> Config -> Config
 setLengthRegister =

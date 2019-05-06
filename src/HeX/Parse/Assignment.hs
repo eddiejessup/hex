@@ -103,8 +103,8 @@ parseNonMacroAssignment = do
     tokToInteractionMode _ = Nothing
 
 numVarValPair :: InhibitableStream s
-              => (SimpParser s IntegerVariable, SimpParser s Number)
-numVarValPair = (parseIntegerVariable, parseNumber)
+              => (SimpParser s TeXIntVariable, SimpParser s TeXInt)
+numVarValPair = (parseTeXIntVariable, parseTeXInt)
 
 lenVarValPair :: InhibitableStream s
               => (SimpParser s LengthVariable, SimpParser s Length)
@@ -134,7 +134,7 @@ parseVarEqVal (varParser, valParser) f =
 parseVariableAssignment :: InhibitableStream s
                         => SimpParser s VariableAssignment
 parseVariableAssignment =
-    P.choice [ parseVarEqVal numVarValPair IntegerVariableAssignment
+    P.choice [ parseVarEqVal numVarValPair TeXIntVariableAssignment
              , parseVarEqVal lenVarValPair LengthVariableAssignment
              , parseVarEqVal glueVarValPair GlueVariableAssignment
              , parseVarEqVal mathGlueVarValPair MathGlueVariableAssignment
@@ -144,8 +144,8 @@ parseVariableAssignment =
                    <*> (TokenListAssignmentVar <$> parseTokenListVariable)
                -- Unofficial variable assignments, separated because of being
                -- global in the TeXbook.
-             , parseVarEqVal (parseSpecialInteger, parseNumber)
-                             SpecialIntegerVariableAssignment
+             , parseVarEqVal (parseSpecialTeXInt, parseTeXInt)
+                             SpecialTeXIntVariableAssignment
              , parseVarEqVal (parseSpecialLength, parseLength)
                              SpecialLengthVariableAssignment
              ]
@@ -155,7 +155,7 @@ parseVariableModification
     InhibitableStream s
     => SimpParser s VariableModification
 parseVariableModification =
-    P.choice [ parseAdvanceVar numVarValPair AdvanceIntegerVariable
+    P.choice [ parseAdvanceVar numVarValPair AdvanceTeXIntVariable
              , parseAdvanceVar lenVarValPair AdvanceLengthVariable
              , parseAdvanceVar glueVarValPair AdvanceGlueVariable
              , parseAdvanceVar mathGlueVarValPair AdvanceMathGlueVariable
@@ -178,12 +178,12 @@ parseVariableModification =
                 _ -> Nothing
         var <- parseNumericVariable
         skipOptionalBy
-        ScaleVariable d var <$> parseNumber
+        ScaleVariable d var <$> parseTeXInt
 
     skipOptionalBy = (parseOptionalKeyword "by" $> ()) <|> skipOptionalSpaces
 
     parseNumericVariable =
-        P.choice [ IntegerNumericVariable <$> parseIntegerVariable
+        P.choice [ TeXIntNumericVariable <$> parseTeXIntVariable
                  , LengthNumericVariable <$> parseLengthVariable
                  , GlueNumericVariable <$> parseGlueVariable
                  , MathGlueNumericVariable <$> parseMathGlueVariable
@@ -191,7 +191,7 @@ parseVariableModification =
 
 parseCodeAssignment :: InhibitableStream s => SimpParser s CodeAssignment
 parseCodeAssignment =
-    parseVarEqVal (parseCodeTableRef, parseNumber) CodeAssignment
+    parseVarEqVal (parseCodeTableRef, parseTeXInt) CodeAssignment
 
 parseLet :: InhibitableStream s => SimpParser s AssignmentBody
 parseLet = do
@@ -213,7 +213,7 @@ parseShortMacroAssignment = do
         \case
             T.ShortDefHeadTok t -> Just t
             _ -> Nothing
-    (cs, n) <- parseVarEqVal (parseCSName, parseNumber) (,)
+    (cs, n) <- parseVarEqVal (parseCSName, parseTeXInt) (,)
     pure $ DefineControlSequence cs (ShortDefineTarget quant n)
 
 parseSetFamilyMember :: InhibitableStream s => SimpParser s AssignmentBody
@@ -227,7 +227,7 @@ parseSetParShape = do
     -- In a ⟨shape assignment⟩ for which the ⟨number⟩ is n, the ⟨shape
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
-    nrPairs <- parseNumber
+    nrPairs <- parseTeXInt
     stream <- P.getInput
     eNrPairs
         <- runExceptT (runReaderT (texEvaluate nrPairs) (getConfig stream))
@@ -242,7 +242,7 @@ parseReadToControlSequence :: InhibitableStream s
                            => SimpParser s AssignmentBody
 parseReadToControlSequence = do
     skipSatisfiedEquals T.ReadTok
-    nr <- parseNumber
+    nr <- parseTeXInt
     skipKeyword "to"
     skipOptionalSpaces
     cs <- parseCSName
@@ -251,7 +251,7 @@ parseReadToControlSequence = do
 parseSetBoxRegister :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetBoxRegister = do
     skipSatisfiedEquals T.SetBoxRegisterTok
-    parseVarEqVal (parseEightBitNumber, skipFiller >> parseBox) SetBoxRegister
+    parseVarEqVal (parseEightBitTeXInt, skipFiller >> parseBox) SetBoxRegister
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
 parseFileName :: InhibitableStream s => SimpParser s (Path Rel File)
@@ -302,14 +302,14 @@ parseNewFontAssignment = do
 
     parseFontSpecAt = skipKeyword "at" >> (FontAt <$> parseLength)
 
-    parseFontSpecScaled = skipKeyword "scaled" >> (FontScaled <$> parseNumber)
+    parseFontSpecScaled = skipKeyword "scaled" >> (FontScaled <$> parseTeXInt)
 
 parseSetFontDimension :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetFontDimension =
     parseVarEqVal (parseFontDimensionRef, parseLength) SetFontDimension
 
 parseSetFontChar :: InhibitableStream s => SimpParser s AssignmentBody
-parseSetFontChar = parseVarEqVal (parseFontCharRef, parseNumber) SetFontChar
+parseSetFontChar = parseVarEqVal (parseFontCharRef, parseTeXInt) SetFontChar
 
 parseSetBoxDimension :: InhibitableStream s => SimpParser s AssignmentBody
 parseSetBoxDimension =

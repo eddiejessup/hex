@@ -8,7 +8,7 @@ import           HeX.BreakList.Glue  ( Glue(..), MathGlue, fixedGlue )
 import           HeX.Parse.Token
 import qualified HeX.Unit            as Unit
 
-newtype IntParamVal a = IntParamVal { unIntParam :: IntVal }
+newtype IntParamVal a = IntParamVal { unIntParam :: TeXIntVal }
     deriving ( Eq, Enum, Ord, Show, Num, Real, Integral )
 
 newtype LenParamVal a = LenParamVal { unLenParam :: LenVal }
@@ -257,8 +257,8 @@ data PageShrink
 
 data PageDepth
 
-newIntegerParameters :: HMap.HashMap IntegerParameter IntVal
-newIntegerParameters =
+newTeXIntParameters :: HMap.HashMap TeXIntParameter TeXIntVal
+newTeXIntParameters =
     HMap.fromList [ (Tolerance, 10000)
                   , (EscapeChar, 92)  -- '\'
                   , (EndLineChar, 13)  -- '\r'
@@ -283,17 +283,17 @@ newMathGlueParameters = HMap.empty
 newTokenListParameters :: HMap.HashMap TokenListParameter BalancedText
 newTokenListParameters = HMap.empty
 
-newSpecialIntegers :: HMap.HashMap SpecialInteger IntVal
-newSpecialIntegers = HMap.empty
+newSpecialTeXInts :: HMap.HashMap SpecialTeXInt TeXIntVal
+newSpecialTeXInts = HMap.empty
 
-newSpecialLengths :: HMap.HashMap SpecialLength IntVal
+newSpecialLengths :: HMap.HashMap SpecialLength TeXIntVal
 newSpecialLengths = HMap.fromList [ (PrevDepth, fromIntegral $ -Unit.oneKPt) ]
 
-usableIntegerParameters :: HMap.HashMap IntegerParameter IntVal
-usableIntegerParameters =
+usableTeXIntParameters :: HMap.HashMap TeXIntParameter TeXIntVal
+usableTeXIntParameters =
     let vm = HMap.fromList [ (Tolerance, 500), (LinePenalty, 10), (Mag, 1000) ]
     in
-        HMap.union vm $ newIntegerParameters
+        HMap.union vm $ newTeXIntParameters
 
 usableLengthParameters :: HMap.HashMap LengthParameter LenVal
 usableLengthParameters =

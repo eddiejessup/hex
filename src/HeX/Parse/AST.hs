@@ -9,33 +9,35 @@ import qualified HeX.Lex         as Lex
 import qualified HeX.Parse.Token as T
 import           HeX.Unit        ( PhysicalUnit(..) )
 
--- Number.
-data Number = Number T.Sign UnsignedNumber
+-- TeXInt.
+
+data TeXInt = TeXInt T.Sign UnsignedTeXInt
     deriving ( Show )
 
-newtype EightBitNumber = EightBitNumber Number
+newtype EightBitTeXInt = EightBitTeXInt TeXInt
     deriving ( Show )
 
-constNumber :: IntVal -> Number
-constNumber n = Number (T.Sign True) $ constUNumber n
+constTeXInt :: TeXIntVal -> TeXInt
+constTeXInt n = TeXInt (T.Sign True) $ constUTeXInt n
 
-data UnsignedNumber =
-    NormalIntegerAsUNumber NormalInteger | CoercedInteger CoercedInteger
+data UnsignedTeXInt =
+    NormalTeXIntAsUTeXInt NormalTeXInt | CoercedTeXInt CoercedTeXInt
     deriving ( Show )
 
-constUNumber :: IntVal -> UnsignedNumber
-constUNumber n = NormalIntegerAsUNumber $ IntegerConstant n
+constUTeXInt :: TeXIntVal -> UnsignedTeXInt
+constUTeXInt n = NormalTeXIntAsUTeXInt $ TeXIntConstant n
 
 -- Think: 'un-coerced integer'.
-data NormalInteger = IntegerConstant Int | InternalInteger InternalInteger
+data NormalTeXInt = TeXIntConstant Int | InternalTeXInt InternalTeXInt
     deriving ( Show )
 
-zeroInteger, oneInteger :: NormalInteger
-zeroInteger = IntegerConstant 0
+zeroTeXInt :: NormalTeXInt
+zeroTeXInt = TeXIntConstant 0
 
-oneInteger = IntegerConstant 1
+oneTeXInt :: NormalTeXInt
+oneTeXInt = TeXIntConstant 1
 
-data CoercedInteger =
+data CoercedTeXInt =
     InternalLengthAsInt InternalLength | InternalGlueAsInt InternalGlue
     deriving ( Show )
 
@@ -60,7 +62,7 @@ data NormalLength =
     deriving ( Show )
 
 data Factor =
-      NormalIntegerFactor NormalInteger
+      NormalTeXIntFactor NormalTeXInt
       -- Badly named 'decimal constant' in the TeXbook. Granted, it is specified
       -- with decimal digits, but its main feature is that it can represent
       -- non-integers.
@@ -68,9 +70,9 @@ data Factor =
     deriving ( Show )
 
 zeroFactor, oneFactor :: Factor
-zeroFactor = NormalIntegerFactor zeroInteger
+zeroFactor = NormalTeXIntFactor zeroTeXInt
 
-oneFactor = NormalIntegerFactor oneInteger
+oneFactor = NormalTeXIntFactor oneTeXInt
 
 data Unit =
     PhysicalUnit PhysicalUnitFrame PhysicalUnit | InternalUnit InternalUnit
@@ -82,7 +84,7 @@ scaledPointUnit = PhysicalUnit MagnifiedFrame ScaledPoint
 data InternalUnit =
       Em
     | Ex
-    | InternalIntegerUnit InternalInteger
+    | InternalTeXIntUnit InternalTeXInt
     | InternalLengthUnit InternalLength
     | InternalGlueUnit InternalGlue
     deriving ( Show )
@@ -147,10 +149,10 @@ data MathFlex = FiniteMathFlex MathLength | FilMathFlex FilLength
     deriving ( Show )
 
 -- Internal quantities.
-data QuantVariable a = ParamVar a | RegisterVar EightBitNumber
+data QuantVariable a = ParamVar a | RegisterVar EightBitTeXInt
     deriving ( Show )
 
-type IntegerVariable = QuantVariable T.IntegerParameter
+type TeXIntVariable = QuantVariable T.TeXIntParameter
 
 type LengthVariable = QuantVariable T.LengthParameter
 
@@ -160,12 +162,12 @@ type MathGlueVariable = QuantVariable T.MathGlueParameter
 
 type TokenListVariable = QuantVariable T.TokenListParameter
 
-data InternalInteger =
-      InternalIntegerVariable IntegerVariable
-    | InternalSpecialInteger T.SpecialInteger
+data InternalTeXInt =
+      InternalTeXIntVariable TeXIntVariable
+    | InternalSpecialTeXInt T.SpecialTeXInt
     | InternalCodeTableRef CodeTableRef
-    | InternalCharToken IntVal
-    | InternalMathCharToken IntVal
+    | InternalCharToken TeXIntVal
+    | InternalMathCharToken TeXIntVal
     | InternalFontCharRef FontCharRef
     | LastPenalty
     | ParShape
@@ -173,7 +175,7 @@ data InternalInteger =
     | Badness
     deriving ( Show )
 
-data CodeTableRef = CodeTableRef T.CodeType Number
+data CodeTableRef = CodeTableRef T.CodeType TeXInt
     deriving ( Show )
 
 data FontCharRef = FontCharRef T.FontChar FontRef
@@ -183,13 +185,13 @@ data FontRef =
     FontTokenRef Int | CurrentFontRef | FamilyMemberFontRef FamilyMember
     deriving ( Show )
 
-data FamilyMember = FamilyMember T.FontRange Number
+data FamilyMember = FamilyMember T.FontRange TeXInt
     deriving ( Show )
 
-data BoxDimensionRef = BoxDimensionRef Number BoxDim
+data BoxDimensionRef = BoxDimensionRef TeXInt BoxDim
     deriving ( Show )
 
-data FontDimensionRef = FontDimensionRef Number FontRef
+data FontDimensionRef = FontDimensionRef TeXInt FontRef
     deriving ( Show )
 
 data InternalLength =
@@ -215,8 +217,8 @@ data ControlSequenceTarget =
       MacroTarget T.MacroContents
     | LetTarget Lex.Token
     | FutureLetTarget Lex.Token Lex.Token
-    | ShortDefineTarget T.QuantityType Number
-    | ReadTarget Number
+    | ShortDefineTarget T.QuantityType TeXInt
+    | ReadTarget TeXInt
     | FontTarget FontSpecification (Path Rel File)
     deriving ( Show )
 
@@ -225,13 +227,13 @@ data AssignmentBody =
     | SetVariable VariableAssignment
     | ModifyVariable VariableModification
     | AssignCode CodeAssignment
-    | SelectFont IntVal
+    | SelectFont TeXIntVal
     | SetFamilyMember FamilyMember FontRef
     | SetParShape [(Length, Length)]
-    | SetBoxRegister EightBitNumber Box
+    | SetBoxRegister EightBitTeXInt Box
       -- -- Global assignments.
     | SetFontDimension FontDimensionRef Length
-    | SetFontChar FontCharRef Number
+    | SetFontChar FontCharRef TeXInt
     | SetHyphenation T.BalancedText
     | SetHyphenationPatterns T.BalancedText
     | SetBoxDimension BoxDimensionRef Length
@@ -243,39 +245,39 @@ data TokenListAssignmentTarget = TokenListAssignmentVar TokenListVariable
     deriving ( Show )
 
 data VariableAssignment =
-      IntegerVariableAssignment IntegerVariable Number
+      TeXIntVariableAssignment TeXIntVariable TeXInt
     | LengthVariableAssignment LengthVariable Length
     | GlueVariableAssignment GlueVariable Glue
     | MathGlueVariableAssignment MathGlueVariable MathGlue
     | TokenListVariableAssignment TokenListVariable TokenListAssignmentTarget
-    | SpecialIntegerVariableAssignment T.SpecialInteger Number
+    | SpecialTeXIntVariableAssignment T.SpecialTeXInt TeXInt
     | SpecialLengthVariableAssignment T.SpecialLength Length
     deriving ( Show )
 
 data VariableModification =
-      AdvanceIntegerVariable IntegerVariable Number
+      AdvanceTeXIntVariable TeXIntVariable TeXInt
     | AdvanceLengthVariable LengthVariable Length
     | AdvanceGlueVariable GlueVariable Glue
     | AdvanceMathGlueVariable MathGlueVariable MathGlue
-    | ScaleVariable VDirection NumericVariable Number
+    | ScaleVariable VDirection NumericVariable TeXInt
     deriving ( Show )
 
-data NumericVariable = IntegerNumericVariable IntegerVariable
+data NumericVariable = TeXIntNumericVariable TeXIntVariable
                      | LengthNumericVariable LengthVariable
                      | GlueNumericVariable GlueVariable
                      | MathGlueNumericVariable MathGlueVariable
     deriving ( Show )
 
-data CodeAssignment = CodeAssignment CodeTableRef Number
+data CodeAssignment = CodeAssignment CodeTableRef TeXInt
     deriving ( Show )
 
-data FontSpecification = NaturalFont | FontAt Length | FontScaled Number
+data FontSpecification = NaturalFont | FontAt Length | FontScaled TeXInt
     deriving ( Show )
 
 -- Box specification.
-data Box = FetchedRegisterBox T.BoxFetchMode EightBitNumber
+data Box = FetchedRegisterBox T.BoxFetchMode EightBitTeXInt
          | LastBox
-         | VSplitBox Number Length
+         | VSplitBox TeXInt Length
          | ExplicitBox BoxSpecification T.ExplicitBox
     deriving ( Show )
 
@@ -291,15 +293,15 @@ data ModeIndependentCommand
     = Assign Assignment
     | Relax
     | IgnoreSpaces
-    | AddPenalty Number
+    | AddPenalty TeXInt
     | AddKern Length
     | AddMathKern MathLength
     | RemoveItem T.RemovableItem
     | SetAfterAssignmentToken Lex.Token
     | AddToAfterGroupTokens Lex.Token
     | Message T.StandardOutputStream T.ExpandedBalancedText
-    | ModifyFileStream FileStreamType FileStreamAction Number
-    | WriteToStream Number WriteText
+    | ModifyFileStream FileStreamType FileStreamAction TeXInt
+    | WriteToStream TeXInt WriteText
     | DoSpecial T.ExpandedBalancedText
     | AddBox BoxPlacement Box
     | ChangeScope T.Sign CommandTrigger
@@ -307,14 +309,14 @@ data ModeIndependentCommand
 
 data Command
     = ShowToken Lex.Token
-    | ShowBox Number
+    | ShowBox TeXInt
     | ShowLists
     | ShowTheInternalQuantity InternalQuantity
     | ShipOut Box
     | AddMark T.BalancedText
       -- -- Note: this *is* an all-modes command. It can happen in non-vertical modes,
       -- -- then can 'migrate' out.
-      -- \| AddInsertion Number VModeMaterial
+      -- \| AddInsertion TeXInt VModeMaterial
       -- \| AddAdjustment VModeMaterial
     | AddSpace
     | StartParagraph T.IndentFlag
@@ -338,7 +340,7 @@ data VModeCommand
 data HModeCommand =
       AddControlSpace
     | AddCharacter CharCodeRef
-    | AddAccentedCharacter Number [Assignment] (Maybe CharCodeRef)
+    | AddAccentedCharacter TeXInt [Assignment] (Maybe CharCodeRef)
     | AddItalicCorrection
     | AddDiscretionaryText { preBreak, postBreak, noBreak :: T.BalancedText }
     | AddDiscretionaryHyphen
@@ -349,7 +351,7 @@ data HModeCommand =
     | AddUnwrappedFetchedHBox FetchedBoxRef -- \unh{box,copy}
     deriving ( Show )
 
-data FetchedBoxRef = FetchedBoxRef Number T.BoxFetchMode
+data FetchedBoxRef = FetchedBoxRef TeXInt T.BoxFetchMode
     deriving ( Show )
 
 data LeadersSpec = LeadersSpec T.LeadersType BoxOrRule Glue
@@ -359,7 +361,7 @@ data CommandTrigger = CharCommandTrigger | CSCommandTrigger
     deriving ( Show, Eq )
 
 data InternalQuantity =
-      InternalIntegerQuantity InternalInteger
+      InternalTeXIntQuantity InternalTeXInt
     | InternalLengthQuantity InternalLength
     | InternalGlueQuantity InternalGlue
     | InternalMathGlueQuantity InternalMathGlue
@@ -387,21 +389,21 @@ data BoxPlacement = NaturalPlacement | ShiftedPlacement Axis Direction Length
     deriving ( Show )
 
 data CharCodeRef =
-    CharRef CharCode | CharTokenRef IntVal | CharCodeNrRef Number
+    CharRef CharCode | CharTokenRef TeXIntVal | CharCodeNrRef TeXInt
     deriving ( Show )
 
 -- Condition heads.
 data IfConditionHead =
-      IfIntegerPairTest Number Ordering Number -- \ifnum
+      IfTeXIntPairTest TeXInt Ordering TeXInt -- \ifnum
     | IfLengthPairTest Length Ordering Length -- \ifdim
-    | IfIntegerOdd Number -- \ifodd
+    | IfTeXIntOdd TeXInt -- \ifodd
     | IfInMode T.ModeAttribute -- \ifvmode, \ifhmode, \ifmmode, \ifinner
     | IfTokenAttributesEqual T.TokenAttribute T.PrimitiveToken T.PrimitiveToken -- \if, \ifcat
     | IfTokensEqual Lex.Token Lex.Token -- \ifx
-    | IfBoxRegisterIs T.BoxRegisterAttribute Number -- \ifvoid, \ifhbox, \ifvbox
-    | IfInputEnded Number -- \ifeof
+    | IfBoxRegisterIs T.BoxRegisterAttribute TeXInt -- \ifvoid, \ifhbox, \ifvbox
+    | IfInputEnded TeXInt -- \ifeof
     | IfConst Bool -- \iftrue, \iffalse
     deriving ( Show )
 
-data ConditionHead = IfConditionHead IfConditionHead | CaseConditionHead Number
+data ConditionHead = IfConditionHead IfConditionHead | CaseConditionHead TeXInt
     deriving ( Show )

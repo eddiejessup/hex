@@ -31,7 +31,7 @@ extractCommand = extractResult parseCommand
 
 parseInternalQuantity :: InhibitableStream s => SimpParser s InternalQuantity
 parseInternalQuantity =
-    P.choice [ InternalIntegerQuantity <$> parseInternalInteger
+    P.choice [ InternalTeXIntQuantity <$> parseInternalTeXInt
              , InternalLengthQuantity <$> parseInternalLength
              , InternalGlueQuantity <$> parseInternalGlue
              , InternalMathGlueQuantity <$> parseInternalMathGlue
@@ -64,7 +64,7 @@ parseFetchedBoxRef tgtAxis = do
             Just fm
         _ ->
             Nothing
-    n <- parseNumber
+    n <- parseTeXInt
     pure $ FetchedBoxRef n fetchMode
 
 parseBoxOrRule :: InhibitableStream s => SimpParser s BoxOrRule
@@ -119,7 +119,7 @@ parseModeIndependentCommand =
         [ skipSatisfiedEquals T.RelaxTok $> Relax
         , skipSatisfiedEquals T.IgnoreSpacesTok
               >> skipOptionalSpaces $> IgnoreSpaces
-        , skipSatisfiedEquals T.PenaltyTok >> (AddPenalty <$> parseNumber)
+        , skipSatisfiedEquals T.PenaltyTok >> (AddPenalty <$> parseTeXInt)
         , skipSatisfiedEquals T.KernTok >> (AddKern <$> parseLength)
         , skipSatisfiedEquals T.MathKernTok
               >> (AddMathKern <$> parseMathLength)
@@ -132,7 +132,7 @@ parseModeIndependentCommand =
         , parseMessage
         , parseOpenInput
         , skipSatisfiedEquals T.CloseInputTok
-              >> (ModifyFileStream FileInput Close <$> parseNumber)
+              >> (ModifyFileStream FileInput Close <$> parseTeXInt)
           -- Need a 'try' because all these can start with '\immediate'.
         , P.try parseOpenOutput
         , P.try parseCloseOutput
@@ -211,7 +211,7 @@ parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
 parseOpenInput :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseOpenInput = do
     skipSatisfiedEquals T.OpenInputTok
-    n <- parseNumber
+    n <- parseTeXInt
     skipOptionalEquals
     fn <- parseFileName
     pure $ ModifyFileStream FileInput (Open fn) n
@@ -224,7 +224,7 @@ parseOpenOutput :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseOpenOutput = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.OpenOutputTok
-    n <- parseNumber
+    n <- parseTeXInt
     skipOptionalEquals
     fn <- parseFileName
     pure $ ModifyFileStream (FileOutput writePolicy) (Open fn) n
@@ -233,14 +233,14 @@ parseCloseOutput :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseCloseOutput = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.CloseOutputTok
-        >> (ModifyFileStream (FileOutput writePolicy) Close <$> parseNumber)
+        >> (ModifyFileStream (FileOutput writePolicy) Close <$> parseTeXInt)
 
 parseWriteToStream :: InhibitableStream s
                    => SimpParser s ModeIndependentCommand
 parseWriteToStream = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.WriteTok
-    n <- parseNumber
+    n <- parseTeXInt
     txt <- case writePolicy of
         Immediate -> ImmediateWriteText <$> parseExpandedGeneralText
         Deferred  -> DeferredWriteText <$> parseGeneralText
@@ -269,7 +269,7 @@ parseCommand =
 
         , skipSatisfiedEquals T.ShowTokenTok
                >> (ShowToken <$> parseLexToken)
-        , skipSatisfiedEquals T.ShowBoxTok >> (ShowBox <$> parseNumber)
+        , skipSatisfiedEquals T.ShowBoxTok >> (ShowBox <$> parseTeXInt)
         , skipSatisfiedEquals T.ShowListsTok $> ShowLists
         , skipSatisfiedEquals T.ShowTheInternalQuantityTok
               >> (ShowTheInternalQuantity <$> parseInternalQuantity)
@@ -323,12 +323,12 @@ parseCharCodeRef =
             _ -> Nothing
 
     parseAddControlCharacter = skipSatisfiedEquals T.ControlCharTok
-        >> (CharCodeNrRef <$> parseNumber)
+        >> (CharCodeNrRef <$> parseTeXInt)
 
 parseAddAccentedCharacter :: InhibitableStream s => SimpParser s HModeCommand
 parseAddAccentedCharacter = do
     skipSatisfiedEquals T.AccentTok
-    AddAccentedCharacter <$> parseNumber
+    AddAccentedCharacter <$> parseTeXInt
         <*> P.many parseNonSetBoxAssignment
         <*> P.optional parseCharCodeRef
 -- ⟨optional assignments⟩ stands for zero or more ⟨assignment⟩ commands

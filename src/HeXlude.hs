@@ -20,7 +20,7 @@ module HeXlude
     , mconcat
     , mconcatMap
 
-    , IntVal
+    , TeXIntVal
     , LenVal
     , newNBitInt
     , EightBitInt(..)
@@ -120,7 +120,7 @@ seqHeadMay = \case
 
 
 
-type IntVal = Int
+type TeXIntVal = Int
 type LenVal = Int
 
 newNBitInt :: Alternative f => (Int -> a) -> Int ->  Int -> f a
@@ -131,7 +131,7 @@ newNBitInt f nBits n
 
 -- 8-bit.
 
-newtype EightBitInt = EightBitInt IntVal
+newtype EightBitInt = EightBitInt TeXIntVal
     deriving (Show, Eq, Generic, Enum)
 
 instance Hashable EightBitInt
@@ -145,7 +145,7 @@ newEightBitInt = newNBitInt EightBitInt 8
 
 -- 4-bit.
 
-newtype FourBitInt = FourBitInt IntVal
+newtype FourBitInt = FourBitInt TeXIntVal
     deriving (Show, Eq, Generic, Enum)
 
 instance Hashable FourBitInt

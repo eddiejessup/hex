@@ -2,25 +2,22 @@ module HeX.Parse.Inhibited where
 
 import           HeXlude
 
-import           Control.Monad     ( foldM, guard )
-import           Control.Monad.State.Lazy   ( MonadState
-                                            , StateT
-                                            , runStateT
-                                            , modify
-                                            )
-import           Data.Char         ( ord )
-import qualified Data.Foldable     as Fold
-import           Data.Functor      ( ($>) )
-import qualified Data.Map.Strict   as Map
-import           Data.Maybe        ( fromMaybe )
+import           Control.Monad            (foldM, guard)
+import           Control.Monad.State.Lazy (MonadState, StateT, modify,
+                                           runStateT)
+import           Data.Char                (ord)
+import qualified Data.Foldable            as Fold
+import           Data.Functor             (($>))
+import qualified Data.Map.Strict          as Map
+import           Data.Maybe               (fromMaybe)
 
-import qualified Text.Megaparsec   as P
-import           Text.Megaparsec   ( (<|>) )
+import           Text.Megaparsec          ((<|>))
+import qualified Text.Megaparsec          as P
 
-import           HeX.Config        ( Config )
+import           HeX.Config               (Config)
 import           HeX.Evaluate
-import           HeX.Lex           ( CharCat(..), Token(..) )
-import qualified HeX.Lex           as Lex
+import           HeX.Lex                  (CharCat (..), Token (..))
+import qualified HeX.Lex                  as Lex
 import           HeX.Parse.Common
 import           HeX.Parse.Helpers
 import           HeX.Parse.Resolve
@@ -34,9 +31,9 @@ class (P.Stream s, Show s, P.Token s ~ PrimitiveToken, Eq s)
 
     setConfig :: Config -> s -> s
 
-    insertLexToken :: s -> Lex.Token -> s
+    insertLexToken :: s -> Token -> s
 
-    insertLexTokens :: s -> [Lex.Token] -> s
+    insertLexTokens :: s -> [Token] -> s
     insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
 
     getConditionBodyState :: s -> Maybe ConditionBodyState
@@ -85,7 +82,7 @@ runConfState f = do
 --     follows
 -- 10.  Just after a <‘,12> token that begins an alphabetic constant
 -- Case 3, macro arguments.
-newtype MacroArgument = MacroArgument [Lex.Token]
+newtype MacroArgument = MacroArgument [Token]
     deriving ( Show, Eq )
 
 nrExpressions :: (a -> Ordering) -> [a] -> Maybe (Int, Int)
@@ -139,7 +136,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
     -- If the parameter is undelimited, the argument is the next non-blank
     -- token, unless that token is ‘{’, when the argument will be the entire
     -- following {...} group.
-    parseUndelimitedArgs :: InhibitableStream s => SimpParser s [Lex.Token]
+    parseUndelimitedArgs :: InhibitableStream s => SimpParser s [Token]
     parseUndelimitedArgs = do
         -- Skip blank tokens (assumed to mean spaces).
         skipManySatisfied (primTokHasCategory Lex.Space)
@@ -155,9 +152,9 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
     -- character codes and control sequence names must match.
     parseDelimitedArgs
         :: InhibitableStream s
-        => [Lex.Token]
-        -> [Lex.Token]
-        -> SimpParser s [Lex.Token]
+        => [Token]
+        -> [Token]
+        -> SimpParser s [Token]
     parseDelimitedArgs ts delims = do
         -- Parse tokens until we see the delimiter tokens, then add what we grab
         -- to our accumulating argument.
@@ -201,7 +198,7 @@ unsafeParseCSName = handleLex tokToCSLike
     tokToCSLike _ = Nothing
 
 -- Case 5, arbitrary tokens such as for \let\foo=<token>.
-unsafeAnySingleLex :: InhibitableStream s => SimpParser s Lex.Token
+unsafeAnySingleLex :: InhibitableStream s => SimpParser s Token
 unsafeAnySingleLex = satisfyThen tokToLex
 
 -- Case 6, macro parameter text.
@@ -290,7 +287,7 @@ parseNestedExpr n parseNext policy = do
         _ -> (x :) <$> parseNestedExpr nextN parseNext policy
 
 -- Part of case 7, \uppercase's body and such.
-tokToChange :: Lex.Token -> Ordering
+tokToChange :: Token -> Ordering
 tokToChange t
     | lexTokHasCategory Lex.BeginGroup t = GT
     | lexTokHasCategory Lex.EndGroup t = LT
@@ -318,17 +315,20 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
         >>= \case
             -- If we see a '#', parse the parameter number and return a token
             -- representing the call.
-            (CharCatToken CharCat{cat = Lex.Parameter}) -> do
-                paramDig <- handleLex handleParamNr
-                pure (MacroTextParamToken paramDig, EQ)
+            (CharCatToken CharCat{cat = Lex.Parameter}) ->
+                handleLex handleParamNr <&> (, EQ)
             -- Otherwise, just return the ordinary lex token.
             t -> pure (MacroTextLexToken t, tokToChange t)
 
-    -- We are only happy if the '#' is followed by a decimal digit.
-    handleParamNr (CharCatToken CharCat{char = c, cat = cat})
-        | cat `elem` [ Lex.Letter, Lex.Other ] = charToDigit c
-        | otherwise = Nothing
-    handleParamNr _ = Nothing
+    -- We are happy iff the '#' is followed by a decimal digit, or another '#'.
+    handleParamNr = \case
+        CharCatToken cc@CharCat{char = c, cat = cat}
+            | cat `elem` [ Lex.Letter, Lex.Other ] ->
+                MacroTextParamToken <$> charToDigit c
+            | cat == Lex.Parameter ->
+                pure $ MacroTextLexToken $ Lex.CharCatToken cc{ cat = Lex.Other }
+        _ ->
+            Nothing
 
 -- Case 10, character constant like "`c".
 unsafeParseCharLike :: InhibitableStream s => SimpParser s Int
@@ -363,10 +363,10 @@ parseParamText = parseInhibited unsafeParseParamText
 parseMacroText :: InhibitableStream s => SimpParser s MacroText
 parseMacroText = parseInhibited unsafeParseMacroText
 
-parseLexToken :: InhibitableStream s => SimpParser s Lex.Token
+parseLexToken :: InhibitableStream s => SimpParser s Token
 parseLexToken = parseInhibited unsafeAnySingleLex
 
-parseLetArg :: InhibitableStream s => SimpParser s Lex.Token
+parseLetArg :: InhibitableStream s => SimpParser s Token
 parseLetArg = parseInhibited skipOneOptionalSpace >> parseLexToken
 
 -- Derived related parsers.

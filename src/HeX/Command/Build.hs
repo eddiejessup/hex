@@ -174,8 +174,8 @@ hListToParaLineBoxes
 hListToParaLineBoxes hList =
     do
     desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
-    lineTol <- asks $ IntParamVal . lookupIntegerParameter HP.Tolerance
-    linePen <- asks $ IntParamVal . lookupIntegerParameter HP.LinePenalty
+    lineTol <- asks $ IntParamVal . lookupTeXIntParameter HP.Tolerance
+    linePen <- asks $ IntParamVal . lookupTeXIntParameter HP.LinePenalty
     liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph desiredW lineTol linePen hList
 
 data MainVModeResult = MainVModeResult ForwardVList

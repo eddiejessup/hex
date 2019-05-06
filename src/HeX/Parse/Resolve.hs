@@ -47,9 +47,9 @@ hModeTok e = primTok $ ModedCommand Horizontal e
 
 defaultCSMap :: CSMap
 defaultCSMap = HMap.fromList
-    [ (_cs "ifnum", condTok IfIntegerPairTestTok)
+    [ (_cs "ifnum", condTok IfTeXIntPairTestTok)
     , (_cs "ifdim", condTok IfLengthPairTestTok)
-    , (_cs "ifodd", condTok IfIntegerOddTok)
+    , (_cs "ifodd", condTok IfTeXIntOddTok)
     , (_cs "ifvmode", condTok $ IfInModeTok VerticalMode)
     , (_cs "ifhmode", condTok $ IfInModeTok HorizontalMode)
     , (_cs "ifmmode", condTok $ IfInModeTok MathMode)
@@ -166,7 +166,7 @@ defaultCSMap = HMap.fromList
     , (_cs "edef", primTok $ DefineMacroTok Local ExpandDef)
     , (_cs "gdef", primTok $ DefineMacroTok Global InhibitDef)
     , (_cs "xdef", primTok $ DefineMacroTok Global ExpandDef)
-      -- Integer parameters.
+      -- TeXInt parameters.
     , (_cs "pretolerance", primTok $ IntParamVarTok PreTolerance)
     , (_cs "tolerance", primTok $ IntParamVarTok Tolerance)
     , (_cs "hbadness", primTok $ IntParamVarTok HBadness)
@@ -276,10 +276,10 @@ defaultCSMap = HMap.fromList
     , (_cs "everycr", primTok $ TokenListParamVarTok EveryCR)
     , (_cs "errhelp", primTok $ TokenListParamVarTok ErrHelp)
       -- Special integers.
-    , (_cs "spacefactor", primTok $ SpecialIntegerTok SpaceFactorInteger)
-    , (_cs "prevgraf", primTok $ SpecialIntegerTok PrevGrafInteger)
-    , (_cs "deadcycles", primTok $ SpecialIntegerTok DeadCyclesInteger)
-    , (_cs "insertpenalties", primTok $ SpecialIntegerTok InsertPenaltiesInteger)
+    , (_cs "spacefactor", primTok $ SpecialTeXIntTok SpaceFactorTeXInt)
+    , (_cs "prevgraf", primTok $ SpecialTeXIntTok PrevGrafTeXInt)
+    , (_cs "deadcycles", primTok $ SpecialTeXIntTok DeadCyclesTeXInt)
+    , (_cs "insertpenalties", primTok $ SpecialTeXIntTok InsertPenaltiesTeXInt)
       -- Special lengths.
     , (_cs "prevdepth", primTok $ SpecialLengthTok PrevDepth)
     , (_cs "pagegoal", primTok $ SpecialLengthTok PageGoal)

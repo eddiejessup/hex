@@ -21,7 +21,7 @@ instance Semigroup Sign where
 instance Monoid Sign where
     mempty = Sign True
 
-data IntegerParameter
+data TeXIntParameter
     = PreTolerance           -- Badness tolerance before hyphenation
     | Tolerance              -- Badness tolerance after hyphenation
     | HBadness               -- Badness above which bad hboxes will be shown
@@ -79,7 +79,7 @@ data IntegerParameter
     | ErrorContextLines      -- Maximum extra context shown when errors occur
     deriving (Show, Eq, Generic, Enum, Bounded)
 
-instance Hashable IntegerParameter
+instance Hashable TeXIntParameter
 
 data LengthParameter
     = HFuzz                  -- Maximum overrun before overfull hbox messages occur
@@ -149,14 +149,14 @@ data TokenListParameter
 
 instance Hashable TokenListParameter
 
-data SpecialInteger
-    = SpaceFactorInteger
-    | PrevGrafInteger
-    | DeadCyclesInteger
-    | InsertPenaltiesInteger
+data SpecialTeXInt
+    = SpaceFactorTeXInt
+    | PrevGrafTeXInt
+    | DeadCyclesTeXInt
+    | InsertPenaltiesTeXInt
     deriving (Show, Eq, Generic, Enum, Bounded)
 
-instance Hashable SpecialInteger
+instance Hashable SpecialTeXInt
 
 data SpecialLength
     = PrevDepth
@@ -410,15 +410,15 @@ data PrimitiveToken
     --     \def, \gdef, \edef (expanded-def), \xdef (global-expanded-def).
     | DefineMacroTok GlobalFlag ExpandDefFlag
     -- > Setting variable values.
-    | IntParamVarTok IntegerParameter
+    | IntParamVarTok TeXIntParameter
     | LenParamVarTok LengthParameter
     | GlueParamVarTok GlueParameter
     | MathGlueParamVarTok MathGlueParameter
     | TokenListParamVarTok TokenListParameter
-    | SpecialIntegerTok SpecialInteger -- \example: \spacefactor
+    | SpecialTeXIntTok SpecialTeXInt -- \example: \spacefactor
     | SpecialLengthTok SpecialLength -- \example: \pagestretch
     -- Tokens storing integers defined by short-hand definitions.
-    | IntRefTok QuantityType IntVal
+    | IntRefTok QuantityType TeXIntVal
     -- A char-cat pair defined by a 'let' assignment. This differs from a
     -- \chardef target, because \chardef maps to a character number, which is
     -- categorised at the time of use, while a \let maps to a static char-cat
@@ -426,7 +426,7 @@ data PrimitiveToken
     | LetCharCat Lex.CharCat
     -- A control sequence representing a particular font, such as defined through
     -- \font.
-    | FontRefToken IntVal
+    | FontRefToken TeXIntVal
     -- Heads of register references.
     | RegisterVariableTok RegisterType
     -- Heads of int-ref definitions.
@@ -498,9 +498,9 @@ data ConditionTok
     deriving (Show, Eq)
 
 data ConditionHeadTok
-    = IfIntegerPairTestTok -- \ifnum
+    = IfTeXIntPairTestTok -- \ifnum
     | IfLengthPairTestTok -- \ifdim
-    | IfIntegerOddTok -- \ifodd
+    | IfTeXIntOddTok -- \ifodd
     | IfInModeTok ModeAttribute -- \ifvmode, \ifhmode, \ifmmode, \ifinner
     | IfTokenAttributesEqualTok TokenAttribute
     | IfTokensEqualTok -- \ifx

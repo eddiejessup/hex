@@ -206,7 +206,7 @@ loadFont relPath fontSpec = do
 selectFont :: MonadState Config m => Int -> HP.GlobalFlag -> m ()
 selectFont n globalFlag = modify $ selectFontNr n globalFlag
 
-getFileStream :: HMap.HashMap FourBitInt Handle -> IntVal -> Maybe Handle
+getFileStream :: HMap.HashMap FourBitInt Handle -> TeXIntVal -> Maybe Handle
 getFileStream strms n = do
     fourBitn <- newFourBitInt n
     HMap.lookup fourBitn strms

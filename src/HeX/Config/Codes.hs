@@ -41,11 +41,11 @@ letters = lowerLetters <> upperLetters
 -- position "56 of family "4.
 -- If the small or large variant is given as "000, however (position 0 of
 -- family 0), that variant is ignored.
-data DelimiterCode = NotADelimiter IntVal | DelimiterSpecCode DelimiterSpec
+data DelimiterCode = NotADelimiter TeXIntVal | DelimiterSpecCode DelimiterSpec
     deriving ( Show )
 
 instance Bounded DelimiterCode where
-    minBound = NotADelimiter (minBound :: IntVal)
+    minBound = NotADelimiter (minBound :: TeXIntVal)
 
     maxBound = DelimiterSpecCode $ DelimiterSpec maxBound maxBound
 
@@ -81,7 +81,7 @@ instance Enum DelimiterVar where
     fromEnum NullDelimiterVar = 0
     fromEnum (PresentDelimiterVar f) = fromEnum f
 
-data FamilyCharRef = FamilyCharRef { family, position :: IntVal }
+data FamilyCharRef = FamilyCharRef { family, position :: TeXIntVal }
     deriving ( Show )
 
 instance Bounded FamilyCharRef where
@@ -196,7 +196,7 @@ newUppercaseCodes = initialiseCharCodes f
         | otherwise = NoCaseChange
 
 -- Space factor code.
-newtype SpaceFactorCode = SpaceFactorCode IntVal
+newtype SpaceFactorCode = SpaceFactorCode TeXIntVal
     deriving ( Show )
 
 instance Bounded SpaceFactorCode where

@@ -40,36 +40,36 @@ instance TeXEvaluable AST.TokenListAssignmentTarget where
         AST.TokenListAssignmentText tgtText ->
             pure tgtText
 
--- Integer.
+-- TeXInt.
 
-instance TeXEvaluable AST.Number where
-    type EvalTarget AST.Number = IntVal
+instance TeXEvaluable AST.TeXInt where
+    type EvalTarget AST.TeXInt = TeXIntVal
 
-    texEvaluate (AST.Number (T.Sign isPos) u) =
+    texEvaluate (AST.TeXInt (T.Sign isPos) u) =
         do
         size <- texEvaluate u
         pure $ if isPos then size else (-size)
 
-instance TeXEvaluable AST.UnsignedNumber where
-    type EvalTarget AST.UnsignedNumber = Int
+instance TeXEvaluable AST.UnsignedTeXInt where
+    type EvalTarget AST.UnsignedTeXInt = Int
 
     texEvaluate = \case
-        AST.NormalIntegerAsUNumber v -> texEvaluate v
-        AST.CoercedInteger v -> texEvaluate v
+        AST.NormalTeXIntAsUTeXInt v -> texEvaluate v
+        AST.CoercedTeXInt v -> texEvaluate v
 
-instance TeXEvaluable AST.NormalInteger where
-    type EvalTarget AST.NormalInteger = Int
-
-    texEvaluate = \case
-        AST.IntegerConstant n -> pure n
-        AST.InternalInteger v -> texEvaluate v
-
-instance TeXEvaluable AST.InternalInteger where
-    type EvalTarget AST.InternalInteger = Int
+instance TeXEvaluable AST.NormalTeXInt where
+    type EvalTarget AST.NormalTeXInt = Int
 
     texEvaluate = \case
-        AST.InternalIntegerVariable v -> texEvaluate v
-        AST.InternalSpecialInteger v  -> texEvaluate v
+        AST.TeXIntConstant n -> pure n
+        AST.InternalTeXInt v -> texEvaluate v
+
+instance TeXEvaluable AST.InternalTeXInt where
+    type EvalTarget AST.InternalTeXInt = Int
+
+    texEvaluate = \case
+        AST.InternalTeXIntVariable v -> texEvaluate v
+        AST.InternalSpecialTeXInt v  -> texEvaluate v
         AST.InternalCodeTableRef v    -> texEvaluate v
         AST.InternalCharToken n       -> pure n
         AST.InternalMathCharToken n   -> pure n
@@ -79,16 +79,16 @@ instance TeXEvaluable AST.InternalInteger where
         AST.InputLineNr               -> notImplemented
         AST.Badness                   -> notImplemented
 
-instance TeXEvaluable AST.EightBitNumber where
-    type EvalTarget AST.EightBitNumber = EightBitInt
+instance TeXEvaluable AST.EightBitTeXInt where
+    type EvalTarget AST.EightBitTeXInt = EightBitInt
 
-    texEvaluate (AST.EightBitNumber n) =
+    texEvaluate (AST.EightBitTeXInt n) =
         texEvaluate n
-        >>= (\i -> liftMaybe ("Number not in range: " <> show i) $ newEightBitInt i)
+        >>= (\i -> liftMaybe ("TeXInt not in range: " <> show i) $ newEightBitInt i)
 
 getRegisterIdx
     :: (MonadReader Config m, MonadError Text m)
-    => AST.EightBitNumber
+    => AST.EightBitTeXInt
     -> (EightBitInt -> Config -> a)
     -> m a
 getRegisterIdx n f =
@@ -96,17 +96,17 @@ getRegisterIdx n f =
     en <- texEvaluate n
     asks $ f en
 
-instance TeXEvaluable AST.IntegerVariable where
-    type EvalTarget AST.IntegerVariable = Int
+instance TeXEvaluable AST.TeXIntVariable where
+    type EvalTarget AST.TeXIntVariable = Int
 
     texEvaluate = \case
-        AST.ParamVar p -> asks $ lookupIntegerParameter p
-        AST.RegisterVar n -> getRegisterIdx n lookupIntegerRegister
+        AST.ParamVar p -> asks $ lookupTeXIntParameter p
+        AST.RegisterVar n -> getRegisterIdx n lookupTeXIntRegister
 
-instance TeXEvaluable T.SpecialInteger where
-    type EvalTarget T.SpecialInteger = Int
+instance TeXEvaluable T.SpecialTeXInt where
+    type EvalTarget T.SpecialTeXInt = Int
 
-    texEvaluate p = asks $ lookupSpecialInteger p
+    texEvaluate p = asks $ lookupSpecialTeXInt p
 
 instance TeXEvaluable AST.CodeTableRef where
     type EvalTarget AST.CodeTableRef = Int
@@ -149,8 +149,8 @@ instance TeXEvaluable AST.FamilyMember where
     type EvalTarget AST.FamilyMember = (T.FontRange, Int)
     texEvaluate (AST.FamilyMember rng n) = (rng,) <$> texEvaluate n
 
-instance TeXEvaluable AST.CoercedInteger where
-    type EvalTarget AST.CoercedInteger = Int
+instance TeXEvaluable AST.CoercedTeXInt where
+    type EvalTarget AST.CoercedTeXInt = Int
 
     texEvaluate = \case
         AST.InternalLengthAsInt ln -> texEvaluate ln
@@ -189,7 +189,7 @@ instance TeXEvaluable AST.Factor where
     type EvalTarget AST.Factor = Rational
 
     texEvaluate = \case
-        AST.NormalIntegerFactor n -> fromIntegral <$> texEvaluate n
+        AST.NormalTeXIntFactor n -> fromIntegral <$> texEvaluate n
         AST.RationalConstant r -> pure r
 
 instance TeXEvaluable AST.Unit where
@@ -200,7 +200,7 @@ instance TeXEvaluable AST.Unit where
         AST.PhysicalUnit AST.TrueFrame u -> pure $ Unit.inScaledPoint u
         AST.PhysicalUnit AST.MagnifiedFrame u ->
             do
-            _mag <- asks $ lookupIntegerParameter T.Mag
+            _mag <- asks $ lookupTeXIntParameter T.Mag
             eU <- texEvaluate $ AST.PhysicalUnit AST.TrueFrame u
             pure $ eU * 1000 / fromIntegral _mag
 
@@ -210,7 +210,7 @@ instance TeXEvaluable AST.InternalUnit where
     texEvaluate = \case
         AST.Em -> (TFM.quad . fontMetrics) <$> currentFontInfo
         AST.Ex -> (TFM.xHeight . fontMetrics) <$> currentFontInfo
-        AST.InternalIntegerUnit v -> fromIntegral <$> texEvaluate v
+        AST.InternalTeXIntUnit v -> fromIntegral <$> texEvaluate v
         AST.InternalLengthUnit v -> fromIntegral <$> texEvaluate v
         AST.InternalGlueUnit v -> (fromIntegral . BL.dimen) <$> texEvaluate v
 
@@ -410,7 +410,7 @@ instance TeXEvaluable AST.InternalQuantity where
     type EvalTarget AST.InternalQuantity = [CharCode]
 
     texEvaluate = \case
-        AST.InternalIntegerQuantity n ->
+        AST.InternalTeXIntQuantity n ->
             do
             en <- texEvaluate n
             pure $ show en
@@ -476,7 +476,7 @@ instance TeXEvaluable AST.IfConditionHead where
     type EvalTarget AST.IfConditionHead = Bool
 
     texEvaluate = \case
-        AST.IfIntegerPairTest n1 ordering n2 ->
+        AST.IfTeXIntPairTest n1 ordering n2 ->
             do
             en1 <- texEvaluate n1
             en2 <- texEvaluate n2
@@ -486,7 +486,7 @@ instance TeXEvaluable AST.IfConditionHead where
             ed1 <- texEvaluate d1
             ed2 <- texEvaluate d2
             pure $ (ordToComp ordering) ed1 ed2
-        AST.IfIntegerOdd n ->
+        AST.IfTeXIntOdd n ->
             do
             en <- texEvaluate n
             pure $ en `mod` 2 == 1

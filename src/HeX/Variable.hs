@@ -33,12 +33,12 @@ setValueFromAST
 setValueFromAST var globalFlag astVal =
     readOnState (texEvaluate astVal) >>= setValue var globalFlag
 
-instance TeXVariable HP.IntegerVariable where
+instance TeXVariable HP.TeXIntVariable where
     setValue v globalFlag tgt = case v of
-        HP.ParamVar p -> modify $ setIntegerParameter p tgt globalFlag
+        HP.ParamVar p -> modify $ setTeXIntParameter p tgt globalFlag
         HP.RegisterVar iRaw ->
             readOnState (texEvaluate iRaw)
-                >>= (\i -> modify $ setIntegerRegister i tgt globalFlag)
+                >>= (\i -> modify $ setTeXIntRegister i tgt globalFlag)
 
 instance TeXVariable HP.LengthVariable where
     setValue v globalFlag tgt = case v of
@@ -68,9 +68,9 @@ instance TeXVariable HP.TokenListVariable where
             readOnState (texEvaluate iRaw)
                 >>= (\i -> modify $ setTokenListRegister i tgt globalFlag)
 
-instance TeXVariable HP.SpecialInteger where
+instance TeXVariable HP.SpecialTeXInt where
     setValue p _ tgt =
-        modify $ setSpecialInteger p tgt
+        modify $ setSpecialTeXInt p tgt
 
 instance TeXVariable HP.SpecialLength where
     setValue p _ tgt =
@@ -80,8 +80,8 @@ instance TeXVariable HP.SpecialLength where
 
 class TeXVariable a => TeXNumericVariable a where
     advanceOp :: Proxy a -> EvalTarget a -> EvalTarget a -> EvalTarget a
-    scaleUpOp :: Proxy a -> EvalTarget a -> IntVal -> EvalTarget a
-    scaleDownOp :: Proxy a -> EvalTarget a -> IntVal -> EvalTarget a
+    scaleUpOp :: Proxy a -> EvalTarget a -> TeXIntVal -> EvalTarget a
+    scaleDownOp :: Proxy a -> EvalTarget a -> TeXIntVal -> EvalTarget a
 
     advanceValueFromAST
         :: (MonadState Config m, MonadError Text m
@@ -101,7 +101,7 @@ class TeXVariable a => TeXNumericVariable a where
         => a
         -> HP.GlobalFlag
         -> VDirection
-        -> HP.Number
+        -> HP.TeXInt
         -> m ()
     scaleValueFromAST var globalFlag vDir scaleVal =
         do
@@ -111,7 +111,7 @@ class TeXVariable a => TeXNumericVariable a where
         newVal <- readOnState $ (op (Proxy @a)) <$> texEvaluate var <*> texEvaluate scaleVal
         setValue var globalFlag newVal
 
-instance TeXNumericVariable HP.IntegerVariable where
+instance TeXNumericVariable HP.TeXIntVariable where
     advanceOp _ = (+)
     scaleUpOp _ = (*)
     -- Division of a positive integer by a positive integer

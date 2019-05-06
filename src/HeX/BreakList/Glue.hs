@@ -22,10 +22,10 @@ instance Semigroup GlueFlex where
 instance Monoid GlueFlex where
     mempty = GlueFlex 0 0
 
-multiplyFlex :: GlueFlex -> IntVal -> GlueFlex
+multiplyFlex :: GlueFlex -> TeXIntVal -> GlueFlex
 multiplyFlex (GlueFlex f o) i = GlueFlex (f * (fromIntegral i)) o
 
-divFlex :: GlueFlex -> IntVal -> GlueFlex
+divFlex :: GlueFlex -> TeXIntVal -> GlueFlex
 divFlex (GlueFlex f o) i = GlueFlex (f / (fromIntegral i)) o
 
 noFlex :: GlueFlex
@@ -39,7 +39,7 @@ filFlex = GlueFlex 1 1
 
 -- Glue.
 data Glue =
-    Glue { dimen :: !IntVal, stretch :: !GlueFlex, shrink :: !GlueFlex }
+    Glue { dimen :: !TeXIntVal, stretch :: !GlueFlex, shrink :: !GlueFlex }
     deriving ( Show, Eq )
 
 instance Readable Glue where
@@ -69,7 +69,7 @@ negateGlue (Glue d str shr) = Glue (-d) str shr
 filGlue :: Glue
 filGlue = Glue { dimen = 0, stretch = filFlex, shrink = noFlex }
 
-fixedGlue :: IntVal -> Glue
+fixedGlue :: TeXIntVal -> Glue
 fixedGlue d = Glue d noFlex noFlex
 
 newtype MathGlue = MathGlue { unMathGlue :: Glue }

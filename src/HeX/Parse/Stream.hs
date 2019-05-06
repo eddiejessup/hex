@@ -252,7 +252,7 @@ expandSyntaxCommand strm = \case
     RomanNumeralTok ->
         notImplemented
     StringTok ->
-        let escapeChar = (Conf.IntParamVal . Conf.lookupIntegerParameter EscapeChar . config) strm
+        let escapeChar = (Conf.IntParamVal . Conf.lookupTeXIntParameter EscapeChar . config) strm
         in runExpandCommand strm escapeChar parseLexToken expandString
     JobNameTok ->
         notImplemented
