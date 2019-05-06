@@ -50,6 +50,7 @@ ghc-options:
 - -Wno-warnings-deprecations
 - -O0
 - +RTS -A128m -n2m -RTS
+- -j
 
 executables:
   hex:
