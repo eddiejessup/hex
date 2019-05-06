@@ -33,7 +33,7 @@ data Node = Root | Branch !Int
     deriving ( Show )
 
 data InEdge = InEdge
-    { elems      :: !(BackwardDirected Seq ElemAdj)
+    { elems      :: !ForwardHList
     , src        :: !Node
     , discarding :: !DiscardingState
     }
@@ -44,20 +44,20 @@ data InEdge = InEdge
 newEdge :: Int -> InEdge
 newEdge n = InEdge mempty (Branch n) Discarding
 
-inEdgeCons :: ElemAdj -> InEdge -> InEdge
-inEdgeCons elemAdj e@InEdge{ elems, discarding } =
+inEdgeCons :: HListElem -> InEdge -> InEdge
+inEdgeCons hElem e@InEdge{ elems, discarding } =
     case discarding of
-        Discarding | isDiscardable (Adj.fromAdjacency elemAdj) ->
+        Discarding | isDiscardable hElem ->
             e
         _ ->
-            e{ elems = elemAdj .<- elems, discarding = NotDiscarding }
+            e{ elems = elems ->. hElem, discarding = NotDiscarding }
 
-inEdgeConcat :: Foldable f => f ElemAdj -> InEdge -> InEdge
-inEdgeConcat xs e = foldr inEdgeCons e xs
+inEdgeConcat :: (Foldable t, Functor t) => t ElemAdj -> InEdge -> InEdge
+inEdgeConcat xs e = foldr inEdgeCons e (Adj.fromAdjacencies xs)
 
 edgeStatus :: LenParamVal HSize -> InEdge -> GlueStatus
-edgeStatus (LenParamVal dw) (InEdge v _ _) =
-    listGlueStatus dw $ Adj.fromAdjacencies v
+edgeStatus (LenParamVal dw) (InEdge elems _ _) =
+    listGlueStatus dw elems
 
 withStatus :: LenParamVal HSize -> InEdge -> (InEdge, GlueStatus)
 withStatus dw e = (e, edgeStatus dw e)
@@ -105,12 +105,14 @@ isPromising dw e = case edgeStatus dw e of
     FixablyBad Overfull _ -> False
     _                     -> True
 
-finaliseInEdge :: ElemAdj -> InEdge -> InEdge
-
--- If the break-point is at glue, then the line doesn't include that glue.
-finaliseInEdge Adj{adjVal = HVListElem (ListGlue _)} e = e
--- If the break is at some other type of break, the line includes it.
-finaliseInEdge x (InEdge cs n discard) = InEdge (x .<- cs) n discard
+-- The line omits the break-point item iff the break-point is glue.
+finaliseInEdge :: HListElem -> InEdge -> InEdge
+finaliseInEdge hElem e@InEdge{ elems } =
+    case hElem of
+        HVListElem (ListGlue _) ->
+            e
+        _ ->
+            e{ elems = elems ->. hElem }
 
 data BreakingState =
     BreakingState { accEdges        :: !(BackwardDirected Seq InEdge)
@@ -161,7 +163,7 @@ appendEntry dw
             promisingInEdges = filter (isPromising dw) inEdges
             -- 'finalise' the promising edges to get 'candidate' edges to actually
             -- break.
-            candidateBrokenDInEdges = withStatus dw . finaliseInEdge x <$> promisingInEdges
+            candidateBrokenDInEdges = withStatus dw . finaliseInEdge (adjVal x) <$> promisingInEdges
         in
             -- Filter the candidates to those we could actually accept.
             case toOnlyAcceptables tol lp br candidateBrokenDInEdges of
@@ -174,7 +176,7 @@ appendEntry dw
                     let
                         -- For later calls, build up the still-promising edges with
                         -- the break item added.
-                        grownPromisingInEdges = inEdgeCons x <$> promisingInEdges
+                        grownPromisingInEdges = inEdgeCons (adjVal x) <$> promisingInEdges
                         -- Add an edge representing the chance to break here.
                         newInEdge = newEdge $ length nodeToBestRoute
                         -- Add that new edge to the existing, now-grown, edges.
@@ -199,9 +201,9 @@ shortestRoute :: BackwardDirected Seq (InEdge, GlueStatus, Demerit)
 shortestRoute es (BDirected routesSeq) = do
     Safe.F.minimumDef defaultRoute <$> mapM bestSubroute es
   where
-    bestSubroute (InEdge ev n _, st, ed) =
+    bestSubroute (InEdge{ elems = ev, src = n }, st, ed) =
         let
-            boxes = setHList st (revBackwardSeq $ Adj.fromAdjacencies ev)
+            boxes = setHList st ev
         in
             case n of
                 Root ->
