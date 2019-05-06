@@ -62,17 +62,23 @@ edgeStatus (LenParamVal dw) (InEdge elems _ _) =
 withStatus :: LenParamVal HSize -> InEdge -> (InEdge, GlueStatus)
 withStatus dw e = (e, edgeStatus dw e)
 
-data Route = Route !(BackwardDirected Seq (ForwardDirected [] B.HBoxElem)) !Demerit
+data Route = Route
+    { routeSolution :: !(ForwardDirected Seq (ForwardDirected [] B.HBoxElem))
+    , routeDemerit  :: !Demerit
+    }
     deriving ( Show )
 
+emptyRoute :: Route
+emptyRoute = Route mempty (Demerit 0)
+
 instance Eq Route where
-    (Route _ distA) == (Route _ distB) = distA == distB
+    rA == rB = routeDemerit rA == routeDemerit rB
 
 instance Ord Route where
-    compare (Route _ distA) (Route _ distB) = compare distA distB
+    rA `compare` rB = routeDemerit rA `compare` routeDemerit rB
 
 routeCons :: Route -> ForwardDirected [] B.HBoxElem -> Demerit -> Route
-routeCons (Route subLns sA) ln sB = Route (ln .<- subLns) (sA + sB)
+routeCons (Route rSoln rDemerit) ln lnDemerit = Route (rSoln ->. ln) (rDemerit + lnDemerit)
 
 lineDemerit :: IntParamVal LinePenalty -> BadnessSize -> BreakItem -> Demerit
 lineDemerit (IntParamVal lp) b br =
@@ -199,7 +205,7 @@ shortestRoute :: BackwardDirected Seq (InEdge, GlueStatus, Demerit)
               -> BackwardDirected Seq Route
               -> Either Text Route
 shortestRoute es (BDirected routesSeq) = do
-    Safe.F.minimumDef defaultRoute <$> mapM bestSubroute es
+    Safe.F.minimumDef emptyRoute <$> mapM bestSubroute es
   where
     bestSubroute (InEdge{ elems = ev, src = n }, st, ed) =
         let
@@ -207,12 +213,10 @@ shortestRoute es (BDirected routesSeq) = do
         in
             case n of
                 Root ->
-                    pure $ Route (BDirected (Seq.singleton boxes)) ed
+                    pure $ Route (FDirected (Seq.singleton boxes)) ed
                 Branch sn -> do
                     subRoute <- seqLookupEith "route" routesSeq (length routesSeq - sn - 1)
                     pure $ routeCons subRoute boxes ed
-
-    defaultRoute = Route mempty (Demerit 0)
 
 breakAndSetParagraph
     :: LenParamVal HSize
@@ -239,5 +243,4 @@ breakAndSetParagraph dw tol lp hList@(FDirected (xs :|> x)) =
     BreakingState{accEdges, nodeToBestRoute, chunk} <- foldM (appendEntry dw tol lp) initialBreakingState $ Adj.toAdjacents hListFinished
     let inEdges = inEdgeConcat chunk <$> accEdges
         acceptableDInEdges = toOnlyAcceptables tol lp NoBreak $ withStatus dw <$> inEdges
-    (Route rawLns _) <- shortestRoute acceptableDInEdges nodeToBestRoute
-    pure $ revBackwardSeq rawLns
+    routeSolution <$> shortestRoute acceptableDInEdges nodeToBestRoute
