@@ -176,8 +176,7 @@ hListToParaLineBoxes hList =
     desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
     lineTol <- asks $ IntParamVal . lookupIntegerParameter HP.Tolerance
     linePen <- asks $ IntParamVal . lookupIntegerParameter HP.LinePenalty
-    let bwdHList = revForwardSeq hList
-    liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph desiredW lineTol linePen bwdHList
+    liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph desiredW lineTol linePen hList
 
 data MainVModeResult = MainVModeResult ForwardVList
 

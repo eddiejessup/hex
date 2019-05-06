@@ -207,8 +207,8 @@ axisNaturalSpan Horizontal a = naturalWidth a
 
 newtype TaggedContainer n t a = TaggedContainer {untagged :: t a}
     deriving Show
-    deriving stock   Foldable
-    deriving newtype (Functor, Applicative, Monad, Filterable, Semigroup, Monoid)
+    deriving stock   (Foldable, Traversable)
+    deriving newtype (Functor, Applicative, Monad, Alternative, Filterable, Semigroup, Monoid)
 
 data Forward
 data Backward
