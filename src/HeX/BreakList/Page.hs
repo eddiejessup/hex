@@ -45,7 +45,7 @@ setPage :: LenParamVal VSize -> ForwardVList -> B.Page
 setPage (LenParamVal h) cs = B.Page $ setVList (listGlueStatus h cs) cs
 
 data CurrentPage = CurrentPage
-    { items :: BackwardDirected Seq VListElem
+    { items :: ForwardVList
     , bestPointAndCost :: Maybe (Int, Int)
     }
 
@@ -56,17 +56,17 @@ runPageBuilder :: LenParamVal VSize
                -> CurrentPage
                -> ForwardVList
                -> ForwardDirected Seq B.Page
-runPageBuilder desiredV curPage@(CurrentPage cur@(BDirected curSeq) _bestPointAndCost) vList = case vList of
+runPageBuilder desiredV curPage@(CurrentPage curElemsFwd@(FDirected curFwdSeq) _bestPointAndCost) vList = case vList of
     FDirected Empty ->
         pure (setPage desiredV curElemsFwd)
     FDirected (x :<| xs)
         -- If the current vlist has no boxes, we discard a discardable item.
         -- Otherwise, if a discardable item is a legitimate breakpoint, we compute
         -- the cost c of breaking at this point.
-        | not $ any isBox cur ->
+        | not $ any isBox curElemsFwd ->
             continue (if isDiscardable x then curPage else usualNextPage) smallerVList
         | isDiscardable x ->
-            case toBreakItem Adj { adjPre  = seqHeadMay curSeq
+            case toBreakItem Adj { adjPre  = seqLastMay curFwdSeq
                                  , adjVal  = x
                                  , adjPost = seqHeadMay xs
                                  } of
@@ -97,7 +97,7 @@ runPageBuilder desiredV curPage@(CurrentPage cur@(BDirected curSeq) _bestPointAn
                         -- If the resulting cost <= the smallest cost seen so far, remember
                         -- the current breakpoint as the best so far.
                         (TrackCost cHere, _) ->
-                            let thisPointAndCost = Just (length cur, cHere)
+                            let thisPointAndCost = Just (length curElemsFwd, cHere)
                                 newBestPointAndCost = case _bestPointAndCost of
                                     Nothing         -> thisPointAndCost
                                     Just (_, cBest) -> if cHere > cBest
@@ -111,7 +111,7 @@ runPageBuilder desiredV curPage@(CurrentPage cur@(BDirected curSeq) _bestPointAn
       where
         smallerVList = FDirected xs
 
-        pageWithAddedElem = CurrentPage (x <<| cur)
+        pageWithAddedElem = CurrentPage (curElemsFwd ->. x)
 
         usualNextPage = pageWithAddedElem _bestPointAndCost
 
@@ -119,7 +119,5 @@ runPageBuilder desiredV curPage@(CurrentPage cur@(BDirected curSeq) _bestPointAn
   where
     continue = runPageBuilder desiredV
 
-    curElemsFwd@(FDirected curFwdSeq) = revBackwardSeq cur
-
     addPage newPageElems vListRemaining =
-        (setPage desiredV newPageElems) <<| continue newCurrentPage vListRemaining
+        (setPage desiredV newPageElems) .-> continue newCurrentPage vListRemaining

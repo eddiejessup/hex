@@ -161,7 +161,7 @@ codesToDVIRaw xs = do
     -- Who cares, it's for debugging
     let _mag = 1000
     instrs <- codesToDVI xs
-    revBackwardSeq <$> (strEitherToIO $ parseInstructions instrs _mag)
+    strEitherToIO $ parseInstructions instrs _mag
 
 runDVIRaw :: [CharCode] -> IO ()
 runDVIRaw xs = codesToDVIRaw xs >>= printLine

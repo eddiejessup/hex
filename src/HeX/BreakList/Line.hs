@@ -46,7 +46,7 @@ inEdgeCons c e@(InEdge cs n (IsDiscarding _discarding))
     | _discarding && isDiscardable (Adj.fromAdjacency c) =
         e
     | otherwise =
-        InEdge (c <<| cs) n (IsDiscarding False)
+        InEdge (c .<- cs) n (IsDiscarding False)
 
 inEdgeConcat :: Foldable f => f ElemAdj -> InEdge -> InEdge
 inEdgeConcat xs e = foldr inEdgeCons e xs
@@ -68,7 +68,7 @@ instance Ord Route where
     compare (Route _ distA) (Route _ distB) = compare distA distB
 
 routeCons :: Route -> ForwardDirected [] B.HBoxElem -> Demerit -> Route
-routeCons (Route subLns sA) ln sB = Route (ln <<| subLns) (sA + sB)
+routeCons (Route subLns sA) ln sB = Route (ln .<- subLns) (sA + sB)
 
 lineDemerit :: IntParamVal LinePenalty -> BadnessSize -> BreakItem -> Demerit
 lineDemerit (IntParamVal lp) b br =
@@ -102,7 +102,7 @@ finaliseInEdge :: ElemAdj -> InEdge -> InEdge
 -- If the break-point is at glue, then the line doesn't include that glue.
 finaliseInEdge Adj{adjVal = HVListElem (ListGlue _)} e = e
 -- If the break is at some other type of break, the line includes it.
-finaliseInEdge x (InEdge cs n discard) = InEdge (x <<| cs) n discard
+finaliseInEdge x (InEdge cs n discard) = InEdge (x .<- cs) n discard
 
 data BreakingState =
     BreakingState { accEdges        :: !(Seq InEdge)

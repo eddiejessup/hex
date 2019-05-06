@@ -48,7 +48,7 @@ module HeXlude
     , revForwardSeq
     , revBackwardSeq
     , taggedSeqtoList
-    , (<<|)
+    , (.<-), (<-.), (->.), (.->)
     )
 where
 
@@ -228,22 +228,37 @@ bUndirected = untagged
 type ForwardDirected = TaggedContainer Forward
 type BackwardDirected = TaggedContainer Backward
 
+type ForwardSeq = ForwardDirected Seq
+type BackwardSeq = BackwardDirected Seq
+
 mapTaggedContainer :: (t a -> u a) -> TaggedContainer n t a -> TaggedContainer n u a
 mapTaggedContainer f (TaggedContainer xs) = TaggedContainer (f xs)
 
 taggedSeqtoList :: TaggedContainer n Seq a -> TaggedContainer n [] a
 taggedSeqtoList = mapTaggedContainer toList
 
-revForwardSeq :: ForwardDirected Seq a -> BackwardDirected Seq a
+revForwardSeq :: ForwardSeq a -> BackwardSeq a
 revForwardSeq = revForwardContainer Seq.reverse
 
-revBackwardSeq :: BackwardDirected Seq a -> ForwardDirected Seq a
+revBackwardSeq :: BackwardSeq a -> ForwardSeq a
 revBackwardSeq = revBackwardContainer Seq.reverse
 
-infixr 5 <<|
+infixr 5 .<-
+infixl 5 <-.
+infixl 5 ->.
+infixr 5 .->
 
-(<<|) :: a -> TaggedContainer n Seq a -> TaggedContainer n Seq a
-x <<| (TaggedContainer xs) = TaggedContainer (x <| xs)
+(.<-) :: a -> BackwardSeq a -> BackwardSeq a
+x .<- (TaggedContainer xs) = TaggedContainer (x <| xs)
+
+(->.) :: ForwardSeq a -> a -> ForwardSeq a
+(TaggedContainer xs) ->. x = TaggedContainer (xs |> x)
+
+(<-.) :: BackwardSeq a -> a -> BackwardSeq a
+(TaggedContainer xs) <-. x = TaggedContainer (xs |> x)
+
+(.->) :: a -> ForwardSeq a -> ForwardSeq a
+x .-> (TaggedContainer xs) = TaggedContainer (x <| xs)
 
 pattern FDirected :: t a -> ForwardDirected t a
 pattern FDirected v = TaggedContainer v

@@ -77,7 +77,7 @@ instance Readable Instruction where
       PopStack -> "Pop stack"
 
 data ParseState =
-    ParseState { instrs :: !(BackwardDirected Seq EncodableInstruction)
+    ParseState { instrs :: !(ForwardDirected Seq EncodableInstruction)
                , curFontNr :: !(Maybe Int)
                , beginPagePointers :: ![Int]
                , stackDepth :: !Int
@@ -94,7 +94,7 @@ initialParseState mag =
                }
 
 addInstruction :: ParseState -> EncodableInstruction -> ParseState
-addInstruction s@ParseState{instrs = _instrs} i = s { instrs = i <<| _instrs }
+addInstruction s@ParseState{ instrs } i = s{ instrs = instrs ->. i }
 
 parseMundaneInstruction :: ParseState -> Instruction -> Either Text ParseState
 parseMundaneInstruction st = \case
@@ -113,16 +113,17 @@ parseMundaneInstruction st = \case
             -- so don't add an end-page instruction.
             instrsEnded = case points of
                 [] -> instrs st
-                _  -> endPageInstruction <<| instrs st
+                _  -> instrs st ->. endPageInstruction
             beginPageInstr = getBeginPageInstruction $ lastDef (-1) points
-            instrsBegun = beginPageInstr <<| instrsEnded
+            instrsBegun = instrsEnded ->. beginPageInstr
         -- If a font is selected, add an instruction to select it again on the
         -- new page.
         instrsDone <- case curFontNr st of
             Just nr -> do
                 fInstr <- getSelectFontNrInstruction nr
-                pure $ fInstr <<| instrsBegun
-            Nothing -> pure $ instrsBegun
+                pure (instrsBegun ->. fInstr)
+            Nothing ->
+                pure instrsBegun
         -- Update the instructions, and add a pointer for the new begin-page
         -- instruction.
         pure st { instrs = instrsDone
@@ -154,7 +155,7 @@ parseMundaneInstructions mag _instrs = do
     st <- foldM parseMundaneInstruction (initialParseState mag) _instrs
     pure $ addInstruction st endPageInstruction
 
-parseInstructions :: ForwardDirected [] Instruction -> Int -> Either Text (BackwardDirected Seq EncodableInstruction)
+parseInstructions :: ForwardDirected [] Instruction -> Int -> Either Text (ForwardDirected Seq EncodableInstruction)
 parseInstructions _instrs magnification = do
     ParseState{instrs = mundaneInstrs, beginPagePointers, maxStackDepth}
         <- parseMundaneInstructions magnification _instrs
@@ -168,8 +169,7 @@ parseInstructions _instrs magnification = do
         postamblePointer = encLength mundaneInstrs
         postPostambleInstr = getPostPostambleInstr postamblePointer
         fontDefinitions = filter isDefineFontInstr mundaneInstrs
-    pure $
-        postPostambleInstr <<| (fontDefinitions <> (postambleInstr <<| mundaneInstrs))
+    pure $ (mundaneInstrs ->. postambleInstr) <> fontDefinitions ->. postPostambleInstr
   where
     isDefineFontInstr i = case i of
         EncodableInstruction (DefineFontNr _) _ -> True

@@ -7,8 +7,7 @@ import           Control.Monad.Except        (liftEither)
 import           Data.Either.Combinators     (mapLeft)
 
 import qualified HeX.Box                     as B
-import           HeX.BreakList               (BackwardHList, BackwardVList,
-                                              ForwardHList, ForwardVList)
+import           HeX.BreakList               (ForwardHList, ForwardVList)
 import qualified HeX.BreakList               as BL
 import           HeX.Command.Commands
 import           HeX.Command.Common
@@ -23,7 +22,7 @@ data EndParaReason
     = EndParaSawEndParaCommand
     | EndParaSawLeaveBox
 
-handleCommandInParaMode :: HP.InhibitableStream s => BackwardHList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult BackwardHList ParaResult)
+handleCommandInParaMode :: HP.InhibitableStream s => ForwardHList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardHList ParaResult)
 handleCommandInParaMode hList command oldStream =
     case command of
         HP.VModeCommand _ ->
@@ -64,15 +63,15 @@ handleCommandInParaMode hList command oldStream =
     doNothing' = doNothing hList
     addElem' = addElem hList
     addMaybeElem' = addMaybeElem hList
-    endLoop reason result = EndLoop $ ParaResult reason (revBackwardSeq result)
+    endLoop reason result = EndLoop $ ParaResult reason result
 
 data HBoxResult = HBoxResult ForwardHList
 
 handleCommandInHBoxMode :: HP.InhibitableStream s
-                        => BackwardHList
+                        => ForwardHList
                         -> HP.Command
                         -> s
-                        -> ExceptMonadBuild s (RecursionResult BackwardHList HBoxResult)
+                        -> ExceptMonadBuild s (RecursionResult ForwardHList HBoxResult)
 handleCommandInHBoxMode hList command _ =
     case command of
         HP.VModeCommand vModeCommand ->
@@ -106,11 +105,11 @@ handleCommandInHBoxMode hList command _ =
     doNothing' = doNothing hList
     addElem' = addElem hList
     addMaybeElem' = addMaybeElem hList
-    endLoop result = (EndLoop . HBoxResult . revBackwardSeq) result
+    endLoop result = (EndLoop . HBoxResult) result
 
 data VBoxResult = VBoxResult ForwardVList
 
-handleCommandInVBoxMode :: HP.InhibitableStream s => BackwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult BackwardVList VBoxResult)
+handleCommandInVBoxMode :: HP.InhibitableStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList VBoxResult)
 handleCommandInVBoxMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
@@ -145,7 +144,7 @@ handleCommandInVBoxMode vList command oldStream =
     doNothing' = doNothing vList
     addElem' = addElem vList
     addMaybeElem' = addMaybeElem vList
-    endLoop result = (EndLoop . VBoxResult . revBackwardSeq) result
+    endLoop result = (EndLoop . VBoxResult) result
 
     addPara indentFlag =
         do
@@ -159,7 +158,7 @@ handleCommandInVBoxMode vList command oldStream =
 
 appendParagraph
     :: HP.InhibitableStream s
-    => ForwardHList -> BackwardVList -> ExceptMonadBuild s BackwardVList
+    => ForwardHList -> ForwardVList -> ExceptMonadBuild s ForwardVList
 appendParagraph paraHList vList =
     do
     lineBoxes <- readOnConfState (hListToParaLineBoxes paraHList)
@@ -182,7 +181,7 @@ hListToParaLineBoxes hList =
 
 data MainVModeResult = MainVModeResult ForwardVList
 
-handleCommandInMainVMode :: HP.InhibitableStream s => BackwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult BackwardVList MainVModeResult)
+handleCommandInMainVMode :: HP.InhibitableStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList MainVModeResult)
 handleCommandInMainVMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
@@ -218,7 +217,7 @@ handleCommandInMainVMode vList command oldStream =
     addElem' el = addElem vList el
     -- addElem' = addElem vList
     addMaybeElem' = addMaybeElem vList
-    endLoop result = (EndLoop . MainVModeResult . revBackwardSeq) result
+    endLoop result = (EndLoop . MainVModeResult) result
 
     addPara indentFlag =
         do
