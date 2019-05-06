@@ -22,7 +22,9 @@ newtype BadnessSize = BadnessSize { unBadnessSize :: Int }
 newtype Demerit = Demerit { unDemerit :: Int }
     deriving ( Show, Eq, Ord, Num )
 
-newtype IsDiscarding = IsDiscarding Bool
+data DiscardingState
+    = Discarding
+    | NotDiscarding
     deriving ( Show )
 
 type ElemAdj = Adj HListElem
@@ -30,21 +32,25 @@ type ElemAdj = Adj HListElem
 data Node = Root | Branch !Int
     deriving ( Show )
 
-data InEdge =
-    InEdge { elems :: !(BackwardDirected Seq ElemAdj), src :: !Node, discarding :: !IsDiscarding }
+data InEdge = InEdge
+    { elems      :: !(BackwardDirected Seq ElemAdj)
+    , src        :: !Node
+    , discarding :: !DiscardingState
+    }
     deriving ( Show )
 
 -- Set this edge to 'discarding' so that later discardable items won't be
 -- added.
 newEdge :: Int -> InEdge
-newEdge n = InEdge mempty (Branch n) (IsDiscarding True)
+newEdge n = InEdge mempty (Branch n) Discarding
 
 inEdgeCons :: ElemAdj -> InEdge -> InEdge
-inEdgeCons c e@(InEdge cs n (IsDiscarding _discarding))
-    | _discarding && isDiscardable (Adj.fromAdjacency c) =
-        e
-    | otherwise =
-        InEdge (c .<- cs) n (IsDiscarding False)
+inEdgeCons elemAdj e@InEdge{ elems, discarding } =
+    case discarding of
+        Discarding | isDiscardable (Adj.fromAdjacency elemAdj) ->
+            e
+        _ ->
+            e{ elems = elemAdj .<- elems, discarding = NotDiscarding }
 
 inEdgeConcat :: Foldable f => f ElemAdj -> InEdge -> InEdge
 inEdgeConcat xs e = foldr inEdgeCons e xs
@@ -114,7 +120,7 @@ data BreakingState =
 
 initialBreakingState :: BreakingState
 initialBreakingState =
-    BreakingState { accEdges        = pure (InEdge mempty Root (IsDiscarding False))
+    BreakingState { accEdges        = pure (InEdge mempty Root NotDiscarding)
                   , nodeToBestRoute = mempty
                   , chunk           = mempty
                   }
@@ -155,8 +161,7 @@ appendEntry dw
             promisingInEdges = filter (isPromising dw) inEdges
             -- 'finalise' the promising edges to get 'candidate' edges to actually
             -- break.
-            candidateBrokenDInEdges =
-                withStatus dw . finaliseInEdge x <$> promisingInEdges
+            candidateBrokenDInEdges = withStatus dw . finaliseInEdge x <$> promisingInEdges
         in
             -- Filter the candidates to those we could actually accept.
             case toOnlyAcceptables tol lp br candidateBrokenDInEdges of
@@ -169,8 +174,7 @@ appendEntry dw
                     let
                         -- For later calls, build up the still-promising edges with
                         -- the break item added.
-                        grownPromisingInEdges =
-                            inEdgeCons x <$> promisingInEdges
+                        grownPromisingInEdges = inEdgeCons x <$> promisingInEdges
                         -- Add an edge representing the chance to break here.
                         newInEdge = newEdge $ length nodeToBestRoute
                         -- Add that new edge to the existing, now-grown, edges.
