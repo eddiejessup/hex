@@ -1,8 +1,7 @@
 module Main where
 
+import           HeXlude
 import qualified Prelude
-import           Protolude
-import           Protolude.Panic                ( panic )
 
 import qualified Data.ByteString                as BS
 import qualified System.Console.GetOpt          as Opt
@@ -92,9 +91,9 @@ main = do
         ResolveMode  -> runResolved input
         ExpandMode   -> runExpand input
         CommandMode  -> runCommand input
-        -- ParaListMode -> runPara input
-        -- ParaSetMode  -> runSetPara input
-        -- PageMode     -> runPages input
-        -- DVIMode      -> runDVI input
-        -- RawDVIMode   -> runDVIRaw input
+        ParaListMode -> runPara input
+        ParaSetMode  -> runSetPara input
+        PageMode     -> runPages input
+        DVIMode      -> runDVI input
+        RawDVIMode   -> runDVIRaw input
         DVIWriteMode -> codesToDVIBytes input >>= BS.writeFile dest

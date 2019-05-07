@@ -277,6 +277,10 @@ expandSyntaxCommand strm = \case
         panic "Not implemented: syntax command NoExpandTok"
     MarkRegisterTok _ ->
         panic "Not implemented: syntax command MarkRegisterTok"
+    -- \input ⟨file name⟩:
+    -- - Expand to no tokens
+    -- - Prepare to read from the specified file before looking at any more
+    --   tokens from the current source.
     InputTok ->
         panic "Not implemented: syntax command InputTok"
     EndInputTok ->
