@@ -45,8 +45,9 @@ parseDefineMacro = do
     cs <- parseCSName
     -- Parameter text.
     (preParamTokens, parameters) <- parseParamText
-    -- TODO: Support expanded-def.
-    when (defExpandType == T.ExpandDef) $ notImplemented
+
+    when (defExpandType == T.ExpandDef) $ panic "Not implemented: ExpandDef"
+
     -- Replacement text.
     replacementTokens <- parseMacroText
     let tgt = T.MacroContents { T.preParamTokens = preParamTokens

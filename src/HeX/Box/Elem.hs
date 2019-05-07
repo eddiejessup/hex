@@ -94,10 +94,10 @@ instance Dimensioned Box where
             Just lst -> naturalLength BoxDepth lst
 
         (BoxHeight, Box (VBoxContents _ TopAlign) _) ->
-            undefined
+            panic "Not implemented: height, top-align"
 
         (BoxDepth, Box (VBoxContents _ TopAlign) _) ->
-            undefined
+            panic "Not implemented: depth, top-align"
 
       where
         subLengths :: (Dimensioned a) => ForwardDirected [] a -> ForwardDirected [] LenVal

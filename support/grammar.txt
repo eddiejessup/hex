@@ -233,11 +233,14 @@
     <dimen-variable>
     <special-dimen>
     <fontdimen-reference>
-    <box-dimension> <8-bit-number>
+    <box-dimen-reference>
     \lastkern
 
 <fontdimen-reference>
     \fontdimen <number> <font>
+
+<box-dimen-reference>
+    <box-dimension> <8-bit-number>
 
 <box-dimension>
     \ht
@@ -411,7 +414,7 @@
     \patterns <general-text>
 
 <box-size-assignment>
-    <box-dimension> <8-bit-number> <equals> <dimen>
+    <box-dimen-reference> <equals> <dimen>
 
 <interaction-mode-assignment>
     \errorstopmode

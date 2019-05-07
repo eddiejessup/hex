@@ -74,10 +74,10 @@ instance TeXEvaluable AST.InternalTeXInt where
         AST.InternalCharToken n       -> pure n
         AST.InternalMathCharToken n   -> pure n
         AST.InternalFontCharRef v     -> texEvaluate v
-        AST.LastPenalty               -> notImplemented
-        AST.ParShape                  -> notImplemented
-        AST.InputLineNr               -> notImplemented
-        AST.Badness                   -> notImplemented
+        AST.LastPenalty               -> panic "Not implemented: evaluate LastPenalty"
+        AST.ParShape                  -> panic "Not implemented: evaluate ParShape"
+        AST.InputLineNr               -> panic "Not implemented: evaluate InputLineNr"
+        AST.Badness                   -> panic "Not implemented: evaluate Badness"
 
 instance TeXEvaluable AST.EightBitTeXInt where
     type EvalTarget AST.EightBitTeXInt = EightBitInt
@@ -222,7 +222,7 @@ instance TeXEvaluable AST.InternalLength where
         AST.InternalSpecialLength v -> texEvaluate v
         AST.InternalFontDimensionRef v -> texEvaluate v
         AST.InternalBoxDimensionRef v -> texEvaluate v
-        AST.LastKern -> notImplemented
+        AST.LastKern -> panic "Not implemented: evaluate LastKern"
 
 instance TeXEvaluable AST.LengthVariable where
     type EvalTarget AST.LengthVariable = Int
@@ -242,15 +242,16 @@ instance TeXEvaluable AST.FontDimensionRef where
     texEvaluate (AST.FontDimensionRef n _) =
         do
         _ <- texEvaluate n
-        notImplemented
+        panic "Not implemented: evaluate FontDimensionRef"
 
 instance TeXEvaluable AST.BoxDimensionRef where
     type EvalTarget AST.BoxDimensionRef = Int
 
-    texEvaluate (AST.BoxDimensionRef n _) =
+    texEvaluate (AST.BoxDimensionRef idx boxDim) =
         do
-        _ <- texEvaluate n
-        notImplemented
+        eIdx <- texEvaluate idx
+        asks (lookupBoxRegister eIdx)
+        <&> maybe 0 (naturalLength boxDim)
 
 instance TeXEvaluable AST.CoercedLength where
     type EvalTarget AST.CoercedLength = Int
@@ -333,7 +334,7 @@ instance TeXEvaluable AST.InternalGlue where
 
     texEvaluate = \case
         AST.InternalGlueVariable v -> texEvaluate v
-        AST.LastGlue -> notImplemented
+        AST.LastGlue -> panic "Not implemented: evaluate LastGlue"
 
 instance TeXEvaluable AST.GlueVariable where
     type EvalTarget AST.GlueVariable = BL.Glue
@@ -376,7 +377,7 @@ instance TeXEvaluable AST.InternalMathGlue where
 
     texEvaluate = \case
         AST.InternalMathGlueVariable v -> texEvaluate v
-        AST.LastMathGlue -> notImplemented
+        AST.LastMathGlue -> panic "Not implemented: evaluate LastMathGlue"
 
 instance TeXEvaluable AST.MathGlueVariable where
     type EvalTarget AST.MathGlueVariable = BL.MathGlue
@@ -417,23 +418,23 @@ instance TeXEvaluable AST.InternalQuantity where
         AST.InternalLengthQuantity d ->
             do
             _ <- texEvaluate d
-            notImplemented
+            panic "Not implemented: evaluate InternalLengthQuantity"
         AST.InternalGlueQuantity g ->
             do
             _ <- texEvaluate g
-            notImplemented
+            panic "Not implemented: evaluate InternalGlueQuantity"
         AST.InternalMathGlueQuantity mg ->
             do
             _ <- texEvaluate mg
-            notImplemented
+            panic "Not implemented: evaluate InternalMathGlueQuantity"
         AST.FontQuantity f ->
             do
             _ <- texEvaluate f
-            notImplemented
+            panic "Not implemented: evaluate FontQuantity"
         AST.TokenListVariableQuantity tl ->
             do
             _ <- texEvaluate tl
-            notImplemented
+            panic "Not implemented: evaluate TokenListVariableQuantity"
 
 -- Condition
 
@@ -490,7 +491,8 @@ instance TeXEvaluable AST.IfConditionHead where
             do
             en <- texEvaluate n
             pure $ en `mod` 2 == 1
-        AST.IfInMode _ -> notImplemented
+        AST.IfInMode _ ->
+            panic "Not implemented: IfInMode"
         -- A control sequence token is considered to have character code 256 and
         -- category code 16.
         -- This logic is hard to follow literally, because my category codee type
@@ -499,36 +501,43 @@ instance TeXEvaluable AST.IfConditionHead where
         -- all char-cat pairs.
         -- TODO: Unless the control sequence has been \let equal to a non-active
         -- character token.
-        AST.IfTokenAttributesEqual T.CharCodeAttribute t1 t2 -> pure $ eqChars t1 t2
-        AST.IfTokenAttributesEqual T.CatCodeAttribute t1 t2 -> pure $ eqCats t1 t2
+        AST.IfTokenAttributesEqual T.CharCodeAttribute t1 t2 ->
+            pure $ eqChars t1 t2
+        AST.IfTokenAttributesEqual T.CatCodeAttribute t1 t2 ->
+            pure $ eqCats t1 t2
         --  The condition is true if (a) the two tokens are not macros, and they
         --  both represent the same (character code, category code) pair, the same
         --  TeX primitive, the same \font or \chardef or \countdef, etc.; or if (b)
         --  the two tokens are macros, and they both have the same status with
         --  respect to \long and \outer, and they both have the same parameters and
         --  “top level” expansion.
-        AST.IfTokensEqual (Lex.CharCatToken cc1) (Lex.CharCatToken cc2) -> pure $ cc1 == cc2
+        AST.IfTokensEqual (Lex.CharCatToken cc1) (Lex.CharCatToken cc2) ->
+            pure $ cc1 == cc2
         AST.IfTokensEqual (Lex.ControlSequenceToken cs1) (Lex.ControlSequenceToken cs2) ->
             do
             conf <- ask
             let lkp cs = lookupCSProper cs conf
-            -- Surprisingly, two notImplemented control sequences are considered equal,
+            -- Surprisingly, two undefined control sequences are considered equal,
             -- so we may compare the Maybe types.
             -- The 'Just' values are arranged so that I think their naïve
             -- comparison gives the desired behaviour.
             pure $ lkp cs1 == lkp cs2
-        AST.IfTokensEqual _ _ -> pure False
+        AST.IfTokensEqual _ _ ->
+            pure False
         AST.IfBoxRegisterIs attr n ->
             do
             _ <- texEvaluate n
             case attr of
-                T.HasVerticalBox -> notImplemented
-                T.HasHorizontalBox -> notImplemented
-                T.IsVoid -> notImplemented
+                T.HasVerticalBox ->
+                    panic "Not implemented: evaluate IfBoxRegister HasVerticalBox"
+                T.HasHorizontalBox ->
+                    panic "Not implemented: evaluate IfBoxRegister HasHorizontalBox"
+                T.IsVoid ->
+                    panic "Not implemented: evaluate IfBoxRegister IsVoid"
         AST.IfInputEnded n ->
             do
             _ <- texEvaluate n
-            notImplemented
+            panic "Not implemented: evaluate IfInputEnded"
         AST.IfConst b -> pure b
       where
         ordToComp GT = (>)

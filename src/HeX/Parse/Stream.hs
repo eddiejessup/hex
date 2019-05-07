@@ -248,18 +248,18 @@ expandSyntaxCommand strm = \case
     ConditionTok ct ->
         (\(v, s) -> (justToEither v, s)) $ expandConditionToken strm ct
     NumberTok ->
-        notImplemented
+        panic "Not implemented: syntax command NumberTok"
     RomanNumeralTok ->
-        notImplemented
+        panic "Not implemented: syntax command RomanNumeralTok"
     StringTok ->
         let escapeChar = (Conf.IntParamVal . Conf.lookupTeXIntParameter EscapeChar . config) strm
         in runExpandCommand strm escapeChar parseLexToken expandString
     JobNameTok ->
-        notImplemented
+        panic "Not implemented: syntax command JobNameTok"
     FontNameTok ->
-        notImplemented
+        panic "Not implemented: syntax command FontNameTok"
     MeaningTok ->
-        notImplemented
+        panic "Not implemented: syntax command MeaningTok"
     CSNameTok ->
         runExpandCommand strm () parseCSNameArgs expandCSName
     ExpandAfterTok ->
@@ -274,13 +274,13 @@ expandSyntaxCommand strm = \case
                     Just (Right expandedLTs, expandedStrm) ->
                         (Right $ expandAfterArgLT:expandedLTs, expandedStrm)
     NoExpandTok ->
-        notImplemented
+        panic "Not implemented: syntax command NoExpandTok"
     MarkRegisterTok _ ->
-        notImplemented
+        panic "Not implemented: syntax command MarkRegisterTok"
     InputTok ->
-        notImplemented
+        panic "Not implemented: syntax command InputTok"
     EndInputTok ->
-        notImplemented
+        panic "Not implemented: syntax command EndInputTok"
     TheTok -> case easyRunParser parseInternalQuantity strm of
         (P.State resultStream _ _, Left err) ->
             (Left $ show err, resultStream)
@@ -386,9 +386,9 @@ instance P.Stream ExpandedStream where
                     Right lts ->
                         P.take1_ $ insertLexTokens expandStream lts
 
-    takeN_ = notImplemented
+    takeN_ = panic "Not implemented: stream method takeN_"
 
-    takeWhile_ = notImplemented
+    takeWhile_ = panic "Not implemented: stream method takeWhile_"
 
     showTokens Proxy = show
 

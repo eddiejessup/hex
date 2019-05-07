@@ -433,7 +433,7 @@ parseFontDimensionRef = skipSatisfiedEquals T.FontDimensionTok
 parseBoxDimensionRef :: InhibitableStream s => SimpParser s BoxDimensionRef
 parseBoxDimensionRef = do
     dim <- parseBoxDimension
-    boxNr <- parseTeXInt
+    boxNr <- parseEightBitTeXInt
     pure $ BoxDimensionRef boxNr dim
 
 parseBoxDimension :: InhibitableStream s => SimpParser s BoxDim

@@ -90,8 +90,8 @@ handleModeIndependentCommand = \case
                         let fontRefTok = HP.primTok $ HP.FontRefToken fontNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure (Just boxElem, fontRefTok)
-                    _ ->
-                        notImplemented
+                    oth ->
+                        panic $ "Not implemented: DefineControlSequence target " <> show oth
                 liftIO $ putText $ "Setting CS " <> show cs <> " to token: " <> show newCSTok <> (if global == HP.Global then " globally" else " locally")
                 modConfState $ setControlSequence cs newCSTok global
                 pure $ maybe DoNothing AddElem maybeElem
@@ -166,9 +166,9 @@ handleModeIndependentCommand = \case
                         modConfState $ setBoxRegisterNullable eLhsIdx global fetchedMaybeBox
                         pure DoNothing
                     HP.LastBox ->
-                        notImplemented
+                        panic $ "Not implemented: SetBoxRegister to LastBox"
                     HP.VSplitBox _ _ ->
-                        notImplemented
+                        panic $ "Not implemented: SetBoxRegister to VSplitBox"
                     HP.ExplicitBox spec boxType ->
                         do
                         eSpec <- liftEvalOnConfState spec

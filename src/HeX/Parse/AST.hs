@@ -188,7 +188,7 @@ data FontRef =
 data FamilyMember = FamilyMember T.FontRange TeXInt
     deriving ( Show )
 
-data BoxDimensionRef = BoxDimensionRef TeXInt BoxDim
+data BoxDimensionRef = BoxDimensionRef EightBitTeXInt BoxDim
     deriving ( Show )
 
 data FontDimensionRef = FontDimensionRef TeXInt FontRef
