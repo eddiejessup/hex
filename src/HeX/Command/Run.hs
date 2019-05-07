@@ -27,7 +27,7 @@ usableCatLookup = catLookup usableCatCodes
 
 -- Cat
 
-runCat :: [CharCode] -> IO ()
+runCat :: ForwardDirected [] CharCode -> IO ()
 runCat xs = case extractCharCat usableCatLookup xs of
     Just (cc, xs') ->
         print cc >> runCat xs'
@@ -36,7 +36,7 @@ runCat xs = case extractCharCat usableCatLookup xs of
 
 -- Lex.
 
-runLex :: [CharCode] -> IO ()
+runLex :: ForwardDirected [] CharCode -> IO ()
 runLex _xs = extractAndPrint (LineBegin, _xs)
   where
     extractAndPrint (lexState, xs) =
@@ -50,7 +50,7 @@ runLex _xs = extractAndPrint (LineBegin, _xs)
 
 -- Resolve.
 
-runResolved :: [CharCode] -> IO ()
+runResolved :: ForwardDirected [] CharCode -> IO ()
 runResolved _xs = extractAndPrint (LineBegin, _xs)
   where
     extractAndPrint (lexState, xs) =
@@ -66,7 +66,7 @@ runResolved _xs = extractAndPrint (LineBegin, _xs)
 
 -- Expand.
 
-runExpand :: [CharCode] -> IO ()
+runExpand :: ForwardDirected [] CharCode -> IO ()
 runExpand xs = newExpandStream xs >>= extractAndPrint
   where
     extractAndPrint estream = case P.take1_ estream of
@@ -79,7 +79,7 @@ runExpand xs = newExpandStream xs >>= extractAndPrint
 
 -- Command.
 
-runCommand :: [CharCode] -> IO ()
+runCommand :: ForwardDirected [] CharCode -> IO ()
 runCommand xs = newExpandStream xs >>= extractAndPrint
   where
     extractAndPrint estream = case extractCommand estream of
@@ -104,7 +104,7 @@ buildEitherToIO (Left (ConfigError s))        = panic $ "Bad semantics: " <> s
 buildEitherToIO (Right v)                     = pure v
 
 codesToSth
-    :: [CharCode]
+    :: ForwardDirected [] CharCode
     -> ExceptMonadBuild ExpandedStream a
     -> IO a
 codesToSth xs f =
@@ -118,55 +118,55 @@ extractParaHList :: InhibitableStream s => ExceptMonadBuild s ForwardHList
 extractParaHList =
     (\(ParaResult _ hList) -> hList) <$> extractPara Indent
 
-codesToParaList :: [CharCode] -> IO ForwardHList
+codesToParaList :: ForwardDirected [] CharCode -> IO ForwardHList
 codesToParaList xs =
     codesToSth xs extractParaHList
 
-runPara :: [CharCode] -> IO ()
+runPara :: ForwardDirected [] CharCode -> IO ()
 runPara xs = codesToParaList xs >>= printLine
 
 -- Paragraph boxes.
 
-codesToParaBoxes :: [CharCode] -> IO (ForwardDirected Seq (ForwardDirected [] HBoxElem))
+codesToParaBoxes :: ForwardDirected [] CharCode -> IO (ForwardDirected Seq (ForwardDirected [] HBoxElem))
 codesToParaBoxes xs =
     codesToSth xs (extractParaHList >>= readOnConfState . hListToParaLineBoxes)
 
-runSetPara :: [CharCode] -> IO ()
+runSetPara :: ForwardDirected [] CharCode -> IO ()
 runSetPara xs =
     codesToParaBoxes xs >>= putStrLn . describeDoubleLined
 
 -- Pages list.
 
-codesToPages :: [CharCode] -> IO (ForwardDirected Seq Page)
+codesToPages :: ForwardDirected [] CharCode -> IO (ForwardDirected Seq Page)
 codesToPages xs = codesToSth xs extractBreakAndSetVList
 
 printLine :: (Readable a, Foldable t, Functor t) => t a -> IO ()
 printLine = putStrLn . describeLined
 
-runPages :: [CharCode] -> IO ()
+runPages :: ForwardDirected [] CharCode -> IO ()
 runPages xs = codesToPages xs >>= printLine
 
 -- DVI instructions.
 
-codesToDVI :: [CharCode] -> IO (ForwardDirected [] Instruction)
+codesToDVI :: ForwardDirected [] CharCode -> IO (ForwardDirected [] Instruction)
 codesToDVI xs = codesToPages xs <&> pagesToDVI
 
-runDVI :: [CharCode] -> IO ()
+runDVI :: ForwardDirected [] CharCode -> IO ()
 runDVI xs = codesToDVI xs >>= printLine
 
 -- Raw DVI instructions.
 
-codesToDVIRaw :: [CharCode] -> IO (ForwardDirected Seq EncodableInstruction)
+codesToDVIRaw :: ForwardDirected [] CharCode -> IO (ForwardDirected Seq EncodableInstruction)
 codesToDVIRaw xs = do
     -- Who cares, it's for debugging
     let _mag = 1000
     instrs <- codesToDVI xs
     strEitherToIO $ parseInstructions instrs _mag
 
-runDVIRaw :: [CharCode] -> IO ()
+runDVIRaw :: ForwardDirected [] CharCode -> IO ()
 runDVIRaw xs = codesToDVIRaw xs >>= printLine
 
 -- DVI byte strings.
 
-codesToDVIBytes :: [CharCode] -> IO ByteString
+codesToDVIBytes :: ForwardDirected [] CharCode -> IO ByteString
 codesToDVIBytes xs = encode <$> codesToDVIRaw xs

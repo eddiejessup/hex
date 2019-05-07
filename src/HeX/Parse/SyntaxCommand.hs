@@ -8,5 +8,6 @@ import           HeX.Parse.Helpers
 import           HeX.Parse.Inhibited
 import           HeX.Parse.Token
 
-parseCSNameArgs :: InhibitableStream s => SimpParser s [Cat.CharCode]
-parseCSNameArgs = parseManyChars <* (skipSatisfiedEquals $ SyntaxCommandArg EndCSNameTok)
+parseCSNameArgs :: InhibitableStream s => SimpParser s (ForwardDirected [] Cat.CharCode)
+parseCSNameArgs =
+    FDirected <$> (parseManyChars <* (skipSatisfiedEquals $ SyntaxCommandArg EndCSNameTok))

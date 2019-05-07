@@ -45,10 +45,15 @@ module HeXlude
     , BackwardDirected
     , fUndirected
     , bUndirected
+
     , revForwardSeq
     , revBackwardSeq
     , taggedSeqtoList
     , (.<-), (<-.), (->.), (.->)
+
+    , revForwardList
+    , revBackwardList
+    , fwdListDropWhile
     )
 where
 
@@ -64,6 +69,7 @@ import           Control.Monad.IO.Class    (MonadIO)
 import           Control.Monad.Trans.Maybe (MaybeT, runMaybeT)
 import           Data.Function             ((&))
 import           Data.Functor              ((<&>))
+import qualified Data.List                 as List
 import           Data.Sequence             (Seq (..), (<|), (|>))
 import qualified Data.Sequence             as Seq
 import           Data.Witherable           (Filterable (..))
@@ -207,8 +213,12 @@ axisNaturalSpan Horizontal a = naturalWidth a
 
 newtype TaggedContainer n t a = TaggedContainer {untagged :: t a}
     deriving Show
-    deriving stock   (Foldable, Traversable)
-    deriving newtype (Functor, Applicative, Monad, Alternative, Filterable, Semigroup, Monoid)
+    deriving stock   ( Foldable, Traversable, Eq )
+    deriving newtype ( Functor, Filterable
+                     , Applicative, Monad
+                     , Alternative
+                     , Semigroup, Monoid
+                     , Hashable )
 
 data Forward
 data Backward
@@ -233,6 +243,14 @@ type BackwardSeq = BackwardDirected Seq
 
 mapTaggedContainer :: (t a -> u a) -> TaggedContainer n t a -> TaggedContainer n u a
 mapTaggedContainer f (TaggedContainer xs) = TaggedContainer (f xs)
+
+pattern FDirected :: t a -> ForwardDirected t a
+pattern FDirected v = TaggedContainer v
+
+pattern BDirected :: t a -> BackwardDirected t a
+pattern BDirected v = TaggedContainer v
+
+-- Directed Seq.
 
 taggedSeqtoList :: TaggedContainer n Seq a -> TaggedContainer n [] a
 taggedSeqtoList = mapTaggedContainer toList
@@ -260,8 +278,18 @@ x .<- (TaggedContainer xs) = TaggedContainer (x <| xs)
 (.->) :: a -> ForwardSeq a -> ForwardSeq a
 x .-> (TaggedContainer xs) = TaggedContainer (x <| xs)
 
-pattern FDirected :: t a -> ForwardDirected t a
-pattern FDirected v = TaggedContainer v
+-- Directed List.
 
-pattern BDirected :: t a -> BackwardDirected t a
-pattern BDirected v = TaggedContainer v
+-- List.
+
+type ForwardList = ForwardDirected []
+type BackwardList = BackwardDirected []
+
+revForwardList :: ForwardList a -> BackwardList a
+revForwardList = revForwardContainer List.reverse
+
+revBackwardList :: BackwardList a -> ForwardList a
+revBackwardList = revBackwardContainer List.reverse
+
+fwdListDropWhile :: (a -> Bool) -> ForwardList a -> ForwardList a
+fwdListDropWhile predi = mapTaggedContainer (dropWhile predi)

@@ -61,9 +61,11 @@ usage = toS $ Opt.usageInfo header options
   where
     header = "Usage: hex [OPTION...] [file]"
 
-preamble, postamble :: [CharCode]
-preamble = "\\font\\thefont=cmr10 \\thefont\n\n"
-postamble = "\n\n\\end\n"
+preamble :: ForwardDirected [] CharCode
+preamble = FDirected "\\font\\thefont=cmr10 \\thefont\n\n"
+
+postamble :: ForwardDirected [] CharCode
+postamble = FDirected "\n\n\\end\n"
 
 parseArgs :: [Text] -> IO ([Flag], [Text])
 parseArgs argStr =
@@ -75,7 +77,7 @@ main :: IO ()
 main = do
     (flags, args) <- ((toS <$>) <$> getArgs) >>= parseArgs
     when (Help `elem` flags) $ panic usage
-    inputRaw <- case args of
+    inputRaw <- FDirected <$> case args of
         ["-"] -> Prelude.getContents
         [f  ] -> Prelude.readFile (toS f)
         _     -> panic usage

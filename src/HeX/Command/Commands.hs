@@ -2,28 +2,25 @@ module HeX.Command.Commands where
 
 import           HeXlude
 
-import qualified Data.HashMap.Strict           as HMap
-import qualified Data.Text                     as Text
-import           Path                           ( Path
-                                                , Rel
-                                                , File
-                                                )
+import qualified Data.HashMap.Strict as HMap
+import qualified Data.Text           as Text
+import           Path                (File, Path, Rel)
 import qualified Path
 
-import           Data.Path                      ( findFilePath )
+import           Data.Path           (findFilePath)
+import           TFM                 (TexFont (..))
 import qualified TFM
-import           TFM                            ( TexFont(..) )
 
-import qualified HeX.Box          as B
-import           HeX.BreakList                  ( HListElem, VListElem )
-import qualified HeX.BreakList    as BL
-import           HeX.Categorise                 ( CharCode )
+import qualified HeX.Box             as B
+import           HeX.BreakList       (HListElem, VListElem)
+import qualified HeX.BreakList       as BL
+import           HeX.Categorise      (CharCode)
 import           HeX.Command.Common
 import           HeX.Config
 import           HeX.Evaluate
-import qualified HeX.Lex                       as Lex
-import qualified HeX.Parse        as HP
-import qualified HeX.Unit         as Unit
+import qualified HeX.Lex             as Lex
+import qualified HeX.Parse           as HP
+import qualified HeX.Unit            as Unit
 
 glueToElem :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s BL.VListElem
 glueToElem g =
@@ -221,8 +218,9 @@ showLexTok = \case
         Text.singleton char
     Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Lex.Space } ->
         Text.singleton char
-    Lex.CharCatToken         cc                       -> showT cc
-    Lex.ControlSequenceToken (Lex.ControlSequence cs) -> "\\" <> toS cs
+    Lex.CharCatToken cc -> showT cc
+    Lex.ControlSequenceToken (Lex.ControlSequence cs) ->
+        "\\" <> toS (fUndirected cs)
 
 showPrimTok :: HP.PrimitiveToken -> Text
 showPrimTok = \case

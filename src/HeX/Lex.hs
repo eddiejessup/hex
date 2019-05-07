@@ -9,7 +9,7 @@ import           Data.Hashable                  ( Hashable
 import qualified HeX.Categorise                as Cat
 import           HeX.Categorise                 ( CharCode, CatCode )
 
-newtype ControlSequence = ControlSequence [CharCode]
+newtype ControlSequence = ControlSequence (ForwardDirected [] CharCode)
     deriving (Show, Eq)
 
 data ControlSequenceLike
@@ -73,24 +73,29 @@ chopDropWhile getNext test cs = case getNext cs of
 -- Given a function that chops one 'a' from [b], and a stopping criterion on
 -- 'a', get [a] up to but not including the succeeding item, and the rest of
 -- the list, including the elements that generated the stopping 'a'.
-chopBreak :: ([b] -> Maybe (a, [b])) -> (a -> Bool) -> [b] -> ([a], [b])
-chopBreak f test cs = revFirst $ inner [] f cs
+chopBreak
+    :: (b -> Maybe (a, b))
+    -> b
+    -> (ForwardDirected [] a, b)
+chopBreak getNext xs = revFirst $ go (BDirected []) xs
   where
-    revFirst (a, b) = (reverse a, b)
+    revFirst (a, b) = (revBackwardList a, b)
 
-    inner acc _       []  = (acc, [])
-    inner acc getNext cs' = case getNext cs' of
-        Nothing         -> (acc, [])
-        Just (next, rest)
-            | test next -> (acc, cs')
-            | otherwise -> inner (next : acc) getNext rest
+    go acc@(BDirected accList) cs = case getNext cs of
+        Nothing ->
+            (acc, cs)
+        Just (next, csRest) ->
+            go (BDirected (next : accList)) csRest
+
+parToken :: Token
+parToken = ControlSequenceToken $ ControlSequence (FDirected "par")
 
 extractToken
     :: (CharCode -> CatCode)
     -> LexState
-    -> [CharCode]
-    -> Maybe (Token, LexState, [CharCode])
-extractToken _     _     [] = Nothing
+    -> ForwardDirected [] CharCode
+    -> Maybe (Token, LexState, ForwardDirected [] CharCode)
+extractToken _     _     (FDirected []) = Nothing
 extractToken charToCat _state cs =
     do
     (cc1, rest) <- getCC cs
@@ -98,36 +103,41 @@ extractToken charToCat _state cs =
   where
     getCC = Cat.extractCharCat charToCat
 
+    getLetterCC xs =
+        do
+        (cc, xsRest) <- getCC xs
+        guard (Cat.cat cc == Cat.Letter)
+        pure (cc, xsRest)
+
     extractTokenRest (Cat.CharCat n cat1) rest = case (cat1, _state) of
         -- Control sequence: Grab it.
         (Cat.Escape, _) ->
             do
-            (cc2@(Cat.CharCat _ cat2), rest') <- getCC rest
-            let (controlCCs, rest2) = if cat2 == Cat.Letter
+            (csCC1@(Cat.CharCat _ ctrlSeqCat1), restPostEscape) <- getCC rest
+            let (ctrlSeqCCs, restPostCtrlSeq) = if ctrlSeqCat1 == Cat.Letter
                     then
-                        let (cwNameCCsRest, rest'') =
-                                chopBreak getCC ((/= Cat.Letter) . Cat.cat) rest'
-                        in  (cc2 : cwNameCCsRest, rest'')
+                        let ((FDirected ctrlWordCCsPostFirst), restPostCtrlWord) = chopBreak getLetterCC restPostEscape
+                        in  (FDirected (csCC1 : ctrlWordCCsPostFirst), restPostCtrlWord)
                     else
-                        ([cc2], rest')
-                nextState = case cat2 of
+                        (FDirected [csCC1], restPostEscape)
+                nextState = case ctrlSeqCat1 of
                     Cat.Space  -> SkippingBlanks
                     Cat.Letter -> SkippingBlanks
                     _          -> LineMiddle
-            pure ( ControlSequenceToken $ ControlSequence $ fmap Cat.char controlCCs
+            pure ( ControlSequenceToken $ ControlSequence $ Cat.char <$> ctrlSeqCCs
                  , nextState
-                 , rest2
+                 , restPostCtrlSeq
                  )
         -- Comment: Ignore rest of line and switch to line-begin.
         (Cat.Comment, _) ->
             extractToken charToCat LineBegin $
-                dropWhile (\c -> charToCat c /= Cat.EndOfLine) rest
+                fwdListDropWhile (\c -> charToCat c /= Cat.EndOfLine) rest
         -- Space at the start of a line: Ignore.
         (Cat.Space, LineBegin) ->
             extractToken charToCat _state rest
         -- Empty line: Make a paragraph.
         (Cat.EndOfLine, LineBegin) ->
-            pure (ControlSequenceToken $ ControlSequence "par", LineBegin, rest)
+            pure (parToken, LineBegin, rest)
         -- Simple tokeniser cases.
         (Cat.BeginGroup, _) ->
             pure (CharCatToken $ CharCat n BeginGroup, LineMiddle, rest)

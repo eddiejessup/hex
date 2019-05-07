@@ -26,8 +26,13 @@ import           HeX.Parse.Resolve
 import           HeX.Parse.SyntaxCommand
 import           HeX.Parse.Token
 
+-- data StreamInputElement
+--     = CharCodeElement Cat.CharCode
+--     | LexTokenElement Lex.Token
+--     deriving ( Show )
+
 data ExpandedStream =
-    ExpandedStream { codes         :: [Cat.CharCode]
+    ExpandedStream { codes         :: ForwardDirected [] Cat.CharCode
                    , lexTokens     :: [Lex.Token]
                    , lexState      :: Lex.LexState
                    , expansionMode :: ExpansionMode
@@ -36,7 +41,7 @@ data ExpandedStream =
                    }
     deriving ( Show )
 
-newExpandStream :: [Cat.CharCode] -> IO ExpandedStream
+newExpandStream :: ForwardDirected [] Cat.CharCode -> IO ExpandedStream
 newExpandStream cs = do
     conf <- Conf.newConfig
     pure $
@@ -50,7 +55,7 @@ newExpandStream cs = do
 
 -- Expanding syntax commands.
 
-expandCSName :: () -> [CharCode] -> Either Text [Lex.Token]
+expandCSName :: () -> ForwardDirected [] CharCode -> Either Text [Lex.Token]
 expandCSName _ charToks =
     -- TODO: if control sequence doesn't exist, define one that holds
     -- '\relax'.
@@ -61,13 +66,14 @@ expandString :: Conf.IntParamVal Conf.EscapeChar
              -> Either Text [Lex.Token]
 expandString (Conf.IntParamVal escapeCharCode) tok = Right $
     case tok of
-        Lex.CharCatToken _ -> [ tok ]
-        Lex.ControlSequenceToken (Lex.ControlSequence s) ->
-            stringAsMadeTokens $ escape <> s
+        Lex.CharCatToken _ ->
+            [ tok ]
+        Lex.ControlSequenceToken (Lex.ControlSequence (FDirected s)) ->
+            charCodeAsMadeToken <$> (addEscapeChar s)
   where
-    escape = if (escapeCharCode < 0) || (escapeCharCode > 255)
-             then []
-             else [ chr escapeCharCode ]
+    addEscapeChar = if (escapeCharCode < 0) || (escapeCharCode > 255)
+        then id
+        else (chr escapeCharCode :)
 
 expandMacro :: MacroContents
             -> Map.Map Digit MacroArgument
@@ -293,7 +299,7 @@ expandSyntaxCommand strm = \case
                 Left err ->
                     (Left $ show err, resultStream)
                 Right showS ->
-                    (Right $ stringAsMadeTokens showS, resultStream)
+                    (Right $ charCodeAsMadeToken <$> showS, resultStream)
     ChangeCaseTok direction ->
         runExpandCommand strm (direction, config strm) parseGeneralText expandChangeCase
   where
@@ -318,8 +324,7 @@ fetchLexToken stream =
         [] ->
             do
             let lkpCatCode t = Conf.lookupCatCode t $ config stream
-            (lt, lexState', codes') <-
-                Lex.extractToken lkpCatCode (lexState stream) (codes stream)
+            (lt, lexState', codes') <- Lex.extractToken lkpCatCode (lexState stream) (codes stream)
             pure (lt, stream{codes = codes', lexState = lexState'})
 
 fetchResolvedToken :: ExpandedStream -> Maybe (Lex.Token, ResolvedToken, ExpandedStream)
@@ -331,7 +336,8 @@ fetchResolvedToken stream =
     pure (lt, resolveToken lkp (expansionMode stream') lt, stream')
 
 fetchAndExpandToken :: ExpandedStream -> Maybe (Either Text [Lex.Token], ExpandedStream)
-fetchAndExpandToken ExpandedStream{codes = []} = Nothing
+fetchAndExpandToken ExpandedStream{ codes = FDirected [] } =
+    Nothing
 fetchAndExpandToken stream =
     do
     (lt, rt, stream') <- fetchResolvedToken stream
@@ -373,7 +379,7 @@ instance P.Stream ExpandedStream where
 
     -- take1_ :: s -> Maybe (Token s, s)
     -- If we've no input, signal that we are done.
-    take1_ ExpandedStream{codes = []} = Nothing
+    take1_ ExpandedStream{ codes = FDirected [] } = Nothing
     take1_ stream =
         do
         (_, rt, stream') <- fetchResolvedToken stream

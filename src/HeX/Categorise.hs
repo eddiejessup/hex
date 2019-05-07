@@ -72,15 +72,17 @@ catLookup :: CatCodes -> CharCode -> CatCode
 catLookup m n = catDefault $ HMap.lookup n m
 
 extractCharCat
-  :: (CharCode -> CatCode) -> [CharCode] -> Maybe (CharCat, [CharCode])
-extractCharCat _ [] = Nothing
-extractCharCat charToCat (n1 : n2 : n3 : rest) =
+  :: (CharCode -> CatCode) -> ForwardDirected [] CharCode -> Maybe (CharCat, ForwardDirected [] CharCode)
+extractCharCat _ (FDirected []) =
+    Nothing
+extractCharCat charToCat (FDirected (n1 : n2 : n3 : rest)) =
     -- Next two characters must be identical, and have category
     -- 'Superscript', and triod character mustn't have category 'EndOfLine'.
-  let cat1    = charToCat n1
-      n3Triod = toEnum $ fromEnum n3 + if fromEnum n3 < 64 then 64 else (-64)
-  in  Just
-        $ if (cat1 == Superscript) && (n1 == n2) && (charToCat n3 /= EndOfLine)
-            then (CharCat n3Triod $ charToCat n3Triod, rest)
-            else (CharCat n1 cat1, n2 : n3 : rest)
-extractCharCat charToCat (n1 : rest) = Just (CharCat n1 $ charToCat n1, rest)
+    let cat1    = charToCat n1
+        n3Triod = toEnum $ fromEnum n3 + if fromEnum n3 < 64 then 64 else (-64)
+    in
+        Just $ if (cat1 == Superscript) && (n1 == n2) && (charToCat n3 /= EndOfLine)
+            then (CharCat n3Triod $ charToCat n3Triod, FDirected rest)
+            else (CharCat n1 cat1, FDirected (n2 : n3 : rest))
+extractCharCat charToCat (FDirected (n1 : rest)) =
+    Just (CharCat n1 $ charToCat n1, FDirected rest)

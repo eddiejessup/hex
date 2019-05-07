@@ -397,15 +397,12 @@ instance TeXEvaluable AST.TokenListVariable where
 
 -- Showing internal quantities.
 
--- For \number, \romannumeral, \string. \meaning, \jobname, and \fontname:
--- Each character code gets category "other" , except that 32 is gets "space".
-asMadeToken :: CharCode -> Lex.Token
-asMadeToken c =
+-- For \number, \romannumeral, \string. \meaning, \jobname, and \fontname: Each
+-- character code gets category "other" , except that 32 gets "space".
+charCodeAsMadeToken :: CharCode -> Lex.Token
+charCodeAsMadeToken c =
     let cat = if c == ' ' then Lex.Space else Lex.Other
     in Lex.CharCatToken $ Lex.CharCat c cat
-
-stringAsMadeTokens :: [CharCode] -> [Lex.Token]
-stringAsMadeTokens = fmap asMadeToken
 
 instance TeXEvaluable AST.InternalQuantity where
     type EvalTarget AST.InternalQuantity = [CharCode]

@@ -31,8 +31,7 @@ handleCommandInParaMode hList command oldStream =
             -- primitive.
             -- (Note that we use oldStream.)
             do
-            let parToken = Lex.ControlSequenceToken $ Lex.ControlSequence "par"
-            put $ HP.insertLexToken oldStream parToken
+            put $ HP.insertLexToken oldStream Lex.parToken
             pure doNothing'
         HP.HModeCommand (HP.AddHGlue g) ->
             addElem' <$> hModeAddHGlue g

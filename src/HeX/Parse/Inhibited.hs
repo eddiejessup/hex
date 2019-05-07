@@ -334,10 +334,12 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
 unsafeParseCharLike :: InhibitableStream s => SimpParser s Int
 unsafeParseCharLike = ord <$> handleLex tokToCharLike
   where
-    tokToCharLike (CharCatToken CharCat{char = c}) = Just c
-    tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence [ c ])) =
+    tokToCharLike (CharCatToken CharCat{char = c}) =
         Just c
-    tokToCharLike _ = Nothing
+    tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence (FDirected [ c ]))) =
+        Just c
+    tokToCharLike _ =
+        Nothing
 
 -- Interface.
 parseBalancedText :: InhibitableStream s

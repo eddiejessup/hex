@@ -28,7 +28,7 @@ resolveToken csLookup Expanding t = case t of
     lkp key = fromMaybe (primTok $ ResolutionError key) $ csLookup key
 
 _cs :: [CharCode] -> Lex.ControlSequenceLike
-_cs = Lex.ControlSequenceProper . Lex.ControlSequence
+_cs = Lex.ControlSequenceProper . Lex.ControlSequence . FDirected
 
 syntaxTok :: SyntaxCommandHeadToken -> ResolvedToken
 syntaxTok = SyntaxCommandHeadToken
