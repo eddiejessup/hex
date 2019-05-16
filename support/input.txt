@@ -1,0 +1,33 @@
+# How \input works in TeX
+
+## Steps
+
+Prepare file, *other.tex*, with contents: "file."
+Open tex; run `\def\a{\input other.tex macro.} \a \end`
+
+## Result
+
+*other.dvi* generates text: "file. macro."
+
+## Explanation (inferred)
+
+Define macro as sequence of lex tokens.
+Read next lex token, parsed from input chars, see \a, expand into sequence of lex tokens, insert those *lex tokens* into the input.
+Read next *lex token*, read from first lex token inserted by expansion, see '\input'.
+Read next lex tokens to get argument to \input.
+Prepare to start reading from *other.tex*.
+Read next lex token, see "f" from *other.tex*.
+Read rest of character lex-tokens for "ile" from *other.tex*
+See end-of-file for *other.tex*, resume reading from main input source.
+Read next lex token from
+Read rest of character lex-tokens for "acro".
+See \end.
+
+# Conclusion
+
+We can't keep separate lists of char-codes and lex-tokens, and prioritise lex-tokens if any are present, because this would mean we would read "macro" before "file". We could either,
+
+- Keep separate stacks, but have one pair per input, and prioritise the uppermost input pair
+- Have one stack, storing a type that allows either characters or lex tokens.
+
+The second seems easier to write correctly, but might be slower.
