@@ -10,7 +10,7 @@ import qualified HeX.Categorise      as Cat
 
 initialiseCharCodes :: (Cat.CharCode -> v) -> Cat.CharCodeMap v
 initialiseCharCodes val = HMap.fromList $
-    ((\c -> (c, val c)) . chr) <$> [ 0 .. 127 ]
+    (\c -> (c, val c)) . chr <$> [ 0 .. 127 ]
 
 digits :: [Char]
 digits = [ '1' .. '9' ]
@@ -60,7 +60,7 @@ instance Enum DelimiterCode where
 
     fromEnum (NotADelimiter n) = n
     fromEnum (DelimiterSpecCode DelimiterSpec{smallVar, largeVar}) =
-        (fromEnum largeVar `shiftL` 12) + (fromEnum smallVar)
+        (fromEnum largeVar `shiftL` 12) + fromEnum smallVar
 
 data DelimiterSpec = DelimiterSpec { smallVar, largeVar :: DelimiterVar }
     deriving ( Show )

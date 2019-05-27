@@ -65,7 +65,7 @@ character recipes widths heights depths italicCorrs charInfo =
     let _remainder = remainder charInfo
     -- If the character is special, get its particular extra attributes.
     special <- case tag charInfo of
-            Plain      -> pure $ Nothing
+            Plain      -> pure Nothing
             LigKern    -> pure $ Just $ LigKernIndex _remainder
             Chain      -> pure $ Just $ NextLargerChar _remainder
             Extensible ->
@@ -95,7 +95,7 @@ readCharacters
 readCharacters _minCode charInfos recipes widths heights depths italicCorrs =
     do
     charList <- mapM (character recipes widths heights depths italicCorrs) charInfos
-    pure $ fromList $ fmap (\(idx, c) -> (chr $ idx + _minCode, c)) $ indexed charList
+    pure $ fromList $ (\(idx, c) -> (chr $ idx + _minCode, c)) <$> indexed charList
 
 data CharInfo = CharInfo
     { widthIdx

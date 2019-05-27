@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 module HeX.Parse.Helpers where
 
 import           HeXlude
@@ -7,7 +8,7 @@ import qualified Data.Set        as Set
 
 import qualified Text.Megaparsec as P
 
-type ErrorComp = ()
+type ErrorComp = Void
 
 type SimpParser s = P.Parsec ErrorComp s
 
@@ -18,6 +19,12 @@ type ParseErrorBundle s = P.ParseErrorBundle s ErrorComp
 type MatchToken s = P.Token s -> Bool
 
 type NullSimpParser s = SimpParser s ()
+
+data BuildError s
+  = ParseError s
+  | ConfigError Text
+
+deriving instance Show s => Show (BuildError s)
 
 freshSourcePos :: P.SourcePos
 freshSourcePos = P.initialPos "elmo_source"
@@ -79,8 +86,7 @@ skipManySatisfied :: P.Stream s => MatchToken s -> NullSimpParser s
 skipManySatisfied = P.skipMany . skipSatisfied
 
 skipSatisfiedChunk :: P.Stream s => [P.Token s] -> NullSimpParser s
-skipSatisfiedChunk [] = pure ()
-skipSatisfiedChunk (x : xs) = skipSatisfiedEquals x >> skipSatisfiedChunk xs
+skipSatisfiedChunk = foldr (skipSatisfiedEquals >>> (>>)) (pure ())
 
 copyState :: P.State s -> s' -> P.State s'
 copyState _state tgtStream =

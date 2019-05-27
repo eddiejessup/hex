@@ -92,7 +92,7 @@ class TeXVariable a => TeXNumericVariable a where
         -> m ()
     advanceValueFromAST var globalFlag astPlusVal =
         do
-        newVal <- readOnState $ (advanceOp (Proxy @a)) <$> texEvaluate var <*> texEvaluate astPlusVal
+        newVal <- readOnState $ advanceOp (Proxy @a) <$> texEvaluate var <*> texEvaluate astPlusVal
         setValue var globalFlag newVal
 
     scaleValueFromAST

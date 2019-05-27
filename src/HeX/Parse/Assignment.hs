@@ -7,7 +7,7 @@ import           Control.Monad.Except ( runExceptT )
 import           Control.Monad.Reader ( runReaderT )
 import           Data.Functor         ( ($>) )
 import qualified Data.Set             as Set
-import           Path                 ( File, Path, Rel, parseRelFile )
+import qualified Path
 
 import qualified Text.Megaparsec      as P
 import           Text.Megaparsec      ( (<|>) )
@@ -24,7 +24,7 @@ import qualified HeX.Parse.Token      as T
 parseAssignment :: InhibitableStream s => SimpParser s Assignment
 
 -- 'Try' because both can start with 'global'.
-parseAssignment = (P.try parseDefineMacro) <|> parseNonMacroAssignment
+parseAssignment = P.try parseDefineMacro <|> parseNonMacroAssignment
 
 -- Parse Macro.
 parseDefineMacro :: InhibitableStream s => SimpParser s Assignment
@@ -203,10 +203,7 @@ parseLet = do
 parseFutureLet :: InhibitableStream s => SimpParser s AssignmentBody
 parseFutureLet = do
     skipSatisfiedEquals T.FutureLetTok
-    cs <- parseCSName
-    tok1 <- parseLexToken
-    tok2 <- parseLexToken
-    pure $ DefineControlSequence cs (FutureLetTarget tok1 tok2)
+    DefineControlSequence <$> parseCSName <*> (FutureLetTarget <$> parseLexToken <*> parseLexToken)
 
 parseShortMacroAssignment :: InhibitableStream s => SimpParser s AssignmentBody
 parseShortMacroAssignment = do
@@ -255,35 +252,39 @@ parseSetBoxRegister = do
     parseVarEqVal (parseEightBitTeXInt, skipFiller >> parseBox) SetBoxRegister
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-parseFileName :: InhibitableStream s => SimpParser s (Path Rel File)
+parseFileName :: InhibitableStream s => SimpParser s TeXFilePath
 parseFileName = do
     skipOptionalSpaces
-    fileName <- P.some $
-        satisfyThen $
-        \case
-            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter)) ->
-                Just c
-            -- 'Other' Characters for decimal digits are OK.
-            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
-                case c of
-                    '0' -> Just c
-                    '1' -> Just c
-                    '2' -> Just c
-                    '3' -> Just c
-                    '4' -> Just c
-                    '5' -> Just c
-                    '6' -> Just c
-                    '7' -> Just c
-                    '8' -> Just c
-                    '9' -> Just c
-                    -- Not in the spec, but let's say "/" and "." are OK.
-                    '/' -> Just c
-                    '.' -> Just c
-                    _   -> Nothing
-            _ -> Nothing
+    fileNameChars <- P.some $ satisfyThen $ \case
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter)) ->
+            Just c
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) | isValidOther c ->
+            Just c
+        _ -> Nothing
     skipSatisfied isSpace
-    maybeToFail ("Invalid filename: " <> show fileName <> ".tfm")
-                (parseRelFile (fileName <> ".tfm"))
+    case Path.parseRelFile fileNameChars of
+        Just p -> pure $ TeXFilePath p
+        -- Nothing -> P.failure Nothing Set.empty
+        Nothing -> panic $ show fileNameChars
+
+  where
+    isValidOther = \case
+        -- 'Other' Characters for decimal digits are OK.
+        '0' -> True
+        '1' -> True
+        '2' -> True
+        '3' -> True
+        '4' -> True
+        '5' -> True
+        '6' -> True
+        '7' -> True
+        '8' -> True
+        '9' -> True
+        -- Not in the spec, but let's say these are OK.
+        '/' -> True
+        '.' -> True
+        '_' -> True
+        _ -> False
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
 parseNewFontAssignment :: InhibitableStream s => SimpParser s AssignmentBody

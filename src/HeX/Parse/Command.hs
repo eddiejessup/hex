@@ -47,7 +47,7 @@ parseStartParagraph = satisfyThen $
 
 parseLeadersSpec :: InhibitableStream s => Axis -> SimpParser s LeadersSpec
 parseLeadersSpec axis =
-    LeadersSpec <$> parseLeaders <*> parseBoxOrRule <*> (parseModedGlue axis)
+    LeadersSpec <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue axis
   where
     parseLeaders = satisfyThen $
         \case
@@ -69,8 +69,8 @@ parseFetchedBoxRef tgtAxis = do
 
 parseBoxOrRule :: InhibitableStream s => SimpParser s BoxOrRule
 parseBoxOrRule = P.choice [ BoxOrRuleBox <$> parseBox
-                          , (BoxOrRuleRule Horizontal) <$> (parseModedRule Horizontal)
-                          , (BoxOrRuleRule Vertical) <$> (parseModedRule Vertical)
+                          , BoxOrRuleRule Horizontal <$> parseModedRule Horizontal
+                          , BoxOrRuleRule Vertical <$> parseModedRule Vertical
                           ]
 
 parseModedRule :: InhibitableStream s => Axis -> SimpParser s Rule
@@ -166,7 +166,7 @@ satisfyThenGetMode validTok = satisfyThen $ \case
 
 parseRemoveItem :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseRemoveItem =
-    RemoveItem <$> (satisfyThen $ \case
+    RemoveItem <$> satisfyThen (\case
                         T.RemoveItemTok i -> Just i
                         _ -> Nothing)
 
@@ -186,7 +186,7 @@ parseModedGlue axis =
 
     parsePresetGlue t =
         skipSatisfiedEquals (T.ModedCommand axis (T.PresetGlueTok t))
-        $> (presetToSpecifiedGlue t)
+        $> presetToSpecifiedGlue t
 
     -- \{v,h}fil:    0pt plus 1fil
     -- \{v,h}fill:   0pt plus 1fill
@@ -209,12 +209,18 @@ parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
             _ -> Nothing
 
 parseOpenInput :: InhibitableStream s => SimpParser s ModeIndependentCommand
-parseOpenInput = do
+parseOpenInput =
+    do
     skipSatisfiedEquals T.OpenInputTok
+    parseModifyFileStream FileInput
+
+parseModifyFileStream :: InhibitableStream s => FileStreamType -> SimpParser s ModeIndependentCommand
+parseModifyFileStream fileStreamType =
+    do
     n <- parseTeXInt
     skipOptionalEquals
     fn <- parseFileName
-    pure $ ModifyFileStream FileInput (Open fn) n
+    pure $ ModifyFileStream fileStreamType (Open fn) n
 
 parseOptionalImmediate :: InhibitableStream s => SimpParser s WritePolicy
 parseOptionalImmediate =
@@ -224,10 +230,7 @@ parseOpenOutput :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseOpenOutput = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.OpenOutputTok
-    n <- parseTeXInt
-    skipOptionalEquals
-    fn <- parseFileName
-    pure $ ModifyFileStream (FileOutput writePolicy) (Open fn) n
+    parseModifyFileStream (FileOutput writePolicy)
 
 parseCloseOutput :: InhibitableStream s => SimpParser s ModeIndependentCommand
 parseCloseOutput = do
@@ -293,20 +296,20 @@ parseCommand =
             , parseAddDiscretionaryText
             , skipSatisfiedEquals T.DiscretionaryHyphenTok $> AddDiscretionaryHyphen
             , skipSatisfied (primTokHasCategory Lex.MathShift) $> EnterMathMode
-            , AddHGlue <$> (parseModedGlue Horizontal)
-            , AddHLeaders <$> (parseLeadersSpec Horizontal)
-            , AddHRule <$> (parseModedRule Horizontal)
-            , AddUnwrappedFetchedHBox <$> (parseFetchedBoxRef Horizontal)
+            , AddHGlue <$> parseModedGlue Horizontal
+            , AddHLeaders <$> parseLeadersSpec Horizontal
+            , AddHRule <$> parseModedRule Horizontal
+            , AddUnwrappedFetchedHBox <$> parseFetchedBoxRef Horizontal
             ]
 
     parseVModeCommand =
         P.choice
             [ skipSatisfiedEquals T.EndTok $> End
             , skipSatisfiedEquals T.DumpTok $> Dump
-            , AddVGlue <$> (parseModedGlue Vertical)
-            , AddVLeaders <$> (parseLeadersSpec Vertical)
-            , AddVRule <$> (parseModedRule Vertical)
-            , AddUnwrappedFetchedVBox <$> (parseFetchedBoxRef Vertical)
+            , AddVGlue <$> parseModedGlue Vertical
+            , AddVLeaders <$> parseLeadersSpec Vertical
+            , AddVRule <$> parseModedRule Vertical
+            , AddUnwrappedFetchedVBox <$> parseFetchedBoxRef Vertical
             ]
 
 parseCharCodeRef :: InhibitableStream s => SimpParser s CharCodeRef

@@ -21,7 +21,7 @@ instance (Readable a, Foldable t, Functor t) => Readable (t a) where
     describe = describeLined
 
 showT :: Show a => a -> Text
-showT v = toS $ (show v :: [Char])
+showT v = toS (show v :: [Char])
 
 describeIntercalated :: (Readable a, Foldable t, Functor t) => Text -> t a -> Text
 describeIntercalated d = monoidIntercalate d . (describe <$>)

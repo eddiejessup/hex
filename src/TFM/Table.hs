@@ -1,9 +1,10 @@
 module TFM.Table where
 
-import HeXlude
+import           HeXlude
 
-import           Data.Binary.Get ( Get, getByteString )
-import           Data.ByteString ( ByteString )
+import           Control.Monad.Fail (fail)
+import           Data.Binary.Get    (Get, getByteString)
+import           Data.ByteString    (ByteString)
 
 import           TFM.Common
 
@@ -29,7 +30,7 @@ data Table
     deriving (Show, Eq, Enum, Ord, Bounded)
 
 data TableParams = TableParams
-    { tableToString :: Table -> ByteString
+    { tableToString                     :: Table -> ByteString
     , smallestCharCode, largestCharCode :: Int
     }
 

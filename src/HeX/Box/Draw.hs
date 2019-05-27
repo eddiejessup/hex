@@ -15,9 +15,9 @@ ruleToDVI ax b =
 
 boxToDVI :: Axis -> Box -> ForwardDirected [] D.Instruction
 boxToDVI ax b =
-       (FDirected [ D.PushStack ])
+       FDirected [ D.PushStack ]
     <> contentDVI b
-    <> (FDirected [ D.PopStack, D.Move ax $ axisNaturalSpan ax b ])
+    <> FDirected [ D.PopStack, D.Move ax $ axisNaturalSpan ax b ]
   where
     contentDVI :: Box -> ForwardDirected [] D.Instruction
     contentDVI Box{contents} = case contents of
@@ -41,7 +41,7 @@ hBoxElemToDVI (HBoxHBaseElem (ElemCharacter e)) = FDirected [ D.AddCharacter e ]
 hBoxElemToDVI (HVBoxElem e) = axisVBoxElemToDVI Horizontal e
 
 pageToDVI :: Page -> ForwardDirected [] D.Instruction
-pageToDVI (Page vs) = (FDirected [D.BeginNewPage]) <> mconcatMap vBoxElemToDVI vs
+pageToDVI (Page vs) = FDirected [D.BeginNewPage] <> mconcatMap vBoxElemToDVI vs
 
 pagesToDVI :: (Foldable t, Functor t) => ForwardDirected t Page -> ForwardDirected [] D.Instruction
 pagesToDVI = mconcatMap pageToDVI

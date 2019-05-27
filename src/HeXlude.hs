@@ -14,8 +14,6 @@ module HeXlude
     , liftThrow
     , (>>>)
     , atEith
-    , fail
-    , maybeToFail
     , traceText
     , mconcat
     , mconcatMap
@@ -64,7 +62,6 @@ import           Protolude                 hiding (catMaybes, filter, group,
 import           Control.Applicative       (Alternative, empty)
 import           Control.Arrow             ((>>>))
 import           Control.Monad.Except      (MonadError, liftIO, throwError)
-import           Control.Monad.Fail        (MonadFail, fail)
 import           Control.Monad.IO.Class    (MonadIO)
 import           Control.Monad.Trans.Maybe (MaybeT, runMaybeT)
 import           Data.Function             ((&))
@@ -84,7 +81,7 @@ liftMaybe e = \case
     Just a -> pure a
 
 liftThrow :: (MonadIO m, MonadError e m) => e -> MaybeT IO a -> m a
-liftThrow e v = (liftIO $ runMaybeT v) >>= liftMaybe e
+liftThrow e v = liftIO (runMaybeT v) >>= liftMaybe e
 
 atEith :: Show a => Text -> [a] -> Int -> Either Text a
 atEith str xs i = maybeToRight
@@ -92,16 +89,11 @@ atEith str xs i = maybeToRight
      <> showT xs)
     (atMay xs i)
 
-maybeToFail :: MonadFail m => Text -> Maybe a -> m a
-maybeToFail err = \case
-    Nothing -> fail $ toS err
-    Just v -> pure v
-
 traceText :: Text -> a -> a
 traceText = trace
 
 mconcat :: (Monoid a, Foldable t) => t a -> a
-mconcat xs = foldl' (<>) mempty xs
+mconcat = foldl' (<>) mempty
 
 mconcatMap :: (Monoid c, Foldable t, Functor t) => (a -> c) -> t a -> c
 mconcatMap f = mconcat . (f <$>)

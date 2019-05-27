@@ -208,11 +208,11 @@ instance TeXEvaluable AST.InternalUnit where
     type EvalTarget AST.InternalUnit = Rational
 
     texEvaluate = \case
-        AST.Em -> (TFM.quad . fontMetrics) <$> currentFontInfo
-        AST.Ex -> (TFM.xHeight . fontMetrics) <$> currentFontInfo
+        AST.Em -> TFM.quad . fontMetrics <$> currentFontInfo
+        AST.Ex -> TFM.xHeight . fontMetrics <$> currentFontInfo
         AST.InternalTeXIntUnit v -> fromIntegral <$> texEvaluate v
         AST.InternalLengthUnit v -> fromIntegral <$> texEvaluate v
-        AST.InternalGlueUnit v -> (fromIntegral . BL.dimen) <$> texEvaluate v
+        AST.InternalGlueUnit v -> fromIntegral . BL.dimen <$> texEvaluate v
 
 instance TeXEvaluable AST.InternalLength where
     type EvalTarget AST.InternalLength = Int
@@ -281,18 +281,18 @@ instance TeXEvaluable AST.NormalMathLength where
         do
         ef <- texEvaluate f
         eu <- texEvaluate mathU
-        pure $ round $ ef * (fromIntegral eu)
+        pure $ round $ ef * fromIntegral eu
 
 instance TeXEvaluable AST.MathUnit where
     type EvalTarget AST.MathUnit = Int
 
     texEvaluate = \case
         AST.Mu -> pure 1
-        AST.InternalMathGlueAsUnit mg -> (BL.dimen . BL.unMathGlue) <$> texEvaluate mg
+        AST.InternalMathGlueAsUnit mg -> BL.dimen . BL.unMathGlue <$> texEvaluate mg
 
 instance TeXEvaluable AST.CoercedMathLength where
     type EvalTarget AST.CoercedMathLength = Int
-    texEvaluate (AST.InternalMathGlueAsMathLength mg) = (BL.dimen . BL.unMathGlue) <$> texEvaluate mg
+    texEvaluate (AST.InternalMathGlueAsMathLength mg) = BL.dimen . BL.unMathGlue <$> texEvaluate mg
 
 -- Glue.
 
@@ -305,7 +305,7 @@ instance TeXEvaluable AST.Glue where
         AST.InternalGlue (T.Sign isPos) v ->
             do
             ev <- texEvaluate v
-            pure $ if isPos then ev else (BL.negateGlue ev)
+            pure $ if isPos then ev else BL.negateGlue ev
       where
         evalFlex = \case
             Just f -> texEvaluate f
@@ -478,12 +478,12 @@ instance TeXEvaluable AST.IfConditionHead where
             do
             en1 <- texEvaluate n1
             en2 <- texEvaluate n2
-            pure $ (ordToComp ordering) en1 en2
+            pure $ ordToComp ordering en1 en2
         AST.IfLengthPairTest d1 ordering d2 ->
             do
             ed1 <- texEvaluate d1
             ed2 <- texEvaluate d2
-            pure $ (ordToComp ordering) ed1 ed2
+            pure $ ordToComp ordering ed1 ed2
         AST.IfTeXIntOdd n ->
             do
             en <- texEvaluate n

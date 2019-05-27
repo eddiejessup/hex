@@ -20,19 +20,15 @@ import           HeX.Config
 import           HeX.Evaluate
 import qualified HeX.Parse                     as HP
 
-data BuildError s
-  = ParseError s
-  | ConfigError Text
-
 newtype MonadBuild s a = MonadBuild { unMonadBuild :: StateT s IO a }
     deriving (Functor, Applicative, Monad, MonadState s, MonadIO)
 
 type BaseExceptMonadBuild e s a = ExceptT e (MonadBuild s) a
 
-type ExceptMonadBuild s a = ExceptT (BuildError (HP.ParseErrorBundle s)) (MonadBuild s) a
+type ExceptMonadBuild s a = ExceptT (HP.BuildError (HP.ParseErrorBundle s)) (MonadBuild s) a
 
 liftConfigError :: BaseExceptMonadBuild Text s a -> ExceptMonadBuild s a
-liftConfigError = withExceptT ConfigError
+liftConfigError = withExceptT HP.ConfigError
 
 liftConfState
     :: HP.InhibitableStream s
@@ -46,11 +42,11 @@ liftReadOnConfState
     -> ExceptMonadBuild s a
 liftReadOnConfState x = liftConfigError $ readOnConfState x
 
-throwConfigError :: MonadError (BuildError s) m => Text -> m a
-throwConfigError s = throwError $ ConfigError s
+throwConfigError :: MonadError (HP.BuildError s) m => Text -> m a
+throwConfigError s = throwError $ HP.ConfigError s
 
-liftMaybeConfigError :: MonadError (BuildError s) m => Text -> Maybe a -> m a
-liftMaybeConfigError s = liftMaybe (ConfigError s)
+liftMaybeConfigError :: MonadError (HP.BuildError s) m => Text -> Maybe a -> m a
+liftMaybeConfigError s = liftMaybe (HP.ConfigError s)
 
 readOnState :: MonadState r m => ReaderT r m b -> m b
 readOnState f = get >>= runReaderT f
@@ -63,7 +59,7 @@ readOnConfState f = HP.runConfState $ readOnState f
 
 modConfState
     :: (MonadState s m, HP.InhibitableStream s) => (Config -> Config) -> m ()
-modConfState x = HP.runConfState $ modify $ x
+modConfState x = HP.runConfState $ modify x
 
 liftEvalOnConfState
     :: (HP.InhibitableStream s, TeXEvaluable v)
@@ -92,7 +88,7 @@ addMaybeElem a = \case
     Just e -> addElem a e
 
 runLoop :: Monad m => (a -> m (RecursionResult a b)) -> a -> m b
-runLoop f initialState = go initialState
+runLoop f = go
   where
     go state_ =
         f state_ >>= \case
@@ -106,7 +102,7 @@ runCommandLoop
     => (st -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult st r))
     -> st
     -> ExceptMonadBuild s r
-runCommandLoop f s = runLoop g s
+runCommandLoop f = runLoop g
   where
     g elemList =
         do
@@ -117,6 +113,6 @@ runCommandLoop f s = runLoop g s
     peekCommand =
         do
         oldStream <- get
-        (P.State { P.stateInput = newStream }, command) <- liftEither $ ParseError `mapLeft` HP.extractCommand oldStream
+        (P.State { P.stateInput = newStream }, command) <- liftEither $ HP.ParseError `mapLeft` HP.extractCommand oldStream
         put newStream
         pure (oldStream, command)

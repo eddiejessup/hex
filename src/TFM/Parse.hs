@@ -35,7 +35,7 @@ data TexFont = TexFont
     , extraParams           :: Maybe F.ExtraFontParams
     , ligKerns              :: [LigKernInstr]
     , characters            :: HashMap Char Character
-    } deriving (Show)
+    }
 
 runGetEith :: Text -> B.G.Get b -> BS.ByteString -> Either Text b
 runGetEith ctx f s = case B.G.runGetOrFail f (BS.L.fromStrict s) of
@@ -49,7 +49,7 @@ newTFM contents =
 
     let
         runGetEithTable :: Text -> B.G.Get b -> T.Table -> Either Text b
-        runGetEithTable s f tbl = runGetEith s f ((T.tableToString tableParams) tbl)
+        runGetEithTable s f tbl = runGetEith s f (T.tableToString tableParams tbl)
 
     header <- runGetEithTable "header" H.getHeader T.Header
     charInfos <- runGetEithTable "charInfos" (getChunks getCharInfo) T.CharacterInfo

@@ -2,7 +2,7 @@ module HeX.Parse.AST where
 
 import           HeXlude
 
-import           Path            ( File, Path, Rel )
+import qualified Path
 
 import           HeX.Categorise  ( CharCode )
 import qualified HeX.Lex         as Lex
@@ -92,7 +92,7 @@ data InternalUnit =
 data PhysicalUnitFrame = MagnifiedFrame | TrueFrame
     deriving ( Show )
 
-data CoercedLength = InternalGlueAsLength InternalGlue
+newtype CoercedLength = InternalGlueAsLength InternalGlue
     deriving ( Show )
 
 -- Math-length.
@@ -112,7 +112,7 @@ data NormalMathLength =
 data MathUnit = Mu | InternalMathGlueAsUnit InternalMathGlue
     deriving ( Show )
 
-data CoercedMathLength = InternalMathGlueAsMathLength InternalMathGlue
+newtype CoercedMathLength = InternalMathGlueAsMathLength InternalMathGlue
     deriving ( Show )
 
 -- Glue.
@@ -213,13 +213,16 @@ data InternalMathGlue =
 data Assignment = Assignment { body :: AssignmentBody, global :: T.GlobalFlag }
     deriving ( Show )
 
+newtype TeXFilePath = TeXFilePath (Path.Path Path.Rel Path.File)
+    deriving ( Show )
+
 data ControlSequenceTarget =
       MacroTarget T.MacroContents
     | LetTarget Lex.Token
     | FutureLetTarget Lex.Token Lex.Token
     | ShortDefineTarget T.QuantityType TeXInt
     | ReadTarget TeXInt
-    | FontTarget FontSpecification (Path Rel File)
+    | FontTarget FontSpecification TeXFilePath
     deriving ( Show )
 
 data AssignmentBody =
@@ -379,7 +382,7 @@ data WritePolicy = Immediate | Deferred
 data Rule = Rule { width, height, depth :: Maybe Length }
     deriving ( Show )
 
-data FileStreamAction = Open (Path Rel File) | Close
+data FileStreamAction = Open TeXFilePath | Close
     deriving ( Show )
 
 data FileStreamType = FileInput | FileOutput WritePolicy

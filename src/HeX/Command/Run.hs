@@ -20,7 +20,9 @@ import           HeX.Lex                  (LexState (..), extractToken)
 import           HeX.Parse                (ExpandedStream, ExpansionMode (..),
                                            IndentFlag (..), InhibitableStream,
                                            defaultCSMap, extractCommand,
-                                           newExpandStream, resolveToken)
+                                           resolveToken,
+                                           BuildError (..), showErrorBundle,
+                                           ParseErrorBundle)
 
 usableCatLookup :: CharCode -> CatCode
 usableCatLookup = catLookup usableCatCodes
@@ -66,51 +68,37 @@ runResolved _xs = extractAndPrint (LineBegin, _xs)
 
 -- Expand.
 
-runExpand :: ForwardDirected [] CharCode -> IO ()
-runExpand xs = newExpandStream xs >>= extractAndPrint
-  where
-    extractAndPrint estream = case P.take1_ estream of
-        Just (tok, estream') ->
-            do
-            print tok
-            extractAndPrint estream'
-        Nothing ->
-            pure ()
+runExpand :: ExpandedStream -> IO ()
+runExpand s = case P.take1_ s of
+    Just (tok, s') ->
+        print tok >> runExpand s'
+    Nothing ->
+        pure ()
 
 -- Command.
 
-runCommand :: ForwardDirected [] CharCode -> IO ()
-runCommand xs = newExpandStream xs >>= extractAndPrint
-  where
-    extractAndPrint estream = case extractCommand estream of
-        Right (P.State {P.stateInput = estream'}, com) ->
-            do
-            print com
-            extractAndPrint estream'
-        Left (P.ParseErrorBundle ((P.TrivialError _ (Just P.EndOfInput) _) :| []) _) ->
-            pure ()
-        Left errs ->
-            panic $ show errs
+runCommand :: ExpandedStream -> IO ()
+runCommand s = case extractCommand s of
+    Right (P.State {P.stateInput = s'}, com) ->
+        print com >> runCommand s'
+    Left (P.ParseErrorBundle (P.TrivialError _ (Just P.EndOfInput) _ :| []) _) ->
+        pure ()
+    Left errBundle ->
+        panic $ showErrorBundle errBundle
 
 -- Generic.
 
 strEitherToIO :: Either Text v -> IO v
-strEitherToIO (Left err) = panic $ err
+strEitherToIO (Left err) = panic err
 strEitherToIO (Right v)  = pure v
 
-buildEitherToIO :: P.ShowErrorComponent s => Either (BuildError s) b -> IO b
-buildEitherToIO (Left (ParseError errBundle)) = panic $ toS $ P.showErrorComponent errBundle
+buildEitherToIO :: Show (P.Token s) => Either (BuildError (ParseErrorBundle s)) b -> IO b
+buildEitherToIO (Left (ParseError errBundle)) = panic $ showErrorBundle errBundle
 buildEitherToIO (Left (ConfigError s))        = panic $ "Bad semantics: " <> s
 buildEitherToIO (Right v)                     = pure v
 
-codesToSth
-    :: ForwardDirected [] CharCode
-    -> ExceptMonadBuild ExpandedStream a
-    -> IO a
-codesToSth xs f =
-    newExpandStream xs
-    >>= evalStateT (unMonadBuild $ runExceptT f)
-    >>= buildEitherToIO
+runStream :: ExpandedStream -> ExceptMonadBuild ExpandedStream a -> IO a
+runStream s f = evalStateT (unMonadBuild $ runExceptT f) s >>= buildEitherToIO
 
 -- Paragraph list.
 
@@ -118,55 +106,52 @@ extractParaHList :: InhibitableStream s => ExceptMonadBuild s ForwardHList
 extractParaHList =
     (\(ParaResult _ hList) -> hList) <$> extractPara Indent
 
-codesToParaList :: ForwardDirected [] CharCode -> IO ForwardHList
-codesToParaList xs =
-    codesToSth xs extractParaHList
+codesToParaList :: ExpandedStream -> IO ForwardHList
+codesToParaList s = runStream s extractParaHList
 
-runPara :: ForwardDirected [] CharCode -> IO ()
-runPara xs = codesToParaList xs >>= printLine
+runPara :: ExpandedStream -> IO ()
+runPara s = codesToParaList s >>= printLine
 
 -- Paragraph boxes.
 
-codesToParaBoxes :: ForwardDirected [] CharCode -> IO (ForwardDirected Seq (ForwardDirected [] HBoxElem))
-codesToParaBoxes xs =
-    codesToSth xs (extractParaHList >>= readOnConfState . hListToParaLineBoxes)
+codesToParaBoxes :: ExpandedStream -> IO (ForwardDirected Seq (ForwardDirected [] HBoxElem))
+codesToParaBoxes s = runStream s (extractParaHList >>= readOnConfState . hListToParaLineBoxes)
 
-runSetPara :: ForwardDirected [] CharCode -> IO ()
-runSetPara xs =
-    codesToParaBoxes xs >>= putStrLn . describeDoubleLined
+runSetPara :: ExpandedStream -> IO ()
+runSetPara s = codesToParaBoxes s >>= putStrLn . describeDoubleLined
 
 -- Pages list.
 
-codesToPages :: ForwardDirected [] CharCode -> IO (ForwardDirected Seq Page)
-codesToPages xs = codesToSth xs extractBreakAndSetVList
+codesToPages :: ExpandedStream -> IO (ForwardDirected Seq Page)
+codesToPages s = runStream s extractBreakAndSetVList
 
 printLine :: (Readable a, Foldable t, Functor t) => t a -> IO ()
 printLine = putStrLn . describeLined
 
-runPages :: ForwardDirected [] CharCode -> IO ()
-runPages xs = codesToPages xs >>= printLine
+runPages :: ExpandedStream -> IO ()
+runPages s = codesToPages s >>= printLine
 
 -- DVI instructions.
 
-codesToDVI :: ForwardDirected [] CharCode -> IO (ForwardDirected [] Instruction)
-codesToDVI xs = codesToPages xs <&> pagesToDVI
+codesToDVI :: ExpandedStream -> IO (ForwardDirected [] Instruction)
+codesToDVI s = codesToPages s <&> pagesToDVI
 
-runDVI :: ForwardDirected [] CharCode -> IO ()
-runDVI xs = codesToDVI xs >>= printLine
+runDVI :: ExpandedStream -> IO ()
+runDVI s = codesToDVI s >>= printLine
 
 -- Raw DVI instructions.
 
-codesToDVIRaw :: ForwardDirected [] CharCode -> IO (ForwardDirected Seq EncodableInstruction)
-codesToDVIRaw xs = do
+codesToDVIRaw :: ExpandedStream -> IO (ForwardDirected Seq EncodableInstruction)
+codesToDVIRaw s = do
     -- Who cares, it's for debugging
     let _mag = 1000
-    instrs <- codesToDVI xs
+    instrs <- codesToDVI s
     strEitherToIO $ parseInstructions instrs _mag
 
-runDVIRaw :: ForwardDirected [] CharCode -> IO ()
-runDVIRaw xs = codesToDVIRaw xs >>= printLine
+runDVIRaw :: ExpandedStream -> IO ()
+runDVIRaw s = codesToDVIRaw s >>= printLine
 
 -- DVI byte strings.
 
-codesToDVIBytes :: ForwardDirected [] CharCode -> IO ByteString
-codesToDVIBytes xs = encode <$> codesToDVIRaw xs
+codesToDVIBytes :: ExpandedStream -> IO ByteString
+codesToDVIBytes s = codesToDVIRaw s <&> encode

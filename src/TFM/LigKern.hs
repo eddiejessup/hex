@@ -17,7 +17,7 @@ data LigatureOp = LigatureOp
     , deleteNextChar :: Bool
     } deriving (Show)
 
-data KernOp = KernOp Rational
+newtype KernOp = KernOp Rational
     deriving (Show)
 
 data LigKernInstr = LigKernInstr
@@ -30,8 +30,8 @@ readLigKern :: [Rational] -> LigKernCommand -> Either Text LigKernInstr
 readLigKern kerns (LigKernCommand _skipByte _nextChar _opByte _remainder) =
     do
     op <- if _opByte >= kernOp
-        then (Right . KernOp) <$>
-            (atEith "kern" kerns $ (256 * (_opByte - kernOp) + _remainder))
+        then Right . KernOp <$>
+            atEith "kern" kerns (256 * (_opByte - kernOp) + _remainder)
         else pure $ Left LigatureOp
             { ligatureChar      = _remainder
             , charsToPassOver   = _opByte `shift` 2

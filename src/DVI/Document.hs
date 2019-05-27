@@ -4,14 +4,12 @@ import           HeXlude
 
 import           Data.Char       ( ord )
 import           Path            ( Path )
-import qualified Path            as Path
+import qualified Path
 import qualified Data.Text       as Txt
 
 import           DVI.Encode      ( encLength )
 import           DVI.Instruction
 import           DVI.Operation   ( Operation(DefineFontNr) )
-
-import qualified TFM
 
 data Rule = Rule { ruleWidth, ruleHeight, ruleDepth :: !LenVal }
     deriving ( Show )
@@ -36,11 +34,12 @@ instance Readable Character where
     describe v = "'" <> Txt.singleton (char v) <> "'"
 
 data FontDefinition =
-    FontDefinition { fontInfo         :: !TFM.TexFont
+    FontDefinition { fontDefChecksum    :: Int
+                   , fontDefDesignSize  :: Int
+                   , fontDefDesignScale :: Int
                    , fontPath         :: !(Path Path.Rel Path.File)
                    , fontName         :: !Text
                    , fontNr           :: !Int
-                   , scaleFactorRatio :: !Rational
                    }
     deriving ( Show )
 
@@ -129,16 +128,13 @@ parseMundaneInstruction st = \case
         pure st { instrs = instrsDone
                 , beginPagePointers = encLength instrsEnded : points
                 }
-    DefineFont FontDefinition{ fontInfo = info
+    DefineFont FontDefinition{ fontDefChecksum
+                             , fontDefDesignSize
+                             , fontDefDesignScale
                              , fontPath = path
                              , fontNr = n
-                             , scaleFactorRatio = scaleRatio
                              } ->
-        let cs = TFM.checksum info
-            ds = round $ TFM.designSizeSP info
-            sf = TFM.designScaleSP info scaleRatio
-        in
-            addInstruction st <$> getDefineFontInstruction n path sf ds cs
+        addInstruction st <$> getDefineFontInstruction n path fontDefDesignScale fontDefDesignSize fontDefChecksum
     PushStack ->
         let st' = addInstruction st pushInstruction
             newDepth = succ $ stackDepth st'

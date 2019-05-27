@@ -316,8 +316,8 @@ defaultCSMap = HMap.fromList
     , (_cs "sfcode", primTok $ CodeTypeTok SpaceFactorCodeType)
     , (_cs "delcode", primTok $ CodeTypeTok DelimiterCodeType)
       -- Alias tokens.
-    , (_cs "let", primTok $ LetTok)
-    , (_cs "futurelet", primTok $ FutureLetTok)
+    , (_cs "let", primTok LetTok)
+    , (_cs "futurelet", primTok FutureLetTok)
       -- Font range.
     , (_cs "textfont", primTok $ FontRangeTok TextSizeFontRange)
     , (_cs "scriptfont", primTok $ FontRangeTok ScriptSizeFontRange)

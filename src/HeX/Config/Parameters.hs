@@ -293,7 +293,7 @@ usableTeXIntParameters :: HMap.HashMap TeXIntParameter TeXIntVal
 usableTeXIntParameters =
     let vm = HMap.fromList [ (Tolerance, 500), (LinePenalty, 10), (Mag, 1000) ]
     in
-        HMap.union vm $ newTeXIntParameters
+        HMap.union vm newTeXIntParameters
 
 usableLengthParameters :: HMap.HashMap LengthParameter LenVal
 usableLengthParameters =
@@ -304,7 +304,7 @@ usableLengthParameters =
                              )
                            ]
     in
-        HMap.union vm $ newLengthParameters
+        HMap.union vm newLengthParameters
 
 usableGlueParameters :: HMap.HashMap GlueParameter Glue
 usableGlueParameters =
@@ -320,4 +320,4 @@ usableGlueParameters =
                              )
                            ]
     in
-        HMap.union vm $ newGlueParameters
+        HMap.union vm newGlueParameters

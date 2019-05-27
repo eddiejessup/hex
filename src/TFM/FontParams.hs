@@ -80,17 +80,17 @@ readMathExtensionParams = MathExtensionParams
 getFontParams :: Maybe Ascii -> B.G.Get FontParams
 getFontParams scheme =
     FontParams
-        <$> (getFixWord)
-        <*> (getFixWord)
-        <*> (getFixWord)
-        <*> (getFixWord)
-        <*> (getFixWord)
-        <*> (getFixWord)
-        <*> (getFixWord)
+        <$> getFixWord
+        <*> getFixWord
+        <*> getFixWord
+        <*> getFixWord
+        <*> getFixWord
+        <*> getFixWord
+        <*> getFixWord
         <*> case scheme of
             Just "TeX math symbols" ->
-                (Just . MathSymbolFontParams) <$> readMathSymbolParams
+                Just . MathSymbolFontParams <$> readMathSymbolParams
             Just "TeX math extension" ->
-                (Just . MathExtensionFontParams) <$> readMathExtensionParams
+                Just . MathExtensionFontParams <$> readMathExtensionParams
             _ ->
                 pure Nothing

@@ -9,10 +9,10 @@ import           Data.Byte
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Int             as I
-import           Data.Path            ( stripExtension' )
+import qualified Data.Path            as D.Path
 import qualified Data.Word            as W
 import           Path                 ( Path )
-import qualified Path                 as Path
+import qualified Path
 
 import           DVI.Encode
 import           DVI.Operation
@@ -98,9 +98,8 @@ getSelectFontNrInstruction fNr
         SelectFontNr $
         FastSelectFontOp $
         fromIntegral fNr
-    | otherwise = do
-        arg <- toUnsignedInt fNr
-        getVariByteInstruction (\b -> SelectFontNr $ ArgSelectFontOp b) arg
+    | otherwise =
+        toUnsignedInt fNr >>= getVariByteInstruction (SelectFontNr . ArgSelectFontOp)
 
 endPageInstruction, pushInstruction, popInstruction :: EncodableInstruction
 endPageInstruction = getSimpleEncInstruction EndPage
@@ -127,25 +126,24 @@ getDefineFontInstruction
 getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
     sI <- toUnsignedInt fNr
     (_op, fontNrArgVal) <- getVariByteOpAndArg DefineFontNr sI
-    dirPathStr <- stripLeadingDot <$> (pathToAscii $ Path.parent path)
-    fileNameStr <- (maybeToRight "Could not strip extension" $
-                    stripExtension' $
-                    Path.filename path)
-        >>= pathToAscii
+    dirPathStr <- pathToAscii (Path.parent path) <&> stripLeadingDot
+    fileNameAscii <- D.Path.fileNameText path >>= textToAscii
     let args =
             [ fontNrArgVal  -- font_nr
             , (IntArgVal . U4 . fromIntegral) fontChecksum  -- checksum
             , (IntArgVal . S4 . fromIntegral) scaleFactor  -- scale_factor
             , (IntArgVal . S4 . fromIntegral) designSize  -- design_size
             , (IntArgVal . U1 . fromIntegral . asciiLength) dirPathStr  -- dir_path_length
-            , (IntArgVal . U1 . fromIntegral . asciiLength) fileNameStr  -- file_name_length
-            , StringArgVal $ dirPathStr <> fileNameStr  -- font_path
+            , (IntArgVal . U1 . fromIntegral . asciiLength) fileNameAscii  -- file_name_length
+            , StringArgVal $ dirPathStr <> fileNameAscii  -- font_path
             ]
     pure $ EncodableInstruction _op args
   where
-    pathToAscii p =
-        maybeToRight ("Could not represent path as ASCII: " <> show p)
-                     (Asc.fromChars $ Path.toFilePath p)
+    liftMaybeAscii v = liftMaybe ("Could not represent as ASCII: " <> show v) v
+
+    pathToAscii p = Asc.fromChars (Path.toFilePath p) & liftMaybeAscii
+
+    textToAscii t = Asc.fromText t & liftMaybeAscii
 
     asciiLength = BS.length . Asc.toByteString
 
@@ -161,19 +159,16 @@ getCharacterInstruction code mode = case mode of
             AddChar $
             FastCharOp $
             fromIntegral code
-    _   -> do
-        arg <- toUnsignedInt code
-        getVariByteInstruction (\b -> AddChar $ ArgCharOp mode b) arg
+    _   ->
+        toUnsignedInt code >>= getVariByteInstruction (AddChar . ArgCharOp mode)
 
 getRuleInstruction :: MoveMode -> Int -> Int -> EncodableInstruction
-getRuleInstruction mode h w = EncodableInstruction (AddRule mode) args
-  where
-    args = (IntArgVal . U4 . fromIntegral) <$> [ h, w ]
+getRuleInstruction mode h w =
+    EncodableInstruction (AddRule mode) (IntArgVal . U4 . fromIntegral <$> [h, w])
 
 getMoveInstruction :: Axis -> Int -> Either Text EncodableInstruction
-getMoveInstruction ax dist = do
-    arg <- toSignedInt dist
-    getVariByteInstruction (\b -> Move ax $ ArgMoveOp b) arg
+getMoveInstruction ax dist =
+    toSignedInt dist >>= getVariByteInstruction (Move ax . ArgMoveOp)
 
 dviFormatArg, numeratorArg, denominatorArg :: ArgVal
 dviFormatArg = IntArgVal $ U1 2

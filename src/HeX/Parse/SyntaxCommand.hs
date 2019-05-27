@@ -10,4 +10,4 @@ import           HeX.Parse.Token
 
 parseCSNameArgs :: InhibitableStream s => SimpParser s (ForwardDirected [] Cat.CharCode)
 parseCSNameArgs =
-    FDirected <$> (parseManyChars <* (skipSatisfiedEquals $ SyntaxCommandArg EndCSNameTok))
+    FDirected <$> (parseManyChars <* skipSatisfiedEquals (SyntaxCommandArg EndCSNameTok))

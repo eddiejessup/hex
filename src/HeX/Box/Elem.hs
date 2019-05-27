@@ -43,8 +43,8 @@ instance Dimensioned Box where
         -- HBox.
         (BoxWidth, Box (HBoxContents _) (To toLen)) -> toLen
 
-        (BoxWidth, Box bc@(HBoxContents _) (Spread spread)) -> spread
-            + (naturalLength BoxWidth (Box bc Natural))
+        (BoxWidth, Box bc@(HBoxContents _) (Spread spread)) ->
+            spread + naturalLength BoxWidth (Box bc Natural)
 
         (BoxWidth, Box (HBoxContents cs) Natural) -> sumLength cs
 
@@ -64,8 +64,8 @@ instance Dimensioned Box where
 
         (BoxHeight, Box (VBoxContents _ _) (To toLen)) -> toLen
 
-        (BoxHeight, Box bc@(VBoxContents _ _) (Spread spread)) -> spread
-            + (naturalLength BoxHeight (Box bc Natural))
+        (BoxHeight, Box bc@(VBoxContents _ _) (Spread spread)) ->
+            spread + naturalLength BoxHeight (Box bc Natural)
 
         (BoxHeight, Box (VBoxContents cs DefaultAlign) Natural) ->
             -- h + d for all but last elements, plus the last element's height.
@@ -142,7 +142,7 @@ instance Dimensioned VBoxElem where
     naturalLength = axisVBoxElemNaturalLength Vertical
 
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
-data HBaseElem = ElemCharacter Character
+newtype HBaseElem = ElemCharacter Character
     deriving (Show)
 
 instance Dimensioned HBaseElem where
@@ -184,7 +184,7 @@ instance Readable HBoxElem where
     describe = \case
         HVBoxElem (BoxGlue sg) ->
             "HGlue<" <> describe sg <> ">"
-        HVBoxElem (vBoxElem) ->
+        HVBoxElem vBoxElem ->
             describe vBoxElem
         HBoxHBaseElem hBaseElem ->
             describe hBaseElem

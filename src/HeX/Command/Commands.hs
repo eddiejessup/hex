@@ -4,10 +4,8 @@ import           HeXlude
 
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.Text           as Text
-import           Path                (File, Path, Rel)
-import qualified Path
 
-import           Data.Path           (findFilePath)
+import qualified Data.Path           as D.Path
 import           TFM                 (TexFont (..))
 import qualified TFM
 
@@ -92,11 +90,11 @@ hModeAddCharacter c =
     liftConfigError $
         do
         charCode <- readOnConfState $ texEvaluate c
-        (BL.HListHBaseElem . B.ElemCharacter) <$> (readOnConfState $ characterBox charCode)
+        BL.HListHBaseElem . B.ElemCharacter <$> readOnConfState (characterBox charCode)
 
 hModeAddSpace :: HP.InhibitableStream s => ExceptMonadBuild s HListElem
 hModeAddSpace =
-    liftConfigError $ (BL.HVListElem . BL.ListGlue) <$> readOnConfState spaceGlue
+    liftConfigError $ BL.HVListElem . BL.ListGlue <$> readOnConfState spaceGlue
 
 hModeAddRule :: HP.InhibitableStream s => HP.Rule -> ExceptMonadBuild s HListElem
 hModeAddRule rule =
@@ -116,11 +114,10 @@ hModeStartParagraph = \case
     -- list, and the space factor is set to 1000.
     -- TODO: Space factor.
     HP.Indent ->
-        Just <$> (liftConfigError $ readOnConfState $ asks parIndentBox)
+        Just <$> liftConfigError (readOnConfState $ asks parIndentBox)
 
 vModeAddVGlue :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s VListElem
-vModeAddVGlue g =
-    glueToElem g
+vModeAddVGlue = glueToElem
 
 vModeAddRule :: HP.InhibitableStream s => HP.Rule -> ExceptMonadBuild s VListElem
 vModeAddRule rule =
@@ -139,8 +136,7 @@ characterBox char = do
     fontMetrics <- currentFontMetrics
     let toSP = TFM.designScaleSP fontMetrics
     TFM.Character { TFM.width, TFM.height, TFM.depth } <-
-        liftMaybe "No such character"
-            $ (HMap.lookup char $ characters fontMetrics)
+        liftMaybe "No such character" $ HMap.lookup char (characters fontMetrics)
     pure B.Character { B.char       = char
                      , B.charWidth  = toSP width
                      , B.charHeight = toSP height
@@ -162,43 +158,31 @@ spaceGlue = do
 
 loadFont
     :: (MonadState Config m, MonadIO m, MonadError Text m)
-    => Path Rel File
+    => HP.TeXFilePath
     -> HP.FontSpecification
     -> m B.FontDefinition
-loadFont relPath fontSpec = do
-    fontInfo_ <- readOnState $ readRelPath relPath
-    let designSizeSP = TFM.designSizeSP $ fontMetrics fontInfo_
+loadFont (HP.TeXFilePath path) fontSpec = do
+    fontName <- D.Path.fileNameText path
+    info@FontInfo{ fontMetrics } <- readOnState $ findFilePath (WithImplicitExtension "tfm") [] path >>= readFontInfo
+    let designSizeSP = TFM.designSizeSP fontMetrics
     scaleRatio <- readOnState $ evaluateFontSpecification designSizeSP fontSpec
-    fontName   <- extractFontName relPath
     liftIO
-        $  putStrLn
+        $  putText
         $  "Loading font: "
-        <> showT fontName
+        <> show path
         <> ", with design size: "
-        <> showT designSizeSP
+        <> show designSizeSP
         <> ", with scale ratio: "
-        <> showT scaleRatio
-    fNr <- addFont fontInfo_
-    pure B.FontDefinition { B.fontNr           = fNr
-        -- TODO: Improve mapping of name and path.
-                          , B.fontPath         = relPath
-                          , B.fontName         = fontName
-                          , B.fontInfo         = fontMetrics fontInfo_
-                          , B.scaleFactorRatio = scaleRatio
+        <> show scaleRatio
+    fNr <- addFont info
+    -- TODO: Improve mapping of name and path.
+    pure B.FontDefinition { B.fontDefChecksum    = TFM.checksum fontMetrics
+                          , B.fontDefDesignSize  = round designSizeSP
+                          , B.fontDefDesignScale = TFM.designScaleSP fontMetrics scaleRatio
+                          , B.fontNr             = fNr
+                          , B.fontPath           = path
+                          , B.fontName           = fontName
                           }
-  where
-    readRelPath p =
-        findFilePath p
-            <$> asks searchDirectories
-            >>= liftThrow ("Could not find font: " <> showT p)
-            >>= readFontInfo
-
-    stripExtension p =
-        liftThrow "Could not strip font extension" $ Path.setFileExtension "" p
-
-    fileName = Path.filename >>> Path.toFilePath >>> toS
-
-    extractFontName p = stripExtension p <&> fileName
 
 selectFont :: MonadState Config m => Int -> HP.GlobalFlag -> m ()
 selectFont n globalFlag = modify $ selectFontNr n globalFlag

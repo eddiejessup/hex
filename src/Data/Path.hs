@@ -1,29 +1,23 @@
 module Data.Path where
 
 import           HeXlude
-
-import           Control.Monad.Extra       ( findM )
-import           Control.Monad.IO.Class    ( liftIO )
-import           Control.Monad.Trans.Maybe ( MaybeT(..) )
+import qualified Prelude
 import           Path
-import           System.Directory
 
-firstExistingPath :: [Path b File] -> MaybeT IO (Path b File)
+readPathText :: Path a File -> IO Text
+readPathText = toFilePath >>> readFile
 
--- Make a MaybeT of...
--- The result of an IO function, lifted to our MaybeT IO monad.
--- Namely 'find', but using a predicate which acts in the IO monad,
--- and which tests if a file exists.
-firstExistingPath = MaybeT . liftIO . findM (doesFileExist . toFilePath)
+readPathChars :: Path a File -> IO [Char]
+readPathChars = toFilePath >>> Prelude.readFile
 
-findFilePath :: Path Rel File -> [Path b Dir] -> MaybeT IO (Path b File)
-findFilePath name dirs = firstExistingPath $ fmap (</> name) dirs
+stripExtension :: MonadError Text m => Path b File -> m (Path b File)
+stripExtension p = Path.setFileExtension "" p
+                   & liftMaybe ("Could not strip extension for: " <> show p)
 
-stripExtension' :: Path b File -> Maybe (Path b File)
-stripExtension' = Path.setFileExtension ""
+fileNameText :: MonadError Text m => Path b File -> m Text
+fileNameText p = stripExtension p
+               <&> (Path.filename >>> Path.toFilePath >>> toS)
 
-stripExtension :: (MonadIO m, MonadError Text m)
-               => Path b File
-               -> m (Path b File)
-stripExtension p = liftThrow ("Could not strip font extension for: " <> showT p)
-                             (Path.setFileExtension "" p)
+setFileExtension :: (MonadError Text m) => Path b File -> Text -> m (Path b File)
+setFileExtension p ext = Path.setFileExtension (toS ext) p
+                       & liftMaybe ("Path not valid with extension: " <> show p)

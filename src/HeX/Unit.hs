@@ -78,7 +78,7 @@ inScaledPoint u = case u of
     ScaledPoint -> 1
 
 roundToDec :: RealFrac a => Int -> a -> a
-roundToDec n v = (fromInteger $ round $ v * (10 ^ n)) / (10.0 ^^ n)
+roundToDec n v = fromInteger (round $ v * (10 ^ n)) / (10.0 ^^ n)
 
 scaledPointIn :: PhysicalUnit -> Rational
 scaledPointIn = recip . inScaledPoint

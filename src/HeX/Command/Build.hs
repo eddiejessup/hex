@@ -15,6 +15,7 @@ import           HeX.Command.ModeIndependent
 import           HeX.Config
 import qualified HeX.Lex                     as Lex
 import qualified HeX.Parse                   as HP
+import           HeX.Parse                   (BuildError(..))
 
 data ParaResult = ParaResult EndParaReason ForwardHList
 
@@ -64,7 +65,7 @@ handleCommandInParaMode hList command oldStream =
     addMaybeElem' = addMaybeElem hList
     endLoop reason result = EndLoop $ ParaResult reason result
 
-data HBoxResult = HBoxResult ForwardHList
+newtype HBoxResult = HBoxResult ForwardHList
 
 handleCommandInHBoxMode :: HP.InhibitableStream s
                         => ForwardHList
@@ -104,9 +105,9 @@ handleCommandInHBoxMode hList command _ =
     doNothing' = doNothing hList
     addElem' = addElem hList
     addMaybeElem' = addMaybeElem hList
-    endLoop result = (EndLoop . HBoxResult) result
+    endLoop = EndLoop . HBoxResult
 
-data VBoxResult = VBoxResult ForwardVList
+newtype VBoxResult = VBoxResult ForwardVList
 
 handleCommandInVBoxMode :: HP.InhibitableStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList VBoxResult)
 handleCommandInVBoxMode vList command oldStream =
@@ -143,7 +144,7 @@ handleCommandInVBoxMode vList command oldStream =
     doNothing' = doNothing vList
     addElem' = addElem vList
     addMaybeElem' = addMaybeElem vList
-    endLoop result = (EndLoop . VBoxResult) result
+    endLoop = EndLoop . VBoxResult
 
     addPara indentFlag =
         do
@@ -163,7 +164,7 @@ appendParagraph paraHList vList =
     lineBoxes <- readOnConfState (hListToParaLineBoxes paraHList)
     desiredW <- readOnConfState $ asks $ lookupLengthParameter HP.HSize
     let toBox elemList = B.Box (B.HBoxContents elemList) (B.To desiredW)
-    let boxes = (BL.VListBaseElem . B.ElemBox . toBox) <$> lineBoxes
+    let boxes = BL.VListBaseElem . B.ElemBox . toBox <$> lineBoxes
     HP.runConfState $ foldM addVListElem vList boxes
 
 hListToParaLineBoxes
@@ -177,7 +178,7 @@ hListToParaLineBoxes hList =
     linePen <- asks $ IntParamVal . lookupTeXIntParameter HP.LinePenalty
     liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph desiredW lineTol linePen hList
 
-data MainVModeResult = MainVModeResult ForwardVList
+newtype MainVModeResult = MainVModeResult ForwardVList
 
 handleCommandInMainVMode :: HP.InhibitableStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList MainVModeResult)
 handleCommandInMainVMode vList command oldStream =
@@ -212,10 +213,9 @@ handleCommandInMainVMode vList command oldStream =
             panic $ "Not implemented, outer V mode: " <> show oth
   where
     doNothing' = doNothing vList
-    addElem' el = addElem vList el
-    -- addElem' = addElem vList
+    addElem' = addElem vList
     addMaybeElem' = addMaybeElem vList
-    endLoop result = (EndLoop . MainVModeResult) result
+    endLoop = EndLoop . MainVModeResult
 
     addPara indentFlag =
         do

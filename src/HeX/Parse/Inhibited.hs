@@ -23,7 +23,7 @@ import           HeX.Parse.Helpers
 import           HeX.Parse.Resolve
 import           HeX.Parse.Token
 
-class (P.Stream s, Show s, P.Token s ~ PrimitiveToken, Eq s)
+class (P.Stream s, P.Token s ~ PrimitiveToken, Eq s)
     => InhibitableStream s where
     setExpansion :: Ord e => ExpansionMode -> P.Parsec e s ()
 

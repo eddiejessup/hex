@@ -4,7 +4,6 @@ import           HeXlude
 
 import           Control.Monad        (when)
 import           Safe                 (toEnumMay)
-
 import qualified HeX.Box              as B
 import qualified HeX.BreakList        as BL
 import qualified HeX.Command.Commands as Com
@@ -58,12 +57,12 @@ handleModeIndependentCommand = \case
     -- inserted by \everyhbox or \everyvbox.
     HP.SetAfterAssignmentToken lt ->
         do
-        modConfState $ \conf -> conf{afterAssignmentToken = Just lt}
+        modConfState $ \conf -> conf{ afterAssignmentToken = Just lt }
         pure DoNothing
     HP.AddPenalty n ->
-        (AddElem . BL.ListPenalty . BL.Penalty) <$> liftEvalOnConfState n
+        AddElem . BL.ListPenalty . BL.Penalty <$> liftEvalOnConfState n
     HP.AddKern ln ->
-        (AddElem . BL.VListBaseElem . B.ElemKern . B.Kern) <$> liftEvalOnConfState ln
+        AddElem . BL.VListBaseElem . B.ElemKern . B.Kern <$> liftEvalOnConfState ln
     HP.Assign HP.Assignment { HP.global, HP.body } ->
         do
         assignResult <- case body of
@@ -166,9 +165,9 @@ handleModeIndependentCommand = \case
                         modConfState $ setBoxRegisterNullable eLhsIdx global fetchedMaybeBox
                         pure DoNothing
                     HP.LastBox ->
-                        panic $ "Not implemented: SetBoxRegister to LastBox"
+                        panic "Not implemented: SetBoxRegister to LastBox"
                     HP.VSplitBox _ _ ->
-                        panic $ "Not implemented: SetBoxRegister to VSplitBox"
+                        panic "Not implemented: SetBoxRegister to VSplitBox"
                     HP.ExplicitBox spec boxType ->
                         do
                         eSpec <- liftEvalOnConfState spec
@@ -251,7 +250,7 @@ handleModeIndependentCommand = \case
     HP.AddBox HP.NaturalPlacement (HP.FetchedRegisterBox fetchMode idx) ->
         do
         maybeBox <- fetchBox fetchMode idx
-        pure $ addMaybeElem' $ (\b -> BL.VListBaseElem $ B.ElemBox b) <$> maybeBox
+        pure $ addMaybeElem' $ BL.VListBaseElem . B.ElemBox <$> maybeBox
     HP.AddBox HP.NaturalPlacement (HP.ExplicitBox spec boxType) ->
         -- Start a new level of grouping. Enter inner mode.
         do

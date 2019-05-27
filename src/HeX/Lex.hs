@@ -116,7 +116,7 @@ extractToken charToCat _state cs =
             (csCC1@(Cat.CharCat _ ctrlSeqCat1), restPostEscape) <- getCC rest
             let (ctrlSeqCCs, restPostCtrlSeq) = if ctrlSeqCat1 == Cat.Letter
                     then
-                        let ((FDirected ctrlWordCCsPostFirst), restPostCtrlWord) = chopBreak getLetterCC restPostEscape
+                        let (FDirected ctrlWordCCsPostFirst, restPostCtrlWord) = chopBreak getLetterCC restPostEscape
                         in  (FDirected (csCC1 : ctrlWordCCsPostFirst), restPostCtrlWord)
                     else
                         (FDirected [csCC1], restPostEscape)

@@ -67,7 +67,7 @@ tokToLex _ = Nothing
 handleLex :: (P.Stream s, P.Token s ~ PrimitiveToken)
           => (Token -> Maybe a)
           -> SimpParser s a
-handleLex f = satisfyThen $ \x -> tokToLex x >>= f
+handleLex f = satisfyThen $ tokToLex >=> f
 
 skipSatisfiedEqualsLex
     :: (P.Stream s, P.Token s ~ PrimitiveToken)

@@ -3,6 +3,8 @@ module TFM.Common where
 import HeXlude
 
 import           Control.Monad                  ( when )
+import           Control.Monad.Fail             ( fail )
+
 import           Data.Ascii                     ( Ascii )
 import qualified Data.Ascii                    as Asc
 import           Data.Binary.Get                ( Get)
@@ -44,6 +46,8 @@ getBCPL maxLen =
     n <- getWord8Int
     when (n > (maxLen - 1)) $ fail $ "BCPL string length too large: " <> show n
     s <- B.G.getByteString n
-    asc <- maybeToFail "Could not decode ASCII from bytes" (Asc.fromByteString s)
+    asc <- case Asc.fromByteString s of
+        Just v -> pure v
+        Nothing -> fail "Could not decode ASCII from bytes"
     B.G.skip $ maxLen - 1 - n
     pure asc

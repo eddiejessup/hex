@@ -120,4 +120,4 @@ runPageBuilder desiredV curPage@(CurrentPage curElemsFwd@(FDirected curFwdSeq) _
     continue = runPageBuilder desiredV
 
     addPage newPageElems vListRemaining =
-        (setPage desiredV newPageElems) .-> continue newCurrentPage vListRemaining
+        setPage desiredV newPageElems .-> continue newCurrentPage vListRemaining

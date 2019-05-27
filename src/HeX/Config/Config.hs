@@ -10,7 +10,9 @@ import qualified Data.HashMap.Strict      as HMap
 import           Data.Maybe               ( fromMaybe )
 import qualified Data.IntMap.Strict       as IntMap
 import           Data.IntMap.Strict       ( IntMap, (!?) )
-import           Path
+import qualified Data.Path                as D.Path
+import           Path                     (Path, Abs, Rel, Dir, File, parseAbsDir)
+import qualified Path.IO
 import           System.Directory
 import           System.IO                ( Handle
                                           , IOMode(..)
@@ -133,7 +135,6 @@ data Config =
            , globalScope :: Scope
            , groups :: [Group]
            }
-    deriving ( Show )
 
 newConfig :: IO Config
 newConfig = do
@@ -163,11 +164,33 @@ finaliseConfig config =
 
 -- Unscoped.
 
+data FindFilePolicy
+    = NoImplicitExtension
+    | WithImplicitExtension Text
+
+findFilePath
+    :: (MonadReader Config m, MonadIO m, MonadError Text m)
+    => FindFilePolicy
+    -> [Path Abs Dir]
+    -> Path Rel File
+    -> m (Path Abs File)
+findFilePath findPolicy extraPaths p =
+    do
+    dirs <- asks searchDirectories <&> (<> extraPaths)
+    getTgtPath
+        >>= Path.IO.findFile dirs
+        >>= liftMaybe ("Could not find file: " <> show p)
+  where
+    getTgtPath = case findPolicy of
+        NoImplicitExtension ->
+            pure p
+        WithImplicitExtension ext ->
+            D.Path.setFileExtension p ext
+
 -- Font info.
 
 data FontInfo =
     FontInfo { fontMetrics :: TexFont, hyphenChar, skewChar :: TeXIntVal }
-    deriving ( Show )
 
 readFontInfo :: (MonadReader Config m, MonadIO m, MonadError Text m)
              => Path Abs File
@@ -222,7 +245,7 @@ modLocalScope c@Config{ globalScope, groups } f =
     case groups of
         [] -> c{ globalScope = f globalScope }
         ScopeGroup scope scopeGroupType : outerGroups ->
-            c{ groups = (ScopeGroup (f scope) scopeGroupType) : outerGroups }
+            c{ groups = ScopeGroup (f scope) scopeGroupType : outerGroups }
         nonScopeGroup : outerGroups ->
             let
                 -- Get result if this non-scoped group hadn't existed.
@@ -265,7 +288,8 @@ modifyKey getMap upD k keyOp globalFlag c@Config{ groups, globalScope } =
     case globalFlag of
         Global ->
             c{ globalScope = modOp globalScope
-             , groups = (modGroupScope deleteKeyFromScope) <$> groups }
+             , groups = modGroupScope deleteKeyFromScope <$> groups
+             }
         Local ->
             modLocalScope c modOp
   where
@@ -312,7 +336,7 @@ scopedMapLookup
     -> k
     -> Config
     -> Maybe v
-scopedMapLookup getMap k = scopedLookup ((HMap.lookup k) . getMap)
+scopedMapLookup getMap k = scopedLookup (HMap.lookup k . getMap)
 
 -- Font number (scoped).
 lookupCurrentFontNr :: Config -> Maybe Int
@@ -329,7 +353,7 @@ selectFontNr n globalFlag c@Config{ globalScope, groups } =
     case globalFlag of
         Global ->
             c{ globalScope = selectFontInScope globalScope
-             , groups = (modGroupScope deselectFontInScope) <$> groups
+             , groups = modGroupScope deselectFontInScope <$> groups
              }
         Local ->
             modLocalScope c selectFontInScope
@@ -492,7 +516,7 @@ parIndentBox conf = BL.HVListElem $
     BL.VListBaseElem $
     B.ElemBox $
     B.Box { B.contents      = B.HBoxContents mempty
-          , B.desiredLength = B.To . (lookupLengthParameter ParIndent) $ conf
+          , B.desiredLength = B.To . lookupLengthParameter ParIndent $ conf
           }
 
 -- Registers.

@@ -23,10 +23,10 @@ instance Monoid GlueFlex where
     mempty = GlueFlex 0 0
 
 multiplyFlex :: GlueFlex -> TeXIntVal -> GlueFlex
-multiplyFlex (GlueFlex f o) i = GlueFlex (f * (fromIntegral i)) o
+multiplyFlex (GlueFlex f o) i = GlueFlex (f * fromIntegral i) o
 
 divFlex :: GlueFlex -> TeXIntVal -> GlueFlex
-divFlex (GlueFlex f o) i = GlueFlex (f / (fromIntegral i)) o
+divFlex (GlueFlex f o) i = GlueFlex (f / fromIntegral i) o
 
 noFlex :: GlueFlex
 noFlex = mempty

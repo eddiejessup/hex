@@ -164,7 +164,7 @@ parseFactor = P.choice $
 parseRationalConstant :: InhibitableStream s => SimpParser s Rational
 parseRationalConstant = do
     wholeNr <- decDigitsToTeXInt <$> P.many parseDecimalTeXIntDigit
-    skipSatisfied (\t -> (matchOtherToken ',' t) || (matchOtherToken '.' t))
+    skipSatisfied (\t -> matchOtherToken ',' t || matchOtherToken '.' t)
     -- The fractional part represents its integer interpretation, divided by
     -- the next largest power of 10.
     -- TODO: If performance matters, maybe we can infer the denominator
@@ -258,14 +258,12 @@ parseGlue = P.choice [ ExplicitGlue <$> parseLength
 
 parseFlex :: InhibitableStream s => [CharCode] -> SimpParser s (Maybe Flex)
 parseFlex s = P.choice [ Just <$> P.try parsePresentFlex
-                       , const Nothing <$> skipOptionalSpaces
+                       , skipOptionalSpaces $> Nothing
                        ]
   where
-    parsePresentFlex = skipKeyword s
-        *> (P.choice $
-            P.try <$> [ FiniteFlex <$> parseLength
-                      , FilFlex <$> parseFilLength
-                      ])
+    parsePresentFlex =
+        skipKeyword s
+        *> P.choice (P.try <$> [FiniteFlex <$> parseLength, FilFlex <$> parseFilLength])
 
 parseFilLength :: InhibitableStream s => SimpParser s FilLength
 parseFilLength = (FilLength <$> parseSigns <*> parseFactor <*> parseOrder)
@@ -288,14 +286,12 @@ parseMathFlex :: InhibitableStream s
               => [CharCode]
               -> SimpParser s (Maybe MathFlex)
 parseMathFlex s = P.choice [ Just <$> P.try parsePresentFlex
-                           , const Nothing <$> skipOptionalSpaces
+                           , skipOptionalSpaces $> Nothing
                            ]
   where
-    parsePresentFlex = skipKeyword s
-        *> (P.choice $
-            P.try <$> [ FiniteMathFlex <$> parseMathLength
-                      , FilMathFlex <$> parseFilLength
-                      ])
+    parsePresentFlex =
+        skipKeyword s
+        *> P.choice (P.try <$> [ FiniteMathFlex <$> parseMathLength, FilMathFlex <$> parseFilLength])
 
 -- Internal quantities.
 parseQuantityVariable
@@ -405,7 +401,7 @@ parseFontRefToken = satisfyThen $
         _ -> Nothing
 
 parseFamilyMember :: InhibitableStream s => SimpParser s FamilyMember
-parseFamilyMember = FamilyMember <$> (satisfyThen tokToFontRange)
+parseFamilyMember = FamilyMember <$> satisfyThen tokToFontRange
     <*> parseTeXInt
   where
     tokToFontRange (T.FontRangeTok r) = Just r
