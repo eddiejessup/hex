@@ -8,3 +8,5 @@
 *.tfm
 hex.cabal
 support/*.tex
+dist/
+dist-newstyle/
