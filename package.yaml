@@ -28,6 +28,7 @@ dependencies:
 - mtl
 - parser-combinators
 - path
+- path-io
 - protolude
 - safe
 - split
@@ -48,6 +49,8 @@ ghc-options:
 - -Wincomplete-uni-patterns
 - -Wredundant-constraints
 - -Wno-warnings-deprecations
+- -Wno-incomplete-patterns
+- -Wno-incomplete-uni-patterns
 - -O0
 - +RTS -A128m -n2m -RTS
 - -j

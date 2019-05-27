@@ -13,9 +13,32 @@
 
 # Control which extensions/flags/modules/functions can be used
 #
-# - extensions:
+- extensions:
 #   - default: false # all extension are banned by default
-#   - name: [PatternGuards, ViewPatterns] # only these listed extensions can be used
+  - name:
+    - DeriveFoldable
+    - DeriveFunctor
+    - DeriveGeneric
+    - DeriveLift
+    - DeriveTraversable
+    - DerivingStrategies
+    - EmptyCase
+    - FlexibleContexts
+    - FlexibleInstances
+    - GeneralizedNewtypeDeriving
+    - InstanceSigs
+    - LambdaCase
+    - MultiParamTypeClasses
+    - MultiWayIf
+    - NamedFieldPuns
+    - NoImplicitPrelude
+    - OverloadedStrings
+    - ScopedTypeVariables
+    - StandaloneDeriving
+    - TupleSections
+    - TypeApplications
+    - TypeFamilies
+   # only these listed extensions can be used
 #   - {name: CPP, within: CrossPlatform} # CPP can only be used in a given module
 #
 # - flags:
@@ -44,12 +67,13 @@
 # - group: {name: dollar, enabled: true}
 #
 # Generalise map to fmap, ++ to <>
-# - group: {name: generalise, enabled: true}
+- group: {name: generalise, enabled: true}
 
 
 # Ignore some builtin hints
 # - ignore: {name: Use let}
 # - ignore: {name: Use const}
+- ignore: {name: Use String}
 
 
 # Define some custom infix operators
