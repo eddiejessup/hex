@@ -20,14 +20,14 @@ import qualified HeX.Lex             as Lex
 import qualified HeX.Parse           as HP
 import qualified HeX.Unit            as Unit
 
-glueToElem :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s BL.VListElem
+glueToElem :: HP.TeXStream s => HP.Glue -> ExceptMonadBuild s BL.VListElem
 glueToElem g =
     do
-    eG <- liftEvalOnConfState g
+    eG <- evalOnConfState g
     pure $ BL.ListGlue eG
 
 ruleToElem
-    :: HP.InhibitableStream s
+    :: HP.TeXStream s
     => HP.Rule
     -> ReaderT Config (StateT Config (ExceptT Text (MonadBuild s))) LenVal
     -> ReaderT Config (StateT Config (ExceptT Text (MonadBuild s))) LenVal
@@ -35,7 +35,7 @@ ruleToElem
     -> ExceptMonadBuild s BL.VListElem
 ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD =
     do
-    rule <- liftReadOnConfState $ B.Rule
+    rule <- readOnConfState $ B.Rule
                 <$> maybe defaultW texEvaluate width
                 <*> maybe defaultH texEvaluate height
                 <*> maybe defaultD texEvaluate depth
@@ -81,22 +81,21 @@ addVListElem acc e = case e of
                         else skip
                 in (acc ->. glue) ->. e
 
-hModeAddHGlue :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s HListElem
+hModeAddHGlue :: HP.TeXStream s => HP.Glue -> ExceptMonadBuild s HListElem
 hModeAddHGlue g =
     BL.HVListElem <$> glueToElem g
 
-hModeAddCharacter :: HP.InhibitableStream s => HP.CharCodeRef -> ExceptMonadBuild s HListElem
+hModeAddCharacter :: HP.TeXStream s => HP.CharCodeRef -> ExceptMonadBuild s HListElem
 hModeAddCharacter c =
-    liftConfigError $
-        do
-        charCode <- readOnConfState $ texEvaluate c
-        BL.HListHBaseElem . B.ElemCharacter <$> readOnConfState (characterBox charCode)
+    do
+    charCode <- readOnConfState $ texEvaluate c
+    BL.HListHBaseElem . B.ElemCharacter <$> readOnConfState (characterBox charCode)
 
-hModeAddSpace :: HP.InhibitableStream s => ExceptMonadBuild s HListElem
+hModeAddSpace :: HP.TeXStream s => ExceptMonadBuild s HListElem
 hModeAddSpace =
-    liftConfigError $ BL.HVListElem . BL.ListGlue <$> readOnConfState spaceGlue
+    BL.HVListElem . BL.ListGlue <$> readOnConfState spaceGlue
 
-hModeAddRule :: HP.InhibitableStream s => HP.Rule -> ExceptMonadBuild s HListElem
+hModeAddRule :: HP.TeXStream s => HP.Rule -> ExceptMonadBuild s HListElem
 hModeAddRule rule =
     do
     let
@@ -106,7 +105,7 @@ hModeAddRule rule =
     ruleElem <- ruleToElem rule defaultWidth defaultHeight defaultDepth
     pure $ BL.HVListElem ruleElem
 
-hModeStartParagraph :: HP.InhibitableStream s => HP.IndentFlag -> ExceptMonadBuild s (Maybe HListElem)
+hModeStartParagraph :: HP.TeXStream s => HP.IndentFlag -> ExceptMonadBuild s (Maybe HListElem)
 hModeStartParagraph = \case
     HP.DoNotIndent ->
         pure Nothing
@@ -114,12 +113,12 @@ hModeStartParagraph = \case
     -- list, and the space factor is set to 1000.
     -- TODO: Space factor.
     HP.Indent ->
-        Just <$> liftConfigError (readOnConfState $ asks parIndentBox)
+        Just <$> readOnConfState (asks parIndentBox)
 
-vModeAddVGlue :: HP.InhibitableStream s => HP.Glue -> ExceptMonadBuild s VListElem
+vModeAddVGlue :: HP.TeXStream s => HP.Glue -> ExceptMonadBuild s VListElem
 vModeAddVGlue = glueToElem
 
-vModeAddRule :: HP.InhibitableStream s => HP.Rule -> ExceptMonadBuild s VListElem
+vModeAddRule :: HP.TeXStream s => HP.Rule -> ExceptMonadBuild s VListElem
 vModeAddRule rule =
     do
     let

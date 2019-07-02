@@ -80,6 +80,7 @@ tests:
     - hspec
 
 default-extensions:
+- ConstraintKinds
 - DeriveFoldable
 - DeriveFunctor
 - DeriveGeneric

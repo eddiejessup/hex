@@ -1,70 +1,40 @@
+{-# LANGUAGE RankNTypes #-}
+
 module HeX.Command.Common where
 
 import           HeXlude
 
-import           Control.Monad.Except           ( ExceptT
-                                                , MonadError
-                                                , liftEither
-                                                , throwError
-                                                , withExceptT
-                                                )
-import           Control.Monad.State.Lazy       ( MonadState
-                                                , StateT
-                                                , get
-                                                , modify
-                                                )
-import           Data.Either.Combinators     (mapLeft)
-import qualified Text.Megaparsec             as P
+import           Control.Monad.Except     (ExceptT)
+import           Control.Monad.State.Lazy (MonadState, StateT, get, modify)
 
 import           HeX.Config
 import           HeX.Evaluate
-import qualified HeX.Parse                     as HP
+import qualified HeX.Parse                as HP
 
 newtype MonadBuild s a = MonadBuild { unMonadBuild :: StateT s IO a }
     deriving (Functor, Applicative, Monad, MonadState s, MonadIO)
 
 type BaseExceptMonadBuild e s a = ExceptT e (MonadBuild s) a
 
-type ExceptMonadBuild s a = ExceptT (HP.BuildError (HP.ParseErrorBundle s)) (MonadBuild s) a
-
-liftConfigError :: BaseExceptMonadBuild Text s a -> ExceptMonadBuild s a
-liftConfigError = withExceptT HP.ConfigError
-
-liftConfState
-    :: HP.InhibitableStream s
-    => StateT Config (ExceptT Text (MonadBuild s)) a
-    -> ExceptMonadBuild s a
-liftConfState x = liftConfigError $ HP.runConfState x
-
-liftReadOnConfState
-    :: HP.InhibitableStream s
-    => ReaderT Config (StateT Config (ExceptT Text (MonadBuild s))) a
-    -> ExceptMonadBuild s a
-liftReadOnConfState x = liftConfigError $ readOnConfState x
-
-throwConfigError :: MonadError (HP.BuildError s) m => Text -> m a
-throwConfigError s = throwError $ HP.ConfigError s
-
-liftMaybeConfigError :: MonadError (HP.BuildError s) m => Text -> Maybe a -> m a
-liftMaybeConfigError s = liftMaybe (HP.ConfigError s)
+type ExceptMonadBuild s a = ExceptT Text (MonadBuild s) a
 
 readOnState :: MonadState r m => ReaderT r m b -> m b
 readOnState f = get >>= runReaderT f
 
 readOnConfState
-    :: (HP.InhibitableStream s, MonadState s m)
+    :: (HP.TeXStream s, MonadState s m)
     => ReaderT Config (StateT Config m) a
     -> m a
 readOnConfState f = HP.runConfState $ readOnState f
 
 modConfState
-    :: (MonadState s m, HP.InhibitableStream s) => (Config -> Config) -> m ()
+    :: (MonadState s m, HP.TeXStream s) => (Config -> Config) -> m ()
 modConfState x = HP.runConfState $ modify x
 
-liftEvalOnConfState
-    :: (HP.InhibitableStream s, TeXEvaluable v)
+evalOnConfState
+    :: (HP.TeXStream s, TeXEvaluable v)
     => v -> ExceptMonadBuild s (EvalTarget v)
-liftEvalOnConfState v = liftReadOnConfState $ texEvaluate v
+evalOnConfState v = readOnConfState $ texEvaluate v
 
 data BoxModeIntent
     = IntentToAddBox
@@ -98,7 +68,7 @@ runLoop f = go
                 pure result
 
 runCommandLoop
-    :: HP.InhibitableStream s
+    :: HP.TeXPrimStream s
     => (st -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult st r))
     -> st
     -> ExceptMonadBuild s r
@@ -106,13 +76,10 @@ runCommandLoop f = runLoop g
   where
     g elemList =
         do
-        (oldStream, command) <- peekCommand
-        f elemList command oldStream
-
-    peekCommand :: HP.InhibitableStream s => ExceptMonadBuild s (s, HP.Command)
-    peekCommand =
-        do
         oldStream <- get
-        (P.State { P.stateInput = newStream }, command) <- liftEither $ HP.ParseError `mapLeft` HP.extractCommand oldStream
+        (newStream, command) <- liftIO (runExceptT (HP.runParser HP.parseCommand oldStream)) >>= \case
+            Left err -> throwError $ show err
+            Right v -> pure v
         put newStream
-        pure (oldStream, command)
+        liftIO $ print command
+        f elemList command oldStream

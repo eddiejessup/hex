@@ -1,10 +1,11 @@
+{-# LANGUAGE RankNTypes #-}
+
 module HeX.Command.Build where
 
 import           HeXlude
 
 import           Control.Monad               (foldM)
 import           Control.Monad.Except        (liftEither)
-import           Data.Either.Combinators     (mapLeft)
 
 import qualified HeX.Box                     as B
 import           HeX.BreakList               (ForwardHList, ForwardVList)
@@ -15,7 +16,6 @@ import           HeX.Command.ModeIndependent
 import           HeX.Config
 import qualified HeX.Lex                     as Lex
 import qualified HeX.Parse                   as HP
-import           HeX.Parse                   (BuildError(..))
 
 data ParaResult = ParaResult EndParaReason ForwardHList
 
@@ -23,7 +23,7 @@ data EndParaReason
     = EndParaSawEndParaCommand
     | EndParaSawLeaveBox
 
-handleCommandInParaMode :: HP.InhibitableStream s => ForwardHList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardHList ParaResult)
+handleCommandInParaMode :: HP.TeXPrimStream s => ForwardHList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardHList ParaResult)
 handleCommandInParaMode hList command oldStream =
     case command of
         HP.VModeCommand _ ->
@@ -67,7 +67,7 @@ handleCommandInParaMode hList command oldStream =
 
 newtype HBoxResult = HBoxResult ForwardHList
 
-handleCommandInHBoxMode :: HP.InhibitableStream s
+handleCommandInHBoxMode :: HP.TeXPrimStream s
                         => ForwardHList
                         -> HP.Command
                         -> s
@@ -75,7 +75,7 @@ handleCommandInHBoxMode :: HP.InhibitableStream s
 handleCommandInHBoxMode hList command _ =
     case command of
         HP.VModeCommand vModeCommand ->
-            throwConfigError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
+            throwError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
         HP.HModeCommand (HP.AddCharacter c) ->
             addElem' <$> hModeAddCharacter c
         HP.HModeCommand (HP.AddHGlue g) ->
@@ -109,11 +109,11 @@ handleCommandInHBoxMode hList command _ =
 
 newtype VBoxResult = VBoxResult ForwardVList
 
-handleCommandInVBoxMode :: HP.InhibitableStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList VBoxResult)
+handleCommandInVBoxMode :: HP.TeXPrimStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList VBoxResult)
 handleCommandInVBoxMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
-            throwConfigError "End not allowed in internal vertical mode"
+            throwError "End not allowed in internal vertical mode"
         HP.VModeCommand (HP.AddVGlue g) ->
             addElem' <$> vModeAddVGlue g
         HP.VModeCommand (HP.AddVRule rule) ->
@@ -157,7 +157,7 @@ handleCommandInVBoxMode vList command oldStream =
                 endLoop vListWithPara
 
 appendParagraph
-    :: HP.InhibitableStream s
+    :: HP.TeXPrimStream s
     => ForwardHList -> ForwardVList -> ExceptMonadBuild s ForwardVList
 appendParagraph paraHList vList =
     do
@@ -168,7 +168,7 @@ appendParagraph paraHList vList =
     HP.runConfState $ foldM addVListElem vList boxes
 
 hListToParaLineBoxes
-    :: (MonadReader Config m, MonadError (BuildError s) m)
+    :: (MonadReader Config m, MonadError Text m)
     => ForwardHList
     -> m (ForwardDirected Seq (ForwardDirected [] B.HBoxElem))
 hListToParaLineBoxes hList =
@@ -176,11 +176,11 @@ hListToParaLineBoxes hList =
     desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
     lineTol <- asks $ IntParamVal . lookupTeXIntParameter HP.Tolerance
     linePen <- asks $ IntParamVal . lookupTeXIntParameter HP.LinePenalty
-    liftEither $ ConfigError `mapLeft` BL.breakAndSetParagraph desiredW lineTol linePen hList
+    liftEither $ BL.breakAndSetParagraph desiredW lineTol linePen hList
 
 newtype MainVModeResult = MainVModeResult ForwardVList
 
-handleCommandInMainVMode :: HP.InhibitableStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList MainVModeResult)
+handleCommandInMainVMode :: HP.TeXPrimStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList MainVModeResult)
 handleCommandInMainVMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
@@ -206,7 +206,7 @@ handleCommandInMainVMode vList command oldStream =
                 EnterBoxMode desiredLength boxType boxIntent ->
                     addMaybeElem' <$> extractVSubBox desiredLength boxIntent boxType
                 FinishBoxMode ->
-                    throwConfigError "No box to end: in main V mode"
+                    throwError "No box to end: in main V mode"
                 DoNothing ->
                     pure doNothing'
         oth ->
@@ -224,21 +224,20 @@ handleCommandInMainVMode vList command oldStream =
             EndParaSawEndParaCommand ->
                 LoopAgain <$> appendParagraph finalParaHList vList
             EndParaSawLeaveBox ->
-                throwConfigError "No box to end: in paragraph within main V mode"
+                throwError "No box to end: in paragraph within main V mode"
 
-extractPara
-    :: HP.InhibitableStream s
-    => HP.IndentFlag
-    -> ExceptMonadBuild s ParaResult
+extractPara :: HP.TeXPrimStream s => HP.IndentFlag -> ExceptMonadBuild s ParaResult
 extractPara indentFlag =
-    runCommandLoop handleCommandInParaMode =<< case indentFlag of
+    do
+    bx <- case indentFlag of
         HP.Indent ->
             pure <$> readOnConfState (asks parIndentBox)
         HP.DoNotIndent ->
             pure mempty
+    runCommandLoop handleCommandInParaMode bx
 
 extractParaFromVMode
-    :: HP.InhibitableStream s
+    :: HP.TeXPrimStream s
     => HP.IndentFlag
     -> s
     -> ExceptMonadBuild s ParaResult
@@ -249,13 +248,13 @@ extractParaFromVMode indentFlag oldStream =
     -- "oldStream", not "newStream".)
     put oldStream >> extractPara indentFlag
 
-extractHBox :: HP.InhibitableStream s => ExceptMonadBuild s HBoxResult
+extractHBox :: HP.TeXPrimStream s => ExceptMonadBuild s HBoxResult
 extractHBox = runCommandLoop handleCommandInHBoxMode mempty
 
-extractVBox :: HP.InhibitableStream s => ExceptMonadBuild s VBoxResult
+extractVBox :: HP.TeXPrimStream s => ExceptMonadBuild s VBoxResult
 extractVBox = runCommandLoop handleCommandInVBoxMode mempty
 
-extractVSubBox :: HP.InhibitableStream s => B.DesiredLength -> BoxModeIntent -> HP.ExplicitBox -> ExceptMonadBuild s (Maybe BL.VListElem)
+extractVSubBox :: HP.TeXPrimStream s => B.DesiredLength -> BoxModeIntent -> HP.ExplicitBox -> ExceptMonadBuild s (Maybe BL.VListElem)
 extractVSubBox desiredLength boxIntent boxType =
     do
     -- TODO: I think glue status and desired length
@@ -279,7 +278,7 @@ extractVSubBox desiredLength boxIntent boxType =
             pure Nothing
 
 extractHSubBox
-    :: HP.InhibitableStream s
+    :: HP.TeXPrimStream s
     => B.DesiredLength
     -> BoxModeIntent
     -> HP.ExplicitBox
@@ -289,16 +288,16 @@ extractHSubBox desiredLength boxIntent boxType =
     maybeElem <- extractVSubBox desiredLength boxIntent boxType
     pure $ BL.HVListElem <$> maybeElem
 
-extractMainVList :: HP.InhibitableStream s => ExceptMonadBuild s MainVModeResult
+extractMainVList :: HP.TeXPrimStream s => ExceptMonadBuild s MainVModeResult
 extractMainVList = runCommandLoop handleCommandInMainVMode mempty
 
-extractBreakAndSetVList :: HP.InhibitableStream s => ExceptMonadBuild s (ForwardDirected Seq B.Page)
+extractBreakAndSetVList :: HP.TeXPrimStream s => ExceptMonadBuild s (ForwardDirected Seq B.Page)
 extractBreakAndSetVList =
     do
     MainVModeResult finalMainVList <- extractMainVList
     gets HP.getConditionBodyState >>= \case
         Nothing -> pure ()
-        Just _condState -> throwConfigError $ "Cannot end: in condition block: " <> showT _condState
+        Just _condState -> throwError $ "Cannot end: in condition block: " <> showT _condState
     readOnConfState (asks finaliseConfig) >>= liftIO
     desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
     pure $ BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList

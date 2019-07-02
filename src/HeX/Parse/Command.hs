@@ -1,51 +1,38 @@
+{-# LANGUAGE RankNTypes #-}
+
 module HeX.Parse.Command where
 
 import           HeXlude
 
+import qualified Control.Monad.Combinators as PC
 import           Data.Functor         ( ($>) )
-
-import qualified Text.Megaparsec      as P
 
 import qualified HeX.Lex              as Lex
 import           HeX.Parse.AST
 import           HeX.Parse.Assignment
-import           HeX.Parse.Common
-import           HeX.Parse.Helpers
 import           HeX.Parse.Inhibited
 import           HeX.Parse.Quantity
 import qualified HeX.Parse.Token      as T
 
--- Entry-points.
-type ExtractResult s c = Either (ParseErrorBundle s) (P.State s, c)
-
-extractResult :: SimpParser s c -> s -> ExtractResult s c
-extractResult p stream = do
-    let (parseState, eCom) = easyRunParser p stream
-    com <- eCom
-    pure (parseState, com)
-
-extractCommand :: InhibitableStream s => s -> ExtractResult s Command
-extractCommand = extractResult parseCommand
-
 -- Parse.
 
-parseInternalQuantity :: InhibitableStream s => SimpParser s InternalQuantity
-parseInternalQuantity =
-    P.choice [ InternalTeXIntQuantity <$> parseInternalTeXInt
-             , InternalLengthQuantity <$> parseInternalLength
-             , InternalGlueQuantity <$> parseInternalGlue
-             , InternalMathGlueQuantity <$> parseInternalMathGlue
-             , FontQuantity <$> parseFontRef
-             , TokenListVariableQuantity <$> parseTokenListVariable
-             ]
+parseInternalQuantity :: TeXPrimParser s InternalQuantity
+parseInternalQuantity = PC.choice
+    [ InternalTeXIntQuantity <$> parseInternalTeXInt
+    , InternalLengthQuantity <$> parseInternalLength
+    , InternalGlueQuantity <$> parseInternalGlue
+    , InternalMathGlueQuantity <$> parseInternalMathGlue
+    , FontQuantity <$> parseFontRef
+    , TokenListVariableQuantity <$> parseTokenListVariable
+    ]
 
-parseStartParagraph :: InhibitableStream s => SimpParser s Command
+parseStartParagraph :: TeXPrimParser s Command
 parseStartParagraph = satisfyThen $
     \case
         (T.StartParagraphTok _indent) -> Just $ StartParagraph _indent
         _ -> Nothing
 
-parseLeadersSpec :: InhibitableStream s => Axis -> SimpParser s LeadersSpec
+parseLeadersSpec :: Axis -> TeXPrimParser s LeadersSpec
 parseLeadersSpec axis =
     LeadersSpec <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue axis
   where
@@ -54,10 +41,7 @@ parseLeadersSpec axis =
             T.LeadersTok t -> Just t
             _ -> Nothing
 
-parseFetchedBoxRef
-    :: InhibitableStream s
-    => Axis
-    -> SimpParser s FetchedBoxRef
+parseFetchedBoxRef :: Axis -> TeXPrimParser s FetchedBoxRef
 parseFetchedBoxRef tgtAxis = do
     fetchMode <- satisfyThen $ \case
         T.ModedCommand seenAxis (T.UnwrappedFetchedBoxTok fm) | tgtAxis == seenAxis ->
@@ -67,32 +51,32 @@ parseFetchedBoxRef tgtAxis = do
     n <- parseTeXInt
     pure $ FetchedBoxRef n fetchMode
 
-parseBoxOrRule :: InhibitableStream s => SimpParser s BoxOrRule
-parseBoxOrRule = P.choice [ BoxOrRuleBox <$> parseBox
+parseBoxOrRule :: TeXPrimParser s BoxOrRule
+parseBoxOrRule = PC.choice [ BoxOrRuleBox <$> parseBox
                           , BoxOrRuleRule Horizontal <$> parseModedRule Horizontal
                           , BoxOrRuleRule Vertical <$> parseModedRule Vertical
                           ]
 
-parseModedRule :: InhibitableStream s => Axis -> SimpParser s Rule
+parseModedRule :: Axis -> TeXPrimParser s Rule
 parseModedRule axis =
     skipSatisfiedEquals (T.ModedCommand axis T.RuleTok) >> parseRule
 
 -- \hrule and such.
-parseRule :: InhibitableStream s => SimpParser s Rule
+parseRule :: TeXPrimParser s Rule
 parseRule = parseRuleSpecification Rule{ width  = Nothing
                                        , height = Nothing
                                        , depth  = Nothing
                                        }
   where
-    parseRuleSpecification rule = do
+    parseRuleSpecification rule =
+        do
         skipOptionalSpaces
-        mayNewRule <- P.optional $
-            P.try $
-            P.choice [ parseRuleWidth rule
-                     , parseRuleHeight rule
-                     , parseRuleDepth rule
-                     ]
-        case mayNewRule of
+        PC.optional $ PC.choice
+            [ parseRuleWidth rule
+            , parseRuleHeight rule
+            , parseRuleDepth rule
+            ]
+        >>= \case
             Just newRule -> parseRuleSpecification newRule
             Nothing      -> pure rule
 
@@ -111,11 +95,9 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
         ln <- parseLength
         pure rule { depth = Just ln }
 
-parseModeIndependentCommand
-    :: InhibitableStream s
-    => SimpParser s ModeIndependentCommand
+parseModeIndependentCommand :: TeXPrimParser s ModeIndependentCommand
 parseModeIndependentCommand =
-    P.choice
+    PC.choice
         [ skipSatisfiedEquals T.RelaxTok $> Relax
         , skipSatisfiedEquals T.IgnoreSpacesTok
               >> skipOptionalSpaces $> IgnoreSpaces
@@ -133,10 +115,9 @@ parseModeIndependentCommand =
         , parseOpenInput
         , skipSatisfiedEquals T.CloseInputTok
               >> (ModifyFileStream FileInput Close <$> parseTeXInt)
-          -- Need a 'try' because all these can start with '\immediate'.
-        , P.try parseOpenOutput
-        , P.try parseCloseOutput
-        , P.try parseWriteToStream
+        , parseOpenOutput
+        , parseCloseOutput
+        , parseWriteToStream
         , skipSatisfiedEquals T.DoSpecialTok
               >> (DoSpecial <$> parseExpandedGeneralText)
         , parseAddShiftedBox
@@ -144,7 +125,7 @@ parseModeIndependentCommand =
         , parseChangeScope
         ]
 
-parseChangeScope :: InhibitableStream s => SimpParser s ModeIndependentCommand
+parseChangeScope :: TeXPrimParser s ModeIndependentCommand
 parseChangeScope = satisfyThen $
     \t -> if
         | primTokHasCategory Lex.BeginGroup t -> Just $
@@ -155,24 +136,22 @@ parseChangeScope = satisfyThen $
             <- t -> Just $ ChangeScope sign CSCommandTrigger
         | otherwise -> Nothing
 
-satisfyThenGetMode
-    :: (P.Stream s, P.Token s ~ T.PrimitiveToken)
-    => T.ModedCommandPrimitiveToken -> SimpParser s Axis
+satisfyThenGetMode :: T.ModedCommandPrimitiveToken -> TeXPrimParser s Axis
 satisfyThenGetMode validTok = satisfyThen $ \case
     T.ModedCommand axis seenTok | seenTok == validTok ->
         Just axis
     _ ->
         Nothing
 
-parseRemoveItem :: InhibitableStream s => SimpParser s ModeIndependentCommand
+parseRemoveItem :: TeXPrimParser s ModeIndependentCommand
 parseRemoveItem =
     RemoveItem <$> satisfyThen (\case
                         T.RemoveItemTok i -> Just i
                         _ -> Nothing)
 
-parseModedGlue :: InhibitableStream s => Axis -> SimpParser s Glue
+parseModedGlue :: Axis -> TeXPrimParser s Glue
 parseModedGlue axis =
-    P.choice [ parseSpecifiedGlue
+    PC.choice [ parseSpecifiedGlue
              , parsePresetGlue T.Fil
              , parsePresetGlue T.Fill
              , parsePresetGlue T.StretchOrShrink
@@ -200,7 +179,7 @@ parseModedGlue axis =
 
     noLengthGlue = ExplicitGlue zeroLength
 
-parseMessage :: InhibitableStream s => SimpParser s ModeIndependentCommand
+parseMessage :: TeXPrimParser s ModeIndependentCommand
 parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
   where
     parseMsgStream = satisfyThen $
@@ -208,13 +187,13 @@ parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
             T.MessageTok str -> Just str
             _ -> Nothing
 
-parseOpenInput :: InhibitableStream s => SimpParser s ModeIndependentCommand
+parseOpenInput :: TeXPrimParser s ModeIndependentCommand
 parseOpenInput =
     do
     skipSatisfiedEquals T.OpenInputTok
     parseModifyFileStream FileInput
 
-parseModifyFileStream :: InhibitableStream s => FileStreamType -> SimpParser s ModeIndependentCommand
+parseModifyFileStream :: FileStreamType -> TeXPrimParser s ModeIndependentCommand
 parseModifyFileStream fileStreamType =
     do
     n <- parseTeXInt
@@ -222,24 +201,23 @@ parseModifyFileStream fileStreamType =
     fn <- parseFileName
     pure $ ModifyFileStream fileStreamType (Open fn) n
 
-parseOptionalImmediate :: InhibitableStream s => SimpParser s WritePolicy
+parseOptionalImmediate :: TeXPrimParser s WritePolicy
 parseOptionalImmediate =
-    P.option Deferred $ skipSatisfiedEquals T.ImmediateTok $> Immediate
+    PC.option Deferred $ skipSatisfiedEquals T.ImmediateTok $> Immediate
 
-parseOpenOutput :: InhibitableStream s => SimpParser s ModeIndependentCommand
+parseOpenOutput :: TeXPrimParser s ModeIndependentCommand
 parseOpenOutput = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.OpenOutputTok
     parseModifyFileStream (FileOutput writePolicy)
 
-parseCloseOutput :: InhibitableStream s => SimpParser s ModeIndependentCommand
+parseCloseOutput :: TeXPrimParser s ModeIndependentCommand
 parseCloseOutput = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.CloseOutputTok
         >> (ModifyFileStream (FileOutput writePolicy) Close <$> parseTeXInt)
 
-parseWriteToStream :: InhibitableStream s
-                   => SimpParser s ModeIndependentCommand
+parseWriteToStream :: TeXPrimParser s ModeIndependentCommand
 parseWriteToStream = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.WriteTok
@@ -249,8 +227,7 @@ parseWriteToStream = do
         Deferred  -> DeferredWriteText <$> parseGeneralText
     pure $ WriteToStream n txt
 
-parseAddShiftedBox :: InhibitableStream s
-                   => SimpParser s ModeIndependentCommand
+parseAddShiftedBox :: TeXPrimParser s ModeIndependentCommand
 parseAddShiftedBox = AddBox <$> parsePlacement <*> parseBox
   where
     parseDirection = satisfyThen $ \case
@@ -264,9 +241,9 @@ parseAddShiftedBox = AddBox <$> parsePlacement <*> parseBox
         (axis, direction) <- parseDirection
         ShiftedPlacement axis direction <$> parseLength
 
-parseCommand :: InhibitableStream s => SimpParser s Command
+parseCommand :: TeXPrimParser s Command
 parseCommand =
-    P.choice
+    PC.choice
         [ HModeCommand <$> parseHModeCommand
         , VModeCommand <$> parseVModeCommand
 
@@ -288,7 +265,7 @@ parseCommand =
         ]
   where
     parseHModeCommand =
-        P.choice
+        PC.choice
             [ skipSatisfiedEquals T.ControlSpaceTok $> AddControlSpace
             , AddCharacter <$> parseCharCodeRef
             , parseAddAccentedCharacter
@@ -303,7 +280,7 @@ parseCommand =
             ]
 
     parseVModeCommand =
-        P.choice
+        PC.choice
             [ skipSatisfiedEquals T.EndTok $> End
             , skipSatisfiedEquals T.DumpTok $> Dump
             , AddVGlue <$> parseModedGlue Vertical
@@ -312,9 +289,9 @@ parseCommand =
             , AddUnwrappedFetchedVBox <$> parseFetchedBoxRef Vertical
             ]
 
-parseCharCodeRef :: InhibitableStream s => SimpParser s CharCodeRef
+parseCharCodeRef :: TeXPrimParser s CharCodeRef
 parseCharCodeRef =
-    P.choice [ parseAddCharacterCharOrTok, parseAddControlCharacter ]
+    PC.choice [ parseAddCharacterCharOrTok, parseAddControlCharacter ]
   where
     parseAddCharacterCharOrTok = satisfyThen $
         \case
@@ -328,23 +305,25 @@ parseCharCodeRef =
     parseAddControlCharacter = skipSatisfiedEquals T.ControlCharTok
         >> (CharCodeNrRef <$> parseTeXInt)
 
-parseAddAccentedCharacter :: InhibitableStream s => SimpParser s HModeCommand
-parseAddAccentedCharacter = do
+parseAddAccentedCharacter :: TeXPrimParser s HModeCommand
+parseAddAccentedCharacter =
+    do
     skipSatisfiedEquals T.AccentTok
     AddAccentedCharacter <$> parseTeXInt
-        <*> P.many parseNonSetBoxAssignment
-        <*> P.optional parseCharCodeRef
--- ⟨optional assignments⟩ stands for zero or more ⟨assignment⟩ commands
--- other than \setbox.
+        <*> PC.many parseNonSetBoxAssignment
+        <*> PC.optional parseCharCodeRef
   where
-    parseNonSetBoxAssignment = parseAssignment
-        >>= \case
-            Assignment (SetBoxRegister _ _) _ -> P.empty
+    -- ⟨optional assignments⟩ stands for zero or more ⟨assignment⟩ commands
+    -- other than \setbox.
+    parseNonSetBoxAssignment =
+        parseAssignment >>= \case
+            Assignment (SetBoxRegister _ _) _ -> throwError $ ErrorWhileTaking "Cannot set-box while addidng accented character"
             a -> pure a
 
-parseAddDiscretionaryText :: InhibitableStream s => SimpParser s HModeCommand
-parseAddDiscretionaryText = do
-    skipSatisfiedEquals T.DiscretionaryTextTok
-    AddDiscretionaryText <$> parseGeneralText
+parseAddDiscretionaryText :: TeXPrimParser s HModeCommand
+parseAddDiscretionaryText =
+    skipSatisfiedEquals T.DiscretionaryTextTok 
+    >> AddDiscretionaryText
+        <$> parseGeneralText
         <*> parseGeneralText
         <*> parseGeneralText

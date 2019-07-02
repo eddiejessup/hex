@@ -3,7 +3,6 @@ module HeX.Parse.Resolve where
 import           HeXlude
 
 import qualified Data.HashMap.Strict as HMap
-import           Data.Maybe          ( fromMaybe )
 
 import qualified HeX.Box             as B
 import           HeX.Categorise      ( CharCode )
@@ -18,14 +17,12 @@ type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
 resolveToken :: (Lex.ControlSequenceLike -> Maybe ResolvedToken)
              -> ExpansionMode
              -> Lex.Token
-             -> ResolvedToken
-resolveToken _ NotExpanding t = primTok $ UnexpandedTok t
+             -> Maybe ResolvedToken
+resolveToken _ NotExpanding t = pure $ primTok $ UnexpandedTok t
 resolveToken csLookup Expanding t = case t of
-    Lex.ControlSequenceToken cs -> lkp $ Lex.ControlSequenceProper cs
-    Lex.CharCatToken (Lex.CharCat c Lex.Active) -> lkp $ Lex.ActiveCharacter c
-    _ -> primTok $ UnexpandedTok t
-  where
-    lkp key = fromMaybe (primTok $ ResolutionError key) $ csLookup key
+    Lex.ControlSequenceToken cs -> csLookup $ Lex.ControlSequenceProper cs
+    Lex.CharCatToken (Lex.CharCat c Lex.Active) -> csLookup $ Lex.ActiveCharacter c
+    _ -> pure $ primTok $ UnexpandedTok t
 
 _cs :: [CharCode] -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper . Lex.ControlSequence . FDirected

@@ -114,18 +114,17 @@ instance TeXEvaluable AST.CodeTableRef where
     texEvaluate (AST.CodeTableRef q n) =
         do
         idx <- chr <$> texEvaluate n
-        let lookupFrom
-                :: (MonadReader Config m, MonadError Text m)
-                => (Scope -> HashMap CharCode b) -> m b
-            lookupFrom getMap = asks (scopedMapLookup getMap idx) >>= liftMaybe "err"
-        case q of
-            T.CategoryCodeType       -> fromEnum <$> lookupFrom catCodes
-            T.MathCodeType           -> fromEnum <$> lookupFrom mathCodes
-            T.ChangeCaseCodeType dir -> fromEnum <$> lookupFrom (case dir of
-                Upward   -> uppercaseCodes
-                Downward -> lowercaseCodes)
-            T.SpaceFactorCodeType    -> fromEnum <$> lookupFrom spaceFactors
-            T.DelimiterCodeType      -> fromEnum <$> lookupFrom delimiterCodes
+        conf <- ask
+        let
+            lookupFrom :: Enum v => (Scope -> HashMap Char v) -> Maybe Int
+            lookupFrom getMap = fromEnum <$> scopedMapLookup getMap idx conf
+        liftMaybe "err" $ case q of
+            T.CategoryCodeType            -> lookupFrom catCodes
+            T.MathCodeType                -> lookupFrom mathCodes
+            T.ChangeCaseCodeType Upward   -> lookupFrom uppercaseCodes
+            T.ChangeCaseCodeType Downward -> lookupFrom lowercaseCodes
+            T.SpaceFactorCodeType         -> lookupFrom spaceFactors
+            T.DelimiterCodeType           -> lookupFrom delimiterCodes
 
 instance TeXEvaluable AST.FontCharRef where
     type EvalTarget AST.FontCharRef = Int

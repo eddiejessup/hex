@@ -5,11 +5,9 @@ import           HeXlude
 import           Control.Monad.Except     (runExceptT)
 import           Control.Monad.State.Lazy (evalStateT)
 import qualified Data.HashMap.Strict      as HMap
-import           Data.List.NonEmpty       (NonEmpty (..))
 import           DVI.Document             (Instruction, parseInstructions)
 import           DVI.Encode               (encode)
 import           DVI.Instruction          (EncodableInstruction)
-import qualified Text.Megaparsec          as P
 
 import           HeX.Box
 import           HeX.BreakList
@@ -18,11 +16,10 @@ import           HeX.Command.Build
 import           HeX.Command.Common
 import           HeX.Lex                  (LexState (..), extractToken)
 import           HeX.Parse                (ExpandedStream, ExpansionMode (..),
-                                           IndentFlag (..), InhibitableStream,
-                                           defaultCSMap, extractCommand,
-                                           resolveToken,
-                                           BuildError (..), showErrorBundle,
-                                           ParseErrorBundle)
+                                           IndentFlag (..), TeXPrimStream,
+                                           defaultCSMap,
+                                           resolveToken, runParser,
+                                           parseCommand, anySingle)
 
 usableCatLookup :: CharCode -> CatCode
 usableCatLookup = catLookup usableCatCodes
@@ -69,22 +66,20 @@ runResolved _xs = extractAndPrint (LineBegin, _xs)
 -- Expand.
 
 runExpand :: ExpandedStream -> IO ()
-runExpand s = case P.take1_ s of
-    Just (tok, s') ->
-        print tok >> runExpand s'
-    Nothing ->
+runExpand s = runExceptT (runParser anySingle s) >>= \case
+    Right (newS, tok) ->
+        print tok >> runExpand newS
+    Left _ ->
         pure ()
 
 -- Command.
 
 runCommand :: ExpandedStream -> IO ()
-runCommand s = case extractCommand s of
-    Right (P.State {P.stateInput = s'}, com) ->
-        print com >> runCommand s'
-    Left (P.ParseErrorBundle (P.TrivialError _ (Just P.EndOfInput) _ :| []) _) ->
-        pure ()
-    Left errBundle ->
-        panic $ showErrorBundle errBundle
+runCommand s = runExceptT (runParser parseCommand s) >>= \case
+    Right (newS, com) ->
+        print com >> runCommand newS
+    Left err ->
+        panic $ show err
 
 -- Generic.
 
@@ -92,17 +87,12 @@ strEitherToIO :: Either Text v -> IO v
 strEitherToIO (Left err) = panic err
 strEitherToIO (Right v)  = pure v
 
-buildEitherToIO :: Show (P.Token s) => Either (BuildError (ParseErrorBundle s)) b -> IO b
-buildEitherToIO (Left (ParseError errBundle)) = panic $ showErrorBundle errBundle
-buildEitherToIO (Left (ConfigError s))        = panic $ "Bad semantics: " <> s
-buildEitherToIO (Right v)                     = pure v
-
 runStream :: ExpandedStream -> ExceptMonadBuild ExpandedStream a -> IO a
-runStream s f = evalStateT (unMonadBuild $ runExceptT f) s >>= buildEitherToIO
+runStream s f = evalStateT (unMonadBuild $ runExceptT f) s >>= strEitherToIO
 
 -- Paragraph list.
 
-extractParaHList :: InhibitableStream s => ExceptMonadBuild s ForwardHList
+extractParaHList :: TeXPrimStream s => ExceptMonadBuild s ForwardHList
 extractParaHList =
     (\(ParaResult _ hList) -> hList) <$> extractPara Indent
 

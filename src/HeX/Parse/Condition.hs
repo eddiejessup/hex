@@ -1,17 +1,15 @@
+{-# LANGUAGE RankNTypes #-}
+
 module HeX.Parse.Condition where
 
 import           HeXlude
 
-import qualified Text.Megaparsec     as P
-
 import           HeX.Parse.AST
-import           HeX.Parse.Common
-import           HeX.Parse.Helpers
 import           HeX.Parse.Inhibited
 import           HeX.Parse.Quantity
 import qualified HeX.Parse.Token     as T
 
-parseRelation :: InhibitableStream s => SimpParser s Ordering
+parseRelation :: TeXPrimParser s Ordering
 parseRelation = satisfyThen $
     \t -> if
         | matchOtherToken '<' t -> Just LT
@@ -19,9 +17,7 @@ parseRelation = satisfyThen $
         | isEquals t -> Just EQ
         | otherwise -> Nothing
 
-conditionHeadParser :: InhibitableStream s
-                    => T.ConditionHeadTok
-                    -> SimpParser s ConditionHead
+conditionHeadParser :: T.ConditionHeadTok -> TeXPrimParser s ConditionHead
 conditionHeadParser = \case
     T.IfTeXIntPairTestTok ->
         IfConditionHead <$> (IfTeXIntPairTest <$> parseTeXInt
@@ -34,8 +30,7 @@ conditionHeadParser = \case
     T.IfTeXIntOddTok -> IfConditionHead <$> (IfTeXIntOdd <$> parseTeXInt)
     T.IfInModeTok a -> pure $ (IfConditionHead . IfInMode) a
     T.IfTokenAttributesEqualTok attr ->
-        IfConditionHead <$> (IfTokenAttributesEqual attr <$> P.anySingle
-                             <*> P.anySingle)
+        IfConditionHead <$> (IfTokenAttributesEqual attr <$> anySingle <*> anySingle)
     T.IfTokensEqualTok ->
         IfConditionHead <$> (IfTokensEqual <$> parseLexToken <*> parseLexToken)
     T.IfBoxRegisterIsTok attr ->

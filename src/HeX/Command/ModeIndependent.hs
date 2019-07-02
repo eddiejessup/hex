@@ -21,13 +21,13 @@ data ModeIndependentResult
     | DoNothing
 
 fetchBox
-    :: HP.InhibitableStream s
+    :: HP.TeXStream s
     => HP.BoxFetchMode
     -> HP.EightBitTeXInt
     -> ExceptMonadBuild s (Maybe B.Box)
 fetchBox fetchMode idx =
     do
-    eIdx <- liftEvalOnConfState idx
+    eIdx <- evalOnConfState idx
     fetchedMaybeBox <- readOnConfState $ asks $ lookupBoxRegister eIdx
     case fetchMode of
         HP.Lookup -> pure ()
@@ -35,7 +35,7 @@ fetchBox fetchMode idx =
     pure fetchedMaybeBox
 
 handleModeIndependentCommand
-    :: HP.InhibitableStream s
+    :: HP.TeXStream s
     => HP.ModeIndependentCommand -> ExceptMonadBuild s ModeIndependentResult
 handleModeIndependentCommand = \case
     HP.Message stdOutStream eTxt ->
@@ -60,15 +60,15 @@ handleModeIndependentCommand = \case
         modConfState $ \conf -> conf{ afterAssignmentToken = Just lt }
         pure DoNothing
     HP.AddPenalty n ->
-        AddElem . BL.ListPenalty . BL.Penalty <$> liftEvalOnConfState n
+        AddElem . BL.ListPenalty . BL.Penalty <$> evalOnConfState n
     HP.AddKern ln ->
-        AddElem . BL.VListBaseElem . B.ElemKern . B.Kern <$> liftEvalOnConfState ln
+        AddElem . BL.VListBaseElem . B.ElemKern . B.Kern <$> evalOnConfState ln
     HP.Assign HP.Assignment { HP.global, HP.body } ->
         do
         assignResult <- case body of
             HP.DefineControlSequence cs tgt ->
                 do
-                (maybeElem, newCSTok) <- liftReadOnConfState $ case tgt of
+                (maybeElem, newCSTok) <- readOnConfState $ case tgt of
                     HP.MacroTarget macro ->
                         pure (Nothing, HP.syntaxTok $ HP.MacroTok macro)
                     -- TODO: If a \let target is an active character, should we
@@ -96,7 +96,7 @@ handleModeIndependentCommand = \case
                 pure $ maybe DoNothing AddElem maybeElem
             HP.SetVariable ass ->
                 do
-                liftConfState $ case ass of
+                HP.runConfState $ case ass of
                     HP.TeXIntVariableAssignment v tgt ->
                         Var.setValueFromAST v global tgt
                     HP.LengthVariableAssignment v tgt  ->
@@ -114,7 +114,7 @@ handleModeIndependentCommand = \case
                 pure DoNothing
             HP.ModifyVariable modCommand ->
                 do
-                liftConfState $ case modCommand of
+                HP.runConfState $ case modCommand of
                     HP.AdvanceTeXIntVariable var plusVal ->
                         Var.advanceValueFromAST var global plusVal
                     HP.AdvanceLengthVariable var plusVal ->
@@ -136,13 +136,13 @@ handleModeIndependentCommand = \case
                 pure DoNothing
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
-                eIdx <- liftEvalOnConfState idx
-                eVal <- liftEvalOnConfState val
+                eIdx <- evalOnConfState idx
+                eVal <- evalOnConfState val
                 liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
                 liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
-                idxChar <- liftMaybeConfigError ("Invalid character code index: " <> show eIdx) (toEnumMay eIdx)
+                idxChar <- liftMaybe ("Invalid character code index: " <> show eIdx) (toEnumMay eIdx)
                 liftIO $ putText $ "Setting " <> show codeType <> "@" <> show eIdx <> " (" <> show idxChar <> ") to " <> show eVal
-                liftConfState $ updateCharCodeMap codeType idxChar eVal global
+                HP.runConfState $ updateCharCodeMap codeType idxChar eVal global
                 pure DoNothing
             HP.SelectFont fNr ->
                 do
@@ -150,14 +150,14 @@ handleModeIndependentCommand = \case
                 pure $ AddElem $ BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr
             HP.SetFamilyMember fm fontRef ->
                 do
-                eFm <- liftEvalOnConfState fm
-                fNr <- liftEvalOnConfState fontRef
+                eFm <- evalOnConfState fm
+                fNr <- evalOnConfState fontRef
                 modConfState $ setFamilyMemberFont eFm fNr global
                 pure DoNothing
             -- Start a new level of grouping. Enter inner mode.
             HP.SetBoxRegister lhsIdx box ->
                 do
-                eLhsIdx <- liftEvalOnConfState lhsIdx
+                eLhsIdx <- evalOnConfState lhsIdx
                 case box of
                     HP.FetchedRegisterBox fetchMode rhsIdx ->
                         do
@@ -170,13 +170,13 @@ handleModeIndependentCommand = \case
                         panic "Not implemented: SetBoxRegister to VSplitBox"
                     HP.ExplicitBox spec boxType ->
                         do
-                        eSpec <- liftEvalOnConfState spec
+                        eSpec <- evalOnConfState spec
                         modConfState $ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
                         pure $ EnterBoxMode eSpec boxType (IntentToSetBoxRegister eLhsIdx global)
             HP.SetFontChar (HP.FontCharRef fontChar fontRef) charRef ->
                 do
-                fNr <- liftEvalOnConfState fontRef
-                eCharRef <- liftEvalOnConfState charRef
+                fNr <- evalOnConfState fontRef
+                eCharRef <- evalOnConfState charRef
                 let updateFontChar f = case fontChar of
                         HP.SkewChar   -> f { skewChar = eCharRef }
                         HP.HyphenChar -> f { hyphenChar = eCharRef }
@@ -192,7 +192,7 @@ handleModeIndependentCommand = \case
                 modConfState $ \c -> c{afterAssignmentToken = Nothing}
         pure assignResult
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
-        liftReadOnConfState $
+        readOnConfState $
             do
             en <- texEvaluate n
             fStreams <- asks outFileStreams
@@ -225,7 +225,7 @@ handleModeIndependentCommand = \case
     HP.ChangeScope (HP.Sign False) trig ->
         HP.runConfState $ gets popGroup >>= \case
             Nothing ->
-                throwConfigError "No group to leave"
+                throwError "No group to leave"
             Just (group, poppedConfig) ->
                 do
                 put poppedConfig
@@ -235,7 +235,7 @@ handleModeIndependentCommand = \case
                     -- current mode.
                     ScopeGroup _ (LocalStructureGroup trigConf) ->
                         do
-                        when (trigConf /= trig) $ throwConfigError $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
+                        when (trigConf /= trig) $ throwError $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
                         pure DoNothing
                     -- - Undo the effects of non-global assignments
                     -- - package the [box] using the size that was saved on the
@@ -254,7 +254,7 @@ handleModeIndependentCommand = \case
     HP.AddBox HP.NaturalPlacement (HP.ExplicitBox spec boxType) ->
         -- Start a new level of grouping. Enter inner mode.
         do
-        eSpec <- liftEvalOnConfState spec
+        eSpec <- evalOnConfState spec
         modConfState $ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
         pure $ EnterBoxMode eSpec boxType IntentToAddBox
     oth ->
