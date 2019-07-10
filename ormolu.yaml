@@ -1,0 +1,26 @@
+ghc-opts:
+  - -XConstraintKinds
+  - -XDeriveFoldable
+  - -XDeriveFunctor
+  - -XDeriveGeneric
+  - -XDeriveLift
+  - -XDeriveTraversable
+  - -XDerivingStrategies
+  - -XEmptyCase
+  - -XFlexibleContexts
+  - -XFlexibleInstances
+  - -XGeneralizedNewtypeDeriving
+  - -XInstanceSigs
+  - -XLambdaCase
+  - -XMultiParamTypeClasses
+  - -XMultiWayIf
+  - -XNamedFieldPuns
+  - -XNoImplicitPrelude
+  - -XOverloadedStrings
+  - -XScopedTypeVariables
+  - -XStandaloneDeriving
+  - -XTupleSections
+  - -XTypeApplications
+  - -XTypeFamilies
+unsafe: False
+debug: False
