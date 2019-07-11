@@ -2,14 +2,14 @@ module DVI.Document where
 
 import           HeXlude
 
-import           Data.Char       ( ord )
-import           Path            ( Path )
-import qualified Path
+import           Data.Char       (ord)
 import qualified Data.Text       as Txt
+import           Path            (Path)
+import qualified Path
 
-import           DVI.Encode      ( encLength )
+import           DVI.Encode      (encLength)
 import           DVI.Instruction
-import           DVI.Operation   ( Operation(DefineFontNr) )
+import           DVI.Operation   (Operation (DefineFontNr))
 
 data Rule = Rule { ruleWidth, ruleHeight, ruleDepth :: !LenVal }
     deriving ( Show )
@@ -37,9 +37,9 @@ data FontDefinition =
     FontDefinition { fontDefChecksum    :: Int
                    , fontDefDesignSize  :: Int
                    , fontDefDesignScale :: Int
-                   , fontPath         :: !(Path Path.Rel Path.File)
-                   , fontName         :: !Text
-                   , fontNr           :: !Int
+                   , fontPath           :: !(Path Path.Rel Path.File)
+                   , fontName           :: !Text
+                   , fontNr             :: !Int
                    }
     deriving ( Show )
 
@@ -169,4 +169,4 @@ parseInstructions _instrs magnification = do
   where
     isDefineFontInstr i = case i of
         EncodableInstruction (DefineFontNr _) _ -> True
-        _ -> False
+        _                                       -> False

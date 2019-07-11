@@ -4,20 +4,20 @@ module HeX.Parse.Assignment where
 
 import           HeXlude
 
-import           Control.Monad        ( when )
+import           Control.Monad             (when)
 import qualified Control.Monad.Combinators as PC
-import           Control.Monad.Except ( runExceptT )
-import           Control.Monad.Reader ( runReaderT )
-import           Data.Functor         ( ($>) )
+import           Control.Monad.Except      (runExceptT)
+import           Control.Monad.Reader      (runReaderT)
+import           Data.Functor              (($>))
 import qualified Path
 
 import           HeX.Evaluate
-import qualified HeX.Lex              as Lex
+import qualified HeX.Lex                   as Lex
 import           HeX.Parse.AST
-import           HeX.Parse.Stream.Class
 import           HeX.Parse.Parser
 import           HeX.Parse.Quantity
-import qualified HeX.Parse.Token      as T
+import           HeX.Parse.Stream.Class
+import qualified HeX.Parse.Token           as T
 
 parseAssignment :: TeXParser s Assignment
 parseAssignment = parseDefineMacro <|> parseNonMacroAssignment
@@ -97,7 +97,7 @@ parseNonMacroAssignment = do
                   ]
 
     tokToInteractionMode (T.InteractionModeTok m) = Just m
-    tokToInteractionMode _ = Nothing
+    tokToInteractionMode _                        = Nothing
 
 numVarValPair :: TeXStream s => (SParser s TeXStreamM TeXIntVariable, SParser s TeXStreamM TeXInt)
 numVarValPair = (parseTeXIntVariable, parseTeXInt)
@@ -247,7 +247,7 @@ parseFileName = do
         _ -> Nothing
     skipSatisfied isSpace
     case Path.parseRelFile fileNameChars of
-        Just p -> pure $ TeXFilePath p
+        Just p  -> pure $ TeXFilePath p
         Nothing -> panic $ show fileNameChars
 
   where

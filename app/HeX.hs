@@ -3,15 +3,15 @@ module Main where
 import           HeXlude
 import qualified Prelude
 
-import qualified Data.ByteString                as BS
-import qualified System.Console.GetOpt          as Opt
-import           Control.Monad                  ( when )
+import           Control.Monad             (when)
+import qualified Data.ByteString           as BS
+import qualified System.Console.GetOpt     as Opt
 
-import qualified Data.Path                      as D.Path
-import qualified Path.IO
-import           HeX.Categorise                 ( CharCode )
+import qualified Data.Path                 as D.Path
+import           HeX.Categorise            (CharCode)
 import           HeX.Command.Run
-import           HeX.Parse.Stream.Instance      (newExpandStream)
+import           HeX.Parse.Stream.Instance (newExpandStream)
+import qualified Path.IO
 
 data Mode
     = CatMode
@@ -45,19 +45,19 @@ options =
     output = Output . toS . fromMaybe "out.dvi"
 
     mode m = Mode $ case toS <$> m of
-        Nothing          -> DVIWriteMode
-        Just "cat"       -> CatMode
-        Just "lex"       -> LexMode
-        Just "resolve"   -> ResolveMode
-        Just "expand"    -> ExpandMode
-        Just "command"   -> CommandMode
-        Just "paralist"  -> ParaListMode
-        Just "paraset"   -> ParaSetMode
-        Just "page"      -> PageMode
-        Just "dvi"       -> DVIMode
-        Just "rawdvi"    -> RawDVIMode
-        Just "bytes"     -> DVIWriteMode
-        Just s           -> panic $ "Unknown mode: " <> s
+        Nothing         -> DVIWriteMode
+        Just "cat"      -> CatMode
+        Just "lex"      -> LexMode
+        Just "resolve"  -> ResolveMode
+        Just "expand"   -> ExpandMode
+        Just "command"  -> CommandMode
+        Just "paralist" -> ParaListMode
+        Just "paraset"  -> ParaSetMode
+        Just "page"     -> PageMode
+        Just "dvi"      -> DVIMode
+        Just "rawdvi"   -> RawDVIMode
+        Just "bytes"    -> DVIWriteMode
+        Just s          -> panic $ "Unknown mode: " <> s
 
 usage :: Text
 usage = toS $ Opt.usageInfo header options

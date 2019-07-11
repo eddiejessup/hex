@@ -5,16 +5,16 @@ module HeX.Parse.Quantity where
 import           HeXlude
 
 import qualified Control.Monad.Combinators as PC
-import           Data.Foldable       ( foldl' )
-import           Data.Functor        ( ($>) )
-import           Data.Ratio          ( (%) )
+import           Data.Foldable             (foldl')
+import           Data.Functor              (($>))
+import           Data.Ratio                ((%))
 
-import           HeX.Categorise      ( CharCode )
-import qualified HeX.Lex             as Lex
+import           HeX.Categorise            (CharCode)
+import qualified HeX.Lex                   as Lex
 import           HeX.Parse.AST
 import           HeX.Parse.Stream.Class
-import qualified HeX.Parse.Token     as T
-import           HeX.Unit            ( PhysicalUnit(..) )
+import qualified HeX.Parse.Token           as T
+import           HeX.Unit                  (PhysicalUnit (..))
 
 -- TeXInt.
 
@@ -308,31 +308,31 @@ parseTeXIntVariable :: TeXParser s TeXIntVariable
 parseTeXIntVariable = parseQuantityVariable getParam T.RegInt
   where
     getParam (T.IntParamVarTok p) = Just p
-    getParam _ = Nothing
+    getParam _                    = Nothing
 
 parseLengthVariable :: TeXParser s LengthVariable
 parseLengthVariable = parseQuantityVariable getParam T.RegLen
   where
     getParam (T.LenParamVarTok p) = Just p
-    getParam _ = Nothing
+    getParam _                    = Nothing
 
 parseGlueVariable :: TeXParser s GlueVariable
 parseGlueVariable = parseQuantityVariable getParam T.RegGlue
   where
     getParam (T.GlueParamVarTok p) = Just p
-    getParam _ = Nothing
+    getParam _                     = Nothing
 
 parseMathGlueVariable :: TeXParser s MathGlueVariable
 parseMathGlueVariable = parseQuantityVariable getParam T.RegMathGlue
   where
     getParam (T.MathGlueParamVarTok p) = Just p
-    getParam _ = Nothing
+    getParam _                         = Nothing
 
 parseTokenListVariable :: TeXParser s TokenListVariable
 parseTokenListVariable = parseQuantityVariable getParam T.RegTokenList
   where
     getParam (T.TokenListParamVarTok p) = Just p
-    getParam _ = Nothing
+    getParam _                          = Nothing
 
 parseInternalTeXInt :: TeXParser s InternalTeXInt
 parseInternalTeXInt =
@@ -370,13 +370,13 @@ parseCodeTableRef :: TeXParser s CodeTableRef
 parseCodeTableRef = CodeTableRef <$> satisfyThen tokToCodeType <*> parseTeXInt
   where
     tokToCodeType (T.CodeTypeTok c) = Just c
-    tokToCodeType _ = Nothing
+    tokToCodeType _                 = Nothing
 
 parseFontCharRef :: TeXParser s FontCharRef
 parseFontCharRef = FontCharRef <$> satisfyThen tokToFontChar <*> parseFontRef
   where
     tokToFontChar (T.FontCharTok c) = Just c
-    tokToFontChar _ = Nothing
+    tokToFontChar _                 = Nothing
 
 parseFontRef :: TeXParser s FontRef
 parseFontRef = PC.choice [ FontTokenRef <$> parseFontRefToken
@@ -395,7 +395,7 @@ parseFamilyMember = FamilyMember <$> satisfyThen tokToFontRange
     <*> parseTeXInt
   where
     tokToFontRange (T.FontRangeTok r) = Just r
-    tokToFontRange _ = Nothing
+    tokToFontRange _                  = Nothing
 
 parseInternalLength :: TeXParser s InternalLength
 parseInternalLength =

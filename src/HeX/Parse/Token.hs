@@ -1,14 +1,14 @@
 module HeX.Parse.Token where
 
-import HeXlude
+import           HeXlude
 
-import           GHC.Generics                   ( Generic )
-import           Data.Hashable                  ( Hashable )
-import qualified Data.Map.Strict               as Map
+import           Data.Hashable   (Hashable)
+import qualified Data.Map.Strict as Map
+import           GHC.Generics    (Generic)
 
 
-import qualified HeX.Lex                       as Lex
-import           HeX.Box                        ( VBoxAlignType )
+import           HeX.Box         (VBoxAlignType)
+import qualified HeX.Lex         as Lex
 
 -- mconcat on this newtype wrapper should get the final sign of a list of
 -- signs. Bit pretentious, sorry.
@@ -344,10 +344,10 @@ newtype MacroText = MacroText [MacroTextToken]
 
 data MacroContents = MacroContents
     { -- Tokens to expect before the first argument.
-      preParamTokens :: BalancedText
-    , parameters :: MacroParameters
+      preParamTokens    :: BalancedText
+    , parameters        :: MacroParameters
     , replacementTokens :: MacroText
-    , long, outer :: Bool
+    , long, outer       :: Bool
     } deriving (Show, Eq)
 
 data RemovableItem

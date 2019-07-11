@@ -1,9 +1,9 @@
 module TFM.LigKern where
 
-import HeXlude
+import           HeXlude
 
 import qualified Data.Binary.Get as B.G
-import           Data.Bits ( shift, (.&.) )
+import           Data.Bits       (shift, (.&.))
 
 import           TFM.Common
 
@@ -21,8 +21,8 @@ newtype KernOp = KernOp Rational
     deriving (Show)
 
 data LigKernInstr = LigKernInstr
-    { stop :: Bool
-    , nextChar :: Int
+    { stop      :: Bool
+    , nextChar  :: Int
     , operation :: Either LigatureOp KernOp
     } deriving (Show)
 

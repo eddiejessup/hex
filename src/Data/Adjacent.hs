@@ -22,7 +22,7 @@ toAdjacents xs =
         VeryStart -> Empty
         GotGoing v acc ->
             let maybeLeft = case acc of
-                    Empty -> Nothing
+                    Empty                -> Nothing
                     (_ :|> Adj _ left _) -> Just left
             in acc |> Adj maybeLeft v (Just right)
 

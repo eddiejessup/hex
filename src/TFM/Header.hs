@@ -1,10 +1,10 @@
 module TFM.Header where
 
-import HeXlude
+import           HeXlude
 
-import           Data.Ascii                     ( Ascii )
-import qualified Data.Binary as B
-import           Data.Binary.Get ( Get )
+import           Data.Ascii      (Ascii)
+import qualified Data.Binary     as B
+import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as B.G
 
 import           TFM.Common

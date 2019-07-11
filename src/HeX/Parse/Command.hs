@@ -5,15 +5,15 @@ module HeX.Parse.Command where
 import           HeXlude
 
 import qualified Control.Monad.Combinators as PC
-import           Data.Functor         ( ($>) )
+import           Data.Functor              (($>))
 
-import qualified HeX.Lex              as Lex
-import           HeX.Parse.AST
+import qualified HeX.Lex                   as Lex
 import           HeX.Parse.Assignment
+import           HeX.Parse.AST
 import           HeX.Parse.Parser
 import           HeX.Parse.Quantity
 import           HeX.Parse.Stream.Class
-import qualified HeX.Parse.Token      as T
+import qualified HeX.Parse.Token           as T
 
 -- Parse.
 
@@ -323,7 +323,7 @@ parseAddAccentedCharacter =
 
 parseAddDiscretionaryText :: TeXParser s HModeCommand
 parseAddDiscretionaryText =
-    skipSatisfiedEquals T.DiscretionaryTextTok 
+    skipSatisfiedEquals T.DiscretionaryTextTok
     >> AddDiscretionaryText
         <$> parseGeneralText
         <*> parseGeneralText

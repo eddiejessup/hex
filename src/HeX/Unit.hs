@@ -1,9 +1,9 @@
 module HeX.Unit where
 
-import Protolude
+import           Protolude
 
-import Data.Text (Text)
-import           Data.Ratio                     ( (%) )
+import           Data.Ratio ((%))
+import           Data.Text  (Text)
 
 tenK :: Int
 tenK = 10000

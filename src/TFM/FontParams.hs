@@ -1,8 +1,8 @@
 module TFM.FontParams where
 
-import HeXlude
+import           HeXlude
 
-import           Data.Ascii                     ( Ascii )
+import           Data.Ascii      (Ascii)
 import qualified Data.Binary.Get as B.G
 
 import           TFM.Common

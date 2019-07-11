@@ -4,26 +4,25 @@ module HeX.Command.Run where
 
 import           HeXlude
 
-import           Control.Monad.Except     (runExceptT)
-import           Control.Monad.State.Lazy (evalStateT)
+import           Control.Monad.Except      (runExceptT)
+import           Control.Monad.State.Lazy  (evalStateT)
 import           Control.Monad.Trans.Maybe (MaybeT (..))
-import qualified Data.HashMap.Strict      as HMap
-import           DVI.Document             (Instruction, parseInstructions)
-import           DVI.Encode               (encode)
-import           DVI.Instruction          (EncodableInstruction)
+import qualified Data.HashMap.Strict       as HMap
+import           DVI.Document              (Instruction, parseInstructions)
+import           DVI.Encode                (encode)
+import           DVI.Instruction           (EncodableInstruction)
 
 import           HeX.Box
 import           HeX.BreakList
 import           HeX.Categorise
 import           HeX.Command.Build
 import           HeX.Command.Common
-import           HeX.Lex                  (LexState (..), extractToken)
-import           HeX.Parse                (ExpandedStream, ExpansionMode (..),
-                                           IndentFlag (..),
-                                           TeXStream, TeXParser,
-                                           defaultCSMap,
-                                           resolveToken, runParser,
-                                           parseCommand, anySingle)
+import           HeX.Lex                   (LexState (..), extractToken)
+import           HeX.Parse                 (ExpandedStream, ExpansionMode (..),
+                                            IndentFlag (..), TeXParser,
+                                            TeXStream, anySingle, defaultCSMap,
+                                            parseCommand, resolveToken,
+                                            runParser)
 
 usableCatLookup :: CharCode -> CatCode
 usableCatLookup = catLookup usableCatCodes

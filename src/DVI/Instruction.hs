@@ -1,8 +1,8 @@
 module DVI.Instruction where
 
-import           HeXlude              hiding ( U1 )
+import           HeXlude              hiding (U1)
 
-import           Data.Ascii           ( Ascii )
+import           Data.Ascii           (Ascii)
 import qualified Data.Ascii           as Asc
 import qualified Data.Binary          as B
 import           Data.Byte
@@ -11,7 +11,7 @@ import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Int             as I
 import qualified Data.Path            as D.Path
 import qualified Data.Word            as W
-import           Path                 ( Path )
+import           Path                 (Path)
 import qualified Path
 
 import           DVI.Encode
@@ -21,7 +21,7 @@ data ArgVal = IntArgVal IntArgVal | StringArgVal Ascii
     deriving ( Show )
 
 instance Encodable ArgVal where
-    encode (IntArgVal v) = encode v
+    encode (IntArgVal v)    = encode v
     encode (StringArgVal v) = Asc.toByteString v
 
 data IntArgVal =

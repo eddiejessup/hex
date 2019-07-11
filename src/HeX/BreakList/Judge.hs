@@ -2,13 +2,11 @@ module HeX.BreakList.Judge where
 
 import           HeXlude
 
-import           HeX.Box                 ( SetGlue(..) )
-import           HeX.BreakList.BreakList ( BreakableListElem(..)
-                                         , naturalListSpan
-                                         , totalGlue
-                                         )
-import           HeX.BreakList.Glue      ( Glue(..), GlueFlex(..) )
-import           HeX.Unit                ( showFrac, showSP, tenK )
+import           HeX.Box                 (SetGlue (..))
+import           HeX.BreakList.BreakList (BreakableListElem (..),
+                                          naturalListSpan, totalGlue)
+import           HeX.BreakList.Glue      (Glue (..), GlueFlex (..))
+import           HeX.Unit                (showFrac, showSP, tenK)
 
 -- Here’s the way TeX goes about setting the glue when an hbox is being wrapped
 -- up: The natural width, x, of the box contents is determined by adding up the

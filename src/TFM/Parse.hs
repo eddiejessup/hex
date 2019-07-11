@@ -4,21 +4,21 @@ module TFM.Parse
   )
 where
 
-import HeXlude
+import           HeXlude
 
-import           Data.Ascii                     ( Ascii )
-import qualified Data.Binary.Get               as B.G
-import qualified Data.ByteString               as BS
-import qualified Data.ByteString.Lazy          as BS.L
+import           Data.Ascii           (Ascii)
+import qualified Data.Binary.Get      as B.G
+import qualified Data.ByteString      as BS
+import qualified Data.ByteString.Lazy as BS.L
 import           Data.HashMap.Strict
 
 import           TFM.Character
 import           TFM.Common
-import qualified TFM.FontParams as F
-import qualified TFM.Header as H
+import qualified TFM.FontParams       as F
+import qualified TFM.Header           as H
 import           TFM.LigKern
 import           TFM.Recipe
-import qualified TFM.Table as T
+import qualified TFM.Table            as T
 
 data TexFont = TexFont
     { checksum              :: Int
@@ -40,7 +40,7 @@ data TexFont = TexFont
 runGetEith :: Text -> B.G.Get b -> BS.ByteString -> Either Text b
 runGetEith ctx f s = case B.G.runGetOrFail f (BS.L.fromStrict s) of
         Left (_, _, err) -> Left $ "In " <> showT ctx <> ": " <> toS err
-        Right (_, _, v) -> Right v
+        Right (_, _, v)  -> Right v
 
 newTFM :: BS.ByteString -> Either Text TexFont
 newTFM contents =

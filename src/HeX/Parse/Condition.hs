@@ -5,9 +5,9 @@ module HeX.Parse.Condition where
 import           HeXlude
 
 import           HeX.Parse.AST
-import           HeX.Parse.Stream.Class
 import           HeX.Parse.Quantity
-import qualified HeX.Parse.Token     as T
+import           HeX.Parse.Stream.Class
+import qualified HeX.Parse.Token        as T
 
 parseRelation :: TeXParser s Ordering
 parseRelation = satisfyThen $

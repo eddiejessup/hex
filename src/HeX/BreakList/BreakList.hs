@@ -13,9 +13,9 @@ data BreakItem =
 
 breakPenalty :: BreakItem -> Int
 breakPenalty (PenaltyBreak (Penalty p)) = p
-breakPenalty (GlueBreak _) = 0
-breakPenalty (KernBreak _) = 0
-breakPenalty NoBreak = 0
+breakPenalty (GlueBreak _)              = 0
+breakPenalty (KernBreak _)              = 0
+breakPenalty NoBreak                    = 0
 
 newtype Penalty = Penalty Int
     deriving ( Show )

@@ -1,6 +1,6 @@
 module TFM.Character where
 
-import HeXlude
+import           HeXlude
 
 -- The character info array contains, for each character, six fields packed
 -- into four bytes:
@@ -27,11 +27,11 @@ import HeXlude
 -- > 3, 'ext_tag': this character code represents an extensible character, that
 --   is, a character that is built from smaller pieces so that it can be made
 --   arbitrarily large. The pieces are specified in 'exten[remainder]'.
-import           Data.Bits ( shiftR, (.&.) )
-import qualified Data.Binary.Get as B.G
-import           Data.Char ( chr )
-import           Data.List.Index ( indexed )
+import qualified Data.Binary.Get   as B.G
+import           Data.Bits         (shiftR, (.&.))
+import           Data.Char         (chr)
 import           Data.HashMap.Lazy
+import           Data.List.Index   (indexed)
 
 import           TFM.Common
 import           TFM.Recipe

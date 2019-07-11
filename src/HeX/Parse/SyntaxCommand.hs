@@ -2,9 +2,9 @@
 
 module HeX.Parse.SyntaxCommand where
 
-import HeXlude
+import           HeXlude
 
-import qualified HeX.Categorise                as Cat
+import qualified HeX.Categorise         as Cat
 import           HeX.Parse.Stream.Class
 import           HeX.Parse.Token
 

@@ -4,7 +4,7 @@ import           HeXlude
 
 import qualified Data.HashMap.Strict as HMap
 
-import           HeX.BreakList.Glue  ( Glue(..), MathGlue, fixedGlue )
+import           HeX.BreakList.Glue  (Glue (..), MathGlue, fixedGlue)
 import           HeX.Parse.Token
 import qualified HeX.Unit            as Unit
 

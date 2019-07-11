@@ -4,14 +4,14 @@ module Debug.Readable where
 
 import           Protolude
 
-import qualified Data.Text    as Txt
+import qualified Data.Text as Txt
 
 monoidIntercalate :: (Foldable t, Monoid a) => a -> t a -> a
 monoidIntercalate d = go
   where
     go xs = fromMaybe mempty (foldl' f Nothing xs)
 
-    f Nothing x = Just x
+    f Nothing x    = Just x
     f (Just acc) x = Just (acc <> d <> x)
 
 class Readable a where

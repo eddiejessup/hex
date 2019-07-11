@@ -3,7 +3,7 @@
 
 module HeX.Parse.Parser where
 
-import           HeXlude          hiding  (many)
+import           HeXlude hiding (many)
 
 newtype SParser s m a = SParser { runParser :: s -> m (s, a) }
 

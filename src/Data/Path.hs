@@ -2,7 +2,8 @@ module Data.Path where
 
 import           HeXlude
 import qualified Prelude
-import           Path    (Path, File)
+
+import           Path    (File, Path)
 import qualified Path
 
 readPathText :: Path a File -> IO Text

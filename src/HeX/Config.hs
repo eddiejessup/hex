@@ -5,6 +5,6 @@ module HeX.Config
     )
 where
 
+import           HeX.Config.Codes
 import           HeX.Config.Config
 import           HeX.Config.Parameters
-import           HeX.Config.Codes

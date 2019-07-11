@@ -3,27 +3,27 @@
 
 module HeX.Parse.Stream.Class where
 
-import           HeXlude          hiding  (many)
+import           HeXlude                   hiding (many)
 
-import           Control.Monad            (foldM, guard)
+import           Control.Monad             (foldM, guard)
 import qualified Control.Monad.Combinators as PC
-import           Control.Monad.State.Lazy (MonadState, StateT, modify,
-                                           runStateT)
+import           Control.Monad.State.Lazy  (MonadState, StateT, modify,
+                                            runStateT)
 import           Control.Monad.Trans.Maybe (MaybeT)
-import           Data.Char                (ord, toUpper, toLower)
-import qualified Data.Foldable            as Fold
-import           Data.Functor             (($>))
-import qualified Data.Map.Strict          as Map
-import           Data.Maybe               (fromMaybe)
+import           Data.Char                 (ord, toLower, toUpper)
+import qualified Data.Foldable             as Fold
+import           Data.Functor              (($>))
+import qualified Data.Map.Strict           as Map
+import           Data.Maybe                (fromMaybe)
 
-import           HeX.Categorise           (CharCode)
-import           HeX.Config               (Config)
+import           HeX.Categorise            (CharCode)
+import           HeX.Config                (Config)
 import           HeX.Evaluate
-import           HeX.Lex                  (CharCat (..))
-import qualified HeX.Lex                  as Lex
+import           HeX.Lex                   (CharCat (..))
+import qualified HeX.Lex                   as Lex
+import           HeX.Parse.Parser
 import           HeX.Parse.Resolve
 import           HeX.Parse.Token
-import           HeX.Parse.Parser
 
 class TeXStream s where
 
@@ -78,7 +78,7 @@ satisfy :: (PrimitiveToken -> Bool) -> TeXParser s PrimitiveToken
 satisfy f = satisfyThen (predToMaybe f)
 
 boolToMaybe :: Bool -> a -> Maybe a
-boolToMaybe True x = Just x
+boolToMaybe True x  = Just x
 boolToMaybe False _ = Nothing
 
 predToMaybe :: (a -> Bool) -> a -> Maybe a
@@ -456,11 +456,11 @@ ccHasCategory a CharCat{cat = b} = a == b
 
 lexTokHasCategory :: Lex.LexCatCode -> Lex.Token -> Bool
 lexTokHasCategory a (Lex.CharCatToken cc) = ccHasCategory a cc
-lexTokHasCategory _ _ = False
+lexTokHasCategory _ _                     = False
 
 primTokHasCategory :: Lex.LexCatCode -> PrimitiveToken -> Bool
 primTokHasCategory a (UnexpandedTok lt) = lexTokHasCategory a lt
-primTokHasCategory _ _ = False
+primTokHasCategory _ _                  = False
 
 -- <space token> = character token of category [space], or a control sequence
 -- or active character \let equal to such.
@@ -470,7 +470,7 @@ isSpace = primTokHasCategory Lex.Space
 -- Match particular tokens.
 isFillerItem :: PrimitiveToken -> Bool
 isFillerItem RelaxTok = True
-isFillerItem t = isSpace t
+isFillerItem t        = isSpace t
 
 matchOtherToken :: CharCode -> PrimitiveToken -> Bool
 matchOtherToken c2
@@ -491,12 +491,12 @@ matchNonActiveCharacterUncased _ _ = False
 
 tokToChar :: PrimitiveToken -> Maybe CharCode
 tokToChar (UnexpandedTok (Lex.CharCatToken CharCat{char = c})) = Just c
-tokToChar _ = Nothing
+tokToChar _                                                    = Nothing
 
 -- Lexed.
 tokToLex :: PrimitiveToken -> Maybe Lex.Token
 tokToLex (UnexpandedTok t) = Just t
-tokToLex _ = Nothing
+tokToLex _                 = Nothing
 
 handleLex :: (Lex.Token -> Maybe a) -> TeXParser s a
 handleLex f = satisfyThen $ tokToLex >=> f
@@ -512,7 +512,7 @@ skipBalancedText (BalancedText toks) = skipSatisfiedLexChunk toks
 
 liftLexPred :: (Lex.Token -> Bool) -> PrimitiveToken -> Bool
 liftLexPred f (UnexpandedTok lt) = f lt
-liftLexPred _ _ = False
+liftLexPred _ _                  = False
 
 -- Parsers.
 skipOneOptionalSpace :: TeXParser s ()

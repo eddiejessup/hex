@@ -2,11 +2,11 @@ module HeX.Categorise where
 
 import           HeXlude
 
-import           Data.Foldable                  ( foldl' )
-import           Data.Maybe                     ( fromMaybe )
-import qualified Data.Text                     as Text
+import           Data.Foldable       (foldl')
+import           Data.Maybe          (fromMaybe)
+import qualified Data.Text           as Text
 
-import qualified Data.HashMap.Strict           as HMap
+import qualified Data.HashMap.Strict as HMap
 
 data CatCode
     = Escape       -- 0

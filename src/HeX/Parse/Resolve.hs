@@ -5,7 +5,7 @@ import           HeXlude
 import qualified Data.HashMap.Strict as HMap
 
 import qualified HeX.Box             as B
-import           HeX.Categorise      ( CharCode )
+import           HeX.Categorise      (CharCode)
 import qualified HeX.Lex             as Lex
 import           HeX.Parse.Token
 

@@ -2,28 +2,26 @@ module HeX.Config.Config where
 
 import           HeXlude
 
-import           Control.Monad.Except     ( MonadError, liftEither )
-import           Control.Monad.IO.Class   ( MonadIO )
-import           Control.Monad.Reader     ( MonadReader, asks )
-import           Control.Monad.State.Lazy ( MonadState, gets, liftIO, modify )
+import           Control.Monad.Except     (MonadError, liftEither)
+import           Control.Monad.IO.Class   (MonadIO)
+import           Control.Monad.Reader     (MonadReader, asks)
+import           Control.Monad.State.Lazy (MonadState, gets, liftIO, modify)
 import qualified Data.HashMap.Strict      as HMap
-import           Data.Maybe               ( fromMaybe )
+import           Data.IntMap.Strict       (IntMap, (!?))
 import qualified Data.IntMap.Strict       as IntMap
-import           Data.IntMap.Strict       ( IntMap, (!?) )
+import           Data.Maybe               (fromMaybe)
 import qualified Data.Path                as D.Path
-import           Path                     (Path, Abs, Rel, Dir, File, parseAbsDir)
+import           Path                     (Abs, Dir, File, Path, Rel,
+                                           parseAbsDir)
 import qualified Path.IO
 import           System.Directory
-import           System.IO                ( Handle
-                                          , IOMode(..)
-                                          , hClose
-                                          , openFile
-                                          )
+import           System.IO                (Handle, IOMode (..), hClose,
+                                           openFile)
 
-import           Safe                     ( toEnumMay )
+import           Safe                     (toEnumMay)
 
+import           TFM                      (TexFont)
 import qualified TFM
-import           TFM                      ( TexFont )
 
 import qualified HeX.Box                  as B
 import qualified HeX.BreakList            as BL
@@ -124,16 +122,16 @@ newLocalScope =
           }
 
 data Config =
-    Config { fontInfos :: IntMap FontInfo
-           , searchDirectories :: [Path Abs Dir]
-           , specialTeXInts :: HMap.HashMap SpecialTeXInt TeXIntVal
-           , specialLengths :: HMap.HashMap SpecialLength TeXIntVal
+    Config { fontInfos            :: IntMap FontInfo
+           , searchDirectories    :: [Path Abs Dir]
+           , specialTeXInts       :: HMap.HashMap SpecialTeXInt TeXIntVal
+           , specialLengths       :: HMap.HashMap SpecialLength TeXIntVal
              -- File streams.
-           , logStream :: Handle
-           , outFileStreams :: HMap.HashMap FourBitInt Handle
+           , logStream            :: Handle
+           , outFileStreams       :: HMap.HashMap FourBitInt Handle
            , afterAssignmentToken :: Maybe Lex.Token
-           , globalScope :: Scope
-           , groups :: [Group]
+           , globalScope          :: Scope
+           , groups               :: [Group]
            }
 
 newConfig :: IO Config
@@ -212,7 +210,7 @@ addFont :: MonadState Config m => FontInfo -> m Int
 addFont newInfo = do
     infos <- gets fontInfos
     let newKey = case IntMap.lookupMax infos of
-            Nothing -> 0
+            Nothing     -> 0
             Just (i, _) -> succ i
         newInfos = IntMap.insert newKey newInfo infos
     modify (\conf -> conf { fontInfos = newInfos })

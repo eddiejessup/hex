@@ -4,13 +4,13 @@ module HeX.Command.Common where
 
 import           HeXlude
 
-import           Control.Monad.Except     (ExceptT)
-import           Control.Monad.State.Lazy (MonadState, StateT, get, modify)
+import           Control.Monad.Except      (ExceptT)
+import           Control.Monad.State.Lazy  (MonadState, StateT, get, modify)
 import           Control.Monad.Trans.Maybe (MaybeT (..))
 
 import           HeX.Config
 import           HeX.Evaluate
-import qualified HeX.Parse                as HP
+import qualified HeX.Parse                 as HP
 
 newtype MonadBuild s a = MonadBuild { unMonadBuild :: ExceptT Text (StateT s IO) a }
     deriving (Functor, Applicative, Monad, MonadState s, MonadIO, MonadError Text)

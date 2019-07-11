@@ -4,10 +4,10 @@ import           HeXlude
 
 import qualified Path
 
-import           HeX.Categorise  ( CharCode )
+import           HeX.Categorise  (CharCode)
 import qualified HeX.Lex         as Lex
 import qualified HeX.Parse.Token as T
-import           HeX.Unit        ( PhysicalUnit(..) )
+import           HeX.Unit        (PhysicalUnit (..))
 
 -- TeXInt.
 

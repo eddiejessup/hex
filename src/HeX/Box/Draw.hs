@@ -26,12 +26,12 @@ boxToDVI ax b =
 
 axisVBoxElemToDVI :: Axis -> VBoxElem -> ForwardDirected [] D.Instruction
 axisVBoxElemToDVI ax el = case el of
-    VBoxBaseElem (ElemBox b) -> boxToDVI ax b
-    VBoxBaseElem (ElemRule b) -> ruleToDVI ax b
+    VBoxBaseElem (ElemBox b)            -> boxToDVI ax b
+    VBoxBaseElem (ElemRule b)           -> ruleToDVI ax b
     VBoxBaseElem (ElemFontDefinition e) -> pure (D.DefineFont e)
-    VBoxBaseElem (ElemFontSelection e) -> pure (D.SelectFont e)
-    VBoxBaseElem (ElemKern k) -> pure (D.Move ax $ kernDimen k)
-    BoxGlue g -> pure (D.Move ax $ glueDimen g)
+    VBoxBaseElem (ElemFontSelection e)  -> pure (D.SelectFont e)
+    VBoxBaseElem (ElemKern k)           -> pure (D.Move ax $ kernDimen k)
+    BoxGlue g                           -> pure (D.Move ax $ glueDimen g)
 
 vBoxElemToDVI :: VBoxElem -> ForwardDirected [] D.Instruction
 vBoxElemToDVI = axisVBoxElemToDVI Vertical

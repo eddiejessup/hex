@@ -2,16 +2,14 @@ module HeX.Variable where
 
 import           HeXlude
 
-import           Control.Monad.Except           ( MonadError)
-import           Control.Monad.State.Lazy       ( MonadState
-                                                , modify
-                                                )
+import           Control.Monad.Except     (MonadError)
+import           Control.Monad.State.Lazy (MonadState, modify)
 
-import qualified HeX.BreakList                 as BL
+import qualified HeX.BreakList            as BL
 import           HeX.Command.Common
 import           HeX.Config
 import           HeX.Evaluate
-import qualified HeX.Parse                     as HP
+import qualified HeX.Parse                as HP
 
 class TeXVariable a where
 
@@ -106,7 +104,7 @@ class TeXVariable a => TeXNumericVariable a where
     scaleValueFromAST var globalFlag vDir scaleVal =
         do
         let op = case vDir of
-                Upward -> scaleUpOp
+                Upward   -> scaleUpOp
                 Downward -> scaleDownOp
         newVal <- readOnState $ (op (Proxy @a)) <$> texEvaluate var <*> texEvaluate scaleVal
         setValue var globalFlag newVal

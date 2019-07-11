@@ -6,10 +6,8 @@ import           Data.Adjacent
 import qualified Data.Text               as Text
 
 import           HeX.Box
-import           HeX.BreakList.BreakList ( BreakItem(..)
-                                         , BreakableListElem(..)
-                                         , Penalty
-                                         )
+import           HeX.BreakList.BreakList (BreakItem (..),
+                                          BreakableListElem (..), Penalty)
 import           HeX.BreakList.Glue
 
 type ForwardHList = ForwardDirected Seq HListElem
@@ -27,18 +25,18 @@ data VListElem
 
 instance BreakableListElem VListElem where
     toGlue (ListGlue g) = Just g
-    toGlue _ = Nothing
+    toGlue _            = Nothing
 
     isDiscardable e = case e of
-        ListGlue _ -> True
-        ListPenalty _ -> True
+        ListGlue _                 -> True
+        ListPenalty _              -> True
         VListBaseElem (ElemKern _) -> True
-        _ -> False
+        _                          -> False
 
     isBox e = case e of
-        VListBaseElem (ElemBox _) -> True
+        VListBaseElem (ElemBox _)  -> True
         VListBaseElem (ElemRule _) -> True
-        _ -> False
+        _                          -> False
 
     toBreakItem adj = case adj of
         Adj (Just x) (ListGlue g) _
@@ -68,12 +66,12 @@ data HListElem =
 
 instance BreakableListElem HListElem where
     toGlue (HVListElem e) = toGlue e
-    toGlue _ = Nothing
+    toGlue _              = Nothing
 
-    isDiscardable (HVListElem e) = isDiscardable e
+    isDiscardable (HVListElem e)                     = isDiscardable e
     isDiscardable (HListHBaseElem (ElemCharacter _)) = False
 
-    isBox (HVListElem e) = isBox e
+    isBox (HVListElem e)                     = isBox e
     isBox (HListHBaseElem (ElemCharacter _)) = True
 
     -- TODO: Add math formula conditions.

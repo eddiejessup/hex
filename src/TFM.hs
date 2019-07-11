@@ -8,16 +8,14 @@ module TFM
     )
 where
 
-import HeXlude
+import           HeXlude
 
-import qualified Data.ByteString               as BS
+import qualified Data.ByteString as BS
+import           HeX.Unit        (PhysicalUnit (..), toScaledPoint)
 import           Path
-import           HeX.Unit                       ( toScaledPoint
-                                                , PhysicalUnit(..)
-                                                )
 
+import           TFM.Character   (Character (..))
 import           TFM.Parse
-import           TFM.Character                  ( Character(..) )
 
 designSizeSP :: TexFont -> Rational
 designSizeSP f = toScaledPoint (designFontSize f) Point

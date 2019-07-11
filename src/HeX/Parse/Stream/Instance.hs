@@ -2,24 +2,24 @@ module HeX.Parse.Stream.Instance where
 
 import           HeXlude
 
-import           Control.Monad.Except     ( runExcept )
-import           Control.Monad.Extra      ( mconcatMapM )
-import           Control.Monad.Reader     ( runReaderT )
-import           Control.Monad.Trans.Maybe ( MaybeT (..) )
-import           Data.Char                ( chr )
-import qualified Data.List.NonEmpty       as L.NE
-import qualified Data.Map.Strict          as Map
-import           Data.Map.Strict          ( (!?) )
-import qualified Data.Path                as D.Path
-import           Path                     (Path, Abs, File)
+import           Control.Monad.Except      (runExcept)
+import           Control.Monad.Extra       (mconcatMapM)
+import           Control.Monad.Reader      (runReaderT)
+import           Control.Monad.Trans.Maybe (MaybeT (..))
+import           Data.Char                 (chr)
+import qualified Data.List.NonEmpty        as L.NE
+import           Data.Map.Strict           ((!?))
+import qualified Data.Map.Strict           as Map
+import qualified Data.Path                 as D.Path
+import           Path                      (Abs, File, Path)
 import qualified Path
 import qualified Path.IO
 
-import           HeX.Categorise           ( CharCode )
-import qualified HeX.Categorise           as Cat
-import qualified HeX.Config               as Conf
+import           HeX.Categorise            (CharCode)
+import qualified HeX.Categorise            as Cat
+import qualified HeX.Config                as Conf
 import           HeX.Evaluate
-import qualified HeX.Lex                  as Lex
+import qualified HeX.Lex                   as Lex
 import           HeX.Parse.Assignment
 import           HeX.Parse.AST
 import           HeX.Parse.Command
@@ -32,10 +32,10 @@ import           HeX.Parse.Token
 
 data ExpandedStream = ExpandedStream
     { streamTokenSources :: L.NE.NonEmpty TokenSource
-    , lexState      :: Lex.LexState
-    , expansionMode :: ExpansionMode
-    , config        :: Conf.Config
-    , skipState     :: [ConditionBodyState]
+    , lexState           :: Lex.LexState
+    , expansionMode      :: ExpansionMode
+    , config             :: Conf.Config
+    , skipState          :: [ConditionBodyState]
     }
 
 data TokenSource = TokenSource
@@ -184,7 +184,7 @@ expandConditionToken strm = \case
         (resultStream, condHead) <- runParser (conditionHeadParser ifTok) strm
         eCondHead <- case runExcept (runReaderT (texEvaluate condHead) (config resultStream)) of
             Left err -> throwError $ ErrorWhileTaking err
-            Right v -> pure v
+            Right v  -> pure v
         case eCondHead of
             IfBlockTarget IfPreElse ->
                 pure resultStream{ skipState = IfBodyState IfPreElse : skipState resultStream }
@@ -261,7 +261,7 @@ expandSyntaxCommand strm = \case
         do
         (argLT, postArgStream) <- case fetchLexToken strm of
             Nothing -> mzero
-            Just v -> pure v
+            Just v  -> pure v
         (expandedStream, postArgLTs) <- fetchAndExpandToken postArgStream
         -- Prepend the unexpanded token.
         pure (expandedStream, argLT : postArgLTs)
@@ -277,7 +277,7 @@ expandSyntaxCommand strm = \case
         do
         (resultStream@ExpandedStream{ streamTokenSources }, TeXFilePath texPath) <- runParser parseFileName strm
         let extraDirs = case streamTokenSources & (L.NE.head >>> sourcePath) of
-                Just p -> [Path.parent p]
+                Just p  -> [Path.parent p]
                 Nothing -> []
         absPath <- Path.IO.makeAbsolute texPath
         path <- lift $ withExceptT ErrorWhileTaking $ runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)

@@ -3,7 +3,6 @@ module HeX.Command.ModeIndependent where
 import           HeXlude
 
 import           Control.Monad        (when)
-import           Safe                 (toEnumMay)
 import qualified HeX.Box              as B
 import qualified HeX.BreakList        as BL
 import qualified HeX.Command.Commands as Com
@@ -13,6 +12,7 @@ import           HeX.Evaluate
 import qualified HeX.Lex              as Lex
 import qualified HeX.Parse            as HP
 import qualified HeX.Variable         as Var
+import           Safe                 (toEnumMay)
 
 data ModeIndependentResult
     = AddElem BL.VListElem

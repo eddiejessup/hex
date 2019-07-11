@@ -1,27 +1,23 @@
 module HeX.Evaluate where
 
-import HeXlude
+import           HeXlude
 
-import           Control.Monad.Except           ( MonadError
-                                                )
-import           Control.Monad.Reader           ( MonadReader
-                                                , asks
-                                                , ask
-                                                )
-import           Data.Char                      ( chr )
-import           Data.HashMap.Strict            ( HashMap )
+import           Control.Monad.Except (MonadError)
+import           Control.Monad.Reader (MonadReader, ask, asks)
+import           Data.Char            (chr)
+import           Data.HashMap.Strict  (HashMap)
 
 import qualified TFM
 
 
-import qualified HeX.Lex                       as Lex
-import qualified HeX.Box                       as B
-import qualified HeX.BreakList                 as BL
-import           HeX.Categorise                 ( CharCode )
+import qualified HeX.Box              as B
+import qualified HeX.BreakList        as BL
+import           HeX.Categorise       (CharCode)
 import           HeX.Config
-import qualified HeX.Parse.AST                 as AST
-import qualified HeX.Parse.Token               as T
-import qualified HeX.Unit                      as Unit
+import qualified HeX.Lex              as Lex
+import qualified HeX.Parse.AST        as AST
+import qualified HeX.Parse.Token      as T
+import qualified HeX.Unit             as Unit
 
 class TeXEvaluable a where
     type EvalTarget a

@@ -12,10 +12,10 @@ module HeX.Parse
 where
 
 import           HeX.Parse.Assignment
-import           HeX.Parse.Command
 import           HeX.Parse.AST
-import           HeX.Parse.Quantity
+import           HeX.Parse.Command
 import           HeX.Parse.Parser
+import           HeX.Parse.Quantity
 import           HeX.Parse.Resolve
 import           HeX.Parse.Stream.Class
 import           HeX.Parse.Stream.Instance

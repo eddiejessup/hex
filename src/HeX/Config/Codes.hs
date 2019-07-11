@@ -2,8 +2,8 @@ module HeX.Config.Codes where
 
 import           HeXlude
 
-import           Data.Bits           ( (.&.), shiftL, shiftR )
-import           Data.Char           ( chr, ord, toLower, toUpper )
+import           Data.Bits           (shiftL, shiftR, (.&.))
+import           Data.Char           (chr, ord, toLower, toUpper)
 import qualified Data.HashMap.Strict as HMap
 
 import qualified HeX.Categorise      as Cat
@@ -78,7 +78,7 @@ instance Enum DelimiterVar where
         | n == 0 = NullDelimiterVar
         | otherwise = PresentDelimiterVar $ toEnum n
 
-    fromEnum NullDelimiterVar = 0
+    fromEnum NullDelimiterVar        = 0
     fromEnum (PresentDelimiterVar f) = fromEnum f
 
 data FamilyCharRef = FamilyCharRef { family, position :: TeXIntVal }
@@ -175,7 +175,7 @@ instance Enum CaseChangeCode where
         | n == 0 = NoCaseChange
         | otherwise = ChangeToCode $ toEnum n
 
-    fromEnum NoCaseChange = 0
+    fromEnum NoCaseChange     = 0
     fromEnum (ChangeToCode c) = fromEnum c
 
 -- By default, all \uccode and \lccode values are zero except that the

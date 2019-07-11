@@ -2,8 +2,8 @@ module HeX.BreakList.Page where
 
 import           HeXlude
 
-import           Data.Adjacent           ( Adj(..) )
-import qualified Data.Sequence             as Seq
+import           Data.Adjacent           (Adj (..))
+import qualified Data.Sequence           as Seq
 
 import qualified HeX.Box                 as B
 import           HeX.BreakList.BreakList
@@ -11,7 +11,7 @@ import           HeX.BreakList.Elem
 import           HeX.BreakList.Judge
 import           HeX.BreakList.Set
 import           HeX.Config.Parameters
-import           HeX.Unit                ( hunK, tenK )
+import           HeX.Unit                (hunK, tenK)
 
 data PageBreakJudgment =
     DoNotBreak | BreakPageAtBest | BreakPageHere | TrackCost !Int
@@ -45,7 +45,7 @@ setPage :: LenParamVal VSize -> ForwardVList -> B.Page
 setPage (LenParamVal h) cs = B.Page $ setVList (listGlueStatus h cs) cs
 
 data CurrentPage = CurrentPage
-    { items :: ForwardVList
+    { items            :: ForwardVList
     , bestPointAndCost :: Maybe (Int, Int)
     }
 

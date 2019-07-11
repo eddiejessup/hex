@@ -1,13 +1,11 @@
 module HeX.Lex where
 
-import HeXlude
+import           HeXlude
 
-import           Data.Hashable                  ( Hashable
-                                                , hashWithSalt
-                                                )
+import           Data.Hashable  (Hashable, hashWithSalt)
 
-import qualified HeX.Categorise                as Cat
-import           HeX.Categorise                 ( CharCode, CatCode )
+import           HeX.Categorise (CatCode, CharCode)
+import qualified HeX.Categorise as Cat
 
 newtype ControlSequence = ControlSequence (ForwardDirected [] CharCode)
     deriving (Show, Eq)
@@ -19,7 +17,7 @@ data ControlSequenceLike
 
 instance Hashable ControlSequenceLike where
     hashWithSalt s (ControlSequenceProper cs) = hashWithSalt s cs
-    hashWithSalt s (ActiveCharacter cc) = hashWithSalt s cc
+    hashWithSalt s (ActiveCharacter cc)       = hashWithSalt s cc
 
 instance Hashable ControlSequence where
     hashWithSalt s (ControlSequence w) = hashWithSalt s w
