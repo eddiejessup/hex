@@ -20,7 +20,7 @@ import qualified HeX.Lex             as Lex
 import qualified HeX.Parse           as HP
 import qualified HeX.Unit            as Unit
 
-glueToElem :: HP.TeXStream s => HP.Glue -> ExceptMonadBuild s BL.VListElem
+glueToElem :: HP.TeXStream s => HP.Glue -> MonadBuild s BL.VListElem
 glueToElem g =
     do
     eG <- evalOnConfState g
@@ -29,16 +29,16 @@ glueToElem g =
 ruleToElem
     :: HP.TeXStream s
     => HP.Rule
-    -> ReaderT Config (StateT Config (ExceptT Text (MonadBuild s))) LenVal
-    -> ReaderT Config (StateT Config (ExceptT Text (MonadBuild s))) LenVal
-    -> ReaderT Config (StateT Config (ExceptT Text (MonadBuild s))) LenVal
-    -> ExceptMonadBuild s BL.VListElem
+    -> MonadBuild s LenVal
+    -> MonadBuild s LenVal
+    -> MonadBuild s LenVal
+    -> MonadBuild s BL.VListElem
 ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD =
     do
-    rule <- readOnConfState $ B.Rule
-                <$> maybe defaultW texEvaluate width
-                <*> maybe defaultH texEvaluate height
-                <*> maybe defaultD texEvaluate depth
+    rule <- B.Rule
+                <$> maybe defaultW (readOnConfState . texEvaluate) width
+                <*> maybe defaultH (readOnConfState . texEvaluate) height
+                <*> maybe defaultD (readOnConfState . texEvaluate) depth
     pure $ BL.VListBaseElem $ B.ElemRule rule
 
 -- Assume we are adding a non-rule box of height h to the vertical list.
@@ -81,21 +81,21 @@ addVListElem acc e = case e of
                         else skip
                 in (acc ->. glue) ->. e
 
-hModeAddHGlue :: HP.TeXStream s => HP.Glue -> ExceptMonadBuild s HListElem
+hModeAddHGlue :: HP.TeXStream s => HP.Glue -> MonadBuild s HListElem
 hModeAddHGlue g =
     BL.HVListElem <$> glueToElem g
 
-hModeAddCharacter :: HP.TeXStream s => HP.CharCodeRef -> ExceptMonadBuild s HListElem
+hModeAddCharacter :: HP.TeXStream s => HP.CharCodeRef -> MonadBuild s HListElem
 hModeAddCharacter c =
     do
     charCode <- readOnConfState $ texEvaluate c
     BL.HListHBaseElem . B.ElemCharacter <$> readOnConfState (characterBox charCode)
 
-hModeAddSpace :: HP.TeXStream s => ExceptMonadBuild s HListElem
+hModeAddSpace :: HP.TeXStream s => MonadBuild s HListElem
 hModeAddSpace =
     BL.HVListElem . BL.ListGlue <$> readOnConfState spaceGlue
 
-hModeAddRule :: HP.TeXStream s => HP.Rule -> ExceptMonadBuild s HListElem
+hModeAddRule :: HP.TeXStream s => HP.Rule -> MonadBuild s HListElem
 hModeAddRule rule =
     do
     let
@@ -105,7 +105,7 @@ hModeAddRule rule =
     ruleElem <- ruleToElem rule defaultWidth defaultHeight defaultDepth
     pure $ BL.HVListElem ruleElem
 
-hModeStartParagraph :: HP.TeXStream s => HP.IndentFlag -> ExceptMonadBuild s (Maybe HListElem)
+hModeStartParagraph :: HP.TeXStream s => HP.IndentFlag -> MonadBuild s (Maybe HListElem)
 hModeStartParagraph = \case
     HP.DoNotIndent ->
         pure Nothing
@@ -115,14 +115,14 @@ hModeStartParagraph = \case
     HP.Indent ->
         Just <$> readOnConfState (asks parIndentBox)
 
-vModeAddVGlue :: HP.TeXStream s => HP.Glue -> ExceptMonadBuild s VListElem
+vModeAddVGlue :: HP.TeXStream s => HP.Glue -> MonadBuild s VListElem
 vModeAddVGlue = glueToElem
 
-vModeAddRule :: HP.TeXStream s => HP.Rule -> ExceptMonadBuild s VListElem
+vModeAddRule :: HP.TeXStream s => HP.Rule -> MonadBuild s VListElem
 vModeAddRule rule =
     do
     let
-        defaultWidth = gets $ lookupLengthParameter HP.HSize
+        defaultWidth = readOnConfState $ gets $ lookupLengthParameter HP.HSize
         defaultHeight = pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
         defaultDepth = pure 0
     ruleToElem rule defaultWidth defaultHeight defaultDepth

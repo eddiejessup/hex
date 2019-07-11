@@ -10,13 +10,14 @@ import           Data.Functor         ( ($>) )
 import qualified HeX.Lex              as Lex
 import           HeX.Parse.AST
 import           HeX.Parse.Assignment
-import           HeX.Parse.Inhibited
+import           HeX.Parse.Parser
 import           HeX.Parse.Quantity
+import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token      as T
 
 -- Parse.
 
-parseInternalQuantity :: TeXPrimParser s InternalQuantity
+parseInternalQuantity :: TeXParser s InternalQuantity
 parseInternalQuantity = PC.choice
     [ InternalTeXIntQuantity <$> parseInternalTeXInt
     , InternalLengthQuantity <$> parseInternalLength
@@ -26,13 +27,13 @@ parseInternalQuantity = PC.choice
     , TokenListVariableQuantity <$> parseTokenListVariable
     ]
 
-parseStartParagraph :: TeXPrimParser s Command
+parseStartParagraph :: TeXParser s Command
 parseStartParagraph = satisfyThen $
     \case
         (T.StartParagraphTok _indent) -> Just $ StartParagraph _indent
         _ -> Nothing
 
-parseLeadersSpec :: Axis -> TeXPrimParser s LeadersSpec
+parseLeadersSpec :: Axis -> TeXParser s LeadersSpec
 parseLeadersSpec axis =
     LeadersSpec <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue axis
   where
@@ -41,7 +42,7 @@ parseLeadersSpec axis =
             T.LeadersTok t -> Just t
             _ -> Nothing
 
-parseFetchedBoxRef :: Axis -> TeXPrimParser s FetchedBoxRef
+parseFetchedBoxRef :: Axis -> TeXParser s FetchedBoxRef
 parseFetchedBoxRef tgtAxis = do
     fetchMode <- satisfyThen $ \case
         T.ModedCommand seenAxis (T.UnwrappedFetchedBoxTok fm) | tgtAxis == seenAxis ->
@@ -51,18 +52,18 @@ parseFetchedBoxRef tgtAxis = do
     n <- parseTeXInt
     pure $ FetchedBoxRef n fetchMode
 
-parseBoxOrRule :: TeXPrimParser s BoxOrRule
+parseBoxOrRule :: TeXParser s BoxOrRule
 parseBoxOrRule = PC.choice [ BoxOrRuleBox <$> parseBox
                           , BoxOrRuleRule Horizontal <$> parseModedRule Horizontal
                           , BoxOrRuleRule Vertical <$> parseModedRule Vertical
                           ]
 
-parseModedRule :: Axis -> TeXPrimParser s Rule
+parseModedRule :: Axis -> TeXParser s Rule
 parseModedRule axis =
     skipSatisfiedEquals (T.ModedCommand axis T.RuleTok) >> parseRule
 
 -- \hrule and such.
-parseRule :: TeXPrimParser s Rule
+parseRule :: TeXParser s Rule
 parseRule = parseRuleSpecification Rule{ width  = Nothing
                                        , height = Nothing
                                        , depth  = Nothing
@@ -95,7 +96,7 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
         ln <- parseLength
         pure rule { depth = Just ln }
 
-parseModeIndependentCommand :: TeXPrimParser s ModeIndependentCommand
+parseModeIndependentCommand :: TeXParser s ModeIndependentCommand
 parseModeIndependentCommand =
     PC.choice
         [ skipSatisfiedEquals T.RelaxTok $> Relax
@@ -125,7 +126,7 @@ parseModeIndependentCommand =
         , parseChangeScope
         ]
 
-parseChangeScope :: TeXPrimParser s ModeIndependentCommand
+parseChangeScope :: TeXParser s ModeIndependentCommand
 parseChangeScope = satisfyThen $
     \t -> if
         | primTokHasCategory Lex.BeginGroup t -> Just $
@@ -136,20 +137,20 @@ parseChangeScope = satisfyThen $
             <- t -> Just $ ChangeScope sign CSCommandTrigger
         | otherwise -> Nothing
 
-satisfyThenGetMode :: T.ModedCommandPrimitiveToken -> TeXPrimParser s Axis
+satisfyThenGetMode :: T.ModedCommandPrimitiveToken -> TeXParser s Axis
 satisfyThenGetMode validTok = satisfyThen $ \case
     T.ModedCommand axis seenTok | seenTok == validTok ->
         Just axis
     _ ->
         Nothing
 
-parseRemoveItem :: TeXPrimParser s ModeIndependentCommand
+parseRemoveItem :: TeXParser s ModeIndependentCommand
 parseRemoveItem =
     RemoveItem <$> satisfyThen (\case
                         T.RemoveItemTok i -> Just i
                         _ -> Nothing)
 
-parseModedGlue :: Axis -> TeXPrimParser s Glue
+parseModedGlue :: Axis -> TeXParser s Glue
 parseModedGlue axis =
     PC.choice [ parseSpecifiedGlue
              , parsePresetGlue T.Fil
@@ -179,7 +180,7 @@ parseModedGlue axis =
 
     noLengthGlue = ExplicitGlue zeroLength
 
-parseMessage :: TeXPrimParser s ModeIndependentCommand
+parseMessage :: TeXParser s ModeIndependentCommand
 parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
   where
     parseMsgStream = satisfyThen $
@@ -187,13 +188,13 @@ parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
             T.MessageTok str -> Just str
             _ -> Nothing
 
-parseOpenInput :: TeXPrimParser s ModeIndependentCommand
+parseOpenInput :: TeXParser s ModeIndependentCommand
 parseOpenInput =
     do
     skipSatisfiedEquals T.OpenInputTok
     parseModifyFileStream FileInput
 
-parseModifyFileStream :: FileStreamType -> TeXPrimParser s ModeIndependentCommand
+parseModifyFileStream :: FileStreamType -> TeXParser s ModeIndependentCommand
 parseModifyFileStream fileStreamType =
     do
     n <- parseTeXInt
@@ -201,23 +202,23 @@ parseModifyFileStream fileStreamType =
     fn <- parseFileName
     pure $ ModifyFileStream fileStreamType (Open fn) n
 
-parseOptionalImmediate :: TeXPrimParser s WritePolicy
+parseOptionalImmediate :: TeXParser s WritePolicy
 parseOptionalImmediate =
     PC.option Deferred $ skipSatisfiedEquals T.ImmediateTok $> Immediate
 
-parseOpenOutput :: TeXPrimParser s ModeIndependentCommand
+parseOpenOutput :: TeXParser s ModeIndependentCommand
 parseOpenOutput = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.OpenOutputTok
     parseModifyFileStream (FileOutput writePolicy)
 
-parseCloseOutput :: TeXPrimParser s ModeIndependentCommand
+parseCloseOutput :: TeXParser s ModeIndependentCommand
 parseCloseOutput = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.CloseOutputTok
         >> (ModifyFileStream (FileOutput writePolicy) Close <$> parseTeXInt)
 
-parseWriteToStream :: TeXPrimParser s ModeIndependentCommand
+parseWriteToStream :: TeXParser s ModeIndependentCommand
 parseWriteToStream = do
     writePolicy <- parseOptionalImmediate
     skipSatisfiedEquals T.WriteTok
@@ -227,7 +228,7 @@ parseWriteToStream = do
         Deferred  -> DeferredWriteText <$> parseGeneralText
     pure $ WriteToStream n txt
 
-parseAddShiftedBox :: TeXPrimParser s ModeIndependentCommand
+parseAddShiftedBox :: TeXParser s ModeIndependentCommand
 parseAddShiftedBox = AddBox <$> parsePlacement <*> parseBox
   where
     parseDirection = satisfyThen $ \case
@@ -241,7 +242,7 @@ parseAddShiftedBox = AddBox <$> parsePlacement <*> parseBox
         (axis, direction) <- parseDirection
         ShiftedPlacement axis direction <$> parseLength
 
-parseCommand :: TeXPrimParser s Command
+parseCommand :: TeXParser s Command
 parseCommand =
     PC.choice
         [ HModeCommand <$> parseHModeCommand
@@ -289,7 +290,7 @@ parseCommand =
             , AddUnwrappedFetchedVBox <$> parseFetchedBoxRef Vertical
             ]
 
-parseCharCodeRef :: TeXPrimParser s CharCodeRef
+parseCharCodeRef :: TeXParser s CharCodeRef
 parseCharCodeRef =
     PC.choice [ parseAddCharacterCharOrTok, parseAddControlCharacter ]
   where
@@ -305,7 +306,7 @@ parseCharCodeRef =
     parseAddControlCharacter = skipSatisfiedEquals T.ControlCharTok
         >> (CharCodeNrRef <$> parseTeXInt)
 
-parseAddAccentedCharacter :: TeXPrimParser s HModeCommand
+parseAddAccentedCharacter :: TeXParser s HModeCommand
 parseAddAccentedCharacter =
     do
     skipSatisfiedEquals T.AccentTok
@@ -317,10 +318,10 @@ parseAddAccentedCharacter =
     -- other than \setbox.
     parseNonSetBoxAssignment =
         parseAssignment >>= \case
-            Assignment (SetBoxRegister _ _) _ -> throwError $ ErrorWhileTaking "Cannot set-box while addidng accented character"
+            Assignment (SetBoxRegister _ _) _ -> throwParseError $ ErrorWhileTaking "Cannot set-box while addidng accented character"
             a -> pure a
 
-parseAddDiscretionaryText :: TeXPrimParser s HModeCommand
+parseAddDiscretionaryText :: TeXParser s HModeCommand
 parseAddDiscretionaryText =
     skipSatisfiedEquals T.DiscretionaryTextTok 
     >> AddDiscretionaryText

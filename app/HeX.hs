@@ -11,7 +11,8 @@ import qualified Data.Path                      as D.Path
 import qualified Path.IO
 import           HeX.Categorise                 ( CharCode )
 import           HeX.Command.Run
-import           HeX.Parse.Stream               (newExpandStream)
+import           HeX.Parse.Stream.Instance      (newExpandStream)
+
 data Mode
     = CatMode
     | LexMode

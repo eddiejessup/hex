@@ -1,9 +1,12 @@
+{-# LANGUAGE RankNTypes #-}
+
 module HeX.Command.Run where
 
 import           HeXlude
 
 import           Control.Monad.Except     (runExceptT)
 import           Control.Monad.State.Lazy (evalStateT)
+import           Control.Monad.Trans.Maybe (MaybeT (..))
 import qualified Data.HashMap.Strict      as HMap
 import           DVI.Document             (Instruction, parseInstructions)
 import           DVI.Encode               (encode)
@@ -16,7 +19,8 @@ import           HeX.Command.Build
 import           HeX.Command.Common
 import           HeX.Lex                  (LexState (..), extractToken)
 import           HeX.Parse                (ExpandedStream, ExpansionMode (..),
-                                           IndentFlag (..), TeXPrimStream,
+                                           IndentFlag (..),
+                                           TeXStream, TeXParser,
                                            defaultCSMap,
                                            resolveToken, runParser,
                                            parseCommand, anySingle)
@@ -65,21 +69,22 @@ runResolved _xs = extractAndPrint (LineBegin, _xs)
 
 -- Expand.
 
-runExpand :: ExpandedStream -> IO ()
-runExpand s = runExceptT (runParser anySingle s) >>= \case
-    Right (newS, tok) ->
-        print tok >> runExpand newS
-    Left _ ->
+runParseLoop :: Show a => TeXParser ExpandedStream a -> ExpandedStream -> IO ()
+runParseLoop p s = runExceptT (runMaybeT (runParser p s)) >>= \case
+    Left err ->
+        panic $ show err
+    Right Nothing ->
         pure ()
+    Right (Just (newS, tok)) ->
+        print tok >> runExpand newS
+
+runExpand :: ExpandedStream -> IO ()
+runExpand = runParseLoop anySingle
 
 -- Command.
 
 runCommand :: ExpandedStream -> IO ()
-runCommand s = runExceptT (runParser parseCommand s) >>= \case
-    Right (newS, com) ->
-        print com >> runCommand newS
-    Left err ->
-        panic $ show err
+runCommand = runParseLoop parseCommand
 
 -- Generic.
 
@@ -87,12 +92,12 @@ strEitherToIO :: Either Text v -> IO v
 strEitherToIO (Left err) = panic err
 strEitherToIO (Right v)  = pure v
 
-runStream :: ExpandedStream -> ExceptMonadBuild ExpandedStream a -> IO a
-runStream s f = evalStateT (unMonadBuild $ runExceptT f) s >>= strEitherToIO
+runStream :: ExpandedStream -> MonadBuild ExpandedStream a -> IO a
+runStream s f = evalStateT (runExceptT $ unMonadBuild f) s >>= strEitherToIO
 
 -- Paragraph list.
 
-extractParaHList :: TeXPrimStream s => ExceptMonadBuild s ForwardHList
+extractParaHList :: TeXStream s => MonadBuild s ForwardHList
 extractParaHList =
     (\(ParaResult _ hList) -> hList) <$> extractPara Indent
 

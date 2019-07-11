@@ -6,17 +6,14 @@ import           HeXlude
 
 import           Control.Monad.Except     (ExceptT)
 import           Control.Monad.State.Lazy (MonadState, StateT, get, modify)
+import           Control.Monad.Trans.Maybe (MaybeT (..))
 
 import           HeX.Config
 import           HeX.Evaluate
 import qualified HeX.Parse                as HP
 
-newtype MonadBuild s a = MonadBuild { unMonadBuild :: StateT s IO a }
-    deriving (Functor, Applicative, Monad, MonadState s, MonadIO)
-
-type BaseExceptMonadBuild e s a = ExceptT e (MonadBuild s) a
-
-type ExceptMonadBuild s a = ExceptT Text (MonadBuild s) a
+newtype MonadBuild s a = MonadBuild { unMonadBuild :: ExceptT Text (StateT s IO) a }
+    deriving (Functor, Applicative, Monad, MonadState s, MonadIO, MonadError Text)
 
 readOnState :: MonadState r m => ReaderT r m b -> m b
 readOnState f = get >>= runReaderT f
@@ -33,7 +30,7 @@ modConfState x = HP.runConfState $ modify x
 
 evalOnConfState
     :: (HP.TeXStream s, TeXEvaluable v)
-    => v -> ExceptMonadBuild s (EvalTarget v)
+    => v -> MonadBuild s (EvalTarget v)
 evalOnConfState v = readOnConfState $ texEvaluate v
 
 data BoxModeIntent
@@ -68,18 +65,19 @@ runLoop f = go
                 pure result
 
 runCommandLoop
-    :: HP.TeXPrimStream s
-    => (st -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult st r))
+    :: HP.TeXStream s
+    => (st -> HP.Command -> s -> MonadBuild s (RecursionResult st r))
     -> st
-    -> ExceptMonadBuild s r
+    -> MonadBuild s r
 runCommandLoop f = runLoop g
   where
     g elemList =
         do
         oldStream <- get
-        (newStream, command) <- liftIO (runExceptT (HP.runParser HP.parseCommand oldStream)) >>= \case
+        (newStream, command) <- liftIO (runExceptT (runMaybeT (HP.runParser HP.parseCommand oldStream))) >>= \case
             Left err -> throwError $ show err
-            Right v -> pure v
+            Right Nothing -> throwError "End of input"
+            Right (Just v) -> pure v
         put newStream
         liftIO $ print command
         f elemList command oldStream

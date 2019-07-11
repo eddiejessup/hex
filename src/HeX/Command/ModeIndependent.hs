@@ -24,7 +24,7 @@ fetchBox
     :: HP.TeXStream s
     => HP.BoxFetchMode
     -> HP.EightBitTeXInt
-    -> ExceptMonadBuild s (Maybe B.Box)
+    -> MonadBuild s (Maybe B.Box)
 fetchBox fetchMode idx =
     do
     eIdx <- evalOnConfState idx
@@ -36,7 +36,7 @@ fetchBox fetchMode idx =
 
 handleModeIndependentCommand
     :: HP.TeXStream s
-    => HP.ModeIndependentCommand -> ExceptMonadBuild s ModeIndependentResult
+    => HP.ModeIndependentCommand -> MonadBuild s ModeIndependentResult
 handleModeIndependentCommand = \case
     HP.Message stdOutStream eTxt ->
         do

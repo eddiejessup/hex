@@ -5,11 +5,11 @@ module HeX.Parse.Condition where
 import           HeXlude
 
 import           HeX.Parse.AST
-import           HeX.Parse.Inhibited
+import           HeX.Parse.Stream.Class
 import           HeX.Parse.Quantity
 import qualified HeX.Parse.Token     as T
 
-parseRelation :: TeXPrimParser s Ordering
+parseRelation :: TeXParser s Ordering
 parseRelation = satisfyThen $
     \t -> if
         | matchOtherToken '<' t -> Just LT
@@ -17,7 +17,7 @@ parseRelation = satisfyThen $
         | isEquals t -> Just EQ
         | otherwise -> Nothing
 
-conditionHeadParser :: T.ConditionHeadTok -> TeXPrimParser s ConditionHead
+conditionHeadParser :: T.ConditionHeadTok -> TeXParser s ConditionHead
 conditionHeadParser = \case
     T.IfTeXIntPairTestTok ->
         IfConditionHead <$> (IfTeXIntPairTest <$> parseTeXInt

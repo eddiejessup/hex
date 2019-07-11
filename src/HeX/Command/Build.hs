@@ -23,7 +23,7 @@ data EndParaReason
     = EndParaSawEndParaCommand
     | EndParaSawLeaveBox
 
-handleCommandInParaMode :: HP.TeXPrimStream s => ForwardHList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardHList ParaResult)
+handleCommandInParaMode :: HP.TeXStream s => ForwardHList -> HP.Command -> s -> MonadBuild s (RecursionResult ForwardHList ParaResult)
 handleCommandInParaMode hList command oldStream =
     case command of
         HP.VModeCommand _ ->
@@ -67,11 +67,11 @@ handleCommandInParaMode hList command oldStream =
 
 newtype HBoxResult = HBoxResult ForwardHList
 
-handleCommandInHBoxMode :: HP.TeXPrimStream s
+handleCommandInHBoxMode :: HP.TeXStream s
                         => ForwardHList
                         -> HP.Command
                         -> s
-                        -> ExceptMonadBuild s (RecursionResult ForwardHList HBoxResult)
+                        -> MonadBuild s (RecursionResult ForwardHList HBoxResult)
 handleCommandInHBoxMode hList command _ =
     case command of
         HP.VModeCommand vModeCommand ->
@@ -109,7 +109,7 @@ handleCommandInHBoxMode hList command _ =
 
 newtype VBoxResult = VBoxResult ForwardVList
 
-handleCommandInVBoxMode :: HP.TeXPrimStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList VBoxResult)
+handleCommandInVBoxMode :: HP.TeXStream s => ForwardVList -> HP.Command -> s -> MonadBuild s (RecursionResult ForwardVList VBoxResult)
 handleCommandInVBoxMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
@@ -157,8 +157,8 @@ handleCommandInVBoxMode vList command oldStream =
                 endLoop vListWithPara
 
 appendParagraph
-    :: HP.TeXPrimStream s
-    => ForwardHList -> ForwardVList -> ExceptMonadBuild s ForwardVList
+    :: HP.TeXStream s
+    => ForwardHList -> ForwardVList -> MonadBuild s ForwardVList
 appendParagraph paraHList vList =
     do
     lineBoxes <- readOnConfState (hListToParaLineBoxes paraHList)
@@ -180,7 +180,7 @@ hListToParaLineBoxes hList =
 
 newtype MainVModeResult = MainVModeResult ForwardVList
 
-handleCommandInMainVMode :: HP.TeXPrimStream s => ForwardVList -> HP.Command -> s -> ExceptMonadBuild s (RecursionResult ForwardVList MainVModeResult)
+handleCommandInMainVMode :: HP.TeXStream s => ForwardVList -> HP.Command -> s -> MonadBuild s (RecursionResult ForwardVList MainVModeResult)
 handleCommandInMainVMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
@@ -226,7 +226,7 @@ handleCommandInMainVMode vList command oldStream =
             EndParaSawLeaveBox ->
                 throwError "No box to end: in paragraph within main V mode"
 
-extractPara :: HP.TeXPrimStream s => HP.IndentFlag -> ExceptMonadBuild s ParaResult
+extractPara :: HP.TeXStream s => HP.IndentFlag -> MonadBuild s ParaResult
 extractPara indentFlag =
     do
     bx <- case indentFlag of
@@ -237,10 +237,10 @@ extractPara indentFlag =
     runCommandLoop handleCommandInParaMode bx
 
 extractParaFromVMode
-    :: HP.TeXPrimStream s
+    :: HP.TeXStream s
     => HP.IndentFlag
     -> s
-    -> ExceptMonadBuild s ParaResult
+    -> MonadBuild s ParaResult
 extractParaFromVMode indentFlag oldStream =
     -- If the command shifts to horizontal mode, run
     -- '\indent', and re-read the stream as if the
@@ -248,13 +248,13 @@ extractParaFromVMode indentFlag oldStream =
     -- "oldStream", not "newStream".)
     put oldStream >> extractPara indentFlag
 
-extractHBox :: HP.TeXPrimStream s => ExceptMonadBuild s HBoxResult
+extractHBox :: HP.TeXStream s => MonadBuild s HBoxResult
 extractHBox = runCommandLoop handleCommandInHBoxMode mempty
 
-extractVBox :: HP.TeXPrimStream s => ExceptMonadBuild s VBoxResult
+extractVBox :: HP.TeXStream s => MonadBuild s VBoxResult
 extractVBox = runCommandLoop handleCommandInVBoxMode mempty
 
-extractVSubBox :: HP.TeXPrimStream s => B.DesiredLength -> BoxModeIntent -> HP.ExplicitBox -> ExceptMonadBuild s (Maybe BL.VListElem)
+extractVSubBox :: HP.TeXStream s => B.DesiredLength -> BoxModeIntent -> HP.ExplicitBox -> MonadBuild s (Maybe BL.VListElem)
 extractVSubBox desiredLength boxIntent boxType =
     do
     -- TODO: I think glue status and desired length
@@ -278,20 +278,20 @@ extractVSubBox desiredLength boxIntent boxType =
             pure Nothing
 
 extractHSubBox
-    :: HP.TeXPrimStream s
+    :: HP.TeXStream s
     => B.DesiredLength
     -> BoxModeIntent
     -> HP.ExplicitBox
-    -> ExceptMonadBuild s (Maybe BL.HListElem)
+    -> MonadBuild s (Maybe BL.HListElem)
 extractHSubBox desiredLength boxIntent boxType =
     do
     maybeElem <- extractVSubBox desiredLength boxIntent boxType
     pure $ BL.HVListElem <$> maybeElem
 
-extractMainVList :: HP.TeXPrimStream s => ExceptMonadBuild s MainVModeResult
+extractMainVList :: HP.TeXStream s => MonadBuild s MainVModeResult
 extractMainVList = runCommandLoop handleCommandInMainVMode mempty
 
-extractBreakAndSetVList :: HP.TeXPrimStream s => ExceptMonadBuild s (ForwardDirected Seq B.Page)
+extractBreakAndSetVList :: HP.TeXStream s => MonadBuild s (ForwardDirected Seq B.Page)
 extractBreakAndSetVList =
     do
     MainVModeResult finalMainVList <- extractMainVList

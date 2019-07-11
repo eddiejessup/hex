@@ -12,19 +12,19 @@ import           Data.Ratio          ( (%) )
 import           HeX.Categorise      ( CharCode )
 import qualified HeX.Lex             as Lex
 import           HeX.Parse.AST
-import           HeX.Parse.Inhibited
+import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token     as T
 import           HeX.Unit            ( PhysicalUnit(..) )
 
 -- TeXInt.
 
-parseTeXInt :: TeXPrimParser s TeXInt
+parseTeXInt :: TeXParser s TeXInt
 parseTeXInt = TeXInt <$> parseSigns <*> parseUnsignedTeXInt
 
-parseEightBitTeXInt :: TeXPrimParser s EightBitTeXInt
+parseEightBitTeXInt :: TeXParser s EightBitTeXInt
 parseEightBitTeXInt = EightBitTeXInt <$> parseTeXInt
 
-parseSigns :: TeXPrimParser s T.Sign
+parseSigns :: TeXParser s T.Sign
 parseSigns = mconcat <$> parseOptionalSigns
   where
     parseOptionalSigns = skipOptionalSpaces
@@ -35,7 +35,7 @@ parseSigns = mconcat <$> parseOptionalSigns
         | matchOtherToken '-' t = Just $ T.Sign False
         | otherwise = Nothing
 
-parseUnsignedTeXInt :: TeXPrimParser s UnsignedTeXInt
+parseUnsignedTeXInt :: TeXParser s UnsignedTeXInt
 parseUnsignedTeXInt = PC.choice [ NormalTeXIntAsUTeXInt <$> parseNormalTeXInt
                                 , CoercedTeXInt <$> parseCoercedTeXInt
                                 ]
@@ -46,7 +46,7 @@ digitsToTeXIntVal :: Integral n => n -> [n] -> TeXIntVal
 digitsToTeXIntVal base =
     foldl' (\a b -> a * fromIntegral base + fromIntegral b) 0
 
-parseNormalTeXInt :: TeXPrimParser s NormalTeXInt
+parseNormalTeXInt :: TeXParser s NormalTeXInt
 parseNormalTeXInt =
     PC.choice [ InternalTeXInt <$> parseInternalTeXInt
               , TeXIntConstant <$> parseConstantInt <* skipOneOptionalSpace
@@ -63,7 +63,7 @@ parseNormalTeXInt =
 
     parseCharacter = skipSatisfied (matchOtherToken '`') *> parseCharLike
 
-parseDecimalTeXIntDigit :: TeXPrimParser s Int
+parseDecimalTeXIntDigit :: TeXParser s Int
 parseDecimalTeXIntDigit = satisfyThen $
     \case
         T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
@@ -81,7 +81,7 @@ parseDecimalTeXIntDigit = satisfyThen $
                 _   -> Nothing
         _ -> Nothing
 
-parseHexadecimalTeXIntDigits :: TeXPrimParser s [Int]
+parseHexadecimalTeXIntDigits :: TeXParser s [Int]
 parseHexadecimalTeXIntDigits = skipSatisfied (matchOtherToken '"')
     *> PC.some (satisfyThen hexCharToInt)
   where
@@ -114,7 +114,7 @@ parseHexadecimalTeXIntDigits = skipSatisfied (matchOtherToken '"')
             _   -> Nothing
     hexCharToInt _ = Nothing
 
-parseOctalTeXIntDigits :: TeXPrimParser s [Int]
+parseOctalTeXIntDigits :: TeXParser s [Int]
 parseOctalTeXIntDigits = skipSatisfied (matchOtherToken '\'')
     *> PC.some (satisfyThen octCharToInt)
   where
@@ -131,26 +131,26 @@ parseOctalTeXIntDigits = skipSatisfied (matchOtherToken '\'')
             _   -> Nothing
     octCharToInt _ = Nothing
 
-parseCoercedTeXInt :: TeXPrimParser s CoercedTeXInt
+parseCoercedTeXInt :: TeXParser s CoercedTeXInt
 parseCoercedTeXInt = PC.choice [ InternalLengthAsInt <$> parseInternalLength
                                , InternalGlueAsInt <$> parseInternalGlue
                                ]
 
 -- Length.
-parseLength :: TeXPrimParser s Length
+parseLength :: TeXParser s Length
 parseLength = Length <$> parseSigns <*> parseUnsignedLength
 
-parseUnsignedLength :: TeXPrimParser s UnsignedLength
+parseUnsignedLength :: TeXParser s UnsignedLength
 parseUnsignedLength = PC.choice [ NormalLengthAsULength <$> parseNormalLength
                                 , CoercedLength <$> parseCoercedLength
                                 ]
 
-parseNormalLength :: TeXPrimParser s NormalLength
+parseNormalLength :: TeXParser s NormalLength
 parseNormalLength = PC.choice [ LengthSemiConstant <$> parseFactor <*> parseUnit
                               , InternalLength <$> parseInternalLength
                               ]
 
-parseFactor :: TeXPrimParser s Factor
+parseFactor :: TeXParser s Factor
 
 -- NOTE: The parser order matters because TeX's grammar is ambiguous: '2.2'
 -- could be parsed as an integer constant, '2', followed by '.2'. We break the
@@ -160,7 +160,7 @@ parseFactor = PC.choice
     , NormalTeXIntFactor <$> parseNormalTeXInt
     ]
 
-parseRationalConstant :: TeXPrimParser s Rational
+parseRationalConstant :: TeXParser s Rational
 parseRationalConstant = do
     wholeNr <- decDigitsToTeXInt <$> PC.many parseDecimalTeXIntDigit
     skipSatisfied (\t -> matchOtherToken ',' t || matchOtherToken '.' t)
@@ -176,7 +176,7 @@ parseRationalConstant = do
   where
     decDigitsToTeXInt = digitsToTeXIntVal 10
 
-parseUnit :: TeXPrimParser s Unit
+parseUnit :: TeXParser s Unit
 parseUnit =
     PC.choice [ skipOptionalSpaces *> (InternalUnit <$> parseInternalUnit)
              , (PhysicalUnit <$> parseFrame <*> parsePhysicalUnitLit)
@@ -218,39 +218,39 @@ parseUnit =
         , parseKeywordToValue "sp" ScaledPoint
         ]
 
-parseCoercedLength :: TeXPrimParser s CoercedLength
+parseCoercedLength :: TeXParser s CoercedLength
 parseCoercedLength = InternalGlueAsLength <$> parseInternalGlue
 
 -- Math length.
-parseMathLength :: TeXPrimParser s MathLength
+parseMathLength :: TeXParser s MathLength
 parseMathLength = MathLength <$> parseSigns <*> parseUnsignedMathLength
 
-parseUnsignedMathLength :: TeXPrimParser s UnsignedMathLength
+parseUnsignedMathLength :: TeXParser s UnsignedMathLength
 parseUnsignedMathLength =
     PC.choice [ NormalMathLengthAsUMathLength <$> parseNormalMathLength
               , CoercedMathLength <$> parseCoercedMathLength
               ]
 
-parseNormalMathLength :: TeXPrimParser s NormalMathLength
+parseNormalMathLength :: TeXParser s NormalMathLength
 parseNormalMathLength =
     MathLengthSemiConstant <$> parseFactor <*> parseMathUnit
 
-parseMathUnit :: TeXPrimParser s MathUnit
+parseMathUnit :: TeXParser s MathUnit
 parseMathUnit =
     PC.choice [ skipKeyword "mu" >> skipOneOptionalSpace $> Mu
               , skipOptionalSpaces *> (InternalMathGlueAsUnit <$> parseInternalMathGlue)
               ]
 
-parseCoercedMathLength :: TeXPrimParser s CoercedMathLength
+parseCoercedMathLength :: TeXParser s CoercedMathLength
 parseCoercedMathLength = InternalMathGlueAsMathLength <$> parseInternalMathGlue
 
 -- Glue.
-parseGlue :: TeXPrimParser s Glue
+parseGlue :: TeXParser s Glue
 parseGlue = PC.choice [ ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> parseFlex "minus"
                       , InternalGlue <$> parseSigns <*> parseInternalGlue
                       ]
 
-parseFlex :: [CharCode] -> TeXPrimParser s (Maybe Flex)
+parseFlex :: [CharCode] -> TeXParser s (Maybe Flex)
 parseFlex s = PC.choice [ Just <$> parsePresentFlex
                         , skipOptionalSpaces $> Nothing
                         ]
@@ -259,7 +259,7 @@ parseFlex s = PC.choice [ Just <$> parsePresentFlex
         skipKeyword s
         *> PC.choice [FiniteFlex <$> parseLength, FilFlex <$> parseFilLength]
 
-parseFilLength :: TeXPrimParser s FilLength
+parseFilLength :: TeXParser s FilLength
 parseFilLength = (FilLength <$> parseSigns <*> parseFactor <*> parseOrder)
     <* skipOptionalSpaces
   where
@@ -268,13 +268,13 @@ parseFilLength = (FilLength <$> parseSigns <*> parseFactor <*> parseOrder)
     parseOrder = skipKeyword "fi" *> (length <$> parseSomeLs)
 
 -- Math glue.
-parseMathGlue :: TeXPrimParser s MathGlue
+parseMathGlue :: TeXParser s MathGlue
 parseMathGlue =
     PC.choice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFlex "plus" <*> parseMathFlex "minus"
               , InternalMathGlue <$> parseSigns <*> parseInternalMathGlue
               ]
 
-parseMathFlex :: [CharCode] -> TeXPrimParser s (Maybe MathFlex)
+parseMathFlex :: [CharCode] -> TeXParser s (Maybe MathFlex)
 parseMathFlex s = PC.choice [ Just <$> parsePresentFlex
                             , skipOptionalSpaces $> Nothing
                             ]
@@ -288,7 +288,7 @@ parseMathFlex s = PC.choice [ Just <$> parsePresentFlex
 parseQuantityVariable
     :: (T.PrimitiveToken -> Maybe p) -- Try to extract a parameter from a token.
     -> T.RegisterType
-    -> TeXPrimParser s (QuantVariable p)
+    -> TeXParser s (QuantVariable p)
 parseQuantityVariable getParam rTyp =
     PC.choice [ ParamVar <$> satisfyThen getParam
               , RegisterVar <$> parseShortRegRef
@@ -304,37 +304,37 @@ parseQuantityVariable getParam rTyp =
     parseRegRef =
         skipSatisfied (== T.RegisterVariableTok rTyp) >> parseEightBitTeXInt
 
-parseTeXIntVariable :: TeXPrimParser s TeXIntVariable
+parseTeXIntVariable :: TeXParser s TeXIntVariable
 parseTeXIntVariable = parseQuantityVariable getParam T.RegInt
   where
     getParam (T.IntParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseLengthVariable :: TeXPrimParser s LengthVariable
+parseLengthVariable :: TeXParser s LengthVariable
 parseLengthVariable = parseQuantityVariable getParam T.RegLen
   where
     getParam (T.LenParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseGlueVariable :: TeXPrimParser s GlueVariable
+parseGlueVariable :: TeXParser s GlueVariable
 parseGlueVariable = parseQuantityVariable getParam T.RegGlue
   where
     getParam (T.GlueParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseMathGlueVariable :: TeXPrimParser s MathGlueVariable
+parseMathGlueVariable :: TeXParser s MathGlueVariable
 parseMathGlueVariable = parseQuantityVariable getParam T.RegMathGlue
   where
     getParam (T.MathGlueParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseTokenListVariable :: TeXPrimParser s TokenListVariable
+parseTokenListVariable :: TeXParser s TokenListVariable
 parseTokenListVariable = parseQuantityVariable getParam T.RegTokenList
   where
     getParam (T.TokenListParamVarTok p) = Just p
     getParam _ = Nothing
 
-parseInternalTeXInt :: TeXPrimParser s InternalTeXInt
+parseInternalTeXInt :: TeXParser s InternalTeXInt
 parseInternalTeXInt =
     PC.choice [ InternalTeXIntVariable <$> parseTeXIntVariable
               , InternalSpecialTeXInt <$> parseSpecialTeXInt
@@ -348,56 +348,56 @@ parseInternalTeXInt =
               , skipSatisfiedEquals T.BadnessTok $> Badness
               ]
 
-parseCharToken :: TeXPrimParser s TeXIntVal
+parseCharToken :: TeXParser s TeXIntVal
 parseCharToken = satisfyThen $
     \case
         T.IntRefTok T.CharQuantity c -> Just c
         _ -> Nothing
 
-parseMathCharToken :: TeXPrimParser s TeXIntVal
+parseMathCharToken :: TeXParser s TeXIntVal
 parseMathCharToken = satisfyThen $
     \case
         T.IntRefTok T.MathCharQuantity c -> Just c
         _ -> Nothing
 
-parseSpecialTeXInt :: TeXPrimParser s T.SpecialTeXInt
+parseSpecialTeXInt :: TeXParser s T.SpecialTeXInt
 parseSpecialTeXInt = satisfyThen $
     \case
         T.SpecialTeXIntTok p -> Just p
         _ -> Nothing
 
-parseCodeTableRef :: TeXPrimParser s CodeTableRef
+parseCodeTableRef :: TeXParser s CodeTableRef
 parseCodeTableRef = CodeTableRef <$> satisfyThen tokToCodeType <*> parseTeXInt
   where
     tokToCodeType (T.CodeTypeTok c) = Just c
     tokToCodeType _ = Nothing
 
-parseFontCharRef :: TeXPrimParser s FontCharRef
+parseFontCharRef :: TeXParser s FontCharRef
 parseFontCharRef = FontCharRef <$> satisfyThen tokToFontChar <*> parseFontRef
   where
     tokToFontChar (T.FontCharTok c) = Just c
     tokToFontChar _ = Nothing
 
-parseFontRef :: TeXPrimParser s FontRef
+parseFontRef :: TeXParser s FontRef
 parseFontRef = PC.choice [ FontTokenRef <$> parseFontRefToken
                          , skipSatisfiedEquals T.FontTok $> CurrentFontRef
                          , FamilyMemberFontRef <$> parseFamilyMember
                          ]
 
-parseFontRefToken :: TeXPrimParser s TeXIntVal
+parseFontRefToken :: TeXParser s TeXIntVal
 parseFontRefToken = satisfyThen $
     \case
         T.FontRefToken n -> Just n
         _ -> Nothing
 
-parseFamilyMember :: TeXPrimParser s FamilyMember
+parseFamilyMember :: TeXParser s FamilyMember
 parseFamilyMember = FamilyMember <$> satisfyThen tokToFontRange
     <*> parseTeXInt
   where
     tokToFontRange (T.FontRangeTok r) = Just r
     tokToFontRange _ = Nothing
 
-parseInternalLength :: TeXPrimParser s InternalLength
+parseInternalLength :: TeXParser s InternalLength
 parseInternalLength =
     PC.choice [ InternalLengthVariable <$> parseLengthVariable
               , InternalSpecialLength <$> parseSpecialLength
@@ -406,47 +406,47 @@ parseInternalLength =
               , skipSatisfiedEquals T.LastKernTok $> LastKern
               ]
 
-parseSpecialLength :: TeXPrimParser s T.SpecialLength
+parseSpecialLength :: TeXParser s T.SpecialLength
 parseSpecialLength = satisfyThen $
     \case
         T.SpecialLengthTok p -> Just p
         _ -> Nothing
 
-parseFontDimensionRef :: TeXPrimParser s FontDimensionRef
+parseFontDimensionRef :: TeXParser s FontDimensionRef
 parseFontDimensionRef = skipSatisfiedEquals T.FontDimensionTok
     >> (FontDimensionRef <$> parseTeXInt <*> parseFontRef)
 
-parseBoxDimensionRef :: TeXPrimParser s BoxDimensionRef
+parseBoxDimensionRef :: TeXParser s BoxDimensionRef
 parseBoxDimensionRef = do
     dim <- parseBoxDimension
     boxNr <- parseEightBitTeXInt
     pure $ BoxDimensionRef boxNr dim
 
-parseBoxDimension :: TeXPrimParser s BoxDim
+parseBoxDimension :: TeXParser s BoxDim
 parseBoxDimension = satisfyThen $
     \case
         T.BoxDimensionTok d -> Just d
         _ -> Nothing
 
-parseInternalGlue :: TeXPrimParser s InternalGlue
+parseInternalGlue :: TeXParser s InternalGlue
 parseInternalGlue = PC.choice [ InternalGlueVariable <$> parseGlueVariable
                               , skipSatisfiedEquals T.LastGlueTok $> LastGlue
                               ]
 
-parseInternalMathGlue :: TeXPrimParser s InternalMathGlue
+parseInternalMathGlue :: TeXParser s InternalMathGlue
 parseInternalMathGlue =
     PC.choice [ InternalMathGlueVariable <$> parseMathGlueVariable
               , skipSatisfiedEquals T.LastGlueTok $> LastMathGlue
               ]
 
-parseBox :: TeXPrimParser s Box
+parseBox :: TeXParser s Box
 parseBox = PC.choice [ parseRegisterBox
                      , skipSatisfiedEquals T.LastBoxTok $> LastBox
                      , parseVSplitBox
                      , parseExplicitBox
                      ]
 
-parseRegisterBox :: TeXPrimParser s Box
+parseRegisterBox :: TeXParser s Box
 parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseEightBitTeXInt
   where
     parseFetchMode = satisfyThen $
@@ -454,14 +454,14 @@ parseRegisterBox = FetchedRegisterBox <$> parseFetchMode <*> parseEightBitTeXInt
             T.FetchedBoxTok m -> Just m
             _ -> Nothing
 
-parseVSplitBox :: TeXPrimParser s Box
+parseVSplitBox :: TeXParser s Box
 parseVSplitBox = do
     skipSatisfiedEquals T.SplitVBoxTok
     nr <- parseTeXInt
     skipKeyword "to"
     VSplitBox nr <$> parseLength
 
-parseExplicitBox :: TeXPrimParser s Box
+parseExplicitBox :: TeXParser s Box
 parseExplicitBox = do
     bt <- parseBoxType
     bs <- parseBoxSpecification

@@ -1,10 +1,11 @@
-module HeX.Parse.Stream where
+module HeX.Parse.Stream.Instance where
 
 import           HeXlude
 
 import           Control.Monad.Except     ( runExcept )
 import           Control.Monad.Extra      ( mconcatMapM )
 import           Control.Monad.Reader     ( runReaderT )
+import           Control.Monad.Trans.Maybe ( MaybeT (..) )
 import           Data.Char                ( chr )
 import qualified Data.List.NonEmpty       as L.NE
 import qualified Data.Map.Strict          as Map
@@ -23,8 +24,9 @@ import           HeX.Parse.Assignment
 import           HeX.Parse.AST
 import           HeX.Parse.Command
 import           HeX.Parse.Condition
-import           HeX.Parse.Inhibited
+import           HeX.Parse.Parser
 import           HeX.Parse.Resolve
+import           HeX.Parse.Stream.Class
 import           HeX.Parse.SyntaxCommand
 import           HeX.Parse.Token
 
@@ -257,7 +259,9 @@ expandSyntaxCommand strm = \case
         runExpandCommand strm parseCSNameArgs (expandCSName >>> pure)
     ExpandAfterTok ->
         do
-        (argLT, postArgStream) <- liftMaybe EndOfStream (fetchLexToken strm)
+        (argLT, postArgStream) <- case fetchLexToken strm of
+            Nothing -> mzero
+            Just v -> pure v
         (expandedStream, postArgLTs) <- fetchAndExpandToken postArgStream
         -- Prepend the unexpanded token.
         pure (expandedStream, argLT : postArgLTs)
@@ -271,12 +275,12 @@ expandSyntaxCommand strm = \case
     --   tokens from the current source.
     InputTok ->
         do
-        (resultStream@ExpandedStream{ streamTokenSources }, TeXFilePath texPath ) <- runParser parseFileName strm
+        (resultStream@ExpandedStream{ streamTokenSources }, TeXFilePath texPath) <- runParser parseFileName strm
         let extraDirs = case streamTokenSources & (L.NE.head >>> sourcePath) of
                 Just p -> [Path.parent p]
                 Nothing -> []
         absPath <- Path.IO.makeAbsolute texPath
-        path <- withExceptT ErrorWhileTaking $ runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)
+        path <- lift $ withExceptT ErrorWhileTaking $ runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)
         newCodes <- liftIO (D.Path.readPathChars path) <&> FDirected
         let newSource = newTokenSource (Just absPath) newCodes
         pure (resultStream{ streamTokenSources = newSource `L.NE.cons` streamTokenSources }, [])
@@ -332,7 +336,7 @@ fetchResolvedToken
     -> TeXStreamM (Lex.Token, ResolvedToken, ExpandedStream)
 fetchResolvedToken stream =
     do
-    (lt, newStream) <- liftMaybe EndOfStream (fetchLexToken stream)
+    (lt, newStream) <- MaybeT (pure $ fetchLexToken stream)
     let lkp cs = Conf.lookupCS cs $ config newStream
     rt <- liftMaybe (ErrorWhileTaking $ "Could not resolve token:" <> show lt) $ resolveToken lkp (expansionMode newStream) lt
     pure (lt, rt, newStream)
@@ -350,8 +354,6 @@ fetchAndExpandToken stream =
             expandSyntaxCommand newStream c
 
 instance TeXStream ExpandedStream where
-    type PrimToken ExpandedStream = PrimitiveToken
-
     setExpansion mode s = s{ expansionMode = mode }
 
     getConfig = config
