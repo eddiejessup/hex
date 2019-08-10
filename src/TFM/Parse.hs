@@ -39,8 +39,8 @@ data TexFont = TexFont
 
 runGetEith :: Text -> B.G.Get b -> BS.ByteString -> Either Text b
 runGetEith ctx f s = case B.G.runGetOrFail f (BS.L.fromStrict s) of
-        Left (_, _, err) -> Left $ "In " <> showT ctx <> ": " <> toS err
-        Right (_, _, v)  -> Right v
+    Left (_, _, err) -> Left $ "In " <> showT ctx <> ": " <> toS err
+    Right (_, _, v)  -> Right v
 
 newTFM :: BS.ByteString -> Either Text TexFont
 newTFM contents =

@@ -13,7 +13,6 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE StandaloneDeriving     #-}
 {-# LANGUAGE TypeApplications       #-}
-{-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeOperators          #-}
 {-# LANGUAGE UndecidableInstances   #-}
@@ -59,8 +58,8 @@ module Data.Variant
     -- * Injections
   , CouldBeF (..)
   , CouldBe  (..)
-  , CouldBeAnyOf
   , CouldBeAnyOfF
+  , CouldBeAnyOf
 
     -- * Projections
   , CatchF (..)
@@ -84,9 +83,12 @@ module Data.Variant
 
   , throwFM
   , throwM
+
+  , embedVariantEith
+  , embedVariant
   ) where
 
-import           Prelude
+import Prelude
 
 import Control.Monad.Error.Class (MonadError (..))
 import Control.Monad.Trans.Except (ExceptT, mapExceptT, runExceptT)
@@ -281,35 +283,46 @@ class CouldBeF xs x => CouldBe (xs :: [Type]) (x :: Type) where
 instance CouldBeF xs x => CouldBe xs x where
   throw = throwF . Identity
 
-type family FlattenConstraints (cs :: [Constraint]) = (c :: Constraint) | c -> cs where
-  FlattenConstraints  '[] = ()
-  FlattenConstraints (c ': cs) = (c, FlattenConstraints cs)
+type family All (cs :: [Constraint]) = (c :: Constraint) | c -> cs where
+  All  '[] = ()
+  All (c ': cs) = (c, All cs)
 
-type family TypeMap (f :: k -> l) (xs :: [k]) = (c :: [l]) where
-  TypeMap f (x ': xs) = f x ': (TypeMap f xs)
-  TypeMap f '[] = '[]
-
-type family SpreadConstraint (f :: k -> Constraint) (xs :: [k]) = (c :: Constraint) where
-  SpreadConstraint f xs = FlattenConstraints (TypeMap f xs)
+type family Map (f :: k -> l) (xs :: [k]) = (ys :: [l]) where
+  Map f (x ': xs) = f x ': (Map f xs)
+  Map f '[] = '[]
 
 -- | As with 'CouldBeAnyOf', we can also constrain a variant to represent
 -- several possible types, as we might with several 'CouldBeF' constraints,
--- using a type-level list.
-type family CouldBeAnyOfF (e :: [Type]) (xs :: [Type]) = (c :: Constraint) where
-  CouldBeAnyOfF e xs = SpreadConstraint (CouldBeF e) xs
+-- using one type-level list.
+type e `CouldBeAnyOfF` xs = All (Map (CouldBeF e) xs)
 
--- | Listing the constraints on larger variants can amplify the noise in
+-- | Listing larger variants' constraints might amplify the noise of
 -- functions' signatures. The 'CouldBeAnyOfF' constraint lets us specify
--- several types a variant may contain, in one type level list.
--- So, we could replace,
+-- several types a variant may contain in a single type-level list, as opposed
+-- to several independent constraints. So, we could replace,
 --
 -- f :: (e `CouldBe` Int, e `CouldBe` Bool, e `CouldBe` Char) => VariantF IO e
 --
--- by the equivalent constraint,
+-- with the equivalent constraint,
 --
 -- f :: e `CouldBeAnyOf` '[Int, Bool, Char] => VariantF IO e
-type family CouldBeAnyOf (e :: [Type]) (xs :: [Type]) = (c :: Constraint) where
-  CouldBeAnyOf e xs = SpreadConstraint (CouldBe e) xs
+--
+-- As 'CouldBeAnyOf' is just short-hand, we can use 'throw' just like when we
+-- have 'CouldBe' constraints:
+--
+-- >>> :set -XTypeOperators
+-- >>> :{
+-- f :: e `CouldBeAnyOf` '[Int, Bool, Char] => Variant e
+-- f = throw 'c'
+-- :}
+--
+-- ... and eliminate constraints in just the same way:
+--
+-- >>> :{
+-- g :: e `CouldBeAnyOf` '[Int, Bool] => Either (Variant e) Char
+-- g = catch @Char f
+-- :}
+type e `CouldBeAnyOf` xs = All (Map (CouldBe e) xs)
 
 -- | This is an odd constraint, as you should rarely need to /see/ it. GHC's
 -- partial instantiation tricks should mean that mentions of this class "cancel
@@ -577,3 +590,36 @@ throwM = throwFM . Identity
 --
 -- Notice that the @UserNotFoundError@ constraint has disappeared! By using
 -- 'catchM', we have /dispatched/ this constraint!
+
+
+
+
+
+
+throwFMAll
+    :: ( MonadError (VariantF f e) m
+       , e `CouldBeAnyOf` es
+       )
+    => VariantF f es
+    -> m a
+throwFMAll = \case
+    Here x -> throwFM x
+    There xs -> throwFMAll xs
+
+embedVariantEith
+    :: ( MonadError (Variant e) m
+       , e `CouldBeAnyOf` es
+       )
+    => Either (Variant es) a
+    -> m a
+embedVariantEith = \case
+    Right v -> pure v
+    Left err -> throwFMAll err
+
+embedVariant
+    :: ( MonadError (Variant e) m
+       , e `CouldBeAnyOf` es
+       )
+    => ExceptT (Variant es) m a
+    -> m a
+embedVariant exc = runExceptT exc >>= embedVariantEith

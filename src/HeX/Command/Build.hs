@@ -37,10 +37,10 @@ handleCommandInParaMode
             , EvaluationError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             , TFMError
             ]
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        )
     => ForwardHList
@@ -93,15 +93,15 @@ newtype HBoxResult = HBoxResult ForwardHList
 handleCommandInHBoxMode
     :: ( HP.TeXStream s
        , MonadErrorAnyOf e m
-            '[ BuildError
-             , ConfigError
-             , EvaluationError
-             , HP.StreamTakeError
-             , TFMError
-             , PathError
-             ]
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , HP.StreamTakeError
+            , HP.EndOfInputError
+            , TFMError
+            , PathError
+            ]
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        )
     => ForwardHList
@@ -148,15 +148,16 @@ newtype VBoxResult = VBoxResult ForwardVList
 handleCommandInVBoxMode
     :: ( HP.TeXStream s
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        , MonadErrorAnyOf e m
             '[ EvaluationError
              , ConfigError
              , PathError
              , HP.StreamTakeError
+             , HP.EndOfInputError
              , TFMError
-             , BuildError]
+             , BuildError
+             ]
        )
     => ForwardVList
     -> HP.Command
@@ -250,10 +251,10 @@ handleCommandInMainVMode
             , EvaluationError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             , TFMError
             ]
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        )
     => ForwardVList
@@ -313,11 +314,11 @@ extractPara
             , EvaluationError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             , TFMError
             ]
        , MonadIO m
        , MonadState s m
-       , MonadPlus m
        )
     => HP.IndentFlag
     -> m ParaResult
@@ -339,10 +340,10 @@ extractParaFromVMode
             , TFMError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             ]
        , MonadIO m
        , MonadState s m
-       , MonadPlus m
        )
     => HP.IndentFlag
     -> s
@@ -363,9 +364,9 @@ extractHBox
             , TFMError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             ]
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        )
     => m HBoxResult
@@ -380,9 +381,9 @@ extractVBox
             , TFMError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             ]
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        )
     => m VBoxResult
@@ -397,9 +398,9 @@ extractVSubBox
             , TFMError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             ]
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        )
     => B.DesiredLength
@@ -437,9 +438,9 @@ extractHSubBox
             , TFMError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             ]
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        )
     => B.DesiredLength
@@ -460,9 +461,9 @@ extractMainVList
             , TFMError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             ]
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        )
     => m MainVModeResult
@@ -477,9 +478,9 @@ extractBreakAndSetVList
             , TFMError
             , PathError
             , HP.StreamTakeError
+            , HP.EndOfInputError
             ]
        , MonadIO m
-       , MonadPlus m
        , MonadState s m
        )
     => m (ForwardDirected Seq B.Page)

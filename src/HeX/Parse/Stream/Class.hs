@@ -9,7 +9,6 @@ import           Control.Monad             (foldM, guard)
 import qualified Control.Monad.Combinators as PC
 import           Control.Monad.State.Lazy  (MonadState, StateT, modify,
                                             runStateT)
-import           Control.Monad.Trans.Maybe (MaybeT)
 import           Data.Char                 (ord, toLower, toUpper)
 import qualified Data.Foldable             as Fold
 import           Data.Functor              (($>))
@@ -40,9 +39,12 @@ class TeXStream s where
 
     takeToken :: s -> TeXStreamM (s, PrimitiveToken)
 
-type TeXStreamE = '[StreamTakeError, EvaluationError, ConfigError, D.Path.PathError]
+data EndOfInputError = EndOfInputError
+    deriving (Show)
 
-type TeXStreamM = MaybeT (ExceptT (Variant TeXStreamE) IO)
+type TeXStreamE = '[StreamTakeError, EvaluationError, ConfigError, D.Path.PathError, EndOfInputError]
+
+type TeXStreamM = ExceptT (Variant TeXStreamE) IO
 
 data StreamTakeError
     = ParseError Text
@@ -73,7 +75,7 @@ satisfyThen test = SParser go
         (newStream, tok) <- takeToken stream
         case test tok of
           Nothing ->
-            lift $ throwM $ ParseError $ "Not satisfied with token: " <> show tok
+            throwM $ ParseError $ "Not satisfied with token: " <> show tok
           Just x ->
             pure (newStream, x)
 

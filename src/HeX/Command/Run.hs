@@ -26,7 +26,7 @@ import           HeX.Evaluate              (EvaluationError)
 import           HeX.Lex                   (LexState (..), extractToken)
 import           HeX.Parse                 (ExpandedStream, ExpansionMode (..),
                                             IndentFlag (..), TeXParser,
-                                            StreamTakeError,
+                                            StreamTakeError, EndOfInputError (..),
                                             anySingle, defaultCSMap,
                                             parseCommand, resolveToken,
                                             runParser)
@@ -38,6 +38,7 @@ type AppError =
              , PathError
              , StreamTakeError
              , TFMError
+             , EndOfInputError
              ]
 
 newtype App a
@@ -49,7 +50,6 @@ newtype App a
              , MonadIO
              , MonadError AppError
              , Alternative
-             , MonadPlus
              )
 
 usableCatLookup :: CharCode -> CatCode
@@ -114,12 +114,15 @@ runParseLoop
     => TeXParser ExpandedStream a
     -> ExpandedStream
     -> IO ()
-runParseLoop p s = runExceptT (runMaybeT (runParser p s)) >>= \case
+runParseLoop p s = runExceptT (runParser p s) >>= \case
     Left err ->
-        panic $ show err
-    Right Nothing ->
-        pure ()
-    Right (Just (newS, tok)) ->
+        let
+            caught :: Either (Variant '[StreamTakeError, EvaluationError, ConfigError, Data.Path.PathError]) EndOfInputError
+            caught = catch err
+        in case caught of
+            Left otherErr -> panic $ show otherErr
+            Right EndOfInputError -> pure ()
+    Right (newS, tok) ->
         print tok >> runExpand newS
 
 runExpand

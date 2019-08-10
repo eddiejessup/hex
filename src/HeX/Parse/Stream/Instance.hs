@@ -4,7 +4,6 @@ import           HeXlude
 
 import           Control.Monad.Extra       (mconcatMapM)
 import           Control.Monad.Reader      (runReaderT)
-import           Control.Monad.Trans.Maybe (MaybeT (..))
 import           Data.Char                 (chr)
 import qualified Data.List.NonEmpty        as L.NE
 import           Data.Map.Strict           ((!?))
@@ -256,9 +255,7 @@ expandSyntaxCommand strm = \case
         runExpandCommand strm parseCSNameArgs (expandCSName >>> pure)
     ExpandAfterTok ->
         do
-        (argLT, postArgStream) <- case fetchLexToken strm of
-            Nothing -> mzero
-            Just v  -> pure v
+        (argLT, postArgStream) <- liftMaybe (throw EndOfInputError) (fetchLexToken strm)
         (expandedStream, postArgLTs) <- fetchAndExpandToken postArgStream
         -- Prepend the unexpanded token.
         pure (expandedStream, argLT : postArgLTs)
@@ -277,7 +274,7 @@ expandSyntaxCommand strm = \case
                 Just p  -> [Path.parent p]
                 Nothing -> []
         absPath <- Path.IO.makeAbsolute texPath
-        path <- lift $ runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)
+        path <- runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)
         newCodes <- liftIO (D.Path.readPathChars path) <&> FDirected
         let newSource = newTokenSource (Just absPath) newCodes
         pure (resultStream{ streamTokenSources = newSource `L.NE.cons` streamTokenSources }, [])
@@ -331,7 +328,7 @@ fetchResolvedToken
     -> TeXStreamM (Lex.Token, ResolvedToken, ExpandedStream)
 fetchResolvedToken stream =
     do
-    (lt, newStream) <- MaybeT (pure $ fetchLexToken stream)
+    (lt, newStream) <- liftMaybe (throw EndOfInputError) $ fetchLexToken stream
     let lkp cs = Conf.lookupCS cs $ config newStream
     rt <- liftMaybe (throw $ StreamExpansionError $ "Could not resolve token:" <> show lt) $ resolveToken lkp (expansionMode newStream) lt
     pure (lt, rt, newStream)

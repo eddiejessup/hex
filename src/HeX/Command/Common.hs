@@ -5,7 +5,6 @@ module HeX.Command.Common where
 import           HeXlude
 
 import           Control.Monad.State.Lazy  (MonadState, StateT, get, modify)
-import           Control.Monad.Trans.Maybe (MaybeT (..))
 
 import           HeX.Config
 import           HeX.Evaluate
@@ -70,14 +69,11 @@ runLoop f = go
             EndLoop result ->
                 pure result
 
-data EndOfInputError = EndOfInputError
-
 runCommandLoop
     :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m '[HP.StreamTakeError, EvaluationError]
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadState s m
        , MonadIO m
-       , MonadPlus m
        )
     => (st -> HP.Command -> s -> m (RecursionResult st r))
     -> st
@@ -87,15 +83,7 @@ runCommandLoop f = runLoop g
     g elemList =
         do
         oldStream <- get
-        (newStream, command) <- liftIO (runExceptT (runMaybeT (HP.runParser HP.parseCommand oldStream))) >>= \case
-            Left err -> case catch @HP.StreamTakeError err of
-                Right stErr -> throwM stErr
-                Left nonStErrs -> case catch @EvaluationError nonStErrs of
-                    Right eErr -> throwM eErr
-                    -- Left nonEErrs -> case catch @ConfigError nonEErrs of
-                    --     Right cErr -> throwM cErr
-            Right Nothing -> mzero
-            Right (Just v) -> pure v
+        (newStream, command) <- liftIO (runExceptT (HP.runParser HP.parseCommand oldStream)) >>= embedVariantEith
         put newStream
         liftIO $ print command
         f elemList command oldStream
