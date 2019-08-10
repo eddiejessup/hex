@@ -25,10 +25,11 @@ import           HeX.Config                (ConfigError)
 import           HeX.Evaluate              (EvaluationError)
 import           HeX.Lex                   (LexState (..), extractToken)
 import           HeX.Parse                 (ExpandedStream, ExpansionMode (..),
-                                            IndentFlag (..), TeXParser,
+                                            IndentFlag (..), TeXStream,
                                             StreamTakeError, EndOfInputError (..),
                                             anySingle, defaultCSMap,
                                             parseCommand, resolveToken,
+                                            SParser, TeXStreamE,
                                             runParser)
 
 type AppError =
@@ -110,9 +111,10 @@ runResolved _xs = extractAndPrint (LineBegin, _xs)
 
 runParseLoop
     :: ( Show a
+       , TeXStream s
        )
-    => TeXParser ExpandedStream a
-    -> ExpandedStream
+    => SParser s (ExceptT (Variant TeXStreamE) IO) a
+    -> s
     -> IO ()
 runParseLoop p s = runExceptT (runParser p s) >>= \case
     Left err ->
@@ -125,9 +127,7 @@ runParseLoop p s = runExceptT (runParser p s) >>= \case
     Right (newS, tok) ->
         print tok >> runExpand newS
 
-runExpand
-    :: ExpandedStream
-    -> IO ()
+runExpand :: TeXStream s => s -> IO ()
 runExpand = runParseLoop anySingle
 
 -- Command.

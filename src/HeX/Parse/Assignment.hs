@@ -19,11 +19,11 @@ import           HeX.Parse.Quantity
 import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token           as T
 
-parseAssignment :: TeXParser s Assignment
+parseAssignment :: TeXParser s e m Assignment
 parseAssignment = parseDefineMacro <|> parseNonMacroAssignment
 
 -- Parse Macro.
-parseDefineMacro :: TeXParser s Assignment
+parseDefineMacro :: TeXParser s e m Assignment
 parseDefineMacro = do
     -- Macro prefixes.
     prefixes <- PC.many $
@@ -60,7 +60,7 @@ parseDefineMacro = do
                           _        -> T.Local
                     }
 
-parseNonMacroAssignment :: TeXParser s Assignment
+parseNonMacroAssignment :: TeXParser s e m Assignment
 parseNonMacroAssignment = do
     _global <- parseGlobal
     _body <- parseNonMacroAssignmentBody
@@ -99,29 +99,52 @@ parseNonMacroAssignment = do
     tokToInteractionMode (T.InteractionModeTok m) = Just m
     tokToInteractionMode _                        = Nothing
 
-numVarValPair :: TeXStream s => (SParser s TeXStreamM TeXIntVariable, SParser s TeXStreamM TeXInt)
+numVarValPair
+    :: ( TeXStream s
+       , TeXStreamM e m
+       )
+    => (SParser s m TeXIntVariable, SParser s m TeXInt)
 numVarValPair = (parseTeXIntVariable, parseTeXInt)
 
-lenVarValPair :: TeXStream s => (SParser s TeXStreamM LengthVariable, SParser s TeXStreamM Length)
+lenVarValPair
+    :: ( TeXStream s
+       , TeXStreamM e m
+       )
+    => (SParser s m LengthVariable, SParser s m Length)
 lenVarValPair = (parseLengthVariable, parseLength)
 
-glueVarValPair :: TeXStream s => (SParser s TeXStreamM GlueVariable, SParser s TeXStreamM Glue)
+glueVarValPair
+    :: ( TeXStream s
+       , TeXStreamM e m
+       )
+    => (SParser s m GlueVariable, SParser s m Glue)
 glueVarValPair = (parseGlueVariable, parseGlue)
 
-mathGlueVarValPair :: TeXStream s => (SParser s TeXStreamM MathGlueVariable, SParser s TeXStreamM MathGlue)
+mathGlueVarValPair
+    :: ( TeXStream s
+       , TeXStreamM e m
+       )
+    => (SParser s m MathGlueVariable, SParser s m MathGlue)
 mathGlueVarValPair = (parseMathGlueVariable, parseMathGlue)
 
-tokenListVarValPair :: TeXStream s => (SParser s TeXStreamM TokenListVariable, SParser s TeXStreamM TokenListAssignmentTarget)
+tokenListVarValPair
+    :: ( TeXStream s
+       , TeXStreamM e m
+       )
+    => (SParser s m TokenListVariable, SParser s m TokenListAssignmentTarget)
 tokenListVarValPair = (parseTokenListVariable, TokenListAssignmentText <$> parseGeneralText)
 
-parseVarEqVal :: TeXStream s
-              => (SParser s TeXStreamM a, SParser s TeXStreamM b)
-              -> (a -> b -> c)
-              -> SParser s TeXStreamM c
+parseVarEqVal
+    :: ( TeXStream s
+       , TeXStreamM e m
+       )
+    => (SParser s m a, SParser s m b)
+    -> (a -> b -> c)
+    -> SParser s m c
 parseVarEqVal (varParser, valParser) f =
     f <$> varParser <* skipOptionalEquals <*> valParser
 
-parseVariableAssignment :: TeXParser s VariableAssignment
+parseVariableAssignment :: TeXParser s e m VariableAssignment
 parseVariableAssignment =
     PC.choice [ parseVarEqVal numVarValPair TeXIntVariableAssignment
               , parseVarEqVal lenVarValPair LengthVariableAssignment
@@ -139,7 +162,7 @@ parseVariableAssignment =
                               SpecialLengthVariableAssignment
               ]
 
-parseVariableModification :: forall s. TeXParser s VariableModification
+parseVariableModification :: forall s e m. TeXParser s e m VariableModification
 parseVariableModification =
     PC.choice [ parseAdvanceVar numVarValPair AdvanceTeXIntVariable
               , parseAdvanceVar lenVarValPair AdvanceLengthVariable
@@ -148,9 +171,10 @@ parseVariableModification =
               , parseScaleVar
               ]
   where
-    parseAdvanceVar :: (SParser s TeXStreamM a, SParser s TeXStreamM b)
-                    -> (a -> b -> VariableModification)
-                    -> SParser s TeXStreamM VariableModification
+    parseAdvanceVar
+        :: (SParser s m a, SParser s m b)
+        -> (a -> b -> VariableModification)
+        -> SParser s m VariableModification
     parseAdvanceVar (varParser, valParser) f = do
         skipSatisfiedEquals T.AdvanceVarTok
         var <- varParser
@@ -175,22 +199,22 @@ parseVariableModification =
                   , MathGlueNumericVariable <$> parseMathGlueVariable
                   ]
 
-parseCodeAssignment :: TeXParser s CodeAssignment
+parseCodeAssignment :: TeXParser s e m CodeAssignment
 parseCodeAssignment =
     parseVarEqVal (parseCodeTableRef, parseTeXInt) CodeAssignment
 
-parseLet :: TeXParser s AssignmentBody
+parseLet :: TeXParser s e m AssignmentBody
 parseLet = do
     skipSatisfiedEquals T.LetTok
     (cs, tok) <- parseVarEqVal (parseCSName, parseLetArg) (,)
     pure $ DefineControlSequence cs (LetTarget tok)
 
-parseFutureLet :: TeXParser s AssignmentBody
+parseFutureLet :: TeXParser s e m AssignmentBody
 parseFutureLet = do
     skipSatisfiedEquals T.FutureLetTok
     DefineControlSequence <$> parseCSName <*> (FutureLetTarget <$> parseLexToken <*> parseLexToken)
 
-parseShortMacroAssignment :: TeXParser s AssignmentBody
+parseShortMacroAssignment :: TeXParser s e m AssignmentBody
 parseShortMacroAssignment = do
     quant <- satisfyThen $
         \case
@@ -199,11 +223,11 @@ parseShortMacroAssignment = do
     (cs, n) <- parseVarEqVal (parseCSName, parseTeXInt) (,)
     pure $ DefineControlSequence cs (ShortDefineTarget quant n)
 
-parseSetFamilyMember :: TeXParser s AssignmentBody
+parseSetFamilyMember :: TeXParser s e m AssignmentBody
 parseSetFamilyMember =
     parseVarEqVal (parseFamilyMember, parseFontRef) SetFamilyMember
 
-parseSetParShape :: TeXParser s AssignmentBody
+parseSetParShape :: TeXParser s e m AssignmentBody
 parseSetParShape = do
     skipSatisfiedEquals T.ParagraphShapeTok
     skipOptionalEquals
@@ -221,7 +245,7 @@ parseSetParShape = do
   where
     parseLengthPair = (,) <$> parseLength <*> parseLength
 
-parseReadToControlSequence :: TeXParser s AssignmentBody
+parseReadToControlSequence :: TeXParser s e m AssignmentBody
 parseReadToControlSequence = do
     skipSatisfiedEquals T.ReadTok
     nr <- parseTeXInt
@@ -230,13 +254,13 @@ parseReadToControlSequence = do
     cs <- parseCSName
     pure $ DefineControlSequence cs (ReadTarget nr)
 
-parseSetBoxRegister :: TeXParser s AssignmentBody
+parseSetBoxRegister :: TeXParser s e m AssignmentBody
 parseSetBoxRegister = do
     skipSatisfiedEquals T.SetBoxRegisterTok
     parseVarEqVal (parseEightBitTeXInt, skipFiller >> parseBox) SetBoxRegister
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-parseFileName :: TeXParser s TeXFilePath
+parseFileName :: TeXParser s e m TeXFilePath
 parseFileName = do
     skipOptionalSpaces
     fileNameChars <- PC.some $ satisfyThen $ \case
@@ -270,7 +294,7 @@ parseFileName = do
         _ -> False
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
-parseNewFontAssignment :: TeXParser s AssignmentBody
+parseNewFontAssignment :: TeXParser s e m AssignmentBody
 parseNewFontAssignment = do
     skipSatisfiedEquals T.FontTok
     cs <- parseCSName
@@ -289,13 +313,13 @@ parseNewFontAssignment = do
 
     parseFontSpecScaled = skipKeyword "scaled" >> (FontScaled <$> parseTeXInt)
 
-parseSetFontDimension :: TeXParser s AssignmentBody
+parseSetFontDimension :: TeXParser s e m AssignmentBody
 parseSetFontDimension =
     parseVarEqVal (parseFontDimensionRef, parseLength) SetFontDimension
 
-parseSetFontChar :: TeXParser s AssignmentBody
+parseSetFontChar :: TeXParser s e m AssignmentBody
 parseSetFontChar = parseVarEqVal (parseFontCharRef, parseTeXInt) SetFontChar
 
-parseSetBoxDimension :: TeXParser s AssignmentBody
+parseSetBoxDimension :: TeXParser s e m AssignmentBody
 parseSetBoxDimension =
     parseVarEqVal (parseBoxDimensionRef, parseLength) SetBoxDimension

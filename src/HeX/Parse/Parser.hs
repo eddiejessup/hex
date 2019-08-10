@@ -36,3 +36,17 @@ instance Monad m => Monad (SParser s m) where
 
 throwParseError :: MonadError e m => e -> SParser s m a
 throwParseError e = SParser $ const $ throwError e
+
+data StreamTakeError
+    = ParseError Text
+    | StreamExpansionError Text
+    deriving (Show)
+
+instance MonadErrorAnyOf e m '[StreamTakeError] => Alternative (SParser s m) where
+    empty = throwParseError $ throw $ ParseError "empty"
+
+    (SParser pA) <|> (SParser pB) = SParser go
+      where
+        go stream = pA stream `catchError` (\_ -> pB stream)
+
+instance MonadErrorAnyOf e m '[StreamTakeError] => MonadPlus (SParser s m) where

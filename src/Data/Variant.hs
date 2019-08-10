@@ -84,7 +84,6 @@ module Data.Variant
   , throwFM
   , throwM
 
-  , embedVariantEith
   , embedVariant
   ) where
 
@@ -606,20 +605,12 @@ throwFMAll = \case
     Here x -> throwFM x
     There xs -> throwFMAll xs
 
-embedVariantEith
-    :: ( MonadError (Variant e) m
-       , e `CouldBeAnyOf` es
-       )
-    => Either (Variant es) a
-    -> m a
-embedVariantEith = \case
-    Right v -> pure v
-    Left err -> throwFMAll err
-
 embedVariant
     :: ( MonadError (Variant e) m
        , e `CouldBeAnyOf` es
        )
     => ExceptT (Variant es) m a
     -> m a
-embedVariant exc = runExceptT exc >>= embedVariantEith
+embedVariant exc = runExceptT exc >>= \case
+    Right v -> pure v
+    Left err -> throwFMAll err

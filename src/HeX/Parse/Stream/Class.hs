@@ -37,37 +37,30 @@ class TeXStream s where
 
     getConditionBodyState :: s -> Maybe ConditionBodyState
 
-    takeToken :: s -> TeXStreamM (s, PrimitiveToken)
+    takeToken
+        :: TeXStreamM e m
+        => s
+        -> m (s, PrimitiveToken)
 
 data EndOfInputError = EndOfInputError
     deriving (Show)
 
-type TeXStreamE = '[StreamTakeError, EvaluationError, ConfigError, D.Path.PathError, EndOfInputError]
+type TeXStreamE =
+   '[ StreamTakeError
+    , EvaluationError
+    , ConfigError
+    , D.Path.PathError
+    , EndOfInputError
+    ]
 
-type TeXStreamM = ExceptT (Variant TeXStreamE) IO
+type TeXStreamM e m = (MonadErrorAnyOf e m TeXStreamE, MonadIO m)
 
-data StreamTakeError
-    = ParseError Text
-    | StreamExpansionError Text
-    deriving (Show)
-
-type TeXParser s a = TeXStream s => SParser s TeXStreamM a
-
-instance Alternative (SParser s TeXStreamM) where
-    empty = SParser $ const $ throwM $ ParseError "empty"
-
-    (SParser pA) <|> (SParser pB) = SParser go
-      where
-        go stream = pA stream `catchError` (\_ -> pB stream)
-
-instance MonadPlus (SParser s TeXStreamM) where
-
-
+type TeXParser s e m a = (TeXStream s, TeXStreamM e m) => SParser s m a
 
 insertLexTokens :: TeXStream s => s -> [Lex.Token] -> s
 insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
 
-satisfyThen :: (PrimitiveToken -> Maybe a) -> TeXParser s a
+satisfyThen :: (PrimitiveToken -> Maybe a) -> TeXParser s e m a
 satisfyThen test = SParser go
   where
     go stream =
@@ -79,7 +72,7 @@ satisfyThen test = SParser go
           Just x ->
             pure (newStream, x)
 
-satisfy :: (PrimitiveToken -> Bool) -> TeXParser s PrimitiveToken
+satisfy :: (PrimitiveToken -> Bool) -> TeXParser s e m PrimitiveToken
 satisfy f = satisfyThen (predToMaybe f)
 
 boolToMaybe :: Bool -> a -> Maybe a
@@ -89,36 +82,36 @@ boolToMaybe False _ = Nothing
 predToMaybe :: (a -> Bool) -> a -> Maybe a
 predToMaybe f x = boolToMaybe (f x) x
 
-anySingle :: TeXParser s PrimitiveToken
+anySingle :: TeXParser s e m PrimitiveToken
 anySingle = satisfy (const True)
 
 type MatchToken s = PrimitiveToken -> Bool
 
-manySatisfied :: MatchToken s -> TeXParser s [PrimitiveToken]
+manySatisfied :: MatchToken s -> TeXParser s e m [PrimitiveToken]
 manySatisfied testTok = PC.many $ satisfy testTok
 
-manySatisfiedThen :: (PrimitiveToken -> Maybe a) -> TeXParser s [a]
+manySatisfiedThen :: (PrimitiveToken -> Maybe a) -> TeXParser s e m [a]
 manySatisfiedThen f = PC.many $ satisfyThen f
 
 -- Skipping.
-skipSatisfied :: MatchToken s -> TeXParser s ()
+skipSatisfied :: MatchToken s -> TeXParser s e m ()
 skipSatisfied f = satisfyThen $ \x -> if f x
           then Just ()
           else Nothing
 
-skipSatisfiedEquals :: Eq PrimitiveToken => PrimitiveToken -> TeXParser s ()
+skipSatisfiedEquals :: Eq PrimitiveToken => PrimitiveToken -> TeXParser s e m ()
 skipSatisfiedEquals t = skipSatisfied (== t)
 
-skipOptional :: TeXParser s a -> TeXParser s ()
+skipOptional :: TeXParser s e m a -> TeXParser s e m ()
 skipOptional p = optional p $> ()
 
-skipOneOptionalSatisfied :: MatchToken s -> TeXParser s ()
+skipOneOptionalSatisfied :: MatchToken s -> TeXParser s e m ()
 skipOneOptionalSatisfied = skipOptional . skipSatisfied
 
-skipManySatisfied :: MatchToken s -> TeXParser s ()
+skipManySatisfied :: MatchToken s -> TeXParser s e m ()
 skipManySatisfied = PC.skipMany . skipSatisfied
 
-skipSatisfiedChunk :: Eq PrimitiveToken => [PrimitiveToken] -> TeXParser s ()
+skipSatisfiedChunk :: Eq PrimitiveToken => [PrimitiveToken] -> TeXParser s e m ()
 skipSatisfiedChunk = foldr (skipSatisfiedEquals >>> (>>)) (pure ())
 
 inhibitExpansion, enableExpansion :: TeXStream s => s -> s
@@ -128,7 +121,7 @@ enableExpansion = setExpansion Expanding
 getInput :: Applicative m => SParser s m s
 getInput = SParser $ \s -> pure (s, s)
 
-parseInhibited :: TeXParser s a -> TeXParser s a
+parseInhibited :: TeXParser s e m a -> TeXParser s e m a
 parseInhibited (SParser baseParser) = SParser go
   where
     go stream =
@@ -190,13 +183,13 @@ splitLastMay xs = do
     ini <- initMay xs
     pure (ini, z)
 
-unsafeParseMacroArgs :: MacroContents -> TeXParser s (Map.Map Digit MacroArgument)
+unsafeParseMacroArgs :: MacroContents -> TeXParser s e m (Map.Map Digit MacroArgument)
 unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
     do
         skipBalancedText pre
         parseArgs params
   where
-    parseArgs :: MacroParameters -> TeXParser s (Map.Map Digit MacroArgument)
+    parseArgs :: MacroParameters -> TeXParser s e m (Map.Map Digit MacroArgument)
     parseArgs ps = case Map.minViewWithKey ps of
         -- If there are no parameters, expect no arguments.
         Nothing -> pure Map.empty
@@ -215,7 +208,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
     -- If the parameter is undelimited, the argument is the next non-blank
     -- token, unless that token is ‘{’, when the argument will be the entire
     -- following {...} group.
-    parseUndelimitedArgs :: TeXParser s [Lex.Token]
+    parseUndelimitedArgs :: TeXParser s e m [Lex.Token]
     parseUndelimitedArgs = do
         -- Skip blank tokens (assumed to mean spaces).
         skipManySatisfied (primTokHasCategory Lex.Space)
@@ -228,7 +221,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
     -- Get the shortest, possibly empty, properly nested sequence of tokens,
     -- followed by the delimiter tokens. In the delimiter, category codes,
     -- character codes and control sequence names must match.
-    parseDelimitedArgs :: [Lex.Token] -> [Lex.Token] -> TeXParser s [Lex.Token]
+    parseDelimitedArgs :: [Lex.Token] -> [Lex.Token] -> TeXParser s e m [Lex.Token]
     parseDelimitedArgs ts delims = do
         -- Parse tokens until we see the delimiter tokens, then add what we grab
         -- to our accumulating argument.
@@ -260,7 +253,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
         pure inner
 
 -- Case 4, for things like 'macroName' in '\def\macroName'.
-unsafeParseCSName :: TeXParser s Lex.ControlSequenceLike
+unsafeParseCSName :: TeXParser s e m Lex.ControlSequenceLike
 unsafeParseCSName = handleLex tokToCSLike
   where
     tokToCSLike (Lex.CharCatToken CharCat{cat = Lex.Active, char = c}) =
@@ -270,12 +263,12 @@ unsafeParseCSName = handleLex tokToCSLike
     tokToCSLike _ = Nothing
 
 -- Case 5, arbitrary tokens such as for \let\foo=<token>.
-unsafeAnySingleLex :: TeXParser s Lex.Token
+unsafeAnySingleLex :: TeXParser s e m Lex.Token
 unsafeAnySingleLex = satisfyThen tokToLex
 
 -- Case 6, macro parameter text.
 -- Trivially balanced, because no braces are allowed at all.
-parseParamDelims :: TeXParser s BalancedText
+parseParamDelims :: TeXParser s e m BalancedText
 parseParamDelims = BalancedText <$> manySatisfiedThen tokToDelimTok
   where
     tokToDelimTok (UnexpandedTok lt)
@@ -285,7 +278,7 @@ parseParamDelims = BalancedText <$> manySatisfiedThen tokToDelimTok
         | otherwise = Just lt
     tokToDelimTok _ = Nothing
 
-maybeParseParametersFrom :: Digit -> TeXParser s MacroParameters
+maybeParseParametersFrom :: Digit -> TeXParser s e m MacroParameters
 maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
     -- Parse the left-brace that indicates the end of parameters.
 
@@ -313,7 +306,7 @@ maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
             (cat `elem` [ Lex.Letter, Lex.Other ]) && (c == digitToChar dig)
         matchesDigit _ = False
 
-unsafeParseParamText :: TeXParser s (BalancedText, MacroParameters)
+unsafeParseParamText :: TeXParser s e m (BalancedText, MacroParameters)
 unsafeParseParamText = do
     -- Pre-parameter text tokens.
     preParamToks <- parseParamDelims
@@ -327,7 +320,7 @@ data TerminusPolicy = Include | Discard
     deriving ( Show, Eq )
 
 -- Nested expression with valid grouping.
-parseNestedExpr :: Int -> TeXParser s (a, Ordering) -> TerminusPolicy -> TeXParser s [a]
+parseNestedExpr :: Int -> TeXParser s e m (a, Ordering) -> TerminusPolicy -> TeXParser s e m [a]
 parseNestedExpr 0 _ _ = pure []
 parseNestedExpr n parseNext policy = do
     (x, change) <- parseNext
@@ -355,7 +348,7 @@ tokToChange t
     | otherwise = EQ
 
 -- This assumes we just parsed the '{' that starts the balanced text.
-unsafeParseBalancedText :: TerminusPolicy -> TeXParser s BalancedText
+unsafeParseBalancedText :: TerminusPolicy -> TeXParser s e m BalancedText
 unsafeParseBalancedText policy =
     BalancedText <$> parseNestedExpr 1 parseNext policy
   where
@@ -366,7 +359,7 @@ unsafeParseBalancedText policy =
 -- extract parameter references at definition-time.
 -- This assumes we just parsed the '{' that starts the macro text.
 -- This function is like unsafeParseBalancedText, but extracts argument calls.
-unsafeParseMacroText :: TeXParser s MacroText
+unsafeParseMacroText :: TeXParser s e m MacroText
 unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
   where
     parseNext = unsafeAnySingleLex
@@ -390,7 +383,7 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
 
 
 -- Case 10, character constant like "`c".
-unsafeParseCharLike :: TeXParser s Int
+unsafeParseCharLike :: TeXParser s e m Int
 unsafeParseCharLike = ord <$> handleLex tokToCharLike
   where
     tokToCharLike (Lex.CharCatToken CharCat{char = c}) =
@@ -401,35 +394,35 @@ unsafeParseCharLike = ord <$> handleLex tokToCharLike
         Nothing
 
 -- Interface.
-parseBalancedText :: TerminusPolicy -> TeXParser s BalancedText
+parseBalancedText :: TerminusPolicy -> TeXParser s e m BalancedText
 parseBalancedText = parseInhibited . unsafeParseBalancedText
 
-parseMacroArgs :: MacroContents -> TeXParser s (Map.Map Digit MacroArgument)
+parseMacroArgs :: MacroContents -> TeXParser s e m (Map.Map Digit MacroArgument)
 parseMacroArgs = parseInhibited . unsafeParseMacroArgs
 
-parseCharLike :: TeXParser s Int
+parseCharLike :: TeXParser s e m Int
 parseCharLike = parseInhibited unsafeParseCharLike
 
-parseCSName :: TeXParser s Lex.ControlSequenceLike
+parseCSName :: TeXParser s e m Lex.ControlSequenceLike
 parseCSName = parseInhibited unsafeParseCSName
 
-parseParamText :: TeXParser s (BalancedText, MacroParameters)
+parseParamText :: TeXParser s e m (BalancedText, MacroParameters)
 parseParamText = parseInhibited unsafeParseParamText
 
-parseMacroText :: TeXParser s MacroText
+parseMacroText :: TeXParser s e m MacroText
 parseMacroText = parseInhibited unsafeParseMacroText
 
-parseLexToken :: TeXParser s Lex.Token
+parseLexToken :: TeXParser s e m Lex.Token
 parseLexToken = parseInhibited unsafeAnySingleLex
 
-parseLetArg :: TeXParser s Lex.Token
+parseLetArg :: TeXParser s e m Lex.Token
 parseLetArg = parseInhibited skipOneOptionalSpace >> parseLexToken
 
 -- Derived related parsers.
-skipFiller :: TeXParser s ()
+skipFiller :: TeXParser s e m ()
 skipFiller = skipManySatisfied isFillerItem
 
-parseExpandedBalancedText :: TerminusPolicy -> TeXParser s ExpandedBalancedText
+parseExpandedBalancedText :: TerminusPolicy -> TeXParser s e m ExpandedBalancedText
 parseExpandedBalancedText policy =
     ExpandedBalancedText <$> parseNestedExpr 1 parseNext policy
   where
@@ -439,16 +432,18 @@ parseExpandedBalancedText policy =
         UnexpandedTok lt -> tokToChange lt
         _ -> EQ
 
-_parseDelimitedText :: (TerminusPolicy -> SParser s TeXStreamM a) -> TeXParser s a
+_parseDelimitedText
+    :: (TerminusPolicy -> SParser s m a)
+    -> TeXParser s e m a
 _parseDelimitedText parser = do
     skipFiller
     skipLeftBrace
     parser Discard
 
-parseGeneralText :: TeXParser s BalancedText
+parseGeneralText :: TeXParser s e m BalancedText
 parseGeneralText = _parseDelimitedText parseBalancedText
 
-parseExpandedGeneralText :: TeXParser s ExpandedBalancedText
+parseExpandedGeneralText :: TeXParser s e m ExpandedBalancedText
 parseExpandedGeneralText = _parseDelimitedText parseExpandedBalancedText
 
 
@@ -503,16 +498,16 @@ tokToLex :: PrimitiveToken -> Maybe Lex.Token
 tokToLex (UnexpandedTok t) = Just t
 tokToLex _                 = Nothing
 
-handleLex :: (Lex.Token -> Maybe a) -> TeXParser s a
+handleLex :: (Lex.Token -> Maybe a) -> TeXParser s e m a
 handleLex f = satisfyThen $ tokToLex >=> f
 
-skipSatisfiedEqualsLex :: Lex.Token -> TeXParser s ()
+skipSatisfiedEqualsLex :: Lex.Token -> TeXParser s e m ()
 skipSatisfiedEqualsLex lt = skipSatisfiedEquals (UnexpandedTok lt)
 
-skipSatisfiedLexChunk :: [Lex.Token] -> TeXParser s ()
+skipSatisfiedLexChunk :: [Lex.Token] -> TeXParser s e m ()
 skipSatisfiedLexChunk ts = skipSatisfiedChunk (UnexpandedTok <$> ts)
 
-skipBalancedText :: BalancedText -> TeXParser s ()
+skipBalancedText :: BalancedText -> TeXParser s e m ()
 skipBalancedText (BalancedText toks) = skipSatisfiedLexChunk toks
 
 liftLexPred :: (Lex.Token -> Bool) -> PrimitiveToken -> Bool
@@ -520,31 +515,31 @@ liftLexPred f (UnexpandedTok lt) = f lt
 liftLexPred _ _                  = False
 
 -- Parsers.
-skipOneOptionalSpace :: TeXParser s ()
+skipOneOptionalSpace :: TeXParser s e m ()
 skipOneOptionalSpace = skipOneOptionalSatisfied isSpace
 
 -- TODO: Maybe other things can act as left braces.
-skipLeftBrace :: TeXParser s ()
+skipLeftBrace :: TeXParser s e m ()
 skipLeftBrace = skipSatisfied $ primTokHasCategory Lex.BeginGroup
 
 -- <optional spaces> = <zero or more spaces>.
-skipOptionalSpaces :: TeXParser s ()
+skipOptionalSpaces :: TeXParser s e m ()
 skipOptionalSpaces = skipManySatisfied isSpace
 
-skipOptionalEquals :: TeXParser s ()
+skipOptionalEquals :: TeXParser s e m ()
 skipOptionalEquals = do
     skipOptionalSpaces
     skipOneOptionalSatisfied isEquals
 
-skipKeyword :: [CharCode] -> TeXParser s ()
+skipKeyword :: [CharCode] -> TeXParser s e m ()
 skipKeyword s = skipOptionalSpaces
     *> mapM_ (skipSatisfied . matchNonActiveCharacterUncased) s
 
-parseOptionalKeyword :: [CharCode] -> TeXParser s Bool
+parseOptionalKeyword :: [CharCode] -> TeXParser s e m Bool
 parseOptionalKeyword s = isJust <$> optional (skipKeyword s)
 
-parseKeywordToValue :: [CharCode] -> b -> TeXParser s b
+parseKeywordToValue :: [CharCode] -> b -> TeXParser s e m b
 parseKeywordToValue s = (skipKeyword s $>)
 
-parseManyChars :: TeXParser s [CharCode]
+parseManyChars :: TeXParser s e m [CharCode]
 parseManyChars = PC.many $ satisfyThen tokToChar

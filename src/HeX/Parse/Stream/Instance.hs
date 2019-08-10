@@ -115,10 +115,10 @@ expandChangeCase lookupChangeCaseCode (BalancedText caseToks) =
             Conf.NoCaseChange       -> char
             Conf.ChangeToCode char' -> char'
 
-skipToIfDelim :: IfBodyState -> ExpandedStream -> TeXStreamM ExpandedStream
+skipToIfDelim :: forall e m. TeXStreamM e m => IfBodyState -> ExpandedStream -> m ExpandedStream
 skipToIfDelim blk stream = go stream 1
   where
-    go :: ExpandedStream -> Int -> TeXStreamM ExpandedStream
+    go :: ExpandedStream -> Int -> m ExpandedStream
     go _stream n = do
         (_, rt, _stream') <- fetchResolvedToken _stream
         let cont = go _stream'
@@ -147,10 +147,15 @@ skipToIfDelim blk stream = go stream 1
             _ ->
                 cont n
 
-skipUpToCaseBlock :: Int -> ExpandedStream -> TeXStreamM ExpandedStream
+skipUpToCaseBlock
+    :: forall e m
+    .  TeXStreamM e m
+    => Int
+    -> ExpandedStream
+    -> m ExpandedStream
 skipUpToCaseBlock tgt stream = go stream 0 1
   where
-    go :: ExpandedStream -> Int -> Int -> TeXStreamM ExpandedStream
+    go :: ExpandedStream -> Int -> Int -> m ExpandedStream
     go _stream cur n
             | n == 1, cur == tgt =
                 -- If we are at top condition depth,
@@ -175,7 +180,7 @@ skipUpToCaseBlock tgt stream = go stream 0 1
                     _ ->
                         cont cur n
 
-expandConditionToken :: ExpandedStream -> ConditionTok -> TeXStreamM ExpandedStream
+expandConditionToken :: TeXStreamM e m => ExpandedStream -> ConditionTok -> m ExpandedStream
 expandConditionToken strm = \case
     ConditionHeadTok ifTok ->
         do
@@ -228,9 +233,10 @@ expandConditionToken strm = \case
         pure skipStream{skipState = condRest}
 
 expandSyntaxCommand
-    :: ExpandedStream
+    :: TeXStreamM e m
+    => ExpandedStream
     -> SyntaxCommandHeadToken
-    -> TeXStreamM (ExpandedStream, [Lex.Token])
+    -> m (ExpandedStream, [Lex.Token])
 expandSyntaxCommand strm = \case
     MacroTok m ->
         runExpandCommand strm (parseMacroArgs m) (expandMacro m)
@@ -324,8 +330,10 @@ fetchLexToken stream =
     curTokSource@TokenSource{ sourceCharCodes, sourceLexTokens } :| outerStreams = streamTokenSources stream
 
 fetchResolvedToken
-    :: ExpandedStream
-    -> TeXStreamM (Lex.Token, ResolvedToken, ExpandedStream)
+    :: ( MonadErrorAnyOf e m TeXStreamE
+       )
+    => ExpandedStream
+    -> m (Lex.Token, ResolvedToken, ExpandedStream)
 fetchResolvedToken stream =
     do
     (lt, newStream) <- liftMaybe (throw EndOfInputError) $ fetchLexToken stream
@@ -334,8 +342,9 @@ fetchResolvedToken stream =
     pure (lt, rt, newStream)
 
 fetchAndExpandToken
-    :: ExpandedStream
-    -> TeXStreamM (ExpandedStream, [Lex.Token])
+    :: TeXStreamM e m
+    => ExpandedStream
+    -> m (ExpandedStream, [Lex.Token])
 fetchAndExpandToken stream =
     do
     (lt, rt, newStream) <- fetchResolvedToken stream

@@ -9,7 +9,7 @@ import           HeX.Parse.Quantity
 import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token        as T
 
-parseRelation :: TeXParser s Ordering
+parseRelation :: TeXParser s e m Ordering
 parseRelation = satisfyThen $
     \t -> if
         | matchOtherToken '<' t -> Just LT
@@ -17,7 +17,7 @@ parseRelation = satisfyThen $
         | isEquals t -> Just EQ
         | otherwise -> Nothing
 
-conditionHeadParser :: T.ConditionHeadTok -> TeXParser s ConditionHead
+conditionHeadParser :: T.ConditionHeadTok -> TeXParser s e m ConditionHead
 conditionHeadParser = \case
     T.IfTeXIntPairTestTok ->
         IfConditionHead <$> (IfTeXIntPairTest <$> parseTeXInt

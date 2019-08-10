@@ -83,7 +83,7 @@ runCommandLoop f = runLoop g
     g elemList =
         do
         oldStream <- get
-        (newStream, command) <- liftIO (runExceptT (HP.runParser HP.parseCommand oldStream)) >>= embedVariantEith
+        (newStream, command) <- HP.runParser HP.parseCommand oldStream
         put newStream
         liftIO $ print command
         f elemList command oldStream
