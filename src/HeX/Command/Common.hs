@@ -4,7 +4,6 @@ module HeX.Command.Common where
 
 import           HeXlude
 
-import           Control.Monad.Except      (ExceptT)
 import           Control.Monad.State.Lazy  (MonadState, StateT, get, modify)
 import           Control.Monad.Trans.Maybe (MaybeT (..))
 
@@ -12,14 +11,17 @@ import           HeX.Config
 import           HeX.Evaluate
 import qualified HeX.Parse                 as HP
 
-newtype MonadBuild s a = MonadBuild { unMonadBuild :: ExceptT Text (StateT s IO) a }
-    deriving (Functor, Applicative, Monad, MonadState s, MonadIO, MonadError Text)
-
-readOnState :: MonadState r m => ReaderT r m b -> m b
+readOnState
+    :: ( MonadState r m
+       )
+     => ReaderT r m b
+     -> m b
 readOnState f = get >>= runReaderT f
 
 readOnConfState
-    :: (HP.TeXStream s, MonadState s m)
+    :: ( HP.TeXStream s
+       , MonadState s m
+       )
     => ReaderT Config (StateT Config m) a
     -> m a
 readOnConfState f = HP.runConfState $ readOnState f
@@ -29,8 +31,12 @@ modConfState
 modConfState x = HP.runConfState $ modify x
 
 evalOnConfState
-    :: (HP.TeXStream s, TeXEvaluable v)
-    => v -> MonadBuild s (EvalTarget v)
+    :: ( HP.TeXStream s
+       , TeXEvaluable v
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadState s m
+       )
+    => v -> m (EvalTarget v)
 evalOnConfState v = readOnConfState $ texEvaluate v
 
 data BoxModeIntent
@@ -64,19 +70,31 @@ runLoop f = go
             EndLoop result ->
                 pure result
 
+data EndOfInputError = EndOfInputError
+
 runCommandLoop
-    :: HP.TeXStream s
-    => (st -> HP.Command -> s -> MonadBuild s (RecursionResult st r))
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m '[HP.StreamTakeError, EvaluationError]
+       , MonadState s m
+       , MonadIO m
+       , MonadPlus m
+       )
+    => (st -> HP.Command -> s -> m (RecursionResult st r))
     -> st
-    -> MonadBuild s r
+    -> m r
 runCommandLoop f = runLoop g
   where
     g elemList =
         do
         oldStream <- get
         (newStream, command) <- liftIO (runExceptT (runMaybeT (HP.runParser HP.parseCommand oldStream))) >>= \case
-            Left err -> throwError $ show err
-            Right Nothing -> throwError "End of input"
+            Left err -> case catch @HP.StreamTakeError err of
+                Right stErr -> throwM stErr
+                Left nonStErrs -> case catch @EvaluationError nonStErrs of
+                    Right eErr -> throwM eErr
+                    -- Left nonEErrs -> case catch @ConfigError nonEErrs of
+                    --     Right cErr -> throwM cErr
+            Right Nothing -> mzero
             Right (Just v) -> pure v
         put newStream
         liftIO $ print command

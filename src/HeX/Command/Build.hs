@@ -5,7 +5,9 @@ module HeX.Command.Build where
 import           HeXlude
 
 import           Control.Monad               (foldM)
-import           Control.Monad.Except        (liftEither)
+import           Data.Path                   (PathError)
+
+import           TFM                         (TFMError)
 
 import qualified HeX.Box                     as B
 import           HeX.BreakList               (ForwardHList, ForwardVList)
@@ -13,9 +15,13 @@ import qualified HeX.BreakList               as BL
 import           HeX.Command.Commands
 import           HeX.Command.Common
 import           HeX.Command.ModeIndependent
+import           HeX.Evaluate                (EvaluationError)
 import           HeX.Config
 import qualified HeX.Lex                     as Lex
 import qualified HeX.Parse                   as HP
+
+newtype BuildError = BuildError Text
+    deriving (Show)
 
 data ParaResult = ParaResult EndParaReason ForwardHList
 
@@ -23,7 +29,24 @@ data EndParaReason
     = EndParaSawEndParaCommand
     | EndParaSawLeaveBox
 
-handleCommandInParaMode :: HP.TeXStream s => ForwardHList -> HP.Command -> s -> MonadBuild s (RecursionResult ForwardHList ParaResult)
+handleCommandInParaMode
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , PathError
+            , HP.StreamTakeError
+            , TFMError
+            ]
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       )
+    => ForwardHList
+    -> HP.Command
+    -> s
+    -> m (RecursionResult ForwardHList ParaResult)
 handleCommandInParaMode hList command oldStream =
     case command of
         HP.VModeCommand _ ->
@@ -67,15 +90,28 @@ handleCommandInParaMode hList command oldStream =
 
 newtype HBoxResult = HBoxResult ForwardHList
 
-handleCommandInHBoxMode :: HP.TeXStream s
-                        => ForwardHList
-                        -> HP.Command
-                        -> s
-                        -> MonadBuild s (RecursionResult ForwardHList HBoxResult)
+handleCommandInHBoxMode
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+            '[ BuildError
+             , ConfigError
+             , EvaluationError
+             , HP.StreamTakeError
+             , TFMError
+             , PathError
+             ]
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       )
+    => ForwardHList
+    -> HP.Command
+    -> s
+    -> m (RecursionResult ForwardHList HBoxResult)
 handleCommandInHBoxMode hList command _ =
     case command of
         HP.VModeCommand vModeCommand ->
-            throwError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
+            throwM $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
         HP.HModeCommand (HP.AddCharacter c) ->
             addElem' <$> hModeAddCharacter c
         HP.HModeCommand (HP.AddHGlue g) ->
@@ -109,11 +145,27 @@ handleCommandInHBoxMode hList command _ =
 
 newtype VBoxResult = VBoxResult ForwardVList
 
-handleCommandInVBoxMode :: HP.TeXStream s => ForwardVList -> HP.Command -> s -> MonadBuild s (RecursionResult ForwardVList VBoxResult)
+handleCommandInVBoxMode
+    :: ( HP.TeXStream s
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       , MonadErrorAnyOf e m
+            '[ EvaluationError
+             , ConfigError
+             , PathError
+             , HP.StreamTakeError
+             , TFMError
+             , BuildError]
+       )
+    => ForwardVList
+    -> HP.Command
+    -> s
+    -> m (RecursionResult ForwardVList VBoxResult)
 handleCommandInVBoxMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
-            throwError "End not allowed in internal vertical mode"
+            throwM $ BuildError "End not allowed in internal vertical mode"
         HP.VModeCommand (HP.AddVGlue g) ->
             addElem' <$> vModeAddVGlue g
         HP.VModeCommand (HP.AddVRule rule) ->
@@ -157,8 +209,14 @@ handleCommandInVBoxMode vList command oldStream =
                 endLoop vListWithPara
 
 appendParagraph
-    :: HP.TeXStream s
-    => ForwardHList -> ForwardVList -> MonadBuild s ForwardVList
+    :: ( HP.TeXStream s
+       , MonadIO m
+       , MonadState s m
+       , MonadErrorAnyOf e m '[BuildError]
+       )
+    => ForwardHList
+    -> ForwardVList
+    -> m ForwardVList
 appendParagraph paraHList vList =
     do
     lineBoxes <- readOnConfState (hListToParaLineBoxes paraHList)
@@ -168,7 +226,9 @@ appendParagraph paraHList vList =
     HP.runConfState $ foldM addVListElem vList boxes
 
 hListToParaLineBoxes
-    :: (MonadReader Config m, MonadError Text m)
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[BuildError]
+       )
     => ForwardHList
     -> m (ForwardDirected Seq (ForwardDirected [] B.HBoxElem))
 hListToParaLineBoxes hList =
@@ -176,11 +236,30 @@ hListToParaLineBoxes hList =
     desiredW <- asks $ LenParamVal . lookupLengthParameter HP.HSize
     lineTol <- asks $ IntParamVal . lookupTeXIntParameter HP.Tolerance
     linePen <- asks $ IntParamVal . lookupTeXIntParameter HP.LinePenalty
-    liftEither $ BL.breakAndSetParagraph desiredW lineTol linePen hList
+    case BL.breakAndSetParagraph desiredW lineTol linePen hList of
+        Left err -> throwM $ BuildError err
+        Right v -> pure v
 
 newtype MainVModeResult = MainVModeResult ForwardVList
 
-handleCommandInMainVMode :: HP.TeXStream s => ForwardVList -> HP.Command -> s -> MonadBuild s (RecursionResult ForwardVList MainVModeResult)
+handleCommandInMainVMode
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , PathError
+            , HP.StreamTakeError
+            , TFMError
+            ]
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       )
+    => ForwardVList
+    -> HP.Command
+    -> s
+    -> m (RecursionResult ForwardVList MainVModeResult)
 handleCommandInMainVMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
@@ -206,7 +285,7 @@ handleCommandInMainVMode vList command oldStream =
                 EnterBoxMode desiredLength boxType boxIntent ->
                     addMaybeElem' <$> extractVSubBox desiredLength boxIntent boxType
                 FinishBoxMode ->
-                    throwError "No box to end: in main V mode"
+                    throwM $ BuildError "No box to end: in main V mode"
                 DoNothing ->
                     pure doNothing'
         oth ->
@@ -224,9 +303,24 @@ handleCommandInMainVMode vList command oldStream =
             EndParaSawEndParaCommand ->
                 LoopAgain <$> appendParagraph finalParaHList vList
             EndParaSawLeaveBox ->
-                throwError "No box to end: in paragraph within main V mode"
+                throwM $ BuildError "No box to end: in paragraph within main V mode"
 
-extractPara :: HP.TeXStream s => HP.IndentFlag -> MonadBuild s ParaResult
+extractPara
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , PathError
+            , HP.StreamTakeError
+            , TFMError
+            ]
+       , MonadIO m
+       , MonadState s m
+       , MonadPlus m
+       )
+    => HP.IndentFlag
+    -> m ParaResult
 extractPara indentFlag =
     do
     bx <- case indentFlag of
@@ -237,10 +331,22 @@ extractPara indentFlag =
     runCommandLoop handleCommandInParaMode bx
 
 extractParaFromVMode
-    :: HP.TeXStream s
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , TFMError
+            , PathError
+            , HP.StreamTakeError
+            ]
+       , MonadIO m
+       , MonadState s m
+       , MonadPlus m
+       )
     => HP.IndentFlag
     -> s
-    -> MonadBuild s ParaResult
+    -> m ParaResult
 extractParaFromVMode indentFlag oldStream =
     -- If the command shifts to horizontal mode, run
     -- '\indent', and re-read the stream as if the
@@ -248,13 +354,58 @@ extractParaFromVMode indentFlag oldStream =
     -- "oldStream", not "newStream".)
     put oldStream >> extractPara indentFlag
 
-extractHBox :: HP.TeXStream s => MonadBuild s HBoxResult
+extractHBox
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , TFMError
+            , PathError
+            , HP.StreamTakeError
+            ]
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       )
+    => m HBoxResult
 extractHBox = runCommandLoop handleCommandInHBoxMode mempty
 
-extractVBox :: HP.TeXStream s => MonadBuild s VBoxResult
+extractVBox
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , TFMError
+            , PathError
+            , HP.StreamTakeError
+            ]
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       )
+    => m VBoxResult
 extractVBox = runCommandLoop handleCommandInVBoxMode mempty
 
-extractVSubBox :: HP.TeXStream s => B.DesiredLength -> BoxModeIntent -> HP.ExplicitBox -> MonadBuild s (Maybe BL.VListElem)
+extractVSubBox
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , TFMError
+            , PathError
+            , HP.StreamTakeError
+            ]
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       )
+    => B.DesiredLength
+    -> BoxModeIntent
+    -> HP.ExplicitBox
+    -> m (Maybe BL.VListElem)
 extractVSubBox desiredLength boxIntent boxType =
     do
     -- TODO: I think glue status and desired length
@@ -278,26 +429,66 @@ extractVSubBox desiredLength boxIntent boxType =
             pure Nothing
 
 extractHSubBox
-    :: HP.TeXStream s
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , TFMError
+            , PathError
+            , HP.StreamTakeError
+            ]
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       )
     => B.DesiredLength
     -> BoxModeIntent
     -> HP.ExplicitBox
-    -> MonadBuild s (Maybe BL.HListElem)
+    -> m (Maybe BL.HListElem)
 extractHSubBox desiredLength boxIntent boxType =
     do
     maybeElem <- extractVSubBox desiredLength boxIntent boxType
     pure $ BL.HVListElem <$> maybeElem
 
-extractMainVList :: HP.TeXStream s => MonadBuild s MainVModeResult
+extractMainVList
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , TFMError
+            , PathError
+            , HP.StreamTakeError
+            ]
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       )
+    => m MainVModeResult
 extractMainVList = runCommandLoop handleCommandInMainVMode mempty
 
-extractBreakAndSetVList :: HP.TeXStream s => MonadBuild s (ForwardDirected Seq B.Page)
+extractBreakAndSetVList
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m
+           '[ BuildError
+            , ConfigError
+            , EvaluationError
+            , TFMError
+            , PathError
+            , HP.StreamTakeError
+            ]
+       , MonadIO m
+       , MonadPlus m
+       , MonadState s m
+       )
+    => m (ForwardDirected Seq B.Page)
 extractBreakAndSetVList =
     do
     MainVModeResult finalMainVList <- extractMainVList
     gets HP.getConditionBodyState >>= \case
         Nothing -> pure ()
-        Just _condState -> throwError $ "Cannot end: in condition block: " <> showT _condState
+        Just _condState -> throwM $ BuildError $ "Cannot end: in condition block: " <> showT _condState
     readOnConfState (asks finaliseConfig) >>= liftIO
     desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
     pure $ BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList

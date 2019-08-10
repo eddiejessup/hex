@@ -318,7 +318,7 @@ parseAddAccentedCharacter =
     -- other than \setbox.
     parseNonSetBoxAssignment =
         parseAssignment >>= \case
-            Assignment (SetBoxRegister _ _) _ -> throwParseError $ ErrorWhileTaking "Cannot set-box while addidng accented character"
+            Assignment (SetBoxRegister _ _) _ -> throwParseError $ throw $ ParseError "Cannot set-box while adding accented character"
             a -> pure a
 
 parseAddDiscretionaryText :: TeXParser s HModeCommand

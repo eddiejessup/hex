@@ -20,25 +20,31 @@ import qualified HeX.Lex             as Lex
 import qualified HeX.Parse           as HP
 import qualified HeX.Unit            as Unit
 
-glueToElem :: HP.TeXStream s => HP.Glue -> MonadBuild s BL.VListElem
+glueToElem
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadState s m
+       )
+    => HP.Glue
+    -> m BL.VListElem
 glueToElem g =
-    do
-    eG <- evalOnConfState g
-    pure $ BL.ListGlue eG
+    BL.ListGlue <$> evalOnConfState g
 
 ruleToElem
-    :: HP.TeXStream s
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       )
     => HP.Rule
-    -> MonadBuild s LenVal
-    -> MonadBuild s LenVal
-    -> MonadBuild s LenVal
-    -> MonadBuild s BL.VListElem
+    -> m LenVal
+    -> m LenVal
+    -> m LenVal
+    -> m BL.VListElem
 ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD =
     do
     rule <- B.Rule
-                <$> maybe defaultW (readOnConfState . texEvaluate) width
-                <*> maybe defaultH (readOnConfState . texEvaluate) height
-                <*> maybe defaultD (readOnConfState . texEvaluate) depth
+                <$> maybe defaultW texEvaluate width
+                <*> maybe defaultH texEvaluate height
+                <*> maybe defaultD texEvaluate depth
     pure $ BL.VListBaseElem $ B.ElemRule rule
 
 -- Assume we are adding a non-rule box of height h to the vertical list.
@@ -81,31 +87,60 @@ addVListElem acc e = case e of
                         else skip
                 in (acc ->. glue) ->. e
 
-hModeAddHGlue :: HP.TeXStream s => HP.Glue -> MonadBuild s HListElem
+hModeAddHGlue
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadState s m
+       )
+    => HP.Glue
+    -> m HListElem
 hModeAddHGlue g =
     BL.HVListElem <$> glueToElem g
 
-hModeAddCharacter :: HP.TeXStream s => HP.CharCodeRef -> MonadBuild s HListElem
+hModeAddCharacter
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadState s m
+       )
+    => HP.CharCodeRef
+    -> m HListElem
 hModeAddCharacter c =
-    do
-    charCode <- readOnConfState $ texEvaluate c
-    BL.HListHBaseElem . B.ElemCharacter <$> readOnConfState (characterBox charCode)
+    readOnConfState $
+        texEvaluate c
+        >>= characterBox
+        <&> B.ElemCharacter
+        <&> BL.HListHBaseElem
 
-hModeAddSpace :: HP.TeXStream s => MonadBuild s HListElem
+hModeAddSpace
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m '[ConfigError]
+       , MonadState s m
+       )
+    => m HListElem
 hModeAddSpace =
     BL.HVListElem . BL.ListGlue <$> readOnConfState spaceGlue
 
-hModeAddRule :: HP.TeXStream s => HP.Rule -> MonadBuild s HListElem
+hModeAddRule
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadState s m
+       )
+    => HP.Rule
+    -> m HListElem
 hModeAddRule rule =
-    do
-    let
-        defaultWidth = pure (Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point)
-        defaultHeight = pure (Unit.toScaledPointApprox (10 :: Int) Unit.Point)
-        defaultDepth = pure 0
-    ruleElem <- ruleToElem rule defaultWidth defaultHeight defaultDepth
-    pure $ BL.HVListElem ruleElem
+    BL.HVListElem <$> readOnConfState (ruleToElem rule defaultWidth defaultHeight defaultDepth)
+  where
+    defaultWidth = pure (Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point)
+    defaultHeight = pure (Unit.toScaledPointApprox (10 :: Int) Unit.Point)
+    defaultDepth = pure 0
 
-hModeStartParagraph :: HP.TeXStream s => HP.IndentFlag -> MonadBuild s (Maybe HListElem)
+hModeStartParagraph
+    :: ( HP.TeXStream s
+       , MonadErrorVariant e m
+       , MonadState s m
+       )
+    => HP.IndentFlag
+    -> m (Maybe HListElem)
 hModeStartParagraph = \case
     HP.DoNotIndent ->
         pure Nothing
@@ -115,37 +150,55 @@ hModeStartParagraph = \case
     HP.Indent ->
         Just <$> readOnConfState (asks parIndentBox)
 
-vModeAddVGlue :: HP.TeXStream s => HP.Glue -> MonadBuild s VListElem
+vModeAddVGlue
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadState s m
+       )
+    => HP.Glue
+    -> m VListElem
 vModeAddVGlue = glueToElem
 
-vModeAddRule :: HP.TeXStream s => HP.Rule -> MonadBuild s VListElem
+vModeAddRule
+    :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadState s m
+       )
+    => HP.Rule
+    -> m VListElem
 vModeAddRule rule =
-    do
-    let
-        defaultWidth = readOnConfState $ gets $ lookupLengthParameter HP.HSize
-        defaultHeight = pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
-        defaultDepth = pure 0
-    ruleToElem rule defaultWidth defaultHeight defaultDepth
+    readOnConfState $ ruleToElem rule defaultWidth defaultHeight defaultDepth
+  where
+    defaultWidth = gets $ lookupLengthParameter HP.HSize
+    defaultHeight = pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+    defaultDepth = pure 0
 
 -- Horizontal mode commands.
 
 characterBox
-    :: (MonadReader Config m, MonadError Text m) => CharCode -> m B.Character
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[ConfigError]
+       )
+    => CharCode
+    -> m B.Character
 characterBox char = do
     fontMetrics <- currentFontMetrics
     let toSP = TFM.designScaleSP fontMetrics
     TFM.Character { TFM.width, TFM.height, TFM.depth } <-
-        liftMaybe "No such character" $ HMap.lookup char (characters fontMetrics)
+        liftMaybe (throw $ ConfigError "No such character") $ HMap.lookup char (characters fontMetrics)
     pure B.Character { B.char       = char
                      , B.charWidth  = toSP width
                      , B.charHeight = toSP height
                      , B.charDepth  = toSP depth
                      }
 
-spaceGlue :: (MonadReader Config m, MonadError Text m) => m BL.Glue
+spaceGlue
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[ConfigError]
+       )
+    => m BL.Glue
 spaceGlue = do
-    fontMetrics@TexFont { spacing, spaceStretch, spaceShrink } <-
-        currentFontMetrics
+    fontMetrics@TexFont { spacing, spaceStretch, spaceShrink } <- currentFontMetrics
     let toSP   = TFM.designScaleSP fontMetrics
         toFlex = toSP >>> fromIntegral >>> BL.finiteFlex
     pure BL.Glue { BL.dimen   = toSP spacing
@@ -156,7 +209,15 @@ spaceGlue = do
 -- Mode independent.
 
 loadFont
-    :: (MonadState Config m, MonadIO m, MonadError Text m)
+    :: ( MonadState Config m
+       , MonadIO m
+       , MonadErrorAnyOf e m
+           '[ D.Path.PathError
+            , ConfigError
+            , TFM.TFMError
+            , EvaluationError
+            ]
+       )
     => HP.TeXFilePath
     -> HP.FontSpecification
     -> m B.FontDefinition

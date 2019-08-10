@@ -1,10 +1,16 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes           #-}
 
 module HeXlude
     ( module Protolude
     , module Readable
     , module Data.Sequence
+    , module Data.Variant
     , module HeX.Unit
+
+    , MonadErrorVariant
+    , MonadErrorAnyOf
+
     , seqLookupEith
     , seqLastMay
     , seqHeadMay
@@ -57,7 +63,7 @@ where
 
 import           Prelude                   (id)
 import           Protolude                 hiding (catMaybes, filter, group,
-                                            mapMaybe, mconcat)
+                                            mapMaybe, mconcat, catch)
 
 import           Control.Applicative       (Alternative, empty)
 import           Control.Arrow             ((>>>))
@@ -73,7 +79,12 @@ import           Data.Witherable           (Filterable (..))
 import           Debug.Readable            as Readable
 import           GHC.Generics              (Generic)
 
+import           Data.Variant              hiding (fold)
 import           HeX.Unit
+
+type MonadErrorVariant e m = MonadError (Variant e) m
+
+type MonadErrorAnyOf e m es = (MonadErrorVariant e m, e `CouldBeAnyOf` es)
 
 liftMaybe :: MonadError e m => e -> Maybe a -> m a
 liftMaybe e = \case

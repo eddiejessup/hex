@@ -30,6 +30,7 @@ dependencies:
 - path
 - path-io
 - protolude
+- QuickCheck
 - safe
 - split
 - text
@@ -81,6 +82,7 @@ tests:
 
 default-extensions:
 - ConstraintKinds
+- DataKinds
 - DeriveFoldable
 - DeriveFunctor
 - DeriveGeneric
@@ -103,3 +105,4 @@ default-extensions:
 - TupleSections
 - TypeApplications
 - TypeFamilies
+- TypeOperators

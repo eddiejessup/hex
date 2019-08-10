@@ -15,9 +15,10 @@ import qualified Data.Foldable             as Fold
 import           Data.Functor              (($>))
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (fromMaybe)
+import qualified Data.Path                 as D.Path
 
 import           HeX.Categorise            (CharCode)
-import           HeX.Config                (Config)
+import           HeX.Config                (Config, ConfigError)
 import           HeX.Evaluate
 import           HeX.Lex                   (CharCat (..))
 import qualified HeX.Lex                   as Lex
@@ -39,17 +40,19 @@ class TeXStream s where
 
     takeToken :: s -> TeXStreamM (s, PrimitiveToken)
 
-type TeXStreamM = MaybeT (ExceptT StreamTakeError IO)
+type TeXStreamE = '[StreamTakeError, EvaluationError, ConfigError, D.Path.PathError]
 
-newtype StreamTakeError
-    = ErrorWhileTaking Text
+type TeXStreamM = MaybeT (ExceptT (Variant TeXStreamE) IO)
+
+data StreamTakeError
+    = ParseError Text
+    | StreamExpansionError Text
     deriving (Show)
 
 type TeXParser s a = TeXStream s => SParser s TeXStreamM a
 
-
 instance Alternative (SParser s TeXStreamM) where
-    empty = SParser $ const $ throwError $ ErrorWhileTaking "empty"
+    empty = SParser $ const $ throwM $ ParseError "empty"
 
     (SParser pA) <|> (SParser pB) = SParser go
       where
@@ -70,7 +73,7 @@ satisfyThen test = SParser go
         (newStream, tok) <- takeToken stream
         case test tok of
           Nothing ->
-            lift $ throwError $ ErrorWhileTaking $ "Not satisfied with token: " <> show tok
+            lift $ throwM $ ParseError $ "Not satisfied with token: " <> show tok
           Just x ->
             pure (newStream, x)
 

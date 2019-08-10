@@ -2,6 +2,9 @@ module Data.Byte where
 
 import           HeXlude
 
+newtype ByteError = ByteError Text
+    deriving (Show)
+
 data Signedness = Signed | Unsigned
 
 data SignableInt = SignableInt !Signedness !Int
@@ -12,15 +15,26 @@ isSignedNrExpressibleInNBits nrBits n =
     in
         (-x <= n) && (n <= x - 1)
 
-toSignableInt :: Signedness -> Int -> Either Text SignableInt
+toSignableInt
+    :: MonadErrorAnyOf e m '[ByteError]
+    => Signedness
+    -> Int
+    -> m SignableInt
 toSignableInt Unsigned n
-    | n < 0 = Left $ "Number argument for unsigned is negative: " <> show n
-    | otherwise = Right $ SignableInt Unsigned n
+    | n < 0 = throwM $ ByteError $ "Number argument for unsigned is negative: " <> show n
+    | otherwise = pure $ SignableInt Unsigned n
 toSignableInt Signed n = pure $ SignableInt Signed n
 
-toSignedInt, toUnsignedInt :: Int -> Either Text SignableInt
+toSignedInt
+    :: MonadErrorAnyOf e m '[ByteError]
+    => Int
+    -> m SignableInt
 toSignedInt = toSignableInt Signed
 
+toUnsignedInt
+    :: MonadErrorAnyOf e m '[ByteError]
+    => Int
+    -> m SignableInt
 toUnsignedInt = toSignableInt Unsigned
 
 bytesNeededUnsigned :: Int -> Int

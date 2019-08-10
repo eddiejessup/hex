@@ -2,7 +2,6 @@ module HeX.Variable where
 
 import           HeXlude
 
-import           Control.Monad.Except     (MonadError)
 import           Control.Monad.State.Lazy (MonadState, modify)
 
 import qualified HeX.BreakList            as BL
@@ -14,16 +13,21 @@ import qualified HeX.Parse                as HP
 class TeXVariable a where
 
     setValue
-        :: (MonadState Config m, MonadError Text m)
+        :: ( MonadState Config m
+           , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+           )
         => a
         -> HP.GlobalFlag
         -> EvalTarget a
         -> m ()
 
 setValueFromAST
-    :: (MonadState Config m, MonadError Text m
-       , TeXVariable a, TeXEvaluable b
-       , EvalTarget a ~ EvalTarget b)
+    :: ( MonadState Config m
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , TeXVariable a
+       , TeXEvaluable b
+       , EvalTarget a ~ EvalTarget b
+       )
     => a
     -> HP.GlobalFlag
     -> b
@@ -82,8 +86,12 @@ class TeXVariable a => TeXNumericVariable a where
     scaleDownOp :: Proxy a -> EvalTarget a -> TeXIntVal -> EvalTarget a
 
     advanceValueFromAST
-        :: (MonadState Config m, MonadError Text m
-           , TeXEvaluable a, TeXEvaluable b, EvalTarget b ~ EvalTarget a)
+        :: ( MonadState Config m
+           , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+           , TeXEvaluable a
+           , TeXEvaluable b
+           , EvalTarget b ~ EvalTarget a
+           )
         => a
         -> HP.GlobalFlag
         -> b
@@ -94,8 +102,10 @@ class TeXVariable a => TeXNumericVariable a where
         setValue var globalFlag newVal
 
     scaleValueFromAST
-        :: (MonadState Config m, MonadError Text m
-           , TeXEvaluable a)
+        :: ( MonadState Config m
+           , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+           , TeXEvaluable a
+           )
         => a
         -> HP.GlobalFlag
         -> VDirection

@@ -2,7 +2,9 @@ module DVI.Document where
 
 import           HeXlude
 
+import           Data.Byte       (ByteError)
 import           Data.Char       (ord)
+import           Data.Path       (PathError)
 import qualified Data.Text       as Txt
 import           Path            (Path)
 import qualified Path
@@ -95,7 +97,11 @@ initialParseState mag =
 addInstruction :: ParseState -> EncodableInstruction -> ParseState
 addInstruction s@ParseState{ instrs } i = s{ instrs = instrs ->. i }
 
-parseMundaneInstruction :: ParseState -> Instruction -> Either Text ParseState
+parseMundaneInstruction
+    :: MonadErrorAnyOf e m '[ByteError, DVIError, PathError]
+    => ParseState
+    -> Instruction
+    -> m ParseState
 parseMundaneInstruction st = \case
     SelectFont (FontSelection n) -> do
         st' <- addInstruction st <$> getSelectFontNrInstruction n
@@ -146,12 +152,20 @@ parseMundaneInstruction st = \case
                 in
                     pure st' { stackDepth = pred $ stackDepth st' }
 
-parseMundaneInstructions :: Int -> ForwardDirected [] Instruction -> Either Text ParseState
+parseMundaneInstructions
+    :: MonadErrorAnyOf e m '[ByteError, DVIError, PathError]
+    => Int
+    -> ForwardDirected [] Instruction
+    -> m ParseState
 parseMundaneInstructions mag _instrs = do
     st <- foldM parseMundaneInstruction (initialParseState mag) _instrs
     pure $ addInstruction st endPageInstruction
 
-parseInstructions :: ForwardDirected [] Instruction -> Int -> Either Text (ForwardDirected Seq EncodableInstruction)
+parseInstructions
+    :: MonadErrorAnyOf e m '[ByteError, DVIError, PathError]
+    => ForwardDirected [] Instruction
+    -> Int
+    -> m (ForwardDirected Seq EncodableInstruction)
 parseInstructions _instrs magnification = do
     ParseState{instrs = mundaneInstrs, beginPagePointers, maxStackDepth}
         <- parseMundaneInstructions magnification _instrs

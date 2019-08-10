@@ -17,6 +17,9 @@ import qualified Path
 import           DVI.Encode
 import           DVI.Operation
 
+newtype DVIError = DVIError Text
+    deriving ( Show )
+
 data ArgVal = IntArgVal IntArgVal | StringArgVal Ascii
     deriving ( Show )
 
@@ -33,7 +36,10 @@ data IntArgVal =
     | S4 I.Int32
     deriving ( Show )
 
-intArgValFromSignableInt :: SignableInt -> Either Text IntArgVal
+intArgValFromSignableInt
+    :: MonadErrorAnyOf e m '[DVIError]
+    => SignableInt
+    -> m IntArgVal
 intArgValFromSignableInt n@(SignableInt s i) = case (s, bytesNeeded n) of
     (Signed, 1)   -> pure $ S1 $ fromIntegral i
     (Signed, 2)   -> pure $ S2 $ fromIntegral i
@@ -43,7 +49,7 @@ intArgValFromSignableInt n@(SignableInt s i) = case (s, bytesNeeded n) of
     (Unsigned, 2) -> pure $ U2 $ fromIntegral i
     (Unsigned, 3) -> pure $ U4 $ fromIntegral i
     (Unsigned, 4) -> pure $ U4 $ fromIntegral i
-    (_, b)        -> Left $ "Cannot handle " <> show b <> " bytes"
+    (_, b)        -> throwM $ DVIError $ "Cannot handle " <> show b <> " bytes"
 
 instance Encodable IntArgVal where
     encode a = BS.L.toStrict $
@@ -73,17 +79,20 @@ opByteLength v = case v of
     (S4 _) -> FourByte
     (U4 _) -> FourByte
 
-getVariByteOpAndArg :: (ByteLength -> Operation)
-                    -> SignableInt
-                    -> Either Text (Operation, ArgVal)
+getVariByteOpAndArg
+    :: MonadErrorAnyOf e m '[DVIError]
+    => (ByteLength -> Operation)
+    -> SignableInt
+    -> m (Operation, ArgVal)
 getVariByteOpAndArg f sI = do
     iArgVal <- intArgValFromSignableInt sI
     pure (f $ opByteLength iArgVal, IntArgVal iArgVal)
 
 getVariByteInstruction
-    :: (ByteLength -> Operation)
+    :: MonadErrorAnyOf e m '[DVIError]
+    => (ByteLength -> Operation)
     -> SignableInt
-    -> Either Text EncodableInstruction
+    -> m EncodableInstruction
 getVariByteInstruction f sI = do
     (op, arg) <- getVariByteOpAndArg f sI
     pure $ EncodableInstruction op [ arg ]
@@ -91,7 +100,10 @@ getVariByteInstruction f sI = do
 getSimpleEncInstruction :: Operation -> EncodableInstruction
 getSimpleEncInstruction _op = EncodableInstruction _op []
 
-getSelectFontNrInstruction :: Int -> Either Text EncodableInstruction
+getSelectFontNrInstruction
+    :: MonadErrorAnyOf e m '[DVIError, ByteError]
+    => Int
+    -> m EncodableInstruction
 getSelectFontNrInstruction fNr
     | fNr < 64 = pure $
         getSimpleEncInstruction $
@@ -117,12 +129,13 @@ getBeginPageInstruction lastBeginPoint =
         EncodableInstruction BeginPage args
 
 getDefineFontInstruction
-    :: Int
+    :: MonadErrorAnyOf e m '[D.Path.PathError, ByteError, DVIError]
+    => Int
     -> Path b Path.File
     -> Int
     -> Int
     -> Int
-    -> Either Text EncodableInstruction
+    -> m EncodableInstruction
 getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
     sI <- toUnsignedInt fNr
     (_op, fontNrArgVal) <- getVariByteOpAndArg DefineFontNr sI
@@ -139,7 +152,7 @@ getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
             ]
     pure $ EncodableInstruction _op args
   where
-    liftMaybeAscii v = liftMaybe ("Could not represent as ASCII: " <> show v) v
+    liftMaybeAscii v = liftMaybe (throw $ D.Path.PathError $ "Could not represent as ASCII: " <> show v) v
 
     pathToAscii p = Asc.fromChars (Path.toFilePath p) & liftMaybeAscii
 
@@ -151,7 +164,11 @@ getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
                         then Asc.unsafeFromText ""
                         else x
 
-getCharacterInstruction :: Int -> MoveMode -> Either Text EncodableInstruction
+getCharacterInstruction
+    :: MonadErrorAnyOf e m '[DVIError, ByteError]
+    => Int
+    -> MoveMode
+    -> m EncodableInstruction
 getCharacterInstruction code mode = case mode of
     Set
         | code < 128 -> pure $
@@ -166,7 +183,11 @@ getRuleInstruction :: MoveMode -> Int -> Int -> EncodableInstruction
 getRuleInstruction mode h w =
     EncodableInstruction (AddRule mode) (IntArgVal . U4 . fromIntegral <$> [h, w])
 
-getMoveInstruction :: Axis -> Int -> Either Text EncodableInstruction
+getMoveInstruction
+    :: MonadErrorAnyOf e m '[DVIError, ByteError]
+    => Axis
+    -> Int
+    -> m EncodableInstruction
 getMoveInstruction ax dist =
     toSignedInt dist >>= getVariByteInstruction (Move ax . ArgMoveOp)
 

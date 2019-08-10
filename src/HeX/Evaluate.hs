@@ -2,13 +2,11 @@ module HeX.Evaluate where
 
 import           HeXlude
 
-import           Control.Monad.Except (MonadError)
 import           Control.Monad.Reader (MonadReader, ask, asks)
 import           Data.Char            (chr)
 import           Data.HashMap.Strict  (HashMap)
 
 import qualified TFM
-
 
 import qualified HeX.Box              as B
 import qualified HeX.BreakList        as BL
@@ -19,13 +17,21 @@ import qualified HeX.Parse.AST        as AST
 import qualified HeX.Parse.Token      as T
 import qualified HeX.Unit             as Unit
 
+
 class TeXEvaluable a where
     type EvalTarget a
 
     texEvaluate
-        :: (MonadReader Config m, MonadError Text m)
+        :: ( MonadReader Config m
+           , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+           )
         => a
         -> m (EvalTarget a)
+
+newtype EvaluationError
+    = EvaluationError Text
+    deriving (Show)
+
 
 instance TeXEvaluable AST.TokenListAssignmentTarget where
     type EvalTarget AST.TokenListAssignmentTarget = T.BalancedText
@@ -79,11 +85,14 @@ instance TeXEvaluable AST.EightBitTeXInt where
     type EvalTarget AST.EightBitTeXInt = EightBitInt
 
     texEvaluate (AST.EightBitTeXInt n) =
-        texEvaluate n
-        >>= (\i -> liftMaybe ("TeXInt not in range: " <> show i) $ newEightBitInt i)
+        texEvaluate n >>= toEighBit
+      where
+        toEighBit i = liftMaybe (throw (EvaluationError ("TeXInt not in range: " <> show i))) (newEightBitInt i)
 
 getRegisterIdx
-    :: (MonadReader Config m, MonadError Text m)
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       )
     => AST.EightBitTeXInt
     -> (EightBitInt -> Config -> a)
     -> m a
@@ -114,7 +123,7 @@ instance TeXEvaluable AST.CodeTableRef where
         let
             lookupFrom :: Enum v => (Scope -> HashMap Char v) -> Maybe Int
             lookupFrom getMap = fromEnum <$> scopedMapLookup getMap idx conf
-        liftMaybe "err" $ case q of
+        liftMaybe (throw (EvaluationError "err")) $ case q of
             T.CategoryCodeType            -> lookupFrom catCodes
             T.MathCodeType                -> lookupFrom mathCodes
             T.ChangeCaseCodeType Upward   -> lookupFrom uppercaseCodes
@@ -565,7 +574,9 @@ instance TeXEvaluable AST.BoxSpecification where
         AST.Spread ln -> B.Spread <$> texEvaluate ln
 
 evaluateFontSpecification
-    :: (MonadReader Config m, MonadError Text m)
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       )
     => Rational -> AST.FontSpecification -> m Rational
 evaluateFontSpecification designSizeSP = \case
     AST.NaturalFont ->

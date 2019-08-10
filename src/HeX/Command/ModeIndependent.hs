@@ -3,6 +3,11 @@ module HeX.Command.ModeIndependent where
 import           HeXlude
 
 import           Control.Monad        (when)
+import qualified Data.Path             as D.Path
+import           Safe                 (toEnumMay)
+
+import           TFM                  (TFMError)
+
 import qualified HeX.Box              as B
 import qualified HeX.BreakList        as BL
 import qualified HeX.Command.Commands as Com
@@ -12,7 +17,6 @@ import           HeX.Evaluate
 import qualified HeX.Lex              as Lex
 import qualified HeX.Parse            as HP
 import qualified HeX.Variable         as Var
-import           Safe                 (toEnumMay)
 
 data ModeIndependentResult
     = AddElem BL.VListElem
@@ -21,10 +25,16 @@ data ModeIndependentResult
     | DoNothing
 
 fetchBox
-    :: HP.TeXStream s
+    :: ( HP.TeXStream s
+       , MonadState s m
+       , MonadErrorAnyOf e m
+            '[ ConfigError
+             , EvaluationError
+             ]
+       )
     => HP.BoxFetchMode
     -> HP.EightBitTeXInt
-    -> MonadBuild s (Maybe B.Box)
+    -> m (Maybe B.Box)
 fetchBox fetchMode idx =
     do
     eIdx <- evalOnConfState idx
@@ -35,8 +45,18 @@ fetchBox fetchMode idx =
     pure fetchedMaybeBox
 
 handleModeIndependentCommand
-    :: HP.TeXStream s
-    => HP.ModeIndependentCommand -> MonadBuild s ModeIndependentResult
+    :: ( HP.TeXStream s
+       , MonadState s m
+       , MonadIO m
+       , MonadErrorAnyOf e m
+           '[ ConfigError
+            , EvaluationError
+            , D.Path.PathError
+            , TFMError
+            ]
+       )
+    => HP.ModeIndependentCommand
+    -> m ModeIndependentResult
 handleModeIndependentCommand = \case
     HP.Message stdOutStream eTxt ->
         do
@@ -140,7 +160,7 @@ handleModeIndependentCommand = \case
                 eVal <- evalOnConfState val
                 liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
                 liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
-                idxChar <- liftMaybe ("Invalid character code index: " <> show eIdx) (toEnumMay eIdx)
+                idxChar <- liftMaybe (throw $ ConfigError $ "Invalid character code index: " <> show eIdx) (toEnumMay eIdx)
                 liftIO $ putText $ "Setting " <> show codeType <> "@" <> show eIdx <> " (" <> show idxChar <> ") to " <> show eVal
                 HP.runConfState $ updateCharCodeMap codeType idxChar eVal global
                 pure DoNothing
@@ -225,7 +245,7 @@ handleModeIndependentCommand = \case
     HP.ChangeScope (HP.Sign False) trig ->
         HP.runConfState $ gets popGroup >>= \case
             Nothing ->
-                throwError "No group to leave"
+                throwM $ ConfigError "No group to leave"
             Just (group, poppedConfig) ->
                 do
                 put poppedConfig
@@ -235,7 +255,7 @@ handleModeIndependentCommand = \case
                     -- current mode.
                     ScopeGroup _ (LocalStructureGroup trigConf) ->
                         do
-                        when (trigConf /= trig) $ throwError $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
+                        when (trigConf /= trig) $ throwM $ ConfigError $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
                         pure DoNothing
                     -- - Undo the effects of non-global assignments
                     -- - package the [box] using the size that was saved on the

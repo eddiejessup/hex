@@ -2,7 +2,6 @@ module HeX.Parse.Stream.Instance where
 
 import           HeXlude
 
-import           Control.Monad.Except      (runExcept)
 import           Control.Monad.Extra       (mconcatMapM)
 import           Control.Monad.Reader      (runReaderT)
 import           Control.Monad.Trans.Maybe (MaybeT (..))
@@ -81,7 +80,7 @@ expandString (Conf.IntParamVal escapeCharCode) tok =
         then id
         else (chr escapeCharCode :)
 
-expandMacro :: MonadError StreamTakeError m
+expandMacro :: MonadErrorAnyOf e m '[StreamTakeError]
             => MacroContents
             -> Map.Map Digit MacroArgument
             -> m [Lex.Token]
@@ -94,7 +93,7 @@ expandMacro MacroContents{replacementTokens = (MacroText replaceToks)} args =
         MacroTextParamToken dig ->
             case args !? dig of
                 Nothing ->
-                    throwError $ ErrorWhileTaking "No such parameter"
+                    throwM $ StreamExpansionError "No such parameter"
                 Just (MacroArgument arg) ->
                     pure arg
 
@@ -182,9 +181,7 @@ expandConditionToken strm = \case
     ConditionHeadTok ifTok ->
         do
         (resultStream, condHead) <- runParser (conditionHeadParser ifTok) strm
-        eCondHead <- case runExcept (runReaderT (texEvaluate condHead) (config resultStream)) of
-            Left err -> throwError $ ErrorWhileTaking err
-            Right v  -> pure v
+        eCondHead <- runReaderT (texEvaluate condHead) (config resultStream)
         case eCondHead of
             IfBlockTarget IfPreElse ->
                 pure resultStream{ skipState = IfBodyState IfPreElse : skipState resultStream }
@@ -195,10 +192,10 @@ expandConditionToken strm = \case
     ConditionBodyTok delim -> case (delim, skipState strm) of
         -- Shouldn't see any condition token outside a condition block.
         (_, []) ->
-            throwError $ ErrorWhileTaking $ "Not in a condition body, but saw condition-body token: " <> show delim
+            throwM $ StreamExpansionError $ "Not in a condition body, but saw condition-body token: " <> show delim
         -- Shouldn't see an 'or' while in an if-condition.
         (Or, IfBodyState _ : _) ->
-            throwError $ ErrorWhileTaking "In an if-condition, not case-condition, but saw 'or'"
+            throwM $ StreamExpansionError "In an if-condition, not case-condition, but saw 'or'"
         -- If we see an 'end-if' while in any condition, then pop the
         -- condition.
         (EndIf, _ : condRest) ->
@@ -207,11 +204,11 @@ expandConditionToken strm = \case
         -- processing a block started by 'else'. The same goes for seeing an
         -- 'else' while in an if-condition, having already seen an 'else'.
         (Else, IfBodyState IfPostElse : _) ->
-            throwError $ ErrorWhileTaking "Already saw 'else' in this condition-block, but saw later 'else'"
+            throwM $ StreamExpansionError "Already saw 'else' in this condition-block, but saw later 'else'"
         (Or, CaseBodyState CasePostElse : _) ->
-            throwError $ ErrorWhileTaking "Already saw 'else' in this case-condition, but saw later 'or'"
+            throwM $ StreamExpansionError "Already saw 'else' in this case-condition, but saw later 'or'"
         (Else, CaseBodyState CasePostElse : _) ->
-            throwError $ ErrorWhileTaking "Already saw else in this condition-block, but saw later 'else'"
+            throwM $ StreamExpansionError "Already saw else in this condition-block, but saw later 'else'"
         -- If we see a block delimiter while not-skipping, then we must have
         -- been not-skipping the previous block, so we should skip all
         -- remaining blocks.
@@ -280,7 +277,7 @@ expandSyntaxCommand strm = \case
                 Just p  -> [Path.parent p]
                 Nothing -> []
         absPath <- Path.IO.makeAbsolute texPath
-        path <- lift $ withExceptT ErrorWhileTaking $ runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)
+        path <- lift $ runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)
         newCodes <- liftIO (D.Path.readPathChars path) <&> FDirected
         let newSource = newTokenSource (Just absPath) newCodes
         pure (resultStream{ streamTokenSources = newSource `L.NE.cons` streamTokenSources }, [])
@@ -289,9 +286,7 @@ expandSyntaxCommand strm = \case
     TheTok ->
         do
         (resultStream, intQuant) <- runParser parseInternalQuantity strm
-        quantTokens <- case runExcept (runReaderT (texEvaluate intQuant) (config resultStream)) of
-            Left err -> throwError $ ErrorWhileTaking err
-            Right vs -> pure (charCodeAsMadeToken <$> vs)
+        quantTokens <- (charCodeAsMadeToken <$>) <$> runReaderT (texEvaluate intQuant) (config resultStream)
         pure (resultStream, quantTokens)
     ChangeCaseTok direction ->
         runExpandCommand strm parseGeneralText $ expandChangeCase (\c -> Conf.lookupChangeCaseCode direction c (config strm)) >>> pure
@@ -338,7 +333,7 @@ fetchResolvedToken stream =
     do
     (lt, newStream) <- MaybeT (pure $ fetchLexToken stream)
     let lkp cs = Conf.lookupCS cs $ config newStream
-    rt <- liftMaybe (ErrorWhileTaking $ "Could not resolve token:" <> show lt) $ resolveToken lkp (expansionMode newStream) lt
+    rt <- liftMaybe (throw $ StreamExpansionError $ "Could not resolve token:" <> show lt) $ resolveToken lkp (expansionMode newStream) lt
     pure (lt, rt, newStream)
 
 fetchAndExpandToken

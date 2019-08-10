@@ -215,7 +215,7 @@ parseSetParShape = do
     eNrPairs
         <- runExceptT (runReaderT (texEvaluate nrPairs) (getConfig stream))
         >>= \case
-            Left err  -> throwParseError $ ErrorWhileTaking err
+            Left err -> throwParseError err
             Right v -> pure v
     SetParShape <$> PC.count eNrPairs parseLengthPair
   where

@@ -2,10 +2,9 @@ module HeX.Config.Config where
 
 import           HeXlude
 
-import           Control.Monad.Except     (MonadError, liftEither)
 import           Control.Monad.IO.Class   (MonadIO)
 import           Control.Monad.Reader     (MonadReader, asks)
-import           Control.Monad.State.Lazy (MonadState, gets, liftIO, modify)
+import           Control.Monad.State.Lazy (MonadState, gets, modify)
 import qualified Data.HashMap.Strict      as HMap
 import           Data.IntMap.Strict       (IntMap, (!?))
 import qualified Data.IntMap.Strict       as IntMap
@@ -134,6 +133,9 @@ data Config =
            , groups               :: [Group]
            }
 
+newtype ConfigError = ConfigError Text
+    deriving (Show)
+
 newConfig :: IO Config
 newConfig = do
     cwdRaw <- getCurrentDirectory
@@ -167,7 +169,10 @@ data FindFilePolicy
     | WithImplicitExtension Text
 
 findFilePath
-    :: (MonadReader Config m, MonadIO m, MonadError Text m)
+    :: ( MonadReader Config m
+       , MonadIO m
+       , MonadErrorAnyOf e m '[ConfigError, D.Path.PathError]
+       )
     => FindFilePolicy
     -> [Path Abs Dir]
     -> Path Rel File
@@ -177,7 +182,7 @@ findFilePath findPolicy extraPaths p =
     dirs <- asks searchDirectories <&> (<> extraPaths)
     getTgtPath
         >>= Path.IO.findFile dirs
-        >>= liftMaybe ("Could not find file: " <> show p)
+        >>= liftMaybe (throw $ ConfigError $ "Could not find file: " <> show p)
   where
     getTgtPath = case findPolicy of
         NoImplicitExtension ->
@@ -190,21 +195,27 @@ findFilePath findPolicy extraPaths p =
 data FontInfo =
     FontInfo { fontMetrics :: TexFont, hyphenChar, skewChar :: TeXIntVal }
 
-readFontInfo :: (MonadReader Config m, MonadIO m, MonadError Text m)
-             => Path Abs File
-             -> m FontInfo
+readFontInfo
+    :: ( MonadReader Config m
+       , MonadIO m
+       , MonadErrorAnyOf e m '[TFM.TFMError]
+       )
+    => Path Abs File
+    -> m FontInfo
 readFontInfo fontPath = do
-    eithFontMetrics <- liftIO $ TFM.readTFMFancy fontPath
-    fontMetrics <- liftEither eithFontMetrics
+    fontMetrics <- TFM.readTFMFancy fontPath
     hyphenChar <- asks $ lookupTeXIntParameter DefaultHyphenChar
     skewChar <- asks $ lookupTeXIntParameter DefaultSkewChar
     pure FontInfo { fontMetrics, hyphenChar, skewChar }
 
-lookupFontInfo :: (MonadReader Config m, MonadError Text m)
-               => Int
-               -> m FontInfo
+lookupFontInfo
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[ConfigError]
+       )
+    => Int
+    -> m FontInfo
 lookupFontInfo fNr = (!? fNr) <$> asks fontInfos
-    >>= liftMaybe "No such font number"
+    >>= liftMaybe (throw (ConfigError "No such font number"))
 
 addFont :: MonadState Config m => FontInfo -> m Int
 addFont newInfo = do
@@ -341,10 +352,12 @@ lookupCurrentFontNr :: Config -> Maybe Int
 lookupCurrentFontNr = scopedLookup currentFontNr
 
 mLookupCurrentFontNr
-    :: (MonadReader Config m, MonadError Text m)
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[ConfigError]
+       )
     => m Int
 mLookupCurrentFontNr =
-    asks lookupCurrentFontNr >>= liftMaybe "Font number isn't set"
+    asks lookupCurrentFontNr >>= liftMaybe (throw $ ConfigError "Font number isn't set")
 
 selectFontNr :: Int -> GlobalFlag -> Config -> Config
 selectFontNr n globalFlag c@Config{ globalScope, groups } =
@@ -369,11 +382,13 @@ setFamilyMemberFont =
     insertKey familyMemberFonts $ \c _map -> c { familyMemberFonts = _map }
 
 lookupFontFamilyMember
-    :: (MonadReader Config m, MonadError Text m)
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[ConfigError]
+       )
     => (FontRange, Int)
     -> m Int
 lookupFontFamilyMember k = asks (scopedMapLookup familyMemberFonts k)
-    >>= liftMaybe ("Family member undefined: " <> show k)
+    >>= liftMaybe (throw $ ConfigError $ "Family member undefined: " <> show k)
 
 -- Control sequences.
 lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
@@ -403,7 +418,9 @@ lookupChangeCaseCode d t conf =
         fromMaybe NoCaseChange $ scopedMapLookup field t conf
 
 updateCharCodeMap
-    :: (MonadError Text m, MonadState Config m)
+    :: ( MonadErrorAnyOf e m '[ConfigError]
+       , MonadState Config m
+       )
     => CodeType
     -> Cat.CharCode
     -> TeXIntVal
@@ -442,8 +459,13 @@ updateCharCodeMap t c n globalFlag = do
                           v
     modify $ insert globalFlag
   where
-    liftMay :: MonadError Text m => Maybe a -> m a
-    liftMay = liftMaybe ("Invalid target value for code type "
+    liftMay
+        :: ( MonadErrorAnyOf e m '[ConfigError]
+           )
+        => Maybe a
+        -> m a
+    liftMay = liftMaybe (throw $ ConfigError $
+                         "Invalid target value for code type "
                          <> show t
                          <> ": "
                          <> show n)
@@ -587,8 +609,16 @@ setBoxRegisterNullable idx global = \case
 
 -- Scoped, but with unscoped references.
 
-currentFontInfo :: (MonadReader Config m, MonadError Text m) => m FontInfo
+currentFontInfo
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[ConfigError]
+       )
+    => m FontInfo
 currentFontInfo = mLookupCurrentFontNr >>= lookupFontInfo
 
-currentFontMetrics :: (MonadReader Config m, MonadError Text m) => m TexFont
+currentFontMetrics
+    :: ( MonadReader Config m
+       , MonadErrorAnyOf e m '[ConfigError]
+       )
+    => m TexFont
 currentFontMetrics = fontMetrics <$> currentFontInfo
