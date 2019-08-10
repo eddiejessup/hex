@@ -47,10 +47,10 @@ data EndOfInputError = EndOfInputError
 
 type TeXStreamE =
    '[ StreamTakeError
+    , EndOfInputError
     , EvaluationError
     , ConfigError
     , D.Path.PathError
-    , EndOfInputError
     ]
 
 type TeXStreamM e m = (MonadErrorAnyOf e m TeXStreamE, MonadIO m)

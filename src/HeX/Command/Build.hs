@@ -31,13 +31,9 @@ data EndParaReason
 
 handleCommandInParaMode
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             , TFMError
             ]
        , MonadIO m
@@ -92,14 +88,10 @@ newtype HBoxResult = HBoxResult ForwardHList
 
 handleCommandInHBoxMode
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             , TFMError
-            , PathError
             ]
        , MonadIO m
        , MonadState s m
@@ -149,15 +141,11 @@ handleCommandInVBoxMode
     :: ( HP.TeXStream s
        , MonadIO m
        , MonadState s m
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
-            '[ EvaluationError
-             , ConfigError
-             , PathError
-             , HP.StreamTakeError
-             , HP.EndOfInputError
-             , TFMError
-             , BuildError
-             ]
+           '[ TFMError
+            , BuildError
+            ]
        )
     => ForwardVList
     -> HP.Command
@@ -245,13 +233,9 @@ newtype MainVModeResult = MainVModeResult ForwardVList
 
 handleCommandInMainVMode
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             , TFMError
             ]
        , MonadIO m
@@ -308,13 +292,9 @@ handleCommandInMainVMode vList command oldStream =
 
 extractPara
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             , TFMError
             ]
        , MonadIO m
@@ -333,14 +313,10 @@ extractPara indentFlag =
 
 extractParaFromVMode
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
             , TFMError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             ]
        , MonadIO m
        , MonadState s m
@@ -357,14 +333,10 @@ extractParaFromVMode indentFlag oldStream =
 
 extractHBox
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
             , TFMError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             ]
        , MonadIO m
        , MonadState s m
@@ -391,14 +363,10 @@ extractVBox = runCommandLoop handleCommandInVBoxMode mempty
 
 extractVSubBox
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
             , TFMError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             ]
        , MonadIO m
        , MonadState s m
@@ -431,14 +399,10 @@ extractVSubBox desiredLength boxIntent boxType =
 
 extractHSubBox
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
             , TFMError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             ]
        , MonadIO m
        , MonadState s m
@@ -454,14 +418,10 @@ extractHSubBox desiredLength boxIntent boxType =
 
 extractMainVList
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
             , TFMError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             ]
        , MonadIO m
        , MonadState s m
@@ -471,14 +431,10 @@ extractMainVList = runCommandLoop handleCommandInMainVMode mempty
 
 extractBreakAndSetVList
     :: ( HP.TeXStream s
+       , MonadErrorAnyOf e m HP.TeXStreamE
        , MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
             , TFMError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             ]
        , MonadIO m
        , MonadState s m
