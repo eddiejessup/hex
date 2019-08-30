@@ -22,25 +22,9 @@ instance Hashable ControlSequenceLike where
 instance Hashable ControlSequence where
     hashWithSalt s (ControlSequence w) = hashWithSalt s w
 
--- Not all Catcodes make it past the lexer, which we can represent in the
--- type system.
-data LexCatCode
-    = BeginGroup
-    | EndGroup
-    | MathShift
-    | AlignTab
-    | Parameter
-    | Superscript
-    | Subscript
-    | Space
-    | Letter
-    | Other
-    | Active
-    deriving (Show, Eq)
-
 data CharCat = CharCat
     { char :: CharCode
-    , cat  :: LexCatCode
+    , cat  :: Cat.CoreCatCode
     } deriving (Show, Eq)
 
 data Token
@@ -58,7 +42,7 @@ data LexState
     deriving (Eq, Show)
 
 spaceTok :: Token
-spaceTok = CharCatToken $ CharCat ' ' Space
+spaceTok = CharCatToken $ CharCat ' ' Cat.Space
 
 chopDropWhile :: ([b] -> Maybe (a, [b])) -> (a -> Bool) -> [b] -> [b]
 chopDropWhile _       _    [] = []
@@ -102,26 +86,27 @@ extractToken charToCat _state cs =
     getCC = Cat.extractCharCat charToCat
 
     getLetterCC xs =
-        do
-        (cc, xsRest) <- getCC xs
-        guard (Cat.cat cc == Cat.Letter)
-        pure (cc, xsRest)
+        getCC xs >>= \case
+            r@(Cat.CharCat _ (Cat.CoreCatCode Cat.Letter), _) ->
+                pure r
+            _ ->
+                Nothing
 
     extractTokenRest (Cat.CharCat n cat1) rest = case (cat1, _state) of
         -- Control sequence: Grab it.
         (Cat.Escape, _) ->
             do
             (csCC1@(Cat.CharCat _ ctrlSeqCat1), restPostEscape) <- getCC rest
-            let (ctrlSeqCCs, restPostCtrlSeq) = if ctrlSeqCat1 == Cat.Letter
-                    then
+            let (ctrlSeqCCs, restPostCtrlSeq) = case ctrlSeqCat1 of
+                    Cat.CoreCatCode Cat.Letter ->
                         let (FDirected ctrlWordCCsPostFirst, restPostCtrlWord) = chopBreak getLetterCC restPostEscape
                         in  (FDirected (csCC1 : ctrlWordCCsPostFirst), restPostCtrlWord)
-                    else
+                    _ ->
                         (FDirected [csCC1], restPostEscape)
                 nextState = case ctrlSeqCat1 of
-                    Cat.Space  -> SkippingBlanks
-                    Cat.Letter -> SkippingBlanks
-                    _          -> LineMiddle
+                    Cat.CoreCatCode Cat.Space  -> SkippingBlanks
+                    Cat.CoreCatCode Cat.Letter -> SkippingBlanks
+                    _                          -> LineMiddle
             pure ( ControlSequenceToken $ ControlSequence $ Cat.char <$> ctrlSeqCCs
                  , nextState
                  , restPostCtrlSeq
@@ -131,39 +116,18 @@ extractToken charToCat _state cs =
             extractToken charToCat LineBegin $
                 fwdListDropWhile (\c -> charToCat c /= Cat.EndOfLine) rest
         -- Space at the start of a line: Ignore.
-        (Cat.Space, LineBegin) ->
+        (Cat.CoreCatCode Cat.Space, LineBegin) ->
             extractToken charToCat _state rest
         -- Empty line: Make a paragraph.
         (Cat.EndOfLine, LineBegin) ->
             pure (parToken, LineBegin, rest)
-        -- Simple tokeniser cases.
-        (Cat.BeginGroup, _) ->
-            pure (CharCatToken $ CharCat n BeginGroup, LineMiddle, rest)
-        (Cat.EndGroup, _) ->
-            pure (CharCatToken $ CharCat n EndGroup, LineMiddle, rest)
-        (Cat.MathShift, _) ->
-            pure (CharCatToken $ CharCat n MathShift, LineMiddle, rest)
-        (Cat.AlignTab, _) ->
-            pure (CharCatToken $ CharCat n AlignTab, LineMiddle, rest)
-        (Cat.Parameter, _) ->
-            pure (CharCatToken $ CharCat n Parameter, LineMiddle, rest)
-        (Cat.Superscript, _) ->
-            pure (CharCatToken $ CharCat n Superscript, LineMiddle, rest)
-        (Cat.Subscript, _) ->
-            pure (CharCatToken $ CharCat n Subscript, LineMiddle, rest)
-        (Cat.Letter, _) ->
-            pure (CharCatToken $ CharCat n Letter, LineMiddle, rest)
-        (Cat.Other, _) ->
-            pure (CharCatToken $ CharCat n Other, LineMiddle, rest)
-        (Cat.Active, _) ->
-            pure (CharCatToken $ CharCat n Active, LineMiddle, rest)
         -- Space, or end of line, while skipping blanks: Ignore.
-        (Cat.Space, SkippingBlanks) ->
+        (Cat.CoreCatCode Cat.Space, SkippingBlanks) ->
             extractToken charToCat _state rest
         (Cat.EndOfLine, SkippingBlanks) ->
             extractToken charToCat  _state rest
         -- Space in middle of line: Make a space token and start skipping blanks.
-        (Cat.Space, LineMiddle) ->
+        (Cat.CoreCatCode Cat.Space, LineMiddle) ->
             pure (spaceTok, SkippingBlanks, rest)
         -- End of line in middle of line: Make a space token and go to line begin.
         (Cat.EndOfLine, LineMiddle) ->
@@ -175,3 +139,6 @@ extractToken charToCat _state cs =
         -- TODO: TeXbook says to print an error message in this case.
         (Cat.Invalid, _) ->
             extractToken charToCat _state rest
+        -- Simple tokeniser cases.
+        (Cat.CoreCatCode cc, _) ->
+            pure (CharCatToken $ CharCat n cc, LineMiddle, rest)

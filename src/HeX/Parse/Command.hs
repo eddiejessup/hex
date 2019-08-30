@@ -7,6 +7,7 @@ import           HeXlude
 import qualified Control.Monad.Combinators as PC
 import           Data.Functor              (($>))
 
+import qualified HeX.Categorise            as Cat
 import qualified HeX.Lex                   as Lex
 import           HeX.Parse.Assignment
 import           HeX.Parse.AST
@@ -129,9 +130,9 @@ parseModeIndependentCommand =
 parseChangeScope :: TeXParser s e m ModeIndependentCommand
 parseChangeScope = satisfyThen $
     \t -> if
-        | primTokHasCategory Lex.BeginGroup t -> Just $
+        | primTokHasCategory Cat.BeginGroup t -> Just $
             ChangeScope (T.Sign True) CharCommandTrigger
-        | primTokHasCategory Lex.EndGroup t -> Just $
+        | primTokHasCategory Cat.EndGroup t -> Just $
             ChangeScope (T.Sign False) CharCommandTrigger
         | (T.ChangeScopeCSTok sign)
             <- t -> Just $ ChangeScope sign CSCommandTrigger
@@ -273,7 +274,7 @@ parseCommand =
             , skipSatisfiedEquals T.ItalicCorrectionTok $> AddItalicCorrection
             , parseAddDiscretionaryText
             , skipSatisfiedEquals T.DiscretionaryHyphenTok $> AddDiscretionaryHyphen
-            , skipSatisfied (primTokHasCategory Lex.MathShift) $> EnterMathMode
+            , skipSatisfied (primTokHasCategory Cat.MathShift) $> EnterMathMode
             , AddHGlue <$> parseModedGlue Horizontal
             , AddHLeaders <$> parseLeadersSpec Horizontal
             , AddHRule <$> parseModedRule Horizontal
@@ -296,9 +297,9 @@ parseCharCodeRef =
   where
     parseAddCharacterCharOrTok = satisfyThen $
         \case
-            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter)) ->
+            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Letter)) ->
                 Just $ CharRef c
-            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
+            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other)) ->
                 Just $ CharRef c
             T.IntRefTok T.CharQuantity i -> Just $ CharTokenRef i
             _ -> Nothing

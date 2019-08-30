@@ -16,6 +16,7 @@ import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Path                 as D.Path
 
+import qualified HeX.Categorise            as Cat
 import           HeX.Categorise            (CharCode)
 import           HeX.Config                (Config, ConfigError)
 import           HeX.Evaluate
@@ -99,7 +100,7 @@ skipSatisfied f = satisfyThen $ \x -> if f x
           then Just ()
           else Nothing
 
-skipSatisfiedEquals :: Eq PrimitiveToken => PrimitiveToken -> TeXParser s e m ()
+skipSatisfiedEquals :: PrimitiveToken -> TeXParser s e m ()
 skipSatisfiedEquals t = skipSatisfied (== t)
 
 skipOptional :: TeXParser s e m a -> TeXParser s e m ()
@@ -111,7 +112,7 @@ skipOneOptionalSatisfied = skipOptional . skipSatisfied
 skipManySatisfied :: MatchToken s -> TeXParser s e m ()
 skipManySatisfied = PC.skipMany . skipSatisfied
 
-skipSatisfiedChunk :: Eq PrimitiveToken => [PrimitiveToken] -> TeXParser s e m ()
+skipSatisfiedChunk :: [PrimitiveToken] -> TeXParser s e m ()
 skipSatisfiedChunk = foldr (skipSatisfiedEquals >>> (>>)) (pure ())
 
 inhibitExpansion, enableExpansion :: TeXStream s => s -> s
@@ -211,9 +212,9 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
     parseUndelimitedArgs :: TeXParser s e m [Lex.Token]
     parseUndelimitedArgs = do
         -- Skip blank tokens (assumed to mean spaces).
-        skipManySatisfied (primTokHasCategory Lex.Space)
+        skipManySatisfied (primTokHasCategory Cat.Space)
         unsafeAnySingleLex >>= \case
-                t@(Lex.CharCatToken CharCat{cat = Lex.BeginGroup}) -> do
+                t@(Lex.CharCatToken CharCat{cat = Cat.BeginGroup}) -> do
                     (BalancedText ts) <- unsafeParseBalancedText Include
                     pure $ t : ts
                 t -> pure [ t ]
@@ -241,12 +242,12 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
     getStripped [] = Nothing
     getStripped (a : xs) = do
         -- First token must be a '{'.
-        guard $ lexTokHasCategory Lex.BeginGroup a
+        guard $ lexTokHasCategory Cat.BeginGroup a
         -- Must have at least two tokens. If so, get the last token, 'z', and the
         -- tokens that sit before it, i.e. the stripped argument.
         (inner, z) <- splitLastMay xs
         -- The last token must be a '}'.
-        guard $ lexTokHasCategory Lex.EndGroup z
+        guard $ lexTokHasCategory Cat.EndGroup z
         -- The stripped argument must have valid grouping.
         guard $ hasValidGrouping tokToChange inner
         -- Return the stripped argument.
@@ -256,7 +257,7 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
 unsafeParseCSName :: TeXParser s e m Lex.ControlSequenceLike
 unsafeParseCSName = handleLex tokToCSLike
   where
-    tokToCSLike (Lex.CharCatToken CharCat{cat = Lex.Active, char = c}) =
+    tokToCSLike (Lex.CharCatToken CharCat{cat = Cat.Active, char = c}) =
         Just $ Lex.ActiveCharacter c
     tokToCSLike (Lex.ControlSequenceToken cs) =
         Just $ Lex.ControlSequenceProper cs
@@ -272,9 +273,9 @@ parseParamDelims :: TeXParser s e m BalancedText
 parseParamDelims = BalancedText <$> manySatisfiedThen tokToDelimTok
   where
     tokToDelimTok (UnexpandedTok lt)
-        | lexTokHasCategory Lex.Parameter lt = Nothing
-        | lexTokHasCategory Lex.BeginGroup lt = Nothing
-        | lexTokHasCategory Lex.EndGroup lt = Nothing
+        | lexTokHasCategory Cat.Parameter lt = Nothing
+        | lexTokHasCategory Cat.BeginGroup lt = Nothing
+        | lexTokHasCategory Cat.EndGroup lt = Nothing
         | otherwise = Just lt
     tokToDelimTok _ = Nothing
 
@@ -283,13 +284,13 @@ maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
     -- Parse the left-brace that indicates the end of parameters.
 
       where
-        parseEndOfParams = skipSatisfied (primTokHasCategory Lex.BeginGroup)
+        parseEndOfParams = skipSatisfied (primTokHasCategory Cat.BeginGroup)
             $> Map.empty
 
         -- Parse a present parameter, then the remaining parameters, if present.
         parseParametersFrom = do
             -- Parse, for example, '#3'.
-            skipSatisfied $ primTokHasCategory Lex.Parameter
+            skipSatisfied $ primTokHasCategory Cat.Parameter
             skipSatisfied $ liftLexPred matchesDigit
             -- Parse delimiter tokens after the parameter number, if present.
             thisParam <- parseParamDelims
@@ -303,7 +304,7 @@ maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
                 _    -> maybeParseParametersFrom (succ dig)
 
         matchesDigit (Lex.CharCatToken CharCat{char = c, cat = cat}) =
-            (cat `elem` [ Lex.Letter, Lex.Other ]) && (c == digitToChar dig)
+            (cat `elem` [ Cat.Letter, Cat.Other ]) && (c == digitToChar dig)
         matchesDigit _ = False
 
 unsafeParseParamText :: TeXParser s e m (BalancedText, MacroParameters)
@@ -343,8 +344,8 @@ parseNestedExpr n parseNext policy = do
 -- Part of case 7, \uppercase's body and such.
 tokToChange :: Lex.Token -> Ordering
 tokToChange t
-    | lexTokHasCategory Lex.BeginGroup t = GT
-    | lexTokHasCategory Lex.EndGroup t = LT
+    | lexTokHasCategory Cat.BeginGroup t = GT
+    | lexTokHasCategory Cat.EndGroup t = LT
     | otherwise = EQ
 
 -- This assumes we just parsed the '{' that starts the balanced text.
@@ -366,7 +367,7 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
         >>= \case
             -- If we see a '#', parse the parameter number and return a token
             -- representing the call.
-            Lex.CharCatToken CharCat{cat = Lex.Parameter} ->
+            Lex.CharCatToken CharCat{cat = Cat.Parameter} ->
                 handleLex handleParamNr <&> (, EQ)
             -- Otherwise, just return the ordinary lex token.
             t -> pure (MacroTextLexToken t, tokToChange t)
@@ -374,10 +375,10 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
     -- We are happy iff the '#' is followed by a decimal digit, or another '#'.
     handleParamNr = \case
         Lex.CharCatToken cc@CharCat{char = c, cat = cat}
-            | cat `elem` [ Lex.Letter, Lex.Other ] ->
+            | cat `elem` [ Cat.Letter, Cat.Other ] ->
                 MacroTextParamToken <$> charToDigit c
-            | cat == Lex.Parameter ->
-                pure $ MacroTextLexToken $ Lex.CharCatToken cc{ cat = Lex.Other }
+            | cat == Cat.Parameter ->
+                pure $ MacroTextLexToken $ Lex.CharCatToken cc{ cat = Cat.Other }
         _ ->
             Nothing
 
@@ -451,21 +452,21 @@ parseExpandedGeneralText = _parseDelimitedText parseExpandedBalancedText
 
 
 -- Helpers.
-ccHasCategory :: Lex.LexCatCode -> CharCat -> Bool
+ccHasCategory :: Cat.CoreCatCode -> CharCat -> Bool
 ccHasCategory a CharCat{cat = b} = a == b
 
-lexTokHasCategory :: Lex.LexCatCode -> Lex.Token -> Bool
+lexTokHasCategory :: Cat.CoreCatCode -> Lex.Token -> Bool
 lexTokHasCategory a (Lex.CharCatToken cc) = ccHasCategory a cc
 lexTokHasCategory _ _                     = False
 
-primTokHasCategory :: Lex.LexCatCode -> PrimitiveToken -> Bool
+primTokHasCategory :: Cat.CoreCatCode -> PrimitiveToken -> Bool
 primTokHasCategory a (UnexpandedTok lt) = lexTokHasCategory a lt
 primTokHasCategory _ _                  = False
 
 -- <space token> = character token of category [space], or a control sequence
 -- or active character \let equal to such.
 isSpace :: PrimitiveToken -> Bool
-isSpace = primTokHasCategory Lex.Space
+isSpace = primTokHasCategory Cat.Space
 
 -- Match particular tokens.
 isFillerItem :: PrimitiveToken -> Bool
@@ -474,7 +475,7 @@ isFillerItem t        = isSpace t
 
 matchOtherToken :: CharCode -> PrimitiveToken -> Bool
 matchOtherToken c2
-                (UnexpandedTok (Lex.CharCatToken CharCat{ cat = Lex.Other
+                (UnexpandedTok (Lex.CharCatToken CharCat{ cat = Cat.Other
                                                       , char = c1
                                                       })) = c1 == c2
 matchOtherToken _ _ = False
@@ -486,7 +487,7 @@ matchNonActiveCharacterUncased :: Char -> PrimitiveToken -> Bool
 matchNonActiveCharacterUncased
     a
     (UnexpandedTok (Lex.CharCatToken CharCat{ char = c , cat = cat })) =
-        (cat /= Lex.Active) && (c `elem` [ toUpper a, toLower a ])
+        (cat /= Cat.Active) && (c `elem` [ toUpper a, toLower a ])
 matchNonActiveCharacterUncased _ _ = False
 
 tokToChar :: PrimitiveToken -> Maybe CharCode
@@ -520,7 +521,7 @@ skipOneOptionalSpace = skipOneOptionalSatisfied isSpace
 
 -- TODO: Maybe other things can act as left braces.
 skipLeftBrace :: TeXParser s e m ()
-skipLeftBrace = skipSatisfied $ primTokHasCategory Lex.BeginGroup
+skipLeftBrace = skipSatisfied $ primTokHasCategory Cat.BeginGroup
 
 -- <optional spaces> = <zero or more spaces>.
 skipOptionalSpaces :: TeXParser s e m ()

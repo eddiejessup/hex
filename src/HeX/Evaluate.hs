@@ -10,6 +10,7 @@ import qualified TFM
 
 import qualified HeX.Box              as B
 import qualified HeX.BreakList        as BL
+import qualified HeX.Categorise       as Cat
 import           HeX.Categorise       (CharCode)
 import           HeX.Config
 import qualified HeX.Lex              as Lex
@@ -405,8 +406,9 @@ instance TeXEvaluable AST.TokenListVariable where
 -- character code gets category "other" , except that 32 gets "space".
 charCodeAsMadeToken :: CharCode -> Lex.Token
 charCodeAsMadeToken c =
-    let cat = if c == ' ' then Lex.Space else Lex.Other
-    in Lex.CharCatToken $ Lex.CharCat c cat
+    Lex.CharCatToken $ Lex.CharCat c $ case c of
+        ' ' -> Cat.Space
+        _   -> Cat.Other
 
 instance TeXEvaluable AST.InternalQuantity where
     type EvalTarget AST.InternalQuantity = [CharCode]

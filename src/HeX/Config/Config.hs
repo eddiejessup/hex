@@ -436,16 +436,11 @@ updateCharCodeMap t c n globalFlag = do
             pure $ insertKey mathCodes (\cnf m -> cnf { mathCodes = m }) c v
         ChangeCaseCodeType dir -> do
             v <- liftMay $ toEnumMay n
-            pure $
-                case dir of
-                    Upward   -> insertKey uppercaseCodes
-                                          (\cnf m -> cnf { uppercaseCodes = m })
-                                          c
-                                          v
-                    Downward -> insertKey lowercaseCodes
-                                          (\cnf m -> cnf { lowercaseCodes = m })
-                                          c
-                                          v
+            pure $ case dir of
+                Upward ->
+                    insertKey uppercaseCodes (\cnf m -> cnf { uppercaseCodes = m }) c v
+                Downward ->
+                    insertKey lowercaseCodes (\cnf m -> cnf { lowercaseCodes = m }) c v
         SpaceFactorCodeType    -> do
             v <- liftMay $ toEnumMay n
             pure $

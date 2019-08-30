@@ -9,6 +9,7 @@ import           Data.Foldable             (foldl')
 import           Data.Functor              (($>))
 import           Data.Ratio                ((%))
 
+import qualified HeX.Categorise            as Cat
 import           HeX.Categorise            (CharCode)
 import qualified HeX.Lex                   as Lex
 import           HeX.Parse.AST
@@ -66,7 +67,7 @@ parseNormalTeXInt =
 parseDecimalTeXIntDigit :: TeXParser s e m Int
 parseDecimalTeXIntDigit = satisfyThen $
     \case
-        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) ->
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other)) ->
             case c of
                 '0' -> Just 0
                 '1' -> Just 1
@@ -85,7 +86,7 @@ parseHexadecimalTeXIntDigits :: TeXParser s e m [Int]
 parseHexadecimalTeXIntDigits = skipSatisfied (matchOtherToken '"')
     *> PC.some (satisfyThen hexCharToInt)
   where
-    hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) = case c of
+    hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other))) = case c of
         '0' -> Just 0
         '1' -> Just 1
         '2' -> Just 2
@@ -103,7 +104,7 @@ parseHexadecimalTeXIntDigits = skipSatisfied (matchOtherToken '"')
         'E' -> Just 14
         'F' -> Just 15
         _   -> Nothing
-    hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter))) =
+    hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Letter))) =
         case c of
             'A' -> Just 10
             'B' -> Just 11
@@ -118,7 +119,7 @@ parseOctalTeXIntDigits :: TeXParser s e m [Int]
 parseOctalTeXIntDigits = skipSatisfied (matchOtherToken '\'')
     *> PC.some (satisfyThen octCharToInt)
   where
-    octCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other))) =
+    octCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other))) =
         case c of
             '0' -> Just 0
             '1' -> Just 1

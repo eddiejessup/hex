@@ -12,6 +12,7 @@ import           Data.Functor              (($>))
 import qualified Path
 
 import           HeX.Evaluate
+import qualified HeX.Categorise            as Cat
 import qualified HeX.Lex                   as Lex
 import           HeX.Parse.AST
 import           HeX.Parse.Parser
@@ -264,9 +265,9 @@ parseFileName :: TeXParser s e m TeXFilePath
 parseFileName = do
     skipOptionalSpaces
     fileNameChars <- PC.some $ satisfyThen $ \case
-        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Letter)) ->
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Letter)) ->
             Just c
-        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Lex.Other)) | isValidOther c ->
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other)) | isValidOther c ->
             Just c
         _ -> Nothing
     skipSatisfied isSpace

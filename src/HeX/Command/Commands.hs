@@ -12,6 +12,7 @@ import qualified TFM
 import qualified HeX.Box             as B
 import           HeX.BreakList       (HListElem, VListElem)
 import qualified HeX.BreakList       as BL
+import qualified HeX.Categorise      as Cat
 import           HeX.Categorise      (CharCode)
 import           HeX.Command.Common
 import           HeX.Config
@@ -256,11 +257,11 @@ getFileStream strms n = do
 
 showLexTok :: Lex.Token -> Text
 showLexTok = \case
-    Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Lex.Letter } ->
+    Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Cat.Letter } ->
         Text.singleton char
-    Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Lex.Other } ->
+    Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Cat.Other } ->
         Text.singleton char
-    Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Lex.Space } ->
+    Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Cat.Space } ->
         Text.singleton char
     Lex.CharCatToken cc -> showT cc
     Lex.ControlSequenceToken (Lex.ControlSequence cs) ->
