@@ -1,6 +1,8 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module HeX.Parse.Stream.Instance where
 
-import           HeXlude
+import           HeXlude                   hiding (show)
 
 import           Control.Monad.Extra       (mconcatMapM)
 import           Control.Monad.Reader      (runReaderT)
@@ -12,6 +14,8 @@ import qualified Data.Path                 as D.Path
 import           Path                      (Abs, File, Path)
 import qualified Path
 import qualified Path.IO
+import qualified Text.Megaparsec           as P
+import           Text.Show
 
 import           HeX.Categorise            (CharCode)
 import qualified HeX.Categorise            as Cat
@@ -22,7 +26,6 @@ import           HeX.Parse.Assignment
 import           HeX.Parse.AST
 import           HeX.Parse.Command
 import           HeX.Parse.Condition
-import           HeX.Parse.Parser
 import           HeX.Parse.Resolve
 import           HeX.Parse.Stream.Class
 import           HeX.Parse.SyntaxCommand
@@ -43,6 +46,8 @@ data TokenSource = TokenSource
     }
     deriving ( Show )
 
+instance Show ExpandedStream where
+    show _ = "ExpandedStream {..}"
 newTokenSource :: Maybe (Path Abs File) -> ForwardDirected [] CharCode -> TokenSource
 newTokenSource maybePath cs = TokenSource maybePath cs mempty
 
@@ -56,6 +61,90 @@ newExpandStream maybePath cs =
                         , config        = conf
                         , skipState     = []
                         }
+
+instance TeXParseable ExpandedStream e m => P.Stream ExpandedStream m where
+    type Token ExpandedStream = PrimitiveToken
+
+    type Tokens ExpandedStream = [PrimitiveToken]
+
+    -- take1_ :: s -> m (Maybe (Token s, s))
+    take1_ stream =
+        do
+        (_, rt, newStream) <- fetchResolvedToken stream
+        case rt of
+            -- If it's a primitive token, provide that.
+            PrimitiveToken pt ->
+                pure (Just (pt, newStream))
+            -- If it indicates the start of a syntax command, parse the
+            -- remainder of the syntax command.
+            SyntaxCommandHeadToken c ->
+                do
+                (expandStream, lts) <- expandSyntaxCommand newStream c
+                P.take1_ $ insertLexTokens expandStream lts
+
+    -- tokensToChunk :: Proxy s -> Proxy m -> [Token s] -> Tokens s
+    tokensToChunk _ _ = id
+
+    -- chunkToTokens :: Proxy s -> Proxy m -> Tokens s -> [Token s]
+    chunkToTokens _ _ = id
+
+    -- chunkLength :: Proxy s -> Proxy m -> Tokens s -> Int
+    chunkLength _ _ = length
+
+    -- If n <= 0, reurn 'Just (mempty, s)', where s is the original stream.
+    -- If n > 0 and the stream is empty, return Nothing.
+    -- Otherwise, take a chunk of length n, or shorter if the stream is
+    -- not long enough, and return the chunk along with the rest of the stream.
+    -- takeN_ :: Int -> s -> m (Maybe (Tokens s, s))
+    takeN_ n s
+        | n <= 0 = pure $ Just (mempty, s)
+        | otherwise =
+            P.take1_ s >>= \case
+                Nothing -> pure Nothing
+                Just (t, newS) ->
+                    do
+                    (tsRest, finalS) <- P.takeN_ (pred n) newS <&> \case
+                        Nothing               -> ([],     newS)
+                        Just (tsRest, finalS) -> (tsRest, finalS)
+                    pure $ Just (t:tsRest, finalS)
+
+    -- Extract chunk while the supplied predicate returns True.
+    -- takeWhile_ :: (Token s -> Bool) -> s -> m (Tokens s, s)
+    takeWhile_ f s =
+        P.take1_ s >>= \case
+            Nothing ->
+                pure ([], s)
+            Just (t, newS) ->
+                do
+                (tsRest, finalS) <- if f t then P.takeWhile_ f newS
+                                           else pure ([], newS)
+                pure (t:tsRest, finalS)
+
+    -- showTokens :: Proxy s -> Proxy m -> NonEmpty (Token s) -> String
+    showTokens _ _ = show
+
+    -- reachOffset
+    --   :: Proxy m
+    --   -> Int             -- ^ Offset to reach
+    --   -> PosState s      -- ^ Initial 'PosState' to use
+    --   -> (SourcePos, String, PosState s) -- ^ (See below)
+    reachOffset _ _ _ = undefined
+
+instance TeXStream ExpandedStream where
+    setExpansion mode s = s{ expansionMode = mode }
+
+    getConfig = config
+
+    setConfig c s = s{config = c}
+
+    insertLexToken s t =
+        let
+            curTokSource@TokenSource{ sourceLexTokens } :| outerStreams = streamTokenSources s
+            updatedCurTokSource = curTokSource{ sourceLexTokens = t : sourceLexTokens }
+        in
+            s{ streamTokenSources = updatedCurTokSource :| outerStreams }
+
+    getConditionBodyState = headMay . skipState
 
 -- Expanding syntax commands.
 
@@ -79,7 +168,7 @@ expandString (Conf.IntParamVal escapeCharCode) tok =
         then id
         else (chr escapeCharCode :)
 
-expandMacro :: MonadErrorAnyOf e m '[StreamTakeError]
+expandMacro :: MonadErrorAnyOf e m '[ExpansionError]
             => MacroContents
             -> Map.Map Digit MacroArgument
             -> m [Lex.Token]
@@ -92,7 +181,7 @@ expandMacro MacroContents{replacementTokens = (MacroText replaceToks)} args =
         MacroTextParamToken dig ->
             case args !? dig of
                 Nothing ->
-                    throwM $ StreamExpansionError "No such parameter"
+                    throwM $ ExpansionError "No such parameter"
                 Just (MacroArgument arg) ->
                     pure arg
 
@@ -115,7 +204,7 @@ expandChangeCase lookupChangeCaseCode (BalancedText caseToks) =
             Conf.NoCaseChange       -> char
             Conf.ChangeToCode char' -> char'
 
-skipToIfDelim :: forall e m. TeXStreamM e m => IfBodyState -> ExpandedStream -> m ExpandedStream
+skipToIfDelim :: forall e m. TeXParseable ExpandedStream e m => IfBodyState -> ExpandedStream -> m ExpandedStream
 skipToIfDelim blk stream = go stream 1
   where
     go :: ExpandedStream -> Int -> m ExpandedStream
@@ -149,7 +238,7 @@ skipToIfDelim blk stream = go stream 1
 
 skipUpToCaseBlock
     :: forall e m
-    .  TeXStreamM e m
+    .  TeXParseable ExpandedStream e m
     => Int
     -> ExpandedStream
     -> m ExpandedStream
@@ -180,13 +269,12 @@ skipUpToCaseBlock tgt stream = go stream 0 1
                     _ ->
                         cont cur n
 
-expandConditionToken :: TeXStreamM e m => ExpandedStream -> ConditionTok -> m ExpandedStream
+expandConditionToken :: TeXParseable ExpandedStream e m => ExpandedStream -> ConditionTok -> m ExpandedStream
 expandConditionToken strm = \case
     ConditionHeadTok ifTok ->
         do
-        (resultStream, condHead) <- runParser (conditionHeadParser ifTok) strm
-        eCondHead <- runReaderT (texEvaluate condHead) (config resultStream)
-        case eCondHead of
+        (resultStream, condHead) <- runSimpleRunParserT' (conditionHeadParser ifTok) strm
+        runReaderT (texEvaluate condHead) (config resultStream) >>= \case
             IfBlockTarget IfPreElse ->
                 pure resultStream{ skipState = IfBodyState IfPreElse : skipState resultStream }
             IfBlockTarget IfPostElse ->
@@ -196,10 +284,10 @@ expandConditionToken strm = \case
     ConditionBodyTok delim -> case (delim, skipState strm) of
         -- Shouldn't see any condition token outside a condition block.
         (_, []) ->
-            throwM $ StreamExpansionError $ "Not in a condition body, but saw condition-body token: " <> show delim
+            throwM $ ExpansionError $ "Not in a condition body, but saw condition-body token: " <> showT delim
         -- Shouldn't see an 'or' while in an if-condition.
         (Or, IfBodyState _ : _) ->
-            throwM $ StreamExpansionError "In an if-condition, not case-condition, but saw 'or'"
+            throwM $ ExpansionError "In an if-condition, not case-condition, but saw 'or'"
         -- If we see an 'end-if' while in any condition, then pop the
         -- condition.
         (EndIf, _ : condRest) ->
@@ -208,11 +296,11 @@ expandConditionToken strm = \case
         -- processing a block started by 'else'. The same goes for seeing an
         -- 'else' while in an if-condition, having already seen an 'else'.
         (Else, IfBodyState IfPostElse : _) ->
-            throwM $ StreamExpansionError "Already saw 'else' in this condition-block, but saw later 'else'"
+            throwM $ ExpansionError "Already saw 'else' in this condition-block, but saw later 'else'"
         (Or, CaseBodyState CasePostElse : _) ->
-            throwM $ StreamExpansionError "Already saw 'else' in this case-condition, but saw later 'or'"
+            throwM $ ExpansionError "Already saw 'else' in this case-condition, but saw later 'or'"
         (Else, CaseBodyState CasePostElse : _) ->
-            throwM $ StreamExpansionError "Already saw else in this condition-block, but saw later 'else'"
+            throwM $ ExpansionError "Already saw else in this condition-block, but saw later 'else'"
         -- If we see a block delimiter while not-skipping, then we must have
         -- been not-skipping the previous block, so we should skip all
         -- remaining blocks.
@@ -233,7 +321,7 @@ expandConditionToken strm = \case
         pure skipStream{skipState = condRest}
 
 expandSyntaxCommand
-    :: TeXStreamM e m
+    :: TeXParseable ExpandedStream e m
     => ExpandedStream
     -> SyntaxCommandHeadToken
     -> m (ExpandedStream, [Lex.Token])
@@ -249,7 +337,7 @@ expandSyntaxCommand strm = \case
     StringTok ->
         do
         let escapeChar = (Conf.IntParamVal . Conf.lookupTeXIntParameter EscapeChar . config) strm
-        (postArgStream, lexTok) <- runParser parseLexToken strm
+        (postArgStream, lexTok) <- runSimpleRunParserT' parseLexToken strm
         pure (postArgStream, expandString escapeChar lexTok)
     JobNameTok ->
         panic "Not implemented: syntax command JobNameTok"
@@ -275,7 +363,7 @@ expandSyntaxCommand strm = \case
     --   tokens from the current source.
     InputTok ->
         do
-        (resultStream@ExpandedStream{ streamTokenSources }, TeXFilePath texPath) <- runParser parseFileName strm
+        (resultStream@ExpandedStream{ streamTokenSources }, TeXFilePath texPath) <- runSimpleRunParserT' parseFileName strm
         let extraDirs = case streamTokenSources & (L.NE.head >>> sourcePath) of
                 Just p  -> [Path.parent p]
                 Nothing -> []
@@ -288,7 +376,7 @@ expandSyntaxCommand strm = \case
         panic "Not implemented: syntax command EndInputTok"
     TheTok ->
         do
-        (resultStream, intQuant) <- runParser parseInternalQuantity strm
+        (resultStream, intQuant) <- runSimpleRunParserT' parseInternalQuantity strm
         quantTokens <- (charCodeAsMadeToken <$>) <$> runReaderT (texEvaluate intQuant) (config resultStream)
         pure (resultStream, quantTokens)
     ChangeCaseTok direction ->
@@ -296,9 +384,9 @@ expandSyntaxCommand strm = \case
   where
     runExpandCommand inputStream parser f =
         do
-        (s, a) <- runParser parser inputStream
+        (stream, a) <- runSimpleRunParserT' parser inputStream
         v <- f a
-        pure (s, v)
+        pure (stream, v)
 
 -- Get the next lex token, and update our stream.
 fetchLexToken :: ExpandedStream -> Maybe (Lex.Token, ExpandedStream)
@@ -338,11 +426,11 @@ fetchResolvedToken stream =
     do
     (lt, newStream) <- liftMaybe (throw EndOfInputError) $ fetchLexToken stream
     let lkp cs = Conf.lookupCS cs $ config newStream
-    rt <- liftMaybe (throw $ StreamExpansionError $ "Could not resolve token:" <> show lt) $ resolveToken lkp (expansionMode newStream) lt
+    rt <- liftMaybe (throw $ ExpansionError $ "Could not resolve token:" <> showT lt) $ resolveToken lkp (expansionMode newStream) lt
     pure (lt, rt, newStream)
 
 fetchAndExpandToken
-    :: TeXStreamM e m
+    :: TeXParseable ExpandedStream e m
     => ExpandedStream
     -> m (ExpandedStream, [Lex.Token])
 fetchAndExpandToken stream =
@@ -353,33 +441,3 @@ fetchAndExpandToken stream =
             pure (newStream, [lt])
         SyntaxCommandHeadToken c ->
             expandSyntaxCommand newStream c
-
-instance TeXStream ExpandedStream where
-    setExpansion mode s = s{ expansionMode = mode }
-
-    getConfig = config
-
-    setConfig c s = s{config = c}
-
-    insertLexToken s t =
-        let
-            curTokSource@TokenSource{ sourceLexTokens } :| outerStreams = streamTokenSources s
-            updatedCurTokSource = curTokSource{ sourceLexTokens = t : sourceLexTokens }
-        in
-            s{ streamTokenSources = updatedCurTokSource :| outerStreams }
-
-    getConditionBodyState = headMay . skipState
-
-    takeToken stream =
-        do
-        (_, rt, newStream) <- fetchResolvedToken stream
-        case rt of
-            -- If it's a primitive token, provide that.
-            PrimitiveToken pt ->
-                pure (newStream, pt)
-            -- If it indicates the start of a syntax command, parse the
-            -- remainder of the syntax command.
-            SyntaxCommandHeadToken c ->
-                do
-                (expandStream, lts) <- expandSyntaxCommand newStream c
-                takeToken $ insertLexTokens expandStream lts

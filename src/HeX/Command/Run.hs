@@ -13,6 +13,7 @@ import           Data.Byte                 (ByteError)
 import           DVI.Document              (Instruction, parseInstructions)
 import           DVI.Encode                (encode)
 import           DVI.Instruction           (EncodableInstruction, DVIError)
+import qualified Text.Megaparsec           as P
 
 import           TFM                       (TFMError)
 
@@ -26,18 +27,18 @@ import           HeX.Evaluate              (EvaluationError)
 import           HeX.Lex                   (LexState (..), extractToken)
 import           HeX.Parse                 (ExpandedStream, ExpansionMode (..),
                                             IndentFlag (..), TeXStream,
-                                            StreamTakeError, EndOfInputError (..),
-                                            anySingle, defaultCSMap,
+                                            ExpansionError, EndOfInputError (..),
+                                            defaultCSMap,
                                             parseCommand, resolveToken,
-                                            SParser, TeXStreamE,
-                                            runParser)
+                                            TeXStreamE, runSimpleRunParserT',
+                                            SimpleParsecT)
 
 type AppError =
     Variant '[ BuildError
              , ConfigError
              , EvaluationError
              , PathError
-             , StreamTakeError
+             , ExpansionError
              , TFMError
              , EndOfInputError
              ]
@@ -110,25 +111,34 @@ runResolved _xs = extractAndPrint (LineBegin, _xs)
 -- Expand.
 
 runParseLoop
-    :: ( Show a
-       , TeXStream s
+    :: ( TeXStream s
+       , Show a
+       , Show s
+       , Show (P.Token s)
        )
-    => SParser s (ExceptT (Variant TeXStreamE) IO) a
+    => SimpleParsecT s (ExceptT (Variant TeXStreamE) IO) a
     -> s
     -> IO ()
-runParseLoop p s = runExceptT (runParser p s) >>= \case
+runParseLoop p s = runExceptT (runSimpleRunParserT' p s) >>= \case
     Left err ->
         let
-            caught :: Either (Variant '[StreamTakeError, EvaluationError, ConfigError, Data.Path.PathError]) EndOfInputError
+            caught :: Either (Variant '[EvaluationError, ConfigError, Data.Path.PathError, ExpansionError]) EndOfInputError
             caught = catch err
         in case caught of
             Left otherErr -> panic $ show otherErr
             Right EndOfInputError -> pure ()
     Right (newS, tok) ->
-        print tok >> runExpand newS
+        print tok >> runParseLoop p newS
 
-runExpand :: TeXStream s => s -> IO ()
-runExpand = runParseLoop anySingle
+runExpand
+    :: ( TeXStream s
+       , Show s
+       , Show (P.Token s)
+       , P.Stream s (ExceptT (Variant TeXStreamE) IO)
+       )
+    => s
+    -> IO ()
+runExpand = runParseLoop P.anySingle
 
 -- Command.
 

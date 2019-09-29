@@ -6,16 +6,15 @@ import           HeXlude
 
 import           Control.Monad             (when)
 import qualified Control.Monad.Combinators as PC
-import           Control.Monad.Except      (runExceptT)
 import           Control.Monad.Reader      (runReaderT)
 import           Data.Functor              (($>))
 import qualified Path
+import qualified Text.Megaparsec           as P
 
 import           HeX.Evaluate
 import qualified HeX.Categorise            as Cat
 import qualified HeX.Lex                   as Lex
 import           HeX.Parse.AST
-import           HeX.Parse.Parser
 import           HeX.Parse.Quantity
 import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token           as T
@@ -101,47 +100,41 @@ parseNonMacroAssignment = do
     tokToInteractionMode _                        = Nothing
 
 numVarValPair
-    :: ( TeXStream s
-       , TeXStreamM e m
+    :: ( TeXParseable s e m
        )
-    => (SParser s m TeXIntVariable, SParser s m TeXInt)
+    => (SimpleParsecT s m TeXIntVariable, SimpleParsecT s m TeXInt)
 numVarValPair = (parseTeXIntVariable, parseTeXInt)
 
 lenVarValPair
-    :: ( TeXStream s
-       , TeXStreamM e m
+    :: ( TeXParseable s e m
        )
-    => (SParser s m LengthVariable, SParser s m Length)
+    => (SimpleParsecT s m LengthVariable, SimpleParsecT s m Length)
 lenVarValPair = (parseLengthVariable, parseLength)
 
 glueVarValPair
-    :: ( TeXStream s
-       , TeXStreamM e m
+    :: ( TeXParseable s e m
        )
-    => (SParser s m GlueVariable, SParser s m Glue)
+    => (SimpleParsecT s m GlueVariable, SimpleParsecT s m Glue)
 glueVarValPair = (parseGlueVariable, parseGlue)
 
 mathGlueVarValPair
-    :: ( TeXStream s
-       , TeXStreamM e m
+    :: ( TeXParseable s e m
        )
-    => (SParser s m MathGlueVariable, SParser s m MathGlue)
+    => (SimpleParsecT s m MathGlueVariable, SimpleParsecT s m MathGlue)
 mathGlueVarValPair = (parseMathGlueVariable, parseMathGlue)
 
 tokenListVarValPair
-    :: ( TeXStream s
-       , TeXStreamM e m
+    :: ( TeXParseable s e m
        )
-    => (SParser s m TokenListVariable, SParser s m TokenListAssignmentTarget)
+    => (SimpleParsecT s m TokenListVariable, SimpleParsecT s m TokenListAssignmentTarget)
 tokenListVarValPair = (parseTokenListVariable, TokenListAssignmentText <$> parseGeneralText)
 
 parseVarEqVal
-    :: ( TeXStream s
-       , TeXStreamM e m
+    :: ( TeXParseable s e m
        )
-    => (SParser s m a, SParser s m b)
+    => (SimpleParsecT s m a, SimpleParsecT s m b)
     -> (a -> b -> c)
-    -> SParser s m c
+    -> SimpleParsecT s m c
 parseVarEqVal (varParser, valParser) f =
     f <$> varParser <* skipOptionalEquals <*> valParser
 
@@ -173,9 +166,9 @@ parseVariableModification =
               ]
   where
     parseAdvanceVar
-        :: (SParser s m a, SParser s m b)
+        :: (SimpleParsecT s m a, SimpleParsecT s m b)
         -> (a -> b -> VariableModification)
-        -> SParser s m VariableModification
+        -> SimpleParsecT s m VariableModification
     parseAdvanceVar (varParser, valParser) f = do
         skipSatisfiedEquals T.AdvanceVarTok
         var <- varParser
@@ -236,12 +229,7 @@ parseSetParShape = do
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
     nrPairs <- parseTeXInt
-    stream <- getInput
-    eNrPairs
-        <- runExceptT (runReaderT (texEvaluate nrPairs) (getConfig stream))
-        >>= \case
-            Left err -> throwParseError err
-            Right v -> pure v
+    eNrPairs <- P.getInput <&> getConfig >>= runReaderT (texEvaluate nrPairs)
     SetParShape <$> PC.count eNrPairs parseLengthPair
   where
     parseLengthPair = (,) <$> parseLength <*> parseLength

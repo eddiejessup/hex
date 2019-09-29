@@ -6,12 +6,13 @@ import           HeXlude
 
 import qualified Control.Monad.Combinators as PC
 import           Data.Functor              (($>))
+import           Data.List.NonEmpty        (NonEmpty(..))
+import qualified Text.Megaparsec           as P
 
 import qualified HeX.Categorise            as Cat
 import qualified HeX.Lex                   as Lex
 import           HeX.Parse.Assignment
 import           HeX.Parse.AST
-import           HeX.Parse.Parser
 import           HeX.Parse.Quantity
 import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token           as T
@@ -319,7 +320,7 @@ parseAddAccentedCharacter =
     -- other than \setbox.
     parseNonSetBoxAssignment =
         parseAssignment >>= \case
-            Assignment (SetBoxRegister _ _) _ -> throwParseError $ throw $ ParseError "Cannot set-box while adding accented character"
+            Assignment (SetBoxRegister _ _) _ -> P.failure (Just (P.Label ('S' :| "etBoxRegister"))) mempty
             a -> pure a
 
 parseAddDiscretionaryText :: TeXParser s e m HModeCommand

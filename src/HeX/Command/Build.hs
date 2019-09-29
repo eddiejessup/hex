@@ -5,7 +5,6 @@ module HeX.Command.Build where
 import           HeXlude
 
 import           Control.Monad               (foldM)
-import           Data.Path                   (PathError)
 
 import           TFM                         (TFMError)
 
@@ -15,7 +14,6 @@ import qualified HeX.BreakList               as BL
 import           HeX.Command.Commands
 import           HeX.Command.Common
 import           HeX.Command.ModeIndependent
-import           HeX.Evaluate                (EvaluationError)
 import           HeX.Config
 import qualified HeX.Lex                     as Lex
 import qualified HeX.Parse                   as HP
@@ -30,13 +28,11 @@ data EndParaReason
     | EndParaSawLeaveBox
 
 handleCommandInParaMode
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => ForwardHList
@@ -87,13 +83,11 @@ handleCommandInParaMode hList command oldStream =
 newtype HBoxResult = HBoxResult ForwardHList
 
 handleCommandInHBoxMode
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => ForwardHList
@@ -138,10 +132,8 @@ handleCommandInHBoxMode hList command _ =
 newtype VBoxResult = VBoxResult ForwardVList
 
 handleCommandInVBoxMode
-    :: ( HP.TeXStream s
-       , MonadIO m
-       , MonadState s m
-       , MonadErrorAnyOf e m HP.TeXStreamE
+    :: ( MonadState s m
+       , HP.TeXParseable s e m
        , MonadErrorAnyOf e m
            '[ TFMError
             , BuildError
@@ -232,13 +224,11 @@ hListToParaLineBoxes hList =
 newtype MainVModeResult = MainVModeResult ForwardVList
 
 handleCommandInMainVMode
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => ForwardVList
@@ -291,13 +281,11 @@ handleCommandInMainVMode vList command oldStream =
                 throwM $ BuildError "No box to end: in paragraph within main V mode"
 
 extractPara
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => HP.IndentFlag
@@ -312,13 +300,11 @@ extractPara indentFlag =
     runCommandLoop handleCommandInParaMode bx
 
 extractParaFromVMode
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => HP.IndentFlag
@@ -332,43 +318,33 @@ extractParaFromVMode indentFlag oldStream =
     put oldStream >> extractPara indentFlag
 
 extractHBox
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => m HBoxResult
 extractHBox = runCommandLoop handleCommandInHBoxMode mempty
 
 extractVBox
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
-            , ConfigError
-            , EvaluationError
             , TFMError
-            , PathError
-            , HP.StreamTakeError
-            , HP.EndOfInputError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => m VBoxResult
 extractVBox = runCommandLoop handleCommandInVBoxMode mempty
 
 extractVSubBox
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => B.DesiredLength
@@ -398,13 +374,11 @@ extractVSubBox desiredLength boxIntent boxType =
             pure Nothing
 
 extractHSubBox
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => B.DesiredLength
@@ -417,26 +391,22 @@ extractHSubBox desiredLength boxIntent boxType =
     pure $ BL.HVListElem <$> maybeElem
 
 extractMainVList
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => m MainVModeResult
 extractMainVList = runCommandLoop handleCommandInMainVMode mempty
 
 extractBreakAndSetVList
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
-       , MonadErrorAnyOf e m
+    :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
             ]
-       , MonadIO m
+       , HP.TeXParseable s e m
        , MonadState s m
        )
     => m (ForwardDirected Seq B.Page)

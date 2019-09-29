@@ -15,6 +15,7 @@ import           Data.Functor              (($>))
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Path                 as D.Path
+import qualified Text.Megaparsec           as P
 
 import qualified HeX.Categorise            as Cat
 import           HeX.Categorise            (CharCode)
@@ -22,7 +23,6 @@ import           HeX.Config                (Config, ConfigError)
 import           HeX.Evaluate
 import           HeX.Lex                   (CharCat (..))
 import qualified HeX.Lex                   as Lex
-import           HeX.Parse.Parser
 import           HeX.Parse.Resolve
 import           HeX.Parse.Token
 
@@ -38,60 +38,90 @@ class TeXStream s where
 
     getConditionBodyState :: s -> Maybe ConditionBodyState
 
-    takeToken
-        :: TeXStreamM e m
-        => s
-        -> m (s, PrimitiveToken)
-
 data EndOfInputError = EndOfInputError
     deriving (Show)
 
+newtype ExpansionError = ExpansionError Text
+    deriving (Show)
+
 type TeXStreamE =
-   '[ StreamTakeError
-    , EndOfInputError
+   '[ EndOfInputError
     , EvaluationError
     , ConfigError
     , D.Path.PathError
+    , ExpansionError
     ]
 
-type TeXStreamM e m = (MonadErrorAnyOf e m TeXStreamE, MonadIO m)
+type SimpleParsecT s m a = P.ParsecT Void s m a
 
-type TeXParser s e m a = (TeXStream s, TeXStreamM e m) => SParser s m a
+type TeXParseable s e m = ( MonadErrorAnyOf e m TeXStreamE
+                          , MonadIO m
+                          , P.Stream s m
+                          , P.Token s ~ PrimitiveToken
+                          , TeXStream s
+                          , Show s
+                          )
+
+simpleRunParserT'
+    :: Monad m
+    => P.ParsecT e s m a
+    -> s
+    -> m (s, Either (P.ParseErrorBundle s e) a)
+simpleRunParserT' parser stream =
+    do
+    (P.State { P.stateInput = resultStream }, v) <- P.runParserT' parser inState
+    pure (resultStream, v)
+  where
+    inState = P.State
+        { P.stateInput = stream
+        , P.stateOffset = 0
+        , P.statePosState = posState
+        }
+
+    posState = P.PosState
+        { P.pstateInput = stream
+        , P.pstateOffset = 0
+        , P.pstateSourcePos = srcPos
+        , P.pstateTabWidth = P.mkPos 4
+        , P.pstateLinePrefix = "TeX Error = "
+        }
+
+    srcPos = P.SourcePos
+        { P.sourceName = "TeX file"
+        , P.sourceLine = P.mkPos 0
+        , P.sourceColumn = P.mkPos 0
+        }
+
+runSimpleRunParserT'
+    :: ( MonadError (Variant e) m
+       , CouldBeF e ExpansionError
+       , Show s
+       , Show (P.Token s)
+       )
+    => P.ParsecT Void s m a
+    -> s
+    -> m (s, a)
+runSimpleRunParserT' parser stream =
+    simpleRunParserT' parser stream >>= \case
+        (_, Left err) ->
+            throwM $ ExpansionError (show err)
+        (resultStream, Right a) ->
+            pure (resultStream, a)
+
+type TeXParser s e m a = TeXParseable s e m => SimpleParsecT s m a
 
 insertLexTokens :: TeXStream s => s -> [Lex.Token] -> s
 insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
 
-satisfyThen :: (PrimitiveToken -> Maybe a) -> TeXParser s e m a
-satisfyThen test = SParser go
-  where
-    go stream =
-        do
-        (newStream, tok) <- takeToken stream
-        case test tok of
-          Nothing ->
-            throwM $ ParseError $ "Not satisfied with token: " <> show tok
-          Just x ->
-            pure (newStream, x)
+satisfyThen :: (P.Token s -> Maybe a) -> TeXParser s e m a
+satisfyThen test = P.token test mempty
 
-satisfy :: (PrimitiveToken -> Bool) -> TeXParser s e m PrimitiveToken
-satisfy f = satisfyThen (predToMaybe f)
+type MatchToken s = P.Token s -> Bool
 
-boolToMaybe :: Bool -> a -> Maybe a
-boolToMaybe True x  = Just x
-boolToMaybe False _ = Nothing
+manySatisfied :: MatchToken s -> TeXParser s e m [P.Token s]
+manySatisfied testTok = PC.many $ P.satisfy testTok
 
-predToMaybe :: (a -> Bool) -> a -> Maybe a
-predToMaybe f x = boolToMaybe (f x) x
-
-anySingle :: TeXParser s e m PrimitiveToken
-anySingle = satisfy (const True)
-
-type MatchToken s = PrimitiveToken -> Bool
-
-manySatisfied :: MatchToken s -> TeXParser s e m [PrimitiveToken]
-manySatisfied testTok = PC.many $ satisfy testTok
-
-manySatisfiedThen :: (PrimitiveToken -> Maybe a) -> TeXParser s e m [a]
+manySatisfiedThen :: (P.Token s -> Maybe a) -> TeXParser s e m [a]
 manySatisfiedThen f = PC.many $ satisfyThen f
 
 -- Skipping.
@@ -100,7 +130,7 @@ skipSatisfied f = satisfyThen $ \x -> if f x
           then Just ()
           else Nothing
 
-skipSatisfiedEquals :: PrimitiveToken -> TeXParser s e m ()
+skipSatisfiedEquals :: P.Token s -> TeXParser s e m ()
 skipSatisfiedEquals t = skipSatisfied (== t)
 
 skipOptional :: TeXParser s e m a -> TeXParser s e m ()
@@ -112,27 +142,22 @@ skipOneOptionalSatisfied = skipOptional . skipSatisfied
 skipManySatisfied :: MatchToken s -> TeXParser s e m ()
 skipManySatisfied = PC.skipMany . skipSatisfied
 
-skipSatisfiedChunk :: [PrimitiveToken] -> TeXParser s e m ()
+skipSatisfiedChunk :: [P.Token s] -> TeXParser s e m ()
 skipSatisfiedChunk = foldr (skipSatisfiedEquals >>> (>>)) (pure ())
 
 inhibitExpansion, enableExpansion :: TeXStream s => s -> s
 inhibitExpansion = setExpansion NotExpanding
 enableExpansion = setExpansion Expanding
 
-getInput :: Applicative m => SParser s m s
-getInput = SParser $ \s -> pure (s, s)
-
 parseInhibited :: TeXParser s e m a -> TeXParser s e m a
-parseInhibited (SParser baseParser) = SParser go
-  where
-    go stream =
-        do
-        (postStream, v) <- baseParser (inhibitExpansion stream)
-        pure (enableExpansion postStream, v)
+parseInhibited p =
+    do
+    P.updateParserState (\st@P.State { P.stateInput } -> st { P.stateInput = inhibitExpansion stateInput })
+    v <- p
+    P.updateParserState (\st@P.State { P.stateInput } -> st { P.stateInput = enableExpansion stateInput })
+    pure v
 
-runConfState :: (TeXStream s, MonadState s m)
-             => StateT Config m a
-             -> m a
+runConfState :: (TeXStream s, MonadState s m) => StateT Config m a -> m a
 runConfState f = do
     conf <- gets getConfig
     (v, conf') <- runStateT f conf
@@ -434,7 +459,7 @@ parseExpandedBalancedText policy =
         _ -> EQ
 
 _parseDelimitedText
-    :: (TerminusPolicy -> SParser s m a)
+    :: (TerminusPolicy -> TeXParser s e m a)
     -> TeXParser s e m a
 _parseDelimitedText parser = do
     skipFiller
@@ -470,34 +495,39 @@ isSpace = primTokHasCategory Cat.Space
 
 -- Match particular tokens.
 isFillerItem :: PrimitiveToken -> Bool
-isFillerItem RelaxTok = True
-isFillerItem t        = isSpace t
+isFillerItem = \case
+    RelaxTok -> True
+    t -> isSpace t
 
 matchOtherToken :: CharCode -> PrimitiveToken -> Bool
-matchOtherToken c2
-                (UnexpandedTok (Lex.CharCatToken CharCat{ cat = Cat.Other
-                                                      , char = c1
-                                                      })) = c1 == c2
-matchOtherToken _ _ = False
+matchOtherToken c2 = \case
+    UnexpandedTok (Lex.CharCatToken CharCat{ cat = Cat.Other, char = c1}) ->
+        c1 == c2
+    _ ->
+        False
 
 isEquals :: PrimitiveToken -> Bool
 isEquals = matchOtherToken '='
 
 matchNonActiveCharacterUncased :: Char -> PrimitiveToken -> Bool
-matchNonActiveCharacterUncased
-    a
-    (UnexpandedTok (Lex.CharCatToken CharCat{ char = c , cat = cat })) =
-        (cat /= Cat.Active) && (c `elem` [ toUpper a, toLower a ])
-matchNonActiveCharacterUncased _ _ = False
+matchNonActiveCharacterUncased a = \case
+    UnexpandedTok (Lex.CharCatToken CharCat{ char , cat }) ->
+        (cat /= Cat.Active) && (char `elem` [ toUpper a, toLower a ])
+    _ ->
+        False
 
 tokToChar :: PrimitiveToken -> Maybe CharCode
-tokToChar (UnexpandedTok (Lex.CharCatToken CharCat{char = c})) = Just c
-tokToChar _                                                    = Nothing
+tokToChar = \case
+    UnexpandedTok (Lex.CharCatToken CharCat{ char }) ->
+        Just char
+    _ ->
+        Nothing
 
 -- Lexed.
 tokToLex :: PrimitiveToken -> Maybe Lex.Token
-tokToLex (UnexpandedTok t) = Just t
-tokToLex _                 = Nothing
+tokToLex = \case
+    UnexpandedTok t -> Just t
+    _ -> Nothing
 
 handleLex :: (Lex.Token -> Maybe a) -> TeXParser s e m a
 handleLex f = satisfyThen $ tokToLex >=> f
@@ -512,8 +542,9 @@ skipBalancedText :: BalancedText -> TeXParser s e m ()
 skipBalancedText (BalancedText toks) = skipSatisfiedLexChunk toks
 
 liftLexPred :: (Lex.Token -> Bool) -> PrimitiveToken -> Bool
-liftLexPred f (UnexpandedTok lt) = f lt
-liftLexPred _ _                  = False
+liftLexPred f = \case
+    UnexpandedTok lt -> f lt
+    _ -> False
 
 -- Parsers.
 skipOneOptionalSpace :: TeXParser s e m ()
@@ -528,13 +559,11 @@ skipOptionalSpaces :: TeXParser s e m ()
 skipOptionalSpaces = skipManySatisfied isSpace
 
 skipOptionalEquals :: TeXParser s e m ()
-skipOptionalEquals = do
-    skipOptionalSpaces
-    skipOneOptionalSatisfied isEquals
+skipOptionalEquals = skipOptionalSpaces >> skipOneOptionalSatisfied isEquals
 
 skipKeyword :: [CharCode] -> TeXParser s e m ()
 skipKeyword s = skipOptionalSpaces
-    *> mapM_ (skipSatisfied . matchNonActiveCharacterUncased) s
+    >> mapM_ (skipSatisfied . matchNonActiveCharacterUncased) s
 
 parseOptionalKeyword :: [CharCode] -> TeXParser s e m Bool
 parseOptionalKeyword s = isJust <$> optional (skipKeyword s)

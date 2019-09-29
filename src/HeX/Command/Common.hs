@@ -70,10 +70,8 @@ runLoop f = go
                 pure result
 
 runCommandLoop
-    :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m HP.TeXStreamE
+    :: ( HP.TeXParseable s e m
        , MonadState s m
-       , MonadIO m
        )
     => (st -> HP.Command -> s -> m (RecursionResult st r))
     -> st
@@ -83,7 +81,7 @@ runCommandLoop f = runLoop g
     g elemList =
         do
         oldStream <- get
-        (newStream, command) <- HP.runParser HP.parseCommand oldStream
+        (newStream, command) <- HP.runSimpleRunParserT' HP.parseCommand oldStream
         put newStream
         liftIO $ print command
         f elemList command oldStream
