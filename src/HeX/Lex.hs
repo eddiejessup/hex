@@ -10,6 +10,9 @@ import qualified HeX.Categorise as Cat
 newtype ControlSequence = ControlSequence (ForwardDirected [] CharCode)
     deriving (Show, Eq)
 
+instance Readable ControlSequence where
+    describe (ControlSequence (FDirected ccs)) = "\\" <> toS ccs
+
 data ControlSequenceLike
     = ActiveCharacter CharCode
     | ControlSequenceProper ControlSequence
@@ -27,10 +30,17 @@ data CharCat = CharCat
     , cat  :: Cat.CoreCatCode
     } deriving (Show, Eq)
 
+instance Readable CharCat where
+    describe CharCat { char, cat } = toS [char] <> "[" <> describe cat <> "]"
+
 data Token
     = CharCatToken CharCat
     | ControlSequenceToken ControlSequence
     deriving (Show, Eq)
+
+instance Readable Token where
+    describe (CharCatToken cc) = describe cc
+    describe (ControlSequenceToken cs) = describe cs
 
 instance Ord Token where
     compare _ _ = EQ

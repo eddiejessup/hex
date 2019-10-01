@@ -1,5 +1,4 @@
 {-# LANGUAGE RankNTypes           #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 module HeX.Parse.Stream.Class where
 
@@ -38,15 +37,11 @@ class TeXStream s where
 
     getConditionBodyState :: s -> Maybe ConditionBodyState
 
-data EndOfInputError = EndOfInputError
-    deriving (Show)
-
 newtype ExpansionError = ExpansionError Text
     deriving (Show)
 
 type TeXStreamE =
-   '[ EndOfInputError
-    , EvaluationError
+   '[ EvaluationError
     , ConfigError
     , D.Path.PathError
     , ExpansionError
@@ -74,27 +69,22 @@ simpleRunParserT' parser stream =
   where
     inState = P.State
         { P.stateInput = stream
-        , P.stateOffset = 0
-        , P.statePosState = posState
-        }
-
-    posState = P.PosState
-        { P.pstateInput = stream
-        , P.pstateOffset = 0
-        , P.pstateSourcePos = srcPos
-        , P.pstateTabWidth = P.mkPos 4
-        , P.pstateLinePrefix = "TeX Error = "
-        }
-
-    srcPos = P.SourcePos
-        { P.sourceName = "TeX file"
-        , P.sourceLine = P.mkPos 0
-        , P.sourceColumn = P.mkPos 0
+        , P.stateOffset = 1
+        , P.statePosState = P.PosState
+            { P.pstateInput = stream
+            , P.pstateOffset = 1
+            , P.pstateSourcePos = P.SourcePos
+                { P.sourceName = "TeX file"
+                , P.sourceLine = P.mkPos 1
+                , P.sourceColumn = P.mkPos 1
+                }
+            , P.pstateTabWidth = P.mkPos 4
+            , P.pstateLinePrefix = "TeX Error = "
+            }
         }
 
 runSimpleRunParserT'
-    :: ( MonadError (Variant e) m
-       , CouldBeF e ExpansionError
+    :: ( MonadErrorAnyOf e m TeXStreamE
        , Show s
        , Show (P.Token s)
        )
@@ -103,10 +93,10 @@ runSimpleRunParserT'
     -> m (s, a)
 runSimpleRunParserT' parser stream =
     simpleRunParserT' parser stream >>= \case
-        (_, Left err) ->
-            throwM $ ExpansionError (show err)
         (resultStream, Right a) ->
             pure (resultStream, a)
+        (_, Left err) ->
+            throwM $ ExpansionError $ show err
 
 type TeXParser s e m a = TeXParseable s e m => SimpleParsecT s m a
 
@@ -125,16 +115,14 @@ manySatisfiedThen :: (P.Token s -> Maybe a) -> TeXParser s e m [a]
 manySatisfiedThen f = PC.many $ satisfyThen f
 
 -- Skipping.
-skipSatisfied :: MatchToken s -> TeXParser s e m ()
-skipSatisfied f = satisfyThen $ \x -> if f x
-          then Just ()
-          else Nothing
+skipSatisfied :: P.MonadParsec e s m => MatchToken s -> m ()
+skipSatisfied f = void (P.satisfy f)
 
-skipSatisfiedEquals :: P.Token s -> TeXParser s e m ()
-skipSatisfiedEquals t = skipSatisfied (== t)
+satisfyEquals :: P.MonadParsec e s m => P.Token s -> m ()
+satisfyEquals t = skipSatisfied (== t)
 
 skipOptional :: TeXParser s e m a -> TeXParser s e m ()
-skipOptional p = optional p $> ()
+skipOptional p = void (optional p)
 
 skipOneOptionalSatisfied :: MatchToken s -> TeXParser s e m ()
 skipOneOptionalSatisfied = skipOptional . skipSatisfied
@@ -143,7 +131,12 @@ skipManySatisfied :: MatchToken s -> TeXParser s e m ()
 skipManySatisfied = PC.skipMany . skipSatisfied
 
 skipSatisfiedChunk :: [P.Token s] -> TeXParser s e m ()
-skipSatisfiedChunk = foldr (skipSatisfiedEquals >>> (>>)) (pure ())
+skipSatisfiedChunk = foldr (satisfyEquals >>> (>>)) (pure ())
+
+-- Trying.
+
+tryChoice :: (Foldable f, Functor f, P.MonadParsec e s m) => f (m a) -> m a
+tryChoice ps = P.choice $ P.try <$> ps
 
 inhibitExpansion, enableExpansion :: TeXStream s => s -> s
 inhibitExpansion = setExpansion NotExpanding
@@ -305,32 +298,32 @@ parseParamDelims = BalancedText <$> manySatisfiedThen tokToDelimTok
     tokToDelimTok _ = Nothing
 
 maybeParseParametersFrom :: Digit -> TeXParser s e m MacroParameters
-maybeParseParametersFrom dig = parseEndOfParams <|> parseParametersFrom
+maybeParseParametersFrom dig =
+    tryChoice [parseEndOfParams, parseParametersFrom]
     -- Parse the left-brace that indicates the end of parameters.
+  where
+    parseEndOfParams = skipSatisfied (primTokHasCategory Cat.BeginGroup)
+        $> Map.empty
 
-      where
-        parseEndOfParams = skipSatisfied (primTokHasCategory Cat.BeginGroup)
-            $> Map.empty
+    -- Parse a present parameter, then the remaining parameters, if present.
+    parseParametersFrom = do
+        -- Parse, for example, '#3'.
+        skipSatisfied $ primTokHasCategory Cat.Parameter
+        skipSatisfied $ liftLexPred matchesDigit
+        -- Parse delimiter tokens after the parameter number, if present.
+        thisParam <- parseParamDelims
+        -- Return this parameter, plus any remaining parameters.
+        Map.insert dig thisParam <$> case dig of
+            -- If we are parsing parameter nine, there can't be any more, so we
+            -- only expect to end the parameters.
+            Nine -> parseEndOfParams
+            -- Otherwise, we can either end the parameters, or have some more,
+            -- starting from the successor of this digit.
+            _    -> maybeParseParametersFrom (succ dig)
 
-        -- Parse a present parameter, then the remaining parameters, if present.
-        parseParametersFrom = do
-            -- Parse, for example, '#3'.
-            skipSatisfied $ primTokHasCategory Cat.Parameter
-            skipSatisfied $ liftLexPred matchesDigit
-            -- Parse delimiter tokens after the parameter number, if present.
-            thisParam <- parseParamDelims
-            -- Return this parameter, plus any remaining parameters.
-            Map.insert dig thisParam <$> case dig of
-                -- If we are parsing parameter nine, there can't be any more, so we
-                -- only expect to end the parameters.
-                Nine -> parseEndOfParams
-                -- Otherwise, we can either end the parameters, or have some more,
-                -- starting from the successor of this digit.
-                _    -> maybeParseParametersFrom (succ dig)
-
-        matchesDigit (Lex.CharCatToken CharCat{char = c, cat = cat}) =
-            (cat `elem` [ Cat.Letter, Cat.Other ]) && (c == digitToChar dig)
-        matchesDigit _ = False
+    matchesDigit (Lex.CharCatToken CharCat{char = c, cat = cat}) =
+        (cat `elem` [ Cat.Letter, Cat.Other ]) && (c == digitToChar dig)
+    matchesDigit _ = False
 
 unsafeParseParamText :: TeXParser s e m (BalancedText, MacroParameters)
 unsafeParseParamText = do
@@ -532,8 +525,8 @@ tokToLex = \case
 handleLex :: (Lex.Token -> Maybe a) -> TeXParser s e m a
 handleLex f = satisfyThen $ tokToLex >=> f
 
-skipSatisfiedEqualsLex :: Lex.Token -> TeXParser s e m ()
-skipSatisfiedEqualsLex lt = skipSatisfiedEquals (UnexpandedTok lt)
+satisfyEqualsLex :: Lex.Token -> TeXParser s e m ()
+satisfyEqualsLex lt = void $ satisfyEquals (UnexpandedTok lt)
 
 skipSatisfiedLexChunk :: [Lex.Token] -> TeXParser s e m ()
 skipSatisfiedLexChunk ts = skipSatisfiedChunk (UnexpandedTok <$> ts)

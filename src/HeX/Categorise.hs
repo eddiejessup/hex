@@ -24,6 +24,9 @@ data CoreCatCode
     | Active       -- 13
     deriving (Show, Eq)
 
+instance Readable CoreCatCode where
+    describe = show
+
 data CatCode
     = Escape       -- 0
     | EndOfLine    -- 5

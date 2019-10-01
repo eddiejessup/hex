@@ -10,4 +10,4 @@ import           HeX.Parse.Token
 
 parseCSNameArgs :: TeXParser s e m (ForwardDirected [] Cat.CharCode)
 parseCSNameArgs =
-    FDirected <$> (parseManyChars <* skipSatisfiedEquals (SyntaxCommandArg EndCSNameTok))
+    FDirected <$> (parseManyChars <* satisfyEquals (SyntaxCommandArg EndCSNameTok))

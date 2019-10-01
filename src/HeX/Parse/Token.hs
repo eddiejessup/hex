@@ -477,6 +477,9 @@ data PrimitiveToken
     | UnexpandedTok Lex.Token
     deriving (Show, Eq)
 
+instance Readable PrimitiveToken where
+    describe = show
+
 instance Ord PrimitiveToken where
     compare _ _ = EQ
 
@@ -534,6 +537,9 @@ data SyntaxCommandHeadToken
     | TheTok  -- \the
     | ChangeCaseTok VDirection -- \uppercase, \lowercase
     deriving (Show, Eq)
+
+instance Readable SyntaxCommandHeadToken where
+    describe = show
 
 data ResolvedToken
     = SyntaxCommandHeadToken SyntaxCommandHeadToken

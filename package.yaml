@@ -18,13 +18,9 @@ dependencies:
 - bytestring
 - containers
 - directory
-- either
-- extra
-- filepath
 - hashable
 - ilist
 - megaparsec
-- MissingH
 - mtl
 - parser-combinators
 - path
@@ -32,11 +28,9 @@ dependencies:
 - protolude
 - QuickCheck
 - safe
-- split
 - text
 - transformers
 - unordered-containers
-- vector
 - witherable
 
 library:
@@ -75,7 +69,6 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -O0
     dependencies:
     - hex
     - hspec

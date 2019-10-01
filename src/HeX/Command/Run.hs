@@ -27,7 +27,7 @@ import           HeX.Evaluate              (EvaluationError)
 import           HeX.Lex                   (LexState (..), extractToken)
 import           HeX.Parse                 (ExpandedStream, ExpansionMode (..),
                                             IndentFlag (..), TeXStream,
-                                            ExpansionError, EndOfInputError (..),
+                                            ExpansionError,
                                             defaultCSMap,
                                             parseCommand, resolveToken,
                                             TeXStreamE, runSimpleRunParserT',
@@ -40,7 +40,6 @@ type AppError =
              , PathError
              , ExpansionError
              , TFMError
-             , EndOfInputError
              ]
 
 newtype App a
@@ -121,12 +120,7 @@ runParseLoop
     -> IO ()
 runParseLoop p s = runExceptT (runSimpleRunParserT' p s) >>= \case
     Left err ->
-        let
-            caught :: Either (Variant '[EvaluationError, ConfigError, Data.Path.PathError, ExpansionError]) EndOfInputError
-            caught = catch err
-        in case caught of
-            Left otherErr -> panic $ show otherErr
-            Right EndOfInputError -> pure ()
+        panic $ show err
     Right (newS, tok) ->
         print tok >> runParseLoop p newS
 
