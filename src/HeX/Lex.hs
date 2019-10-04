@@ -1,29 +1,25 @@
+{-# LANGUAGE DeriveAnyClass #-}
+
 module HeX.Lex where
 
 import           HeXlude
 
-import           Data.Hashable  (Hashable, hashWithSalt)
-
+import           Data.Hashable  (Hashable)
+import qualified Data.Sequence as Seq
 import           HeX.Categorise (CatCode, CharCode)
 import qualified HeX.Categorise as Cat
 
-newtype ControlSequence = ControlSequence (ForwardDirected [] CharCode)
-    deriving (Show, Eq)
+newtype ControlSequence = ControlSequence (Seq CharCode)
+    deriving stock (Show, Eq, Generic)
+    deriving newtype (Hashable)
 
 instance Readable ControlSequence where
-    describe (ControlSequence (FDirected ccs)) = "\\" <> toS ccs
+    describe (ControlSequence ccs) = "\\" <> toS ccs
 
 data ControlSequenceLike
     = ActiveCharacter CharCode
     | ControlSequenceProper ControlSequence
-    deriving (Show, Eq)
-
-instance Hashable ControlSequenceLike where
-    hashWithSalt s (ControlSequenceProper cs) = hashWithSalt s cs
-    hashWithSalt s (ActiveCharacter cc)       = hashWithSalt s cc
-
-instance Hashable ControlSequence where
-    hashWithSalt s (ControlSequence w) = hashWithSalt s w
+    deriving (Show, Eq, Generic, Hashable)
 
 data CharCat = CharCat
     { char :: CharCode
@@ -68,26 +64,24 @@ chopDropWhile getNext test cs = case getNext cs of
 chopBreak
     :: (b -> Maybe (a, b))
     -> b
-    -> (ForwardDirected [] a, b)
-chopBreak getNext xs = revFirst $ go (BDirected []) xs
+    -> (Seq a, b)
+chopBreak getNext xs = go Empty xs
   where
-    revFirst (a, b) = (revBackwardList a, b)
-
-    go acc@(BDirected accList) cs = case getNext cs of
+    go acc cs = case getNext cs of
         Nothing ->
             (acc, cs)
         Just (next, csRest) ->
-            go (BDirected (next : accList)) csRest
+            go (acc :|> next) csRest
 
 parToken :: Token
-parToken = ControlSequenceToken $ ControlSequence (FDirected "par")
+parToken = ControlSequenceToken $ ControlSequence ("par")
 
 extractToken
     :: (CharCode -> CatCode)
     -> LexState
-    -> ForwardDirected [] CharCode
-    -> Maybe (Token, LexState, ForwardDirected [] CharCode)
-extractToken _     _     (FDirected []) = Nothing
+    -> Seq CharCode
+    -> Maybe (Token, LexState, Seq CharCode)
+extractToken _     _     Empty = Nothing
 extractToken charToCat _state cs =
     do
     (cc1, rest) <- getCC cs
@@ -109,10 +103,10 @@ extractToken charToCat _state cs =
             (csCC1@(Cat.CharCat _ ctrlSeqCat1), restPostEscape) <- getCC rest
             let (ctrlSeqCCs, restPostCtrlSeq) = case ctrlSeqCat1 of
                     Cat.CoreCatCode Cat.Letter ->
-                        let (FDirected ctrlWordCCsPostFirst, restPostCtrlWord) = chopBreak getLetterCC restPostEscape
-                        in  (FDirected (csCC1 : ctrlWordCCsPostFirst), restPostCtrlWord)
+                        let (ctrlWordCCsPostFirst, restPostCtrlWord) = chopBreak getLetterCC restPostEscape
+                        in  ((csCC1 :<| ctrlWordCCsPostFirst), restPostCtrlWord)
                     _ ->
-                        (FDirected [csCC1], restPostEscape)
+                        (singleton csCC1, restPostEscape)
                 nextState = case ctrlSeqCat1 of
                     Cat.CoreCatCode Cat.Space  -> SkippingBlanks
                     Cat.CoreCatCode Cat.Letter -> SkippingBlanks
@@ -124,7 +118,7 @@ extractToken charToCat _state cs =
         -- Comment: Ignore rest of line and switch to line-begin.
         (Cat.Comment, _) ->
             extractToken charToCat LineBegin $
-                fwdListDropWhile (\c -> charToCat c /= Cat.EndOfLine) rest
+                Seq.dropWhileL (\c -> charToCat c /= Cat.EndOfLine) rest
         -- Space at the start of a line: Ignore.
         (Cat.CoreCatCode Cat.Space, LineBegin) ->
             extractToken charToCat _state rest

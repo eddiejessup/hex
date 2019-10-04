@@ -6,9 +6,10 @@ import qualified Data.Adjacent      as A
 
 import qualified HeX.Box            as B
 import           HeX.BreakList.Glue
+import           HeX.Quantity
 
 data BreakItem =
-    GlueBreak Glue | KernBreak B.Kern | PenaltyBreak Penalty | NoBreak
+    GlueBreak (Glue TeXLength) | KernBreak B.Kern | PenaltyBreak Penalty | NoBreak
     deriving ( Show )
 
 breakPenalty :: BreakItem -> Int
@@ -24,21 +25,10 @@ instance Readable Penalty where
     describe (Penalty p) = "|p" <> show p <> "|"
 
 class BreakableListElem a where
-    toGlue :: a -> Maybe Glue
+    toGlue :: a -> Maybe (Glue TeXLength)
 
     isDiscardable :: a -> Bool
 
     isBox :: a -> Bool
 
     toBreakItem :: A.Adj a -> Maybe BreakItem
-
-    naturalSpan :: a -> Int
-
-naturalListSpan :: (Functor f, Foldable f) => BreakableListElem a => f a -> Int
-naturalListSpan = sum . fmap naturalSpan
-
-glues :: (Filterable f, BreakableListElem a) => f a -> f Glue
-glues = mapMaybe toGlue
-
-totalGlue :: (Filterable f, BreakableListElem a, Foldable f) => f a -> Glue
-totalGlue = mconcat . glues

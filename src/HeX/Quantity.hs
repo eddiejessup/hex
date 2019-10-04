@@ -1,6 +1,6 @@
-module HeX.Unit where
+module HeX.Quantity where
 
-import           Protolude
+import           HeXlude
 
 import           Data.Ratio ((%))
 import           Data.Text  (Text)
@@ -11,7 +11,7 @@ tenK = 10000
 hunK :: Int
 hunK = 100000
 
-oneKPt :: Int
+oneKPt :: TeXLength
 oneKPt = toScaledPointApprox (1000 :: Int) Point
 
 -- Functions related to units used in the TeX world.
@@ -65,6 +65,18 @@ data PhysicalUnit
     | ScaledPoint -- 'sp'
     deriving (Show)
 
+instance Readable PhysicalUnit where
+    describe = \case
+        Point       -> "pt"
+        Pica        -> "pc"
+        Inch        -> "in"
+        BigPoint    -> "bp"
+        Centimetre  -> "cm"
+        Millimetre  -> "mm"
+        Didot       -> "dd"
+        Cicero      -> "cc"
+        ScaledPoint -> "sp"
+
 inScaledPoint :: PhysicalUnit -> Rational
 inScaledPoint u = case u of
     Point       -> fromIntegral pointInScaledPoint
@@ -98,3 +110,72 @@ showFrac n = show $ roundToDec 1 (realToFrac n :: Double)
 showSP :: Real n => n -> Text
 showSP n =
   showFrac ((realToFrac n * realToFrac (scaledPointIn Point)) :: Double) <> "pt"
+
+type TeXIntVal = Int
+
+newtype TeXLength = TeXLength { unLength :: Int }
+    deriving (Show, Num, Eq, Ord, Enum, Real, Integral)
+
+scaleTeXLength :: TeXLength -> Int -> TeXLength
+scaleTeXLength (TeXLength d) n = TeXLength (d * n)
+
+shrinkTeXLength :: TeXLength -> Int -> TeXLength
+shrinkTeXLength (TeXLength d) n = TeXLength (d `quot` n)
+
+instance Readable TeXLength where
+    describe = showSP
+
+newtype MathLength = MathLength { unMathLength :: Int }
+    deriving (Show, Num, Eq, Ord, Enum, Real, Integral)
+
+scaleMathLength :: MathLength -> Int -> MathLength
+scaleMathLength (MathLength d) n = MathLength (d * n)
+
+shrinkMathLength :: MathLength -> Int -> MathLength
+shrinkMathLength (MathLength d) n = MathLength (d `quot` n)
+
+newNBitInt :: Alternative f => (Int -> a) -> Int ->  Int -> f a
+newNBitInt f nBits n
+    | n < 0 = empty
+    | n >= (2 ^ nBits) = empty
+    | otherwise = pure $ f n
+
+-- 8-bit.
+
+newtype EightBitInt = EightBitInt TeXIntVal
+    deriving (Show, Eq, Generic, Enum)
+
+instance Hashable EightBitInt
+
+instance Bounded EightBitInt where
+    minBound = EightBitInt 0
+    maxBound = EightBitInt (2 ^ (8 :: Int) - 1)
+
+newEightBitInt :: Alternative f => Int -> f EightBitInt
+newEightBitInt = newNBitInt EightBitInt 8
+
+-- 4-bit.
+
+newtype FourBitInt = FourBitInt TeXIntVal
+    deriving (Show, Eq, Generic, Enum)
+
+instance Hashable FourBitInt
+
+instance Bounded FourBitInt where
+    minBound = FourBitInt 0
+    maxBound = FourBitInt (2 ^ (4 :: Int) - 1)
+
+newFourBitInt :: Alternative f => Int -> f FourBitInt
+newFourBitInt = newNBitInt FourBitInt 4
+
+class Dimensioned a where
+    naturalLength :: BoxDim -> a -> TeXLength
+
+naturalWidth, naturalHeight, naturalDepth :: Dimensioned a => a -> TeXLength
+naturalWidth  = naturalLength BoxWidth
+naturalHeight = naturalLength BoxHeight
+naturalDepth  = naturalLength BoxDepth
+
+axisNaturalSpan :: Dimensioned a => Axis -> a -> TeXLength
+axisNaturalSpan Vertical   a = naturalHeight a + naturalDepth a
+axisNaturalSpan Horizontal a = naturalWidth a

@@ -9,6 +9,7 @@ import           Data.Char                 (chr)
 import qualified Data.List.NonEmpty        as L.NE
 import           Data.Map.Strict           ((!?))
 import qualified Data.Map.Strict           as Map
+import qualified Data.Sequence             as Seq
 import qualified Data.Path                 as D.Path
 import           Path                      (Abs, File, Path)
 import qualified Path
@@ -40,17 +41,17 @@ data ExpandedStream = ExpandedStream
 
 data TokenSource = TokenSource
     { sourcePath      :: Maybe (Path Abs File)
-    , sourceCharCodes :: ForwardDirected [] Cat.CharCode
-    , sourceLexTokens :: [Lex.Token]
+    , sourceCharCodes :: Seq Cat.CharCode
+    , sourceLexTokens :: Seq Lex.Token
     }
     deriving ( Show )
 
 instance Show ExpandedStream where
     show _ = "ExpandedStream {..}"
-newTokenSource :: Maybe (Path Abs File) -> ForwardDirected [] CharCode -> TokenSource
+newTokenSource :: Maybe (Path Abs File) -> Seq CharCode -> TokenSource
 newTokenSource maybePath cs = TokenSource maybePath cs mempty
 
-newExpandStream :: Maybe (Path Abs File) -> ForwardDirected [] Cat.CharCode -> IO ExpandedStream
+newExpandStream :: Maybe (Path Abs File) -> Seq Cat.CharCode -> IO ExpandedStream
 newExpandStream maybePath cs =
     do
     conf <- Conf.newConfig
@@ -138,7 +139,7 @@ instance TeXStream ExpandedStream where
     insertLexToken s t =
         let
             curTokSource@TokenSource{ sourceLexTokens } :| outerStreams = streamTokenSources s
-            updatedCurTokSource = curTokSource{ sourceLexTokens = t : sourceLexTokens }
+            updatedCurTokSource = curTokSource{ sourceLexTokens = t :<| sourceLexTokens }
         in
             s{ streamTokenSources = updatedCurTokSource :| outerStreams }
 
@@ -146,38 +147,38 @@ instance TeXStream ExpandedStream where
 
 -- Expanding syntax commands.
 
-expandCSName :: ForwardDirected [] CharCode -> [Lex.Token]
+expandCSName :: Applicative t => Seq CharCode -> t Lex.Token
 expandCSName charToks =
     -- TODO: if control sequence doesn't exist, define one that holds
     -- '\relax'.
-    [ Lex.ControlSequenceToken $ Lex.ControlSequence charToks ]
+    pure (Lex.ControlSequenceToken $ Lex.ControlSequence charToks)
 
 expandString :: Conf.IntParamVal Conf.EscapeChar
              -> Lex.Token
-             -> [Lex.Token]
+             -> Seq Lex.Token
 expandString (Conf.IntParamVal escapeCharCode) tok =
     case tok of
         Lex.CharCatToken _ ->
-            [ tok ]
-        Lex.ControlSequenceToken (Lex.ControlSequence (FDirected s)) ->
+            singleton tok
+        Lex.ControlSequenceToken (Lex.ControlSequence s) ->
             charCodeAsMadeToken <$> addEscapeChar s
   where
     addEscapeChar = if (escapeCharCode < 0) || (escapeCharCode > 255)
         then id
-        else (chr escapeCharCode :)
+        else (chr escapeCharCode :<|)
 
 expandMacro :: MonadErrorAnyOf e m '[ExpansionError]
             => MacroContents
             -> Map.Map Digit MacroArgument
-            -> m [Lex.Token]
+            -> m (Seq Lex.Token)
 expandMacro MacroContents{replacementTokens = (MacroText replaceToks)} args =
     mconcatMapM renderToken replaceToks
   where
-    mconcatMapM f = liftM mconcat . mapM f
+    mconcatMapM f = fmap fold . mapM f
 
     renderToken = \case
         MacroTextLexToken x
-            -> pure [x]
+            -> pure (singleton x)
         MacroTextParamToken dig ->
             case args !? dig of
                 Nothing ->
@@ -191,7 +192,7 @@ expandMacro MacroContents{replacementTokens = (MacroText replaceToks)} args =
 -- Don't change the category code.
 expandChangeCase :: (CharCode -> Conf.CaseChangeCode)
                  -> BalancedText
-                 -> [Lex.Token]
+                 -> Seq Lex.Token
 expandChangeCase lookupChangeCaseCode (BalancedText caseToks) =
     changeCase <$> caseToks
       where
@@ -256,7 +257,7 @@ skipUpToCaseBlock tgt stream = go stream 0 1
             | n == 1, cur == tgt =
                 -- If we are at top condition depth,
                 pure $ Just _stream{ skipState = CaseBodyState CasePostOr : skipState _stream }
-            | otherwise = do
+            | otherwise =
                 withJust (fetchResolvedToken _stream) $ \(_, rt, _stream') ->
                     do
                     let cont = go _stream'
@@ -328,7 +329,6 @@ expandConditionToken strm = \case
             skipToEndOfCondition condRest
   where
     skipToEndOfCondition condRest =
-        do
         withJust (skipToIfDelim IfPostElse strm) $ \skippedStream ->
             pure $ Just skippedStream{skipState = condRest}
 
@@ -336,13 +336,13 @@ expandSyntaxCommand
     :: TeXParseable ExpandedStream e m
     => ExpandedStream
     -> SyntaxCommandHeadToken
-    -> m (Maybe (ExpandedStream, [Lex.Token]))
+    -> m (Maybe (ExpandedStream, Seq Lex.Token))
 expandSyntaxCommand strm = \case
     MacroTok m ->
         runExpandCommand strm (parseMacroArgs m) (expandMacro m)
     ConditionTok ct ->
         withJust (expandConditionToken strm ct) $ \newStrm ->
-            pure $ Just (newStrm, [])
+            pure $ Just (newStrm, mempty)
     NumberTok ->
         panic "Not implemented: syntax command NumberTok"
     RomanNumeralTok ->
@@ -366,7 +366,7 @@ expandSyntaxCommand strm = \case
             Just (argLT, postArgStream) ->
                 withJust (fetchAndExpandToken postArgStream) $ \(postArgLTs, _, expandedStream) ->
                     -- Prepend the unexpanded token.
-                    pure $ Just (expandedStream, argLT : postArgLTs)
+                    pure $ Just (expandedStream, argLT :<| postArgLTs)
     NoExpandTok ->
         panic "Not implemented: syntax command NoExpandTok"
     MarkRegisterTok _ ->
@@ -383,9 +383,9 @@ expandSyntaxCommand strm = \case
                 Nothing -> []
         absPath <- Path.IO.makeAbsolute texPath
         path <- runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)
-        newCodes <- liftIO (D.Path.readPathChars path) <&> FDirected
-        let newSource = newTokenSource (Just absPath) newCodes
-        pure $ Just (resultStream{ streamTokenSources = newSource `L.NE.cons` streamTokenSources }, [])
+        newCodes <- liftIO (D.Path.readPathChars path)
+        let newSource = newTokenSource (Just absPath) (Seq.fromList newCodes)
+        pure $ Just (resultStream{ streamTokenSources = newSource `L.NE.cons` streamTokenSources }, mempty)
     EndInputTok ->
         panic "Not implemented: syntax command EndInputTok"
     TheTok ->
@@ -407,13 +407,13 @@ fetchLexToken :: ExpandedStream -> Maybe (Lex.Token, ExpandedStream)
 fetchLexToken stream =
     case sourceLexTokens of
         -- If there is a lex token in the buffer, use that.
-        fstLexToken : laterLexTokens ->
+        fstLexToken :<| laterLexTokens ->
             let
                 newCurTokSource = curTokSource{ sourceLexTokens = laterLexTokens }
             in
                 Just (fstLexToken, stream{ streamTokenSources = newCurTokSource :| outerStreams })
         -- If the lex token buffer is empty, extract a token and use it.
-        [] ->
+        Empty ->
             let
                 lkpCatCode t = Conf.lookupCatCode t (config stream)
             in
@@ -449,17 +449,14 @@ fetchResolvedToken stream =
 fetchAndExpandToken
     :: TeXParseable ExpandedStream e m
     => ExpandedStream
-    -> m (Maybe ([Lex.Token], ResolvedToken, ExpandedStream))
+    -> m (Maybe (Seq Lex.Token, ResolvedToken, ExpandedStream))
 fetchAndExpandToken stream =
     withJust (fetchResolvedToken stream) $ \(lt, rt, newStream) ->
         case rt of
             PrimitiveToken _ ->
-                do
                 -- putText $ "$> ---- Got Lex-token: " <> describe lt <> "\n*> ---- Resolved to Primitive-token: " <> describe pt <> "\n\n"
-                pure $ Just ([lt], rt, newStream)
+                pure $ Just (singleton lt, rt, newStream)
             SyntaxCommandHeadToken c ->
-                do
                 withJust (expandSyntaxCommand newStream c) $ \(expandStream, lts) ->
-                    do
                     -- putText $ "$> ---- Got Lex-token: " <> describe lt <> "\n*> ---- Resolved to Syntax-command-head-token: " <> describe c <> "\n>> ---- Expanded to lex-tokens: " <> describe lts <> "\n\n"
                     pure $ Just (lts, rt, expandStream)

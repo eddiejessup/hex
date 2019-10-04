@@ -7,24 +7,23 @@ import qualified Path
 import           HeX.Categorise  (CharCode)
 import qualified HeX.Lex         as Lex
 import qualified HeX.Parse.Token as T
-import           HeX.Unit        (PhysicalUnit (..))
+import qualified HeX.Quantity    as Q
 
 -- TeXInt.
 
-data TeXInt = TeXInt T.Sign UnsignedTeXInt
-    deriving ( Show )
+type TeXInt = T.Signed UnsignedTeXInt
 
 newtype EightBitTeXInt = EightBitTeXInt TeXInt
     deriving ( Show )
 
-constTeXInt :: TeXIntVal -> TeXInt
-constTeXInt n = TeXInt (T.Sign True) $ constUTeXInt n
+constTeXInt :: Q.TeXIntVal -> TeXInt
+constTeXInt n = T.Signed T.Positive $ constUTeXInt n
 
 data UnsignedTeXInt =
     NormalTeXIntAsUTeXInt NormalTeXInt | CoercedTeXInt CoercedTeXInt
     deriving ( Show )
 
-constUTeXInt :: TeXIntVal -> UnsignedTeXInt
+constUTeXInt :: Q.TeXIntVal -> UnsignedTeXInt
 constUTeXInt n = NormalTeXIntAsUTeXInt $ TeXIntConstant n
 
 -- Think: 'un-coerced integer'.
@@ -42,11 +41,10 @@ data CoercedTeXInt =
     deriving ( Show )
 
 -- Length.
-data Length = Length T.Sign UnsignedLength
-    deriving ( Show )
+type Length = T.Signed UnsignedLength
 
 zeroLength :: Length
-zeroLength = Length (T.Sign True) $
+zeroLength = T.Signed T.Positive $
     NormalLengthAsULength $
     LengthSemiConstant zeroFactor scaledPointUnit
 
@@ -54,12 +52,22 @@ data UnsignedLength =
     NormalLengthAsULength NormalLength | CoercedLength CoercedLength
     deriving ( Show )
 
+instance Readable UnsignedLength where
+    describe = \case
+        NormalLengthAsULength v -> describe v
+        CoercedLength v -> describe v
+
 -- Think: 'un-coerced length'.
 data NormalLength =
       -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
       LengthSemiConstant Factor Unit
     | InternalLength InternalLength
     deriving ( Show )
+
+instance Readable NormalLength where
+    describe = \case
+        LengthSemiConstant f u -> show f <> " " <> describe u
+        InternalLength il -> show il
 
 data Factor =
       NormalTeXIntFactor NormalTeXInt
@@ -75,11 +83,17 @@ zeroFactor = NormalTeXIntFactor zeroTeXInt
 oneFactor = NormalTeXIntFactor oneTeXInt
 
 data Unit =
-    PhysicalUnit PhysicalUnitFrame PhysicalUnit | InternalUnit InternalUnit
+    PhysicalUnit PhysicalUnitFrame Q.PhysicalUnit | InternalUnit InternalUnit
     deriving ( Show )
 
+instance Readable Unit where
+    describe = \case
+        PhysicalUnit MagnifiedFrame pu -> describe pu
+        PhysicalUnit TrueFrame pu -> "true " <> describe pu
+        InternalUnit iu -> describe iu
+
 scaledPointUnit :: Unit
-scaledPointUnit = PhysicalUnit MagnifiedFrame ScaledPoint
+scaledPointUnit = PhysicalUnit MagnifiedFrame Q.ScaledPoint
 
 data InternalUnit =
       Em
@@ -89,15 +103,23 @@ data InternalUnit =
     | InternalGlueUnit InternalGlue
     deriving ( Show )
 
+instance Readable InternalUnit where
+    describe = \case
+        Em -> "em"
+        Ex -> "ex"
+        v -> show v
+
 data PhysicalUnitFrame = MagnifiedFrame | TrueFrame
     deriving ( Show )
 
 newtype CoercedLength = InternalGlueAsLength InternalGlue
     deriving ( Show )
 
+instance Readable CoercedLength where
+    describe (InternalGlueAsLength ig) = "fromGlue(" <> show ig <> ")"
+
 -- Math-length.
-data MathLength = MathLength T.Sign UnsignedMathLength
-    deriving ( Show )
+type MathLength = T.Signed UnsignedMathLength
 
 data UnsignedMathLength = NormalMathLengthAsUMathLength NormalMathLength
                         | CoercedMathLength CoercedMathLength
@@ -117,8 +139,21 @@ newtype CoercedMathLength = InternalMathGlueAsMathLength InternalMathGlue
 
 -- Glue.
 data Glue = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
-          | InternalGlue T.Sign InternalGlue
+          | InternalGlue (T.Signed InternalGlue)
     deriving ( Show )
+
+instance Readable Glue where
+    describe = \case
+        ExplicitGlue len mayStretch mayShrink ->
+            describe len
+            <> case mayStretch of
+                    Nothing -> ""
+                    Just stretch -> " plus " <> show stretch
+            <> case mayShrink of
+                    Nothing -> ""
+                    Just shrink -> " minus " <> show shrink
+        InternalGlue ig ->
+            show ig
 
 data Flex = FiniteFlex Length | FilFlex FilLength
     deriving ( Show )
@@ -130,15 +165,15 @@ minusOneFilFlex = FilFlex minusOneFil
 
 oneFillFlex = FilFlex oneFill
 
-data FilLength = FilLength T.Sign Factor Int
+data FilLength = FilLength (T.Signed Factor) Int
     deriving ( Show )
 
 oneFil, minusOneFil, oneFill :: FilLength
-oneFil = FilLength (T.Sign True) oneFactor 1
+oneFil = FilLength (T.Signed T.Positive oneFactor) 1
 
-minusOneFil = FilLength (T.Sign False) oneFactor 1
+minusOneFil = FilLength (T.Signed T.Negative oneFactor) 1
 
-oneFill = FilLength (T.Sign True) oneFactor 2
+oneFill = FilLength (T.Signed T.Positive oneFactor) 2
 
 -- Math glue.
 data MathGlue = ExplicitMathGlue MathLength (Maybe MathFlex) (Maybe MathFlex)
@@ -166,8 +201,8 @@ data InternalTeXInt =
       InternalTeXIntVariable TeXIntVariable
     | InternalSpecialTeXInt T.SpecialTeXInt
     | InternalCodeTableRef CodeTableRef
-    | InternalCharToken TeXIntVal
-    | InternalMathCharToken TeXIntVal
+    | InternalCharToken Q.TeXIntVal
+    | InternalMathCharToken Q.TeXIntVal
     | InternalFontCharRef FontCharRef
     | LastPenalty
     | ParShape
@@ -230,7 +265,7 @@ data AssignmentBody =
     | SetVariable VariableAssignment
     | ModifyVariable VariableModification
     | AssignCode CodeAssignment
-    | SelectFont TeXIntVal
+    | SelectFont Q.TeXIntVal
     | SetFamilyMember FamilyMember FontRef
     | SetParShape [(Length, Length)]
     | SetBoxRegister EightBitTeXInt Box
@@ -310,6 +345,9 @@ data ModeIndependentCommand
     | ChangeScope T.Sign CommandTrigger
     deriving ( Show )
 
+instance Readable ModeIndependentCommand where
+    describe = show
+
 data Command
     = ShowToken Lex.Token
     | ShowBox TeXInt
@@ -330,6 +368,14 @@ data Command
     | ModeIndependentCommand ModeIndependentCommand
     deriving ( Show )
 
+instance Readable Command where
+    describe = \case
+        HModeCommand c -> describe c
+        VModeCommand c -> describe c
+        ModeIndependentCommand c -> describe c
+        c -> show c
+
+
 data VModeCommand
     = End
     | Dump
@@ -339,6 +385,9 @@ data VModeCommand
     | AddVRule Rule
     | AddUnwrappedFetchedVBox FetchedBoxRef -- \unv{box,copy}
     deriving ( Show )
+
+instance Readable VModeCommand where
+    describe = show
 
 data HModeCommand =
       AddControlSpace
@@ -353,6 +402,12 @@ data HModeCommand =
     | AddHRule Rule
     | AddUnwrappedFetchedHBox FetchedBoxRef -- \unh{box,copy}
     deriving ( Show )
+
+instance Readable HModeCommand where
+    describe = \case
+        AddCharacter ref -> "Add char " <> describe ref
+        AddHGlue g -> "Add glue " <> describe g
+        c -> show c
 
 data FetchedBoxRef = FetchedBoxRef TeXInt T.BoxFetchMode
     deriving ( Show )
@@ -392,8 +447,13 @@ data BoxPlacement = NaturalPlacement | ShiftedPlacement Axis Direction Length
     deriving ( Show )
 
 data CharCodeRef =
-    CharRef CharCode | CharTokenRef TeXIntVal | CharCodeNrRef TeXInt
+    CharRef CharCode | CharTokenRef Q.TeXIntVal | CharCodeNrRef TeXInt
     deriving ( Show )
+
+instance Readable CharCodeRef where
+    describe = \case
+        CharRef c -> toS $ "\"" <> [c] <> "\""
+        v -> show v
 
 -- Condition heads.
 data IfConditionHead =

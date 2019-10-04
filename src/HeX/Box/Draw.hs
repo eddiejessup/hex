@@ -2,29 +2,31 @@ module HeX.Box.Draw where
 
 import           HeXlude
 
-import qualified DVI.Document as D
+import qualified Data.Sequence as Seq
+import qualified DVI.Document  as D
 
 import           HeX.Box.Elem
+import           HeX.Quantity
 
-ruleToDVI :: Axis -> Rule -> ForwardDirected [] D.Instruction
+ruleToDVI :: Axis -> Rule -> Seq D.Instruction
 ruleToDVI ax b =
-    FDirected $
+    Seq.fromList $
            [ D.PushStack ]
         <> [ D.AddRule b ]
         <> [ D.PopStack, D.Move ax $ axisNaturalSpan ax b ]
 
-boxToDVI :: Axis -> Box -> ForwardDirected [] D.Instruction
+boxToDVI :: Axis -> Box BoxContents -> Seq D.Instruction
 boxToDVI ax b =
-       FDirected [ D.PushStack ]
+       Seq.fromList [ D.PushStack ]
     <> contentDVI b
-    <> FDirected [ D.PopStack, D.Move ax $ axisNaturalSpan ax b ]
+    <> Seq.fromList [ D.PopStack, D.Move ax $ axisNaturalSpan ax b ]
   where
-    contentDVI :: Box -> ForwardDirected [] D.Instruction
-    contentDVI Box{contents} = case contents of
-        HBoxContents elems   -> mconcatMap hBoxElemToDVI elems
-        VBoxContents elems _ -> mconcatMap vBoxElemToDVI elems
+    contentDVI :: Box BoxContents -> Seq D.Instruction
+    contentDVI Box { contents } = case contents of
+        HBoxContents (HBox elems) -> mconcatMap hBoxElemToDVI elems
+        VBoxContents (VBox elems) -> mconcatMap vBoxElemToDVI elems
 
-axisVBoxElemToDVI :: Axis -> VBoxElem -> ForwardDirected [] D.Instruction
+axisVBoxElemToDVI :: Axis -> VBoxElem -> Seq D.Instruction
 axisVBoxElemToDVI ax el = case el of
     VBoxBaseElem (ElemBox b)            -> boxToDVI ax b
     VBoxBaseElem (ElemRule b)           -> ruleToDVI ax b
@@ -33,15 +35,16 @@ axisVBoxElemToDVI ax el = case el of
     VBoxBaseElem (ElemKern k)           -> pure (D.Move ax $ kernDimen k)
     BoxGlue g                           -> pure (D.Move ax $ glueDimen g)
 
-vBoxElemToDVI :: VBoxElem -> ForwardDirected [] D.Instruction
+vBoxElemToDVI :: VBoxElem -> Seq D.Instruction
 vBoxElemToDVI = axisVBoxElemToDVI Vertical
 
-hBoxElemToDVI :: HBoxElem -> ForwardDirected [] D.Instruction
-hBoxElemToDVI (HBoxHBaseElem (ElemCharacter e)) = FDirected [ D.AddCharacter e ]
+hBoxElemToDVI :: HBoxElem -> Seq D.Instruction
+hBoxElemToDVI (HBoxHBaseElem (ElemCharacter e)) = Seq.fromList [ D.AddCharacter e ]
 hBoxElemToDVI (HVBoxElem e) = axisVBoxElemToDVI Horizontal e
 
-pageToDVI :: Page -> ForwardDirected [] D.Instruction
-pageToDVI (Page vs) = FDirected [D.BeginNewPage] <> mconcatMap vBoxElemToDVI vs
+pageToDVI :: Page -> Seq D.Instruction
+pageToDVI (Page Box { contents = VBox es }) =
+    Seq.fromList [D.BeginNewPage] <> mconcatMap vBoxElemToDVI es
 
-pagesToDVI :: (Foldable t, Functor t) => ForwardDirected t Page -> ForwardDirected [] D.Instruction
+pagesToDVI :: Seq Page -> Seq D.Instruction
 pagesToDVI = mconcatMap pageToDVI

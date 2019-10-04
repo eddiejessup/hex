@@ -9,11 +9,11 @@ import qualified Control.Monad.Combinators as PC
 import           Control.Monad.State.Lazy  (MonadState, StateT, modify,
                                             runStateT)
 import           Data.Char                 (ord, toLower, toUpper)
-import qualified Data.Foldable             as Fold
 import           Data.Functor              (($>))
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Path                 as D.Path
+import qualified Data.Sequence             as Seq
 import qualified Text.Megaparsec           as P
 
 import qualified HeX.Categorise            as Cat
@@ -100,8 +100,9 @@ runSimpleRunParserT' parser stream =
 
 type TeXParser s e m a = TeXParseable s e m => SimpleParsecT s m a
 
-insertLexTokens :: TeXStream s => s -> [Lex.Token] -> s
-insertLexTokens s ts = Fold.foldl' insertLexToken s $ reverse ts
+insertLexTokens :: TeXStream s => s -> Seq Lex.Token -> s
+insertLexTokens s (ts :|> t) = insertLexTokens (insertLexToken s t) ts
+insertLexTokens s Empty = s
 
 satisfyThen :: (P.Token s -> Maybe a) -> TeXParser s e m a
 satisfyThen test = P.token test mempty
@@ -130,7 +131,7 @@ skipOneOptionalSatisfied = skipOptional . skipSatisfied
 skipManySatisfied :: MatchToken s -> TeXParser s e m ()
 skipManySatisfied = PC.skipMany . skipSatisfied
 
-skipSatisfiedChunk :: [P.Token s] -> TeXParser s e m ()
+skipSatisfiedChunk :: Seq (P.Token s) -> TeXParser s e m ()
 skipSatisfiedChunk = foldr (satisfyEquals >>> (>>)) (pure ())
 
 -- Trying.
@@ -177,10 +178,10 @@ runConfState f = do
 --     follows
 -- 10.  Just after a <‘,12> token that begins an alphabetic constant
 -- Case 3, macro arguments.
-newtype MacroArgument = MacroArgument [Lex.Token]
+newtype MacroArgument = MacroArgument (Seq Lex.Token)
     deriving ( Show, Eq )
 
-nrExpressions :: (a -> Ordering) -> [a] -> Maybe (Int, Int)
+nrExpressions :: Foldable t => (a -> Ordering) -> t a -> Maybe (Int, Int)
 nrExpressions f = foldM next (0, 0)
   where
     next v@(dpth, nrExprs) x = case f x of
@@ -191,16 +192,15 @@ nrExpressions f = foldM next (0, 0)
             | dpth == 1 -> Just (pred dpth, succ nrExprs)
             | otherwise -> Just (pred dpth, nrExprs)
 
-hasValidGrouping :: (a -> Ordering) -> [a] -> Bool
+hasValidGrouping :: Foldable t => (a -> Ordering) -> t a -> Bool
 hasValidGrouping f xs = case nrExpressions f xs of
     Just (0, _) -> True
     _           -> False
 
-splitLastMay :: [a] -> Maybe ([a], a)
-splitLastMay xs = do
-    z <- lastMay xs
-    ini <- initMay xs
-    pure (ini, z)
+splitLast :: Seq a -> Maybe (Seq a, a)
+splitLast = \case
+    xs :|> x -> Just (xs, x)
+    _        -> Nothing
 
 unsafeParseMacroArgs :: MacroContents -> TeXParser s e m (Map.Map Digit MacroArgument)
 unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
@@ -214,8 +214,8 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
         Nothing -> pure Map.empty
         Just ((dig, p), rest) -> do
             argRaw <- case p of
-                BalancedText []     -> parseUndelimitedArgs
-                BalancedText delims -> parseDelimitedArgs [] delims
+                BalancedText Empty  -> parseUndelimitedArgs
+                BalancedText delims -> parseDelimitedArgs Empty delims
             -- If the argument has the form ‘{⟨nested tokens⟩}’, where ⟨nested
             -- tokens⟩ stands for any properly nested token sequence, the outermost
             -- braces are removed.
@@ -227,24 +227,25 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
     -- If the parameter is undelimited, the argument is the next non-blank
     -- token, unless that token is ‘{’, when the argument will be the entire
     -- following {...} group.
-    parseUndelimitedArgs :: TeXParser s e m [Lex.Token]
+    parseUndelimitedArgs :: TeXParser s e m (Seq Lex.Token)
     parseUndelimitedArgs = do
         -- Skip blank tokens (assumed to mean spaces).
         skipManySatisfied (primTokHasCategory Cat.Space)
         unsafeAnySingleLex >>= \case
                 t@(Lex.CharCatToken CharCat{cat = Cat.BeginGroup}) -> do
-                    (BalancedText ts) <- unsafeParseBalancedText Include
-                    pure $ t : ts
-                t -> pure [ t ]
+                    BalancedText ts <- unsafeParseBalancedText Include
+                    pure $ t :<| ts
+                t -> pure $ singleton t
 
     -- Get the shortest, possibly empty, properly nested sequence of tokens,
     -- followed by the delimiter tokens. In the delimiter, category codes,
     -- character codes and control sequence names must match.
-    parseDelimitedArgs :: [Lex.Token] -> [Lex.Token] -> TeXParser s e m [Lex.Token]
+    parseDelimitedArgs :: Seq Lex.Token -> Seq Lex.Token -> TeXParser s e m (Seq Lex.Token)
     parseDelimitedArgs ts delims = do
         -- Parse tokens until we see the delimiter tokens, then add what we grab
         -- to our accumulating argument.
-        arg <- (ts <>) <$> PC.manyTill unsafeAnySingleLex (skipSatisfiedLexChunk delims)
+        newAcc <- Seq.fromList <$> PC.manyTill unsafeAnySingleLex (skipSatisfiedLexChunk delims)
+        let arg = ts <> newAcc
         if hasValidGrouping tokToChange arg
             then
                 -- If the argument has valid grouping, then we are done.
@@ -257,13 +258,13 @@ unsafeParseMacroArgs MacroContents{preParamTokens = pre, parameters = params} =
     -- Check if an argument has an outer '{}' pair that should be stripped, and
     -- do this if so.
     -- If we got an empty argument, can consider this to 'strip' to itself.
-    getStripped [] = Nothing
-    getStripped (a : xs) = do
+    getStripped Empty = Nothing
+    getStripped (a :<| xs) = do
         -- First token must be a '{'.
         guard $ lexTokHasCategory Cat.BeginGroup a
         -- Must have at least two tokens. If so, get the last token, 'z', and the
         -- tokens that sit before it, i.e. the stripped argument.
-        (inner, z) <- splitLastMay xs
+        (inner, z) <- splitLast xs
         -- The last token must be a '}'.
         guard $ lexTokHasCategory Cat.EndGroup z
         -- The stripped argument must have valid grouping.
@@ -288,7 +289,7 @@ unsafeAnySingleLex = satisfyThen tokToLex
 -- Case 6, macro parameter text.
 -- Trivially balanced, because no braces are allowed at all.
 parseParamDelims :: TeXParser s e m BalancedText
-parseParamDelims = BalancedText <$> manySatisfiedThen tokToDelimTok
+parseParamDelims = (BalancedText . Seq.fromList) <$> manySatisfiedThen tokToDelimTok
   where
     tokToDelimTok (UnexpandedTok lt)
         | lexTokHasCategory Cat.Parameter lt = Nothing
@@ -369,7 +370,7 @@ tokToChange t
 -- This assumes we just parsed the '{' that starts the balanced text.
 unsafeParseBalancedText :: TerminusPolicy -> TeXParser s e m BalancedText
 unsafeParseBalancedText policy =
-    BalancedText <$> parseNestedExpr 1 parseNext policy
+    (BalancedText . Seq.fromList) <$> parseNestedExpr 1 parseNext policy
   where
     parseNext = handleLex $ \t -> Just (t, tokToChange t)
 
@@ -381,14 +382,13 @@ unsafeParseBalancedText policy =
 unsafeParseMacroText :: TeXParser s e m MacroText
 unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
   where
-    parseNext = unsafeAnySingleLex
-        >>= \case
-            -- If we see a '#', parse the parameter number and return a token
-            -- representing the call.
-            Lex.CharCatToken CharCat{cat = Cat.Parameter} ->
-                handleLex handleParamNr <&> (, EQ)
-            -- Otherwise, just return the ordinary lex token.
-            t -> pure (MacroTextLexToken t, tokToChange t)
+    parseNext = unsafeAnySingleLex >>= \case
+        -- If we see a '#', parse the parameter number and return a token
+        -- representing the call.
+        Lex.CharCatToken CharCat{cat = Cat.Parameter} ->
+            handleLex handleParamNr <&> (, EQ)
+        -- Otherwise, just return the ordinary lex token.
+        t -> pure (MacroTextLexToken t, tokToChange t)
 
     -- We are happy iff the '#' is followed by a decimal digit, or another '#'.
     handleParamNr = \case
@@ -407,7 +407,7 @@ unsafeParseCharLike = ord <$> handleLex tokToCharLike
   where
     tokToCharLike (Lex.CharCatToken CharCat{char = c}) =
         Just c
-    tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence (FDirected [ c ]))) =
+    tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence (c :<| Empty))) =
         Just c
     tokToCharLike _ =
         Nothing
@@ -528,7 +528,7 @@ handleLex f = satisfyThen $ tokToLex >=> f
 satisfyEqualsLex :: Lex.Token -> TeXParser s e m ()
 satisfyEqualsLex lt = void $ satisfyEquals (UnexpandedTok lt)
 
-skipSatisfiedLexChunk :: [Lex.Token] -> TeXParser s e m ()
+skipSatisfiedLexChunk :: Seq Lex.Token -> TeXParser s e m ()
 skipSatisfiedLexChunk ts = skipSatisfiedChunk (UnexpandedTok <$> ts)
 
 skipBalancedText :: BalancedText -> TeXParser s e m ()

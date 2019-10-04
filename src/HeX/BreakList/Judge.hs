@@ -2,11 +2,10 @@ module HeX.BreakList.Judge where
 
 import           HeXlude
 
-import           HeX.Box                 (SetGlue (..))
-import           HeX.BreakList.BreakList (BreakableListElem (..),
-                                          naturalListSpan, totalGlue)
+import qualified HeX.Box                 as Box
+import           HeX.BreakList.Elem      (BreakableList (..))
 import           HeX.BreakList.Glue      (Glue (..), GlueFlex (..))
-import           HeX.Unit                (showFrac, showSP, tenK)
+import           HeX.Quantity
 
 -- Here’s the way TeX goes about setting the glue when an hbox is being wrapped
 -- up: The natural width, x, of the box contents is determined by adding up the
@@ -50,24 +49,25 @@ data GlueStatus =
     NaturallyGood | UnfixablyBare | FixablyBad LengthJudgment FixParams
     deriving ( Show )
 
-glueStatus :: Int -> Glue -> GlueStatus
-glueStatus excessLength
-           (Glue _ _stretch _shrink) = case compare excessLength 0 of
-    -- The glue ratio is r = [excess length]/[flex]i.
-    -- The natural width x is compared to the desired width w.
-    -- If x = w, all glue gets its natural width.
-    EQ -> NaturallyGood
-    -- Otherwise the glue will be modified, by computing a “glue set ratio” r
-    -- and a “glue set order” i
-    -- LT -> stretchStatus _stretch
-    LT -> stretchStatus _stretch
-    GT -> shrinkStatus _shrink
+glueStatus :: TeXLength -> Glue a -> GlueStatus
+glueStatus excessLength (Glue _ _stretch _shrink) =
+    case compare excessLength 0 of
+        -- The glue ratio is r = [excess length]/[flex]i.
+        -- The natural width x is compared to the desired width w.
+        -- If x = w, all glue gets its natural width.
+        EQ -> NaturallyGood
+        -- Otherwise the glue will be modified, by computing a “glue set ratio” r
+        -- and a “glue set order” i
+        -- LT -> stretchStatus _stretch
+        LT -> stretchStatus _stretch
+        GT -> shrinkStatus _shrink
   where
     toRatio f = abs $ fromIntegral excessLength / f
 
     -- No stretchability. Not much we can do in this case.
     stretchStatus GlueFlex{factor = f, order = o}
-        | f == 0 = UnfixablyBare
+        | f == 0 =
+            UnfixablyBare
         | otherwise =
             FixablyBad Bare FixParams { ratio = toRatio f, setOrder = o }
 
@@ -79,9 +79,28 @@ glueStatus excessLength
         | otherwise =
             FixablyBad Full FixParams { ratio = toRatio f, setOrder = o }
 
-listGlueStatus :: (Foldable f, BreakableListElem a, Filterable f) => Int -> f a -> GlueStatus
-listGlueStatus desiredLength cs =
-    glueStatus (naturalListSpan cs - desiredLength) (totalGlue cs)
+data TargetLength = TargetLength GlueStatus TeXLength
+    deriving (Show)
+
+data LazyTargetLength
+    = UncomputedTargetLength Box.DesiredLength
+    | ComputedTargetLength TargetLength
+    deriving (Show)
+
+listGlueStatusConcreteTarget :: BreakableList a => TeXLength -> a -> TargetLength
+listGlueStatusConcreteTarget toLen bList =
+    TargetLength (glueStatus (naturalSpan bList - toLen) ( totalGlue bList)) toLen
+
+listGlueStatusAbstractTarget :: BreakableList a => Box.DesiredLength -> a -> TargetLength
+listGlueStatusAbstractTarget desiredLength bList =
+    let natSpan = naturalSpan bList
+    in case desiredLength of
+            Box.Natural ->
+                TargetLength NaturallyGood natSpan
+            Box.Spread spreadLen ->
+                TargetLength (glueStatus (-spreadLen) (totalGlue bList)) (natSpan + spreadLen)
+            Box.To toLen ->
+                listGlueStatusConcreteTarget toLen bList
 
 -- TODO: Use types to ensure number is within bounds, such as <= tenK.
 data Badness = FiniteBadness Int | InfiniteBadness
@@ -111,10 +130,9 @@ badness gs = case gs of
 -- flexibility f_j, corresponding to its amount and order of stretch or shrink
 -- as appropriate.
 -- The glue's width is u, plus: r * f_j if j = i; otherwise 0.
-setGlue :: GlueStatus -> Glue -> SetGlue
-setGlue st g@Glue{dimen = d} = SetGlue $ d + glueDiff st g
+setGlue :: Integral a => GlueStatus -> Glue a -> Box.SetGlue a
+setGlue st g@Glue{dimen = d} = Box.SetGlue $ d + glueDiff st g
   where
-    glueDiff :: GlueStatus -> Glue -> Int
     glueDiff s Glue{stretch, shrink} = case s of
         NaturallyGood     -> 0
         -- Note: I made this logic up. Take a 'do your best' approach. This

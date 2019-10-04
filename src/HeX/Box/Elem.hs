@@ -11,129 +11,74 @@ import           HeXlude
 import           DVI.Document (Character (..), FontDefinition (..),
                                FontSelection (..), Rule (..))
 
-import qualified HeX.Unit     as Unit
+import           HeX.Quantity
 
-data DesiredLength = Natural | Spread LenVal | To LenVal
+data DesiredLength = Natural | Spread TeXLength | To TeXLength
     deriving (Show)
 
-data VBoxAlignType = DefaultAlign -- \vbox
-                   | TopAlign -- \vtop
-    deriving (Show, Eq)
-
-newtype Kern = Kern { kernDimen :: LenVal }
+newtype Kern = Kern { kernDimen :: TeXLength }
     deriving (Show)
 
-newtype SetGlue = SetGlue { glueDimen :: LenVal }
+newtype SetGlue a = SetGlue { glueDimen :: a }
     deriving (Show)
 
-instance Readable SetGlue where
+instance Readable (SetGlue TeXLength) where
 
-    describe SetGlue{glueDimen} = "Glue<" <> Unit.showSP glueDimen <> ">"
+    describe SetGlue{glueDimen} = "Glue<" <> showSP glueDimen <> ">"
+
+newtype HBox = HBox (Seq HBoxElem)
+    deriving (Show, Semigroup, Monoid)
+
+instance Readable HBox where
+    describe (HBox hElems) =
+        describeListHeaded 1 "HBox" hElems
+
+newtype VBox = VBox (Seq VBoxElem)
+    deriving (Show, Semigroup, Monoid)
+
+instance Readable VBox where
+    describe (VBox vElems) =
+        describeListHeaded 1 "VBox" vElems
 
 data BoxContents
-    = HBoxContents (ForwardDirected [] HBoxElem)
-    | VBoxContents (ForwardDirected [] VBoxElem) VBoxAlignType
-    deriving ( Show )
-
-data Box = Box { contents :: BoxContents, desiredLength :: DesiredLength }
+    = HBoxContents HBox
+    | VBoxContents VBox
     deriving (Show)
 
-instance Dimensioned Box where
-    naturalLength dim b = case (dim, b) of
-        -- HBox.
-        (BoxWidth, Box (HBoxContents _) (To toLen)) -> toLen
+data Box a = Box { contents :: a, boxWidth, boxHeight, boxDepth :: TeXLength }
+    deriving (Show, Functor, Foldable)
 
-        (BoxWidth, Box bc@(HBoxContents _) (Spread spread)) ->
-            spread + naturalLength BoxWidth (Box bc Natural)
+instance Dimensioned (Box BoxContents) where
+    naturalLength dim (Box _ wid hei dep) = case dim of
+        BoxWidth -> wid
+        BoxHeight -> hei
+        BoxDepth -> dep
 
-        (BoxWidth, Box (HBoxContents cs) Natural) -> sumLength cs
-
-        -- The height and depth of an hbox are the maximum distances by which
-        -- the interior boxes reach above and below the baseline, respectively.
-        -- An \hbox never has negative height or depth, but the width can be
-        -- negative.
-        (BoxHeight, Box (HBoxContents cs) _) -> maxLength cs
-
-        (BoxDepth, Box (HBoxContents cs) _) -> maxLength cs
-
-        -- VBox.
-        -- The width of a \vbox is the maximum distance by which an
-        -- enclosed box extends to the right of the reference point, taking
-        -- possible shifting into account. This width is always nonnegative.
-        (BoxWidth, Box (VBoxContents cs _) _) -> maxLength cs
-
-        (BoxHeight, Box (VBoxContents _ _) (To toLen)) -> toLen
-
-        (BoxHeight, Box bc@(VBoxContents _ _) (Spread spread)) ->
-            spread + naturalLength BoxHeight (Box bc Natural)
-
-        (BoxHeight, Box (VBoxContents cs DefaultAlign) Natural) ->
-            -- h + d for all but last elements, plus the last element's height.
-            let allButLast = case initMay (fUndirected cs) of
-                    Nothing     -> 0
-                    Just _inits -> sum $ hPlusD <$> _inits
-                lastElem = case lastMay (fUndirected cs) of
-                    Nothing  -> 0
-                    Just lst -> naturalLength BoxHeight lst
-            in
-                allButLast + lastElem
-
-        -- When wrapping a vertical list via \vbox, to compute its depth,
-        -- - If the list contains no boxes, the depth is zero.
-        -- - If there's at least one box, consider the final box.
-        --     - if the box is followed by kerning or glue, possibly with
-        --       intervening penalties or other things, the depth is zero.
-        --     - otherwise, the depth is that box's depth.
-        -- If the computed depth exceeds \boxmaxdepth,
-        --     - the depth is \boxmaxdepth
-        --     - add the excess depth to the box's natural height, essentially
-        --       moving the reference point down to reduce the depth to the
-        --       stated maximum.
-        (BoxDepth, Box (VBoxContents cs DefaultAlign) _) -> case lastMay (fUndirected cs) of
-            Nothing  -> 0
-            Just lst -> naturalLength BoxDepth lst
-
-        (BoxHeight, Box (VBoxContents _ TopAlign) _) ->
-            panic "Not implemented: height, top-align"
-
-        (BoxDepth, Box (VBoxContents _ TopAlign) _) ->
-            panic "Not implemented: depth, top-align"
-
-      where
-        subLengths :: (Dimensioned a) => ForwardDirected [] a -> ForwardDirected [] LenVal
-        subLengths cs = naturalLength dim <$> cs
-
-        maxLength cs = max 0 $ maximumDef 0 (fUndirected $ subLengths cs)
-
-        sumLength cs = sum (fUndirected $ subLengths cs)
-
-        hPlusD e = naturalLength BoxHeight e + naturalLength BoxDepth e
-
-data BaseElem = ElemBox Box
+data BaseElem = ElemBox (Box BoxContents)
               | ElemRule Rule
               | ElemFontDefinition FontDefinition
               | ElemFontSelection FontSelection
               | ElemKern Kern
     deriving (Show)
 
-spacerNaturalLength :: Axis -> BoxDim -> Int -> Int
+spacerNaturalLength :: Axis -> BoxDim -> TeXLength -> TeXLength
 spacerNaturalLength ax dim d = case (ax, dim) of
     (Vertical, BoxHeight)  -> d
     (Horizontal, BoxWidth) -> d
     _                      -> 0
 
-axisBaseElemNaturalLength :: Axis -> BoxDim -> BaseElem -> Int
+axisBaseElemNaturalLength :: Axis -> BoxDim -> BaseElem -> TeXLength
 axisBaseElemNaturalLength ax dim e = case e of
-    ElemFontSelection _  -> 0
-    ElemFontDefinition _ -> 0
+    ElemFontSelection _  -> TeXLength 0
+    ElemFontDefinition _ -> TeXLength 0
     ElemBox r            -> naturalLength dim r
     ElemRule r           -> naturalLength dim r
     ElemKern k           -> spacerNaturalLength ax dim $ kernDimen k
 
-data VBoxElem = VBoxBaseElem BaseElem | BoxGlue SetGlue
+data VBoxElem = VBoxBaseElem BaseElem | BoxGlue (SetGlue TeXLength)
     deriving (Show)
 
-axisVBoxElemNaturalLength :: Axis -> BoxDim -> VBoxElem -> Int
+axisVBoxElemNaturalLength :: Axis -> BoxDim -> VBoxElem -> TeXLength
 axisVBoxElemNaturalLength ax dim e = case e of
     VBoxBaseElem be -> axisBaseElemNaturalLength ax dim be
     BoxGlue g       -> spacerNaturalLength ax dim $ glueDimen g
@@ -156,8 +101,8 @@ instance Dimensioned HBoxElem where
         axisVBoxElemNaturalLength Horizontal dim e
     naturalLength dim (HBoxHBaseElem e) = naturalLength dim e
 
-newtype Page = Page (ForwardDirected [] VBoxElem)
-    deriving ( Show )
+newtype Page = Page (Box VBox)
+    deriving (Show)
 
 -- Display
 
@@ -167,7 +112,7 @@ instance Readable BaseElem where
         ElemRule rule -> show rule
         ElemFontDefinition fontDef -> describe fontDef
         ElemFontSelection fontSel -> describe fontSel
-        ElemKern (Kern d) -> "Kern<" <> Unit.showSP d <> ">"
+        ElemKern (Kern d) -> "Kern<" <> showSP d <> ">"
 
 instance Readable HBaseElem where
     describe = \case
@@ -189,10 +134,10 @@ instance Readable HBoxElem where
         HBoxHBaseElem hBaseElem ->
             describe hBaseElem
 
-instance Readable Box where
-    describe Box { contents, desiredLength } =
-        "Box<" <> describe desiredLength <> ">\n"
-        <> describe contents
+instance Readable a => Readable (Box a) where
+    describe Box { contents, boxWidth, boxHeight, boxDepth } =
+        "Box<w=" <> describe boxWidth <> ", h=" <> describe boxHeight <> ", d=" <> describe boxDepth <> ">"
+        <> "\n" <> describe contents
 
 instance Readable DesiredLength where
     describe = \case
@@ -202,14 +147,10 @@ instance Readable DesiredLength where
 
 instance Readable BoxContents where
     describe = \case
-        HBoxContents (FDirected hElems) ->
-            describeListHeaded nrTabs "HBox" hElems
-        VBoxContents (FDirected vElems) DefaultAlign ->
-            describeListHeaded nrTabs "VBox" vElems
-        VBoxContents (FDirected vElems) TopAlign ->
-            describeListHeaded nrTabs "VTop" vElems
-      where
-        nrTabs = 1
+        HBoxContents hBox ->
+            describe hBox
+        VBoxContents vBox ->
+            describe vBox
 
 instance Readable Page where
     describe (Page vBoxElems) =

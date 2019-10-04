@@ -17,8 +17,11 @@ monoidIntercalate d = go
 class Readable a where
     describe :: a -> Text
 
-instance (Readable a, Foldable t, Functor t) => Readable (t a) where
+instance {-# OVERLAPPABLE #-} (Readable a, Foldable t, Functor t) => Readable (t a) where
     describe = describeLined
+
+instance Readable Int where
+    describe = show
 
 showT :: Show a => a -> Text
 showT v = toS (show v :: [Char])

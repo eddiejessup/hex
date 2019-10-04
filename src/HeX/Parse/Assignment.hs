@@ -64,7 +64,7 @@ parseNonMacroGlobal = PC.option T.Local $ satisfyEquals (T.AssignPrefixTok T.Glo
 
 parseNonMacroAssignment :: TeXParser s e m Assignment
 parseNonMacroAssignment =
-    (flip Assignment) <$> parseNonMacroGlobal <*> parseNonMacroAssignmentBody
+    flip Assignment <$> parseNonMacroGlobal <*> parseNonMacroAssignmentBody
   where
     parseNonMacroAssignmentBody =
         tryChoice [ AssignCode <$> parseCodeAssignment

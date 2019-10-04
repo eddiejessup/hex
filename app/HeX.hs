@@ -8,6 +8,7 @@ import qualified Data.ByteString           as BS
 import qualified System.Console.GetOpt     as Opt
 
 import qualified Data.Path                 as D.Path
+import qualified Data.Sequence             as Seq
 import           HeX.Categorise            (CharCode)
 import           HeX.Command.Run
 import           HeX.Parse.Stream.Instance (newExpandStream)
@@ -64,11 +65,11 @@ usage = toS $ Opt.usageInfo header options
   where
     header = "Usage: hex [OPTION...] [file]"
 
-preamble :: ForwardDirected [] CharCode
-preamble = FDirected "\\font\\thefont=cmr10 \\thefont\n\n"
+preamble :: Seq CharCode
+preamble = "\\font\\thefont=cmr10 \\thefont\n\n"
 
-postamble :: ForwardDirected [] CharCode
-postamble = FDirected "\n\n\\end\n"
+postamble :: Seq CharCode
+postamble = "\n\n\\end\n"
 
 parseArgs :: [Text] -> IO ([Flag], [Text])
 parseArgs argStr =
@@ -81,10 +82,14 @@ main = do
     (flags, args) <- ((toS <$>) <$> getArgs) >>= parseArgs
     when (Help `elem` flags) $ panic usage
     (inputRaw, maybePath) <- case args of
-        ["-"] -> Prelude.getContents <&> FDirected <&> (, Nothing)
+        ["-"] ->
+            do
+            xs <- Prelude.getContents
+            pure (Seq.fromList xs, Nothing)
         [pathStr] -> do
             path <- Path.IO.resolveFile' (toS pathStr)
-            D.Path.readPathChars path <&> FDirected <&> (, Just path)
+            xs <- D.Path.readPathChars path
+            pure (Seq.fromList xs, Just path)
     let
         input = if Amble `elem` flags
             then preamble <> inputRaw <> postamble

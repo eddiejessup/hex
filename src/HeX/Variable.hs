@@ -9,6 +9,7 @@ import           HeX.Command.Common
 import           HeX.Config
 import           HeX.Evaluate
 import qualified HeX.Parse                as HP
+import           HeX.Quantity
 
 class TeXVariable a where
 
@@ -129,15 +130,15 @@ instance TeXNumericVariable HP.TeXIntVariable where
 
 instance TeXNumericVariable HP.LengthVariable where
     advanceOp _ = (+)
-    scaleUpOp _ = (*)
-    scaleDownOp _ = quot
+    scaleUpOp _ = scaleTeXLength
+    scaleDownOp _ = shrinkTeXLength
 
 instance TeXNumericVariable HP.GlueVariable where
     advanceOp _ = mappend
-    scaleUpOp _ = BL.multiplyGlue
-    scaleDownOp _ = BL.divGlue
+    scaleUpOp _ = BL.scaleTeXLengthGlue
+    scaleDownOp _ = BL.shrinkTeXLengthGlue
 
 instance TeXNumericVariable HP.MathGlueVariable where
     advanceOp _ = mappend
-    scaleUpOp _ = BL.multiplyMathGlue
-    scaleDownOp _ = BL.divMathGlue
+    scaleUpOp _ = BL.scaleMathGlue
+    scaleDownOp _ = BL.shrinkMathGlue

@@ -6,6 +6,7 @@ import           Data.Bits           (shiftL, shiftR, (.&.))
 import           Data.Char           (chr, ord, toLower, toUpper)
 import qualified Data.HashMap.Strict as HMap
 
+import           HeX.Quantity
 import qualified HeX.Categorise      as Cat
 
 initialiseCharCodes :: (Cat.CharCode -> v) -> Cat.CharCodeMap v

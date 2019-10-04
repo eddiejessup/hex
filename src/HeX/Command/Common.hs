@@ -8,6 +8,7 @@ import           Control.Monad.State.Lazy  (MonadState, StateT, get, modify)
 
 import           HeX.Config
 import           HeX.Evaluate
+import           HeX.Quantity
 import qualified HeX.Parse                 as HP
 
 readOnState
@@ -48,16 +49,10 @@ data RecursionResult a b
     = LoopAgain a
     | EndLoop b
 
-doNothing :: a -> RecursionResult a b
-doNothing = LoopAgain
-
-addElem :: ForwardDirected Seq a -> a -> RecursionResult (ForwardDirected Seq a) b
-addElem a e = LoopAgain (a ->. e)
-
-addMaybeElem :: ForwardDirected Seq a -> Maybe a -> RecursionResult (ForwardDirected Seq a) b
-addMaybeElem a = \case
-    Nothing -> doNothing a
-    Just e -> addElem a e
+addMaybeElem :: Seq a -> Maybe a -> Seq a
+addMaybeElem a mayE = case mayE of
+    Nothing -> a
+    Just e -> a :|> e
 
 runLoop :: Monad m => (a -> m (RecursionResult a b)) -> a -> m b
 runLoop f = go
@@ -83,5 +78,5 @@ runCommandLoop f = runLoop g
         oldStream <- get
         (newStream, command) <- HP.runSimpleRunParserT' HP.parseCommand oldStream
         put newStream
-        liftIO $ print command
+        -- liftIO $ putText $ describe command
         f elemList command oldStream

@@ -9,17 +9,94 @@ import           HeX.Box
 import           HeX.BreakList.BreakList (BreakItem (..),
                                           BreakableListElem (..), Penalty)
 import           HeX.BreakList.Glue
+import           HeX.Quantity
 
-type ForwardHList = ForwardDirected Seq HListElem
-type ForwardVList = ForwardDirected Seq VListElem
+class BreakableList a where
+    naturalSpan :: a -> TeXLength
 
-type BackwardHList = BackwardDirected Seq HListElem
-type BackwardVList = BackwardDirected Seq VListElem
+    totalGlue :: a -> (Glue TeXLength)
+
+newtype HList = HList (Seq HListElem)
+    deriving (Show, Semigroup, Monoid)
+
+instance Dimensioned HList where
+    naturalLength dim (HList elemSeq) = case dim of
+        BoxWidth -> sumLength BoxWidth elemSeq
+        BoxHeight -> maxLength BoxHeight elemSeq
+        BoxDepth -> maxLength BoxDepth elemSeq
+
+subLengths :: Dimensioned a => BoxDim -> Seq a -> Seq TeXLength
+subLengths dim cs = naturalLength dim <$> cs
+
+maxLength :: Dimensioned a => BoxDim -> Seq a -> TeXLength
+maxLength dim cs = max 0 $ maximumDef 0 (toList $ subLengths dim cs)
+
+hPlusD :: Dimensioned a => a -> TeXLength
+hPlusD e = naturalLength BoxHeight e + naturalLength BoxDepth e
+
+sumLength :: Dimensioned a => BoxDim -> Seq a -> TeXLength
+sumLength dim cs = sum (subLengths dim cs)
+
+instance BreakableList HList where
+    naturalSpan = naturalWidth
+
+    totalGlue (HList elemSeq) = mconcat $ mapMaybe toGlue elemSeq
+
+newtype VList = VList (Seq VListElem)
+    deriving (Show, Semigroup, Monoid)
+
+instance BreakableList VList where
+    naturalSpan = naturalHeight
+
+    totalGlue (VList elemSeq) = mconcat $ mapMaybe toGlue elemSeq
+
+instance Dimensioned VList where
+    naturalLength dim (VList elemSeq) =
+        let elemList = toList elemSeq
+        in case dim of
+        BoxWidth ->
+            -- The width of a \vbox is the maximum distance by which an
+            -- enclosed box extends to the right of the reference point, taking
+            -- possible shifting into account. This width is always nonnegative.
+            maxLength BoxWidth elemSeq
+        BoxHeight ->
+            -- h + d for all but last elements, plus the last element's height.
+            let allButLast = case initMay elemList of
+                    Nothing     -> 0
+                    Just _inits -> sum $ hPlusD <$> _inits
+                lastElem = case lastMay elemList of
+                    Nothing  -> 0
+                    Just lst -> naturalLength BoxHeight lst
+            in
+                allButLast + lastElem
+
+        BoxDepth ->
+            -- TODO: All this logic:
+            -- When wrapping a vertical list via \vbox, to compute its
+            -- depth,
+            -- - If the list contains no boxes, the depth is zero.
+            -- - If there's at least one box, consider the final box.
+            --     - if the box is followed by kerning or glue,
+            --       possibly with intervening penalties or other
+            --       things, the depth is zero.
+            --     - otherwise, the depth is that box's depth. If the
+            --       computed depth exceeds \boxmaxdepth,
+            --     - the depth is \boxmaxdepth
+            --     - add the excess depth to the box's natural height,
+            --       essentially moving the reference point down to
+            --       reduce the depth to the stated maximum.
+            case lastMay elemList of
+                Nothing  -> 0
+                Just lst -> naturalLength BoxDepth lst
+
+data VBoxAlignType = DefaultAlign -- \vbox
+                   | TopAlign -- \vtop
+    deriving (Show, Eq)
 
 -- Vertical list.
 data VListElem
     = VListBaseElem BaseElem
-    | ListGlue Glue
+    | ListGlue (Glue TeXLength)
     | ListPenalty Penalty
     deriving ( Show )
 
@@ -46,13 +123,11 @@ instance BreakableListElem VListElem where
         Adj _ (ListPenalty p) _ -> Just $ PenaltyBreak p
         _ -> Nothing
 
-    naturalSpan = naturalHeight
-
-axisVListElemNaturalLength :: Axis -> BoxDim -> VListElem -> Int
+axisVListElemNaturalLength :: Axis -> BoxDim -> VListElem -> TeXLength
 axisVListElemNaturalLength ax dim e = case e of
     VListBaseElem be -> axisBaseElemNaturalLength ax dim be
     ListGlue g       -> spacerNaturalLength ax dim $ dimen g
-    ListPenalty _    -> 0
+    ListPenalty _    -> TeXLength 0
 
 instance Dimensioned VListElem where
     naturalLength = axisVListElemNaturalLength Vertical
@@ -85,8 +160,6 @@ instance BreakableListElem HListElem where
         Adj _ (HVListElem (ListPenalty p)) _ -> Just $ PenaltyBreak p
         _ -> Nothing
 
-    naturalSpan = naturalWidth
-
 instance Dimensioned HListElem where
     naturalLength dim (HVListElem e) =
         axisVListElemNaturalLength Horizontal dim e
@@ -109,8 +182,8 @@ instance Readable HListElem where
 data CondensedHListElem = Sentence Text | NonSentence HListElem
     deriving ( Show )
 
-condenseHList :: ForwardHList -> ForwardDirected [] CondensedHListElem
-condenseHList elems = FDirected (foldr append mempty elems)
+condenseHList :: HList -> [CondensedHListElem]
+condenseHList (HList elems) = foldr append mempty elems
   where
     append (HListHBaseElem (ElemCharacter Character{char})) [] =
         [ Sentence $ Text.singleton char ]

@@ -134,9 +134,9 @@ parseChangeScope :: TeXParser s e m ModeIndependentCommand
 parseChangeScope = satisfyThen $
     \t -> if
         | primTokHasCategory Cat.BeginGroup t -> Just $
-            ChangeScope (T.Sign True) CharCommandTrigger
+            ChangeScope T.Positive CharCommandTrigger
         | primTokHasCategory Cat.EndGroup t -> Just $
-            ChangeScope (T.Sign False) CharCommandTrigger
+            ChangeScope T.Negative CharCommandTrigger
         | (T.ChangeScopeCSTok sign)
             <- t -> Just $ ChangeScope sign CSCommandTrigger
         | otherwise -> Nothing
@@ -156,12 +156,13 @@ parseRemoveItem =
 
 parseModedGlue :: Axis -> TeXParser s e m Glue
 parseModedGlue axis =
-    tryChoice [ parseSpecifiedGlue
-             , parsePresetGlue T.Fil
-             , parsePresetGlue T.Fill
-             , parsePresetGlue T.StretchOrShrink
-             , parsePresetGlue T.FilNeg
-             ]
+    tryChoice
+        [ parseSpecifiedGlue
+        , parsePresetGlue T.Fil
+        , parsePresetGlue T.Fill
+        , parsePresetGlue T.StretchOrShrink
+        , parsePresetGlue T.FilNeg
+        ]
   where
     -- \hskip 10pt and such.
     parseSpecifiedGlue =

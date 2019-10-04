@@ -4,7 +4,7 @@ import           HeXlude
 
 import qualified Data.HashMap.Strict as HMap
 
-import qualified HeX.Box             as B
+import qualified HeX.BreakList.Elem  as BL.E
 import qualified HeX.Categorise      as Cat
 import           HeX.Categorise      (CharCode)
 import qualified HeX.Lex             as Lex
@@ -25,8 +25,8 @@ resolveToken csLookup Expanding t = case t of
     Lex.CharCatToken (Lex.CharCat c Cat.Active) -> csLookup $ Lex.ActiveCharacter c
     _ -> pure $ primTok $ UnexpandedTok t
 
-_cs :: [CharCode] -> Lex.ControlSequenceLike
-_cs = Lex.ControlSequenceProper . Lex.ControlSequence . FDirected
+_cs :: Seq CharCode -> Lex.ControlSequenceLike
+_cs = Lex.ControlSequenceProper . Lex.ControlSequence
 
 syntaxTok :: SyntaxCommandHeadToken -> ResolvedToken
 syntaxTok = SyntaxCommandHeadToken
@@ -88,8 +88,8 @@ defaultCSMap = HMap.fromList
     , (_cs "endcsname", primTok $ SyntaxCommandArg EndCSNameTok)
       -- Nothing special.
     , (_cs "relax", primTok RelaxTok)
-    , (_cs "begingroup", primTok $ ChangeScopeCSTok (Sign True))
-    , (_cs "endgroup", primTok $ ChangeScopeCSTok (Sign False))
+    , (_cs "begingroup", primTok $ ChangeScopeCSTok Positive)
+    , (_cs "endgroup", primTok $ ChangeScopeCSTok Negative)
     , (_cs "show", primTok ShowTokenTok)
     , (_cs "showbox", primTok ShowBoxTok)
     , (_cs "showlists", primTok ShowListsTok)
@@ -339,8 +339,8 @@ defaultCSMap = HMap.fromList
     , (_cs "lastbox", primTok LastBoxTok)
     , (_cs "vsplit", primTok SplitVBoxTok)
     , (_cs "hbox", primTok $ ExplicitBoxTok ExplicitHBox)
-    , (_cs "vbox", primTok $ ExplicitBoxTok $ ExplicitVBox B.DefaultAlign)
-    , (_cs "vtop", primTok $ ExplicitBoxTok $ ExplicitVBox B.TopAlign)
+    , (_cs "vbox", primTok $ ExplicitBoxTok $ ExplicitVBox BL.E.DefaultAlign)
+    , (_cs "vtop", primTok $ ExplicitBoxTok $ ExplicitVBox BL.E.TopAlign)
     , (_cs "setbox", primTok SetBoxRegisterTok)
       -- Stream.
     , (_cs "read", primTok ReadTok)

@@ -5,6 +5,7 @@ import           HeXlude
 import           Control.Monad.Reader (MonadReader, ask, asks)
 import           Data.Char            (chr)
 import           Data.HashMap.Strict  (HashMap)
+import qualified Data.Sequence        as Seq
 
 import qualified TFM
 
@@ -16,7 +17,7 @@ import           HeX.Config
 import qualified HeX.Lex              as Lex
 import qualified HeX.Parse.AST        as AST
 import qualified HeX.Parse.Token      as T
-import qualified HeX.Unit             as Unit
+import           HeX.Quantity
 
 
 class TeXEvaluable a where
@@ -45,13 +46,23 @@ instance TeXEvaluable AST.TokenListAssignmentTarget where
 
 -- TeXInt.
 
+signedTeXEval
+    :: (TeXEvaluable a
+       , MonadReader Config m
+       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , Num (EvalTarget a)
+       )
+    => T.Signed a
+    -> m (EvalTarget a)
+signedTeXEval (T.Signed sign u) =
+    do
+    eu <- texEvaluate u
+    pure $ T.evalSigned (T.Signed sign eu)
+
 instance TeXEvaluable AST.TeXInt where
     type EvalTarget AST.TeXInt = TeXIntVal
 
-    texEvaluate (AST.TeXInt (T.Sign isPos) u) =
-        do
-        size <- texEvaluate u
-        pure $ if isPos then size else (-size)
+    texEvaluate = signedTeXEval
 
 instance TeXEvaluable AST.UnsignedTeXInt where
     type EvalTarget AST.UnsignedTeXInt = Int
@@ -158,28 +169,25 @@ instance TeXEvaluable AST.CoercedTeXInt where
     type EvalTarget AST.CoercedTeXInt = Int
 
     texEvaluate = \case
-        AST.InternalLengthAsInt ln -> texEvaluate ln
-        AST.InternalGlueAsInt g -> BL.dimen <$> texEvaluate g
+        AST.InternalLengthAsInt ln -> unLength <$> texEvaluate ln
+        AST.InternalGlueAsInt g -> (unLength . BL.dimen) <$> texEvaluate g
 
 -- Length.
 
 instance TeXEvaluable AST.Length where
-    type EvalTarget AST.Length = Int
+    type EvalTarget AST.Length = TeXLength
 
-    texEvaluate (AST.Length (T.Sign isPos) uLn) =
-        do
-        eULn <- texEvaluate uLn
-        pure $ if isPos then eULn else -eULn
+    texEvaluate = signedTeXEval
 
 instance TeXEvaluable AST.UnsignedLength where
-    type EvalTarget AST.UnsignedLength = Int
+    type EvalTarget AST.UnsignedLength = TeXLength
 
     texEvaluate = \case
         AST.NormalLengthAsULength v -> texEvaluate v
         AST.CoercedLength v -> texEvaluate v
 
 instance TeXEvaluable AST.NormalLength where
-    type EvalTarget AST.NormalLength = Int
+    type EvalTarget AST.NormalLength = TeXLength
 
     texEvaluate = \case
         AST.LengthSemiConstant f u ->
@@ -202,7 +210,7 @@ instance TeXEvaluable AST.Unit where
 
     texEvaluate = \case
         AST.InternalUnit u -> texEvaluate u
-        AST.PhysicalUnit AST.TrueFrame u -> pure $ Unit.inScaledPoint u
+        AST.PhysicalUnit AST.TrueFrame u -> pure $ inScaledPoint u
         AST.PhysicalUnit AST.MagnifiedFrame u ->
             do
             _mag <- asks $ lookupTeXIntParameter T.Mag
@@ -220,7 +228,7 @@ instance TeXEvaluable AST.InternalUnit where
         AST.InternalGlueUnit v -> fromIntegral . BL.dimen <$> texEvaluate v
 
 instance TeXEvaluable AST.InternalLength where
-    type EvalTarget AST.InternalLength = Int
+    type EvalTarget AST.InternalLength = TeXLength
 
     texEvaluate = \case
         AST.InternalLengthVariable v -> texEvaluate v
@@ -230,19 +238,19 @@ instance TeXEvaluable AST.InternalLength where
         AST.LastKern -> panic "Not implemented: evaluate LastKern"
 
 instance TeXEvaluable AST.LengthVariable where
-    type EvalTarget AST.LengthVariable = Int
+    type EvalTarget AST.LengthVariable = TeXLength
 
     texEvaluate = \case
         AST.ParamVar p -> asks $ lookupLengthParameter p
         AST.RegisterVar n -> getRegisterIdx n lookupLengthRegister
 
 instance TeXEvaluable T.SpecialLength where
-    type EvalTarget T.SpecialLength = Int
+    type EvalTarget T.SpecialLength = TeXLength
 
     texEvaluate p = asks $ lookupSpecialLength p
 
 instance TeXEvaluable AST.FontDimensionRef where
-    type EvalTarget AST.FontDimensionRef = Int
+    type EvalTarget AST.FontDimensionRef = TeXLength
 
     texEvaluate (AST.FontDimensionRef n _) =
         do
@@ -250,7 +258,7 @@ instance TeXEvaluable AST.FontDimensionRef where
         panic "Not implemented: evaluate FontDimensionRef"
 
 instance TeXEvaluable AST.BoxDimensionRef where
-    type EvalTarget AST.BoxDimensionRef = Int
+    type EvalTarget AST.BoxDimensionRef = TeXLength
 
     texEvaluate (AST.BoxDimensionRef idx boxDim) =
         do
@@ -259,28 +267,25 @@ instance TeXEvaluable AST.BoxDimensionRef where
         <&> maybe 0 (naturalLength boxDim)
 
 instance TeXEvaluable AST.CoercedLength where
-    type EvalTarget AST.CoercedLength = Int
+    type EvalTarget AST.CoercedLength = TeXLength
     texEvaluate (AST.InternalGlueAsLength g) = BL.dimen <$> texEvaluate g
 
 -- Math length.
 
 instance TeXEvaluable AST.MathLength where
-    type EvalTarget AST.MathLength = Int
+    type EvalTarget AST.MathLength = MathLength
 
-    texEvaluate (AST.MathLength (T.Sign isPos) uLn) =
-        do
-        eULn <- texEvaluate uLn
-        pure $ if isPos then eULn else -eULn
+    texEvaluate = signedTeXEval
 
 instance TeXEvaluable AST.UnsignedMathLength where
-    type EvalTarget AST.UnsignedMathLength = Int
+    type EvalTarget AST.UnsignedMathLength = MathLength
 
     texEvaluate = \case
         AST.NormalMathLengthAsUMathLength v -> texEvaluate v
         AST.CoercedMathLength v -> texEvaluate v
 
 instance TeXEvaluable AST.NormalMathLength where
-    type EvalTarget AST.NormalMathLength = Int
+    type EvalTarget AST.NormalMathLength = MathLength
 
     texEvaluate (AST.MathLengthSemiConstant f mathU) =
         do
@@ -289,28 +294,32 @@ instance TeXEvaluable AST.NormalMathLength where
         pure $ round $ ef * fromIntegral eu
 
 instance TeXEvaluable AST.MathUnit where
-    type EvalTarget AST.MathUnit = Int
+    type EvalTarget AST.MathUnit = MathLength
 
     texEvaluate = \case
-        AST.Mu -> pure 1
-        AST.InternalMathGlueAsUnit mg -> BL.dimen . BL.unMathGlue <$> texEvaluate mg
+        AST.Mu ->
+            pure 1
+        AST.InternalMathGlueAsUnit mg ->
+            BL.dimen <$> texEvaluate mg
 
 instance TeXEvaluable AST.CoercedMathLength where
-    type EvalTarget AST.CoercedMathLength = Int
-    texEvaluate (AST.InternalMathGlueAsMathLength mg) = BL.dimen . BL.unMathGlue <$> texEvaluate mg
+    type EvalTarget AST.CoercedMathLength = MathLength
+    texEvaluate (AST.InternalMathGlueAsMathLength mg) = BL.dimen <$> texEvaluate mg
 
 -- Glue.
 
 instance TeXEvaluable AST.Glue where
-    type EvalTarget AST.Glue = BL.Glue
+    type EvalTarget AST.Glue = BL.Glue TeXLength
 
     texEvaluate = \case
         AST.ExplicitGlue dim str shr ->
             BL.Glue <$> texEvaluate dim <*> evalFlex str <*> evalFlex shr
-        AST.InternalGlue (T.Sign isPos) v ->
+        AST.InternalGlue (T.Signed sign v) ->
             do
             ev <- texEvaluate v
-            pure $ if isPos then ev else BL.negateGlue ev
+            pure $ case sign of
+                T.Positive -> ev
+                T.Negative -> BL.negateGlue ev
       where
         evalFlex = \case
             Just f -> texEvaluate f
@@ -329,20 +338,20 @@ instance TeXEvaluable AST.Flex where
 instance TeXEvaluable AST.FilLength where
     type EvalTarget AST.FilLength = BL.GlueFlex
 
-    texEvaluate (AST.FilLength (T.Sign isPos) f filOrder) =
+    texEvaluate (AST.FilLength fl filOrder) =
         do
-        eF <- texEvaluate f
-        pure BL.GlueFlex { BL.factor = if isPos then eF else -eF, BL.order = filOrder }
+        efl <- signedTeXEval fl
+        pure BL.GlueFlex { BL.factor = efl, BL.order = filOrder }
 
 instance TeXEvaluable AST.InternalGlue where
-    type EvalTarget AST.InternalGlue = BL.Glue
+    type EvalTarget AST.InternalGlue = BL.Glue TeXLength
 
     texEvaluate = \case
         AST.InternalGlueVariable v -> texEvaluate v
         AST.LastGlue -> panic "Not implemented: evaluate LastGlue"
 
 instance TeXEvaluable AST.GlueVariable where
-    type EvalTarget AST.GlueVariable = BL.Glue
+    type EvalTarget AST.GlueVariable = BL.Glue TeXLength
 
     texEvaluate = \case
         AST.ParamVar p    -> asks $ lookupGlueParameter p
@@ -351,17 +360,17 @@ instance TeXEvaluable AST.GlueVariable where
 -- Math glue.
 
 instance TeXEvaluable AST.MathGlue where
-    type EvalTarget AST.MathGlue = BL.MathGlue
+    type EvalTarget AST.MathGlue = BL.Glue MathLength
 
     texEvaluate = \case
         AST.ExplicitMathGlue mDim mStr mShr ->
-            do
-            g <- BL.Glue <$> texEvaluate mDim <*> evalMathFlex mStr <*> evalMathFlex mShr
-            pure $ BL.MathGlue g
-        AST.InternalMathGlue (T.Sign isPos) v ->
+            BL.Glue <$> texEvaluate mDim <*> evalMathFlex mStr <*> evalMathFlex mShr
+        AST.InternalMathGlue sign v ->
             do
             ev <- texEvaluate v
-            pure $ if isPos then ev else BL.negateMathGlue ev
+            pure $ case sign of
+                T.Positive -> ev
+                T.Negative -> BL.negateGlue ev
       where
         evalMathFlex = \case
             Just f -> texEvaluate f
@@ -378,14 +387,14 @@ instance TeXEvaluable AST.MathFlex where
         AST.FilMathFlex ln -> texEvaluate ln
 
 instance TeXEvaluable AST.InternalMathGlue where
-    type EvalTarget AST.InternalMathGlue = BL.MathGlue
+    type EvalTarget AST.InternalMathGlue = BL.Glue MathLength
 
     texEvaluate = \case
         AST.InternalMathGlueVariable v -> texEvaluate v
         AST.LastMathGlue -> panic "Not implemented: evaluate LastMathGlue"
 
 instance TeXEvaluable AST.MathGlueVariable where
-    type EvalTarget AST.MathGlueVariable = BL.MathGlue
+    type EvalTarget AST.MathGlueVariable = BL.Glue MathLength
 
     texEvaluate = \case
         AST.ParamVar p    -> asks $ lookupMathGlueParameter p
@@ -411,13 +420,13 @@ charCodeAsMadeToken c =
         _   -> Cat.Other
 
 instance TeXEvaluable AST.InternalQuantity where
-    type EvalTarget AST.InternalQuantity = [CharCode]
+    type EvalTarget AST.InternalQuantity = Seq CharCode
 
     texEvaluate = \case
         AST.InternalTeXIntQuantity n ->
             do
             en <- texEvaluate n
-            pure $ show en
+            pure $ Seq.fromList $ show en
         AST.InternalLengthQuantity d ->
             do
             _ <- texEvaluate d
@@ -579,15 +588,17 @@ evaluateFontSpecification
     :: ( MonadReader Config m
        , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
        )
-    => Rational -> AST.FontSpecification -> m Rational
+    => TeXLength
+    -> AST.FontSpecification
+    -> m Rational
 evaluateFontSpecification designSizeSP = \case
     AST.NaturalFont ->
         pure 1
     AST.FontAt ln ->
         do
         eLn <- texEvaluate ln
-        pure $ fromIntegral eLn / designSizeSP
+        pure $ fromIntegral eLn % fromIntegral designSizeSP
     AST.FontScaled n ->
         do
         en <- texEvaluate n
-        pure $ fromIntegral en / 1000
+        pure $ fromIntegral en % 1000

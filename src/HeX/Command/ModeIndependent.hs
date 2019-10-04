@@ -34,7 +34,7 @@ fetchBox
        )
     => HP.BoxFetchMode
     -> HP.EightBitTeXInt
-    -> m (Maybe B.Box)
+    -> m (Maybe (B.Box B.BoxContents))
 fetchBox fetchMode idx =
     do
     eIdx <- evalOnConfState idx
@@ -235,14 +235,14 @@ handleModeIndependentCommand = \case
                     liftIO $ hPutStrLn logHandle txtStr
             pure DoNothing
     -- Start a new level of grouping.
-    HP.ChangeScope (HP.Sign True) trig ->
+    HP.ChangeScope HP.Positive trig ->
         do
         modConfState $ pushGroup $ ScopeGroup newLocalScope (LocalStructureGroup trig)
         pure DoNothing
     -- Do the appropriate finishing actions, undo the
     -- effects of non-global assignments, and leave the
     -- group. Maybe leave the current mode.
-    HP.ChangeScope (HP.Sign False) trig ->
+    HP.ChangeScope HP.Negative trig ->
         HP.runConfState $ gets popGroup >>= \case
             Nothing ->
                 throwM $ ConfigError "No group to leave"

@@ -12,7 +12,7 @@ where
 import           HeXlude
 
 import qualified Data.ByteString as BS
-import           HeX.Unit        (PhysicalUnit (..), toScaledPoint)
+import           HeX.Quantity
 import           Path
 
 import           TFM.Character   (Character (..))
@@ -21,11 +21,14 @@ import           TFM.Parse
 newtype TFMError = TFMError Text
     deriving (Show)
 
-designSizeSP :: TexFont -> Rational
-designSizeSP f = toScaledPoint (designFontSize f) Point
+designSizeRational :: TexFont -> Rational
+designSizeRational f = toScaledPoint (designFontSize f) Point
 
-designScaleSP :: TexFont -> Rational -> Int
-designScaleSP f x = round $ designSizeSP f * x
+designSizeSP :: TexFont -> TeXLength
+designSizeSP f = round $ designSizeRational f
+
+designScaleSP :: TexFont -> Rational -> TeXLength
+designScaleSP f x = round $ designSizeRational f * x
 
 readTFM
     :: ( MonadIO m

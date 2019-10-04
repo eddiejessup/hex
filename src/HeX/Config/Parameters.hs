@@ -4,20 +4,20 @@ import           HeXlude
 
 import qualified Data.HashMap.Strict as HMap
 
-import           HeX.BreakList.Glue  (Glue (..), MathGlue, fixedGlue)
+import qualified HeX.BreakList.Glue  as BL.G
 import           HeX.Parse.Token
-import qualified HeX.Unit            as Unit
+import           HeX.Quantity
 
 newtype IntParamVal a = IntParamVal { unIntParam :: TeXIntVal }
     deriving ( Eq, Enum, Ord, Show, Num, Real, Integral )
 
-newtype LenParamVal a = LenParamVal { unLenParam :: LenVal }
+newtype LenParamVal a = LenParamVal { unLenParam :: TeXLength }
     deriving ( Eq, Enum, Ord, Show, Num, Real, Integral )
 
-newtype GlueParamVal a = GlueParamVal { unGlueParam :: Glue }
+newtype GlueParamVal a = GlueParamVal { unGlueParam :: BL.G.Glue TeXLength }
     deriving ( Show )
 
-newtype MathGlueParamVal a = MathGlueParamVal { unMathGlueParam :: MathGlue }
+newtype MathGlueParamVal a = MathGlueParamVal { unMathGlueParam :: BL.G.Glue MathLength }
     deriving ( Show )
 
 newtype TokenListParamVal a =
@@ -271,13 +271,13 @@ newTeXIntParameters =
                   , (Year, 1970)
                   ]
 
-newLengthParameters :: HMap.HashMap LengthParameter LenVal
+newLengthParameters :: HMap.HashMap LengthParameter TeXLength
 newLengthParameters = HMap.empty
 
-newGlueParameters :: HMap.HashMap GlueParameter Glue
+newGlueParameters :: HMap.HashMap GlueParameter (BL.G.Glue TeXLength)
 newGlueParameters = HMap.empty
 
-newMathGlueParameters :: HMap.HashMap MathGlueParameter MathGlue
+newMathGlueParameters :: HMap.HashMap MathGlueParameter (BL.G.Glue MathLength)
 newMathGlueParameters = HMap.empty
 
 newTokenListParameters :: HMap.HashMap TokenListParameter BalancedText
@@ -286,8 +286,8 @@ newTokenListParameters = HMap.empty
 newSpecialTeXInts :: HMap.HashMap SpecialTeXInt TeXIntVal
 newSpecialTeXInts = HMap.empty
 
-newSpecialLengths :: HMap.HashMap SpecialLength TeXIntVal
-newSpecialLengths = HMap.fromList [ (PrevDepth, fromIntegral $ -Unit.oneKPt) ]
+newSpecialLengths :: HMap.HashMap SpecialLength TeXLength
+newSpecialLengths = HMap.fromList [ (PrevDepth, fromIntegral $ -oneKPt) ]
 
 usableTeXIntParameters :: HMap.HashMap TeXIntParameter TeXIntVal
 usableTeXIntParameters =
@@ -295,28 +295,28 @@ usableTeXIntParameters =
     in
         HMap.union vm newTeXIntParameters
 
-usableLengthParameters :: HMap.HashMap LengthParameter LenVal
+usableLengthParameters :: HMap.HashMap LengthParameter TeXLength
 usableLengthParameters =
     let vm = HMap.fromList [ (HSize, 30750000)
                            , (VSize, 37500000)
                            , ( ParIndent
-                             , Unit.toScaledPointApprox (20 :: Int) Unit.Point
+                             , toScaledPointApprox (20 :: Int) Point
                              )
                            ]
     in
         HMap.union vm newLengthParameters
 
-usableGlueParameters :: HMap.HashMap GlueParameter Glue
+usableGlueParameters :: HMap.HashMap GlueParameter (BL.G.Glue TeXLength)
 usableGlueParameters =
     let vm = HMap.fromList [ ( BaselineSkip
-                             , fixedGlue $
-                                   Unit.toScaledPointApprox (12 :: Int)
-                                                            Unit.Point
+                             , BL.G.fixedGlue $
+                                   toScaledPointApprox (12 :: Int)
+                                                            Point
                              )
                            , ( LineSkip
-                             , fixedGlue $
-                                   Unit.toScaledPointApprox (1 :: Int)
-                                                            Unit.Point
+                             , BL.G.fixedGlue $
+                                   toScaledPointApprox (1 :: Int)
+                                                            Point
                              )
                            ]
     in

@@ -9,11 +9,13 @@ import qualified Data.Text       as Txt
 import           Path            (Path)
 import qualified Path
 
+import           HeX.Quantity
+
 import           DVI.Encode      (encLength)
 import           DVI.Instruction
 import           DVI.Operation   (Operation (DefineFontNr))
 
-data Rule = Rule { ruleWidth, ruleHeight, ruleDepth :: !LenVal }
+data Rule = Rule { ruleWidth, ruleHeight, ruleDepth :: !TeXLength }
     deriving ( Show )
 
 instance Dimensioned Rule where
@@ -23,7 +25,7 @@ instance Dimensioned Rule where
         BoxDepth  -> ruleDepth
 
 data Character =
-    Character { char :: !Char, charWidth, charHeight, charDepth :: !LenVal }
+    Character { char :: !Char, charWidth, charHeight, charDepth :: !TeXLength }
     deriving ( Show )
 
 instance Dimensioned Character where
@@ -37,8 +39,8 @@ instance Readable Character where
 
 data FontDefinition =
     FontDefinition { fontDefChecksum    :: Int
-                   , fontDefDesignSize  :: Int
-                   , fontDefDesignScale :: Int
+                   , fontDefDesignSize  :: TeXLength
+                   , fontDefDesignScale :: TeXLength
                    , fontPath           :: !(Path Path.Rel Path.File)
                    , fontName           :: !Text
                    , fontNr             :: !Int
@@ -58,7 +60,7 @@ data Instruction =
       AddCharacter !Character
     | AddRule !Rule
     | BeginNewPage
-    | Move Axis !Int
+    | Move Axis !TeXLength
     | DefineFont !FontDefinition
     | SelectFont !FontSelection
     | PushStack
@@ -78,7 +80,7 @@ instance Readable Instruction where
       PopStack -> "Pop stack"
 
 data ParseState =
-    ParseState { instrs :: !(ForwardDirected Seq EncodableInstruction)
+    ParseState { instrs :: !(Seq EncodableInstruction)
                , curFontNr :: !(Maybe Int)
                , beginPagePointers :: ![Int]
                , stackDepth :: !Int
@@ -95,7 +97,7 @@ initialParseState mag =
                }
 
 addInstruction :: ParseState -> EncodableInstruction -> ParseState
-addInstruction s@ParseState{ instrs } i = s{ instrs = instrs ->. i }
+addInstruction s@ParseState{ instrs } i = s{ instrs = instrs :|> i }
 
 parseMundaneInstruction
     :: MonadErrorAnyOf e m '[ByteError, DVIError, PathError]
@@ -118,15 +120,15 @@ parseMundaneInstruction st = \case
             -- so don't add an end-page instruction.
             instrsEnded = case points of
                 [] -> instrs st
-                _  -> instrs st ->. endPageInstruction
+                _  -> instrs st :|> endPageInstruction
             beginPageInstr = getBeginPageInstruction $ lastDef (-1) points
-            instrsBegun = instrsEnded ->. beginPageInstr
+            instrsBegun = instrsEnded :|> beginPageInstr
         -- If a font is selected, add an instruction to select it again on the
         -- new page.
         instrsDone <- case curFontNr st of
             Just nr -> do
                 fInstr <- getSelectFontNrInstruction nr
-                pure (instrsBegun ->. fInstr)
+                pure (instrsBegun :|> fInstr)
             Nothing ->
                 pure instrsBegun
         -- Update the instructions, and add a pointer for the new begin-page
@@ -155,7 +157,7 @@ parseMundaneInstruction st = \case
 parseMundaneInstructions
     :: MonadErrorAnyOf e m '[ByteError, DVIError, PathError]
     => Int
-    -> ForwardDirected [] Instruction
+    -> Seq Instruction
     -> m ParseState
 parseMundaneInstructions mag _instrs = do
     st <- foldM parseMundaneInstruction (initialParseState mag) _instrs
@@ -163,9 +165,9 @@ parseMundaneInstructions mag _instrs = do
 
 parseInstructions
     :: MonadErrorAnyOf e m '[ByteError, DVIError, PathError]
-    => ForwardDirected [] Instruction
+    => Seq Instruction
     -> Int
-    -> m (ForwardDirected Seq EncodableInstruction)
+    -> m (Seq EncodableInstruction)
 parseInstructions _instrs magnification = do
     ParseState{instrs = mundaneInstrs, beginPagePointers, maxStackDepth}
         <- parseMundaneInstructions magnification _instrs
@@ -179,7 +181,7 @@ parseInstructions _instrs magnification = do
         postamblePointer = encLength mundaneInstrs
         postPostambleInstr = getPostPostambleInstr postamblePointer
         fontDefinitions = filter isDefineFontInstr mundaneInstrs
-    pure $ (mundaneInstrs ->. postambleInstr) <> fontDefinitions ->. postPostambleInstr
+    pure $ (mundaneInstrs :|> postambleInstr) <> fontDefinitions :|> postPostambleInstr
   where
     isDefineFontInstr i = case i of
         EncodableInstruction (DefineFontNr _) _ -> True

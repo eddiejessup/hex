@@ -14,6 +14,8 @@ import qualified Data.Word            as W
 import           Path                 (Path)
 import qualified Path
 
+import           HeX.Quantity
+
 import           DVI.Encode
 import           DVI.Operation
 
@@ -132,8 +134,8 @@ getDefineFontInstruction
     :: MonadErrorAnyOf e m '[D.Path.PathError, ByteError, DVIError]
     => Int
     -> Path b Path.File
-    -> Int
-    -> Int
+    -> TeXLength
+    -> TeXLength
     -> Int
     -> m EncodableInstruction
 getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
@@ -179,17 +181,17 @@ getCharacterInstruction code mode = case mode of
     _   ->
         toUnsignedInt code >>= getVariByteInstruction (AddChar . ArgCharOp mode)
 
-getRuleInstruction :: MoveMode -> Int -> Int -> EncodableInstruction
+getRuleInstruction :: MoveMode -> TeXLength -> TeXLength -> EncodableInstruction
 getRuleInstruction mode h w =
     EncodableInstruction (AddRule mode) (IntArgVal . U4 . fromIntegral <$> [h, w])
 
 getMoveInstruction
     :: MonadErrorAnyOf e m '[DVIError, ByteError]
     => Axis
-    -> Int
+    -> TeXLength
     -> m EncodableInstruction
 getMoveInstruction ax dist =
-    toSignedInt dist >>= getVariByteInstruction (Move ax . ArgMoveOp)
+    toSignedInt (unLength dist) >>= getVariByteInstruction (Move ax . ArgMoveOp)
 
 dviFormatArg, numeratorArg, denominatorArg :: ArgVal
 dviFormatArg = IntArgVal $ U1 2

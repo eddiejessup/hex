@@ -61,7 +61,7 @@ usableCatLookup = catLookup usableCatCodes
 runCat
     :: ( MonadIO m
        )
-    => ForwardDirected [] CharCode
+    => Seq CharCode
     -> m ()
 runCat xs = case extractCharCat usableCatLookup xs of
     Just (cc, xs') ->
@@ -74,7 +74,7 @@ runCat xs = case extractCharCat usableCatLookup xs of
 runLex
     :: ( MonadIO m
        )
-    => ForwardDirected [] CharCode
+    => Seq CharCode
     -> m ()
 runLex _xs = extractAndPrint (LineBegin, _xs)
   where
@@ -92,7 +92,7 @@ runLex _xs = extractAndPrint (LineBegin, _xs)
 runResolved
     :: ( MonadIO m
        )
-    => ForwardDirected [] CharCode
+    => Seq CharCode
     -> m ()
 runResolved _xs = extractAndPrint (LineBegin, _xs)
   where
@@ -156,27 +156,35 @@ runApp s f = evalStateT (runExceptT $ runMaybeT $ unMonadBuild f) s >>= strEithe
 
 -- Paragraph list.
 
-extractParaHList :: App ForwardHList
+extractParaHList :: App HList
 extractParaHList =
     (\(ParaResult _ hList) -> hList) <$> extractPara Indent
 
-codesToParaList :: ExpandedStream -> IO ForwardHList
+codesToParaList :: ExpandedStream -> IO HList
 codesToParaList s = runApp s extractParaHList
 
 runPara :: ExpandedStream -> IO ()
-runPara s = codesToParaList s >>= printLine
+runPara s =
+    do
+    HList elemSeq <- codesToParaList s
+    printLine elemSeq
 
 -- Paragraph boxes.
 
-codesToParaBoxes :: ExpandedStream -> IO (ForwardDirected Seq (ForwardDirected [] HBoxElem))
-codesToParaBoxes s = runApp s (extractParaHList >>= readOnConfState . hListToParaLineBoxes)
+codesToParaBoxes :: ExpandedStream -> IO (Seq (Box HBox))
+codesToParaBoxes s =
+    runApp s $
+        do
+        hList <- extractParaHList
+        readOnConfState (hListToParaLineBoxes hList)
+
 
 runSetPara :: ExpandedStream -> IO ()
 runSetPara s = codesToParaBoxes s >>= putStrLn . describeDoubleLined
 
 -- Pages list.
 
-codesToPages :: ExpandedStream -> IO (ForwardDirected Seq Page)
+codesToPages :: ExpandedStream -> IO (Seq Page)
 codesToPages s = runApp s extractBreakAndSetVList
 
 printLine :: (Readable a, Foldable t, Functor t) => t a -> IO ()
@@ -187,7 +195,7 @@ runPages s = codesToPages s >>= printLine
 
 -- DVI instructions.
 
-codesToDVI :: ExpandedStream -> IO (ForwardDirected [] Instruction)
+codesToDVI :: ExpandedStream -> IO (Seq Instruction)
 codesToDVI s = codesToPages s <&> pagesToDVI
 
 runDVI :: ExpandedStream -> IO ()
@@ -195,7 +203,7 @@ runDVI s = codesToDVI s >>= printLine
 
 -- Raw DVI instructions.
 
-codesToDVIRaw :: ExpandedStream -> IO (ForwardDirected Seq EncodableInstruction)
+codesToDVIRaw :: ExpandedStream -> IO (Seq EncodableInstruction)
 codesToDVIRaw s = do
     let _mag = 1000
     instrs <- codesToDVI s

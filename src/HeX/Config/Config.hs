@@ -31,6 +31,7 @@ import qualified HeX.Lex                  as Lex
 import qualified HeX.Parse.AST            as AST
 import           HeX.Parse.Resolve
 import           HeX.Parse.Token
+import           HeX.Quantity
 
 data Group
     = ScopeGroup Scope ScopeGroup
@@ -58,17 +59,17 @@ data Scope =
           , delimiterCodes :: Cat.CharCodeMap DelimiterCode
             -- Parameters.
           , texIntParameters :: HMap.HashMap TeXIntParameter TeXIntVal
-          , lengthParameters :: HMap.HashMap LengthParameter LenVal
-          , glueParameters :: HMap.HashMap GlueParameter BL.Glue
-          , mathGlueParameters :: HMap.HashMap MathGlueParameter BL.MathGlue
+          , lengthParameters :: HMap.HashMap LengthParameter TeXLength
+          , glueParameters :: HMap.HashMap GlueParameter (BL.Glue TeXLength)
+          , mathGlueParameters :: HMap.HashMap MathGlueParameter (BL.Glue MathLength)
           , tokenListParameters :: HMap.HashMap TokenListParameter BalancedText
             -- Registers.
           , texIntRegister :: RegisterMap TeXIntVal
-          , lengthRegister :: RegisterMap LenVal
-          , glueRegister :: RegisterMap BL.Glue
-          , mathGlueRegister :: RegisterMap BL.MathGlue
+          , lengthRegister :: RegisterMap TeXLength
+          , glueRegister :: RegisterMap (BL.Glue TeXLength)
+          , mathGlueRegister :: RegisterMap (BL.Glue MathLength)
           , tokenListRegister :: RegisterMap BalancedText
-          , boxRegister :: RegisterMap B.Box
+          , boxRegister :: RegisterMap (B.Box B.BoxContents)
           }
     deriving ( Show )
 
@@ -124,7 +125,7 @@ data Config =
     Config { fontInfos            :: IntMap FontInfo
            , searchDirectories    :: [Path Abs Dir]
            , specialTeXInts       :: HMap.HashMap SpecialTeXInt TeXIntVal
-           , specialLengths       :: HMap.HashMap SpecialLength TeXIntVal
+           , specialLengths       :: HMap.HashMap SpecialLength TeXLength
              -- File streams.
            , logStream            :: Handle
            , outFileStreams       :: HMap.HashMap FourBitInt Handle
@@ -236,14 +237,14 @@ modifyFont fNr f = modify (\c@Config{fontInfos} ->
 lookupSpecialTeXInt :: SpecialTeXInt -> Config -> TeXIntVal
 lookupSpecialTeXInt p c = HMap.lookupDefault 0 p (specialTeXInts c)
 
-lookupSpecialLength :: SpecialLength -> Config -> TeXIntVal
-lookupSpecialLength p c = HMap.lookupDefault 0 p (specialLengths c)
+lookupSpecialLength :: SpecialLength -> Config -> TeXLength
+lookupSpecialLength p c = HMap.lookupDefault (TeXLength 0) p (specialLengths c)
 
 setSpecialTeXInt :: SpecialTeXInt -> TeXIntVal -> Config -> Config
 setSpecialTeXInt p v c =
     c{ specialTeXInts = HMap.insert p v $ specialTeXInts c }
 
-setSpecialLength :: SpecialLength -> TeXIntVal -> Config -> Config
+setSpecialLength :: SpecialLength -> TeXLength -> Config -> Config
 setSpecialLength p v c =
     c{ specialLengths = HMap.insert p v $ specialLengths c }
 
@@ -470,15 +471,15 @@ lookupTeXIntParameter :: TeXIntParameter -> Config -> TeXIntVal
 lookupTeXIntParameter p conf =
     fromMaybe 0 $ scopedMapLookup texIntParameters p conf
 
-lookupLengthParameter :: LengthParameter -> Config -> LenVal
+lookupLengthParameter :: LengthParameter -> Config -> TeXLength
 lookupLengthParameter p conf =
     fromMaybe 0 $ scopedMapLookup lengthParameters p conf
 
-lookupGlueParameter :: GlueParameter -> Config -> BL.Glue
+lookupGlueParameter :: GlueParameter -> Config -> (BL.Glue TeXLength)
 lookupGlueParameter p conf =
     fromMaybe mempty $ scopedMapLookup glueParameters p conf
 
-lookupMathGlueParameter :: MathGlueParameter -> Config -> BL.MathGlue
+lookupMathGlueParameter :: MathGlueParameter -> Config -> (BL.Glue MathLength)
 lookupMathGlueParameter p conf =
     fromMaybe mempty $ scopedMapLookup mathGlueParameters p conf
 
@@ -497,20 +498,20 @@ setTeXIntParameter =
 
 setLengthParameter
     :: LengthParameter
-    -> LenVal
+    -> TeXLength
     -> GlobalFlag
     -> Config
     -> Config
 setLengthParameter =
     insertKey lengthParameters $ \c _map -> c { lengthParameters = _map }
 
-setGlueParameter :: GlueParameter -> BL.Glue -> GlobalFlag -> Config -> Config
+setGlueParameter :: GlueParameter -> (BL.Glue TeXLength) -> GlobalFlag -> Config -> Config
 setGlueParameter =
     insertKey glueParameters $ \c _map -> c { glueParameters = _map }
 
 setMathGlueParameter
     :: MathGlueParameter
-    -> BL.MathGlue
+    -> (BL.Glue MathLength)
     -> GlobalFlag
     -> Config
     -> Config
@@ -529,25 +530,27 @@ setTokenListParameter =
 parIndentBox :: Config -> BL.HListElem
 parIndentBox conf = BL.HVListElem $
     BL.VListBaseElem $
-    B.ElemBox $
-    B.Box { B.contents      = B.HBoxContents mempty
-          , B.desiredLength = B.To . lookupLengthParameter ParIndent $ conf
-          }
+    B.ElemBox $ B.Box
+        { B.contents  = B.HBoxContents mempty
+        , B.boxWidth  = lookupLengthParameter ParIndent conf
+        , B.boxHeight = 0
+        , B.boxDepth  = 0
+        }
 
 -- Registers.
 lookupTeXIntRegister :: EightBitInt -> Config -> TeXIntVal
 lookupTeXIntRegister p conf =
     fromMaybe 0 $ scopedMapLookup texIntRegister p conf
 
-lookupLengthRegister :: EightBitInt -> Config -> LenVal
+lookupLengthRegister :: EightBitInt -> Config -> TeXLength
 lookupLengthRegister p conf =
     fromMaybe 0 $ scopedMapLookup lengthRegister p conf
 
-lookupGlueRegister :: EightBitInt -> Config -> BL.Glue
+lookupGlueRegister :: EightBitInt -> Config -> (BL.Glue TeXLength)
 lookupGlueRegister p conf =
     fromMaybe mempty $ scopedMapLookup glueRegister p conf
 
-lookupMathGlueRegister :: EightBitInt -> Config -> BL.MathGlue
+lookupMathGlueRegister :: EightBitInt -> Config -> (BL.Glue MathLength)
 lookupMathGlueRegister p conf =
     fromMaybe mempty $ scopedMapLookup mathGlueRegister p conf
 
@@ -555,23 +558,23 @@ lookupTokenListRegister :: EightBitInt -> Config -> BalancedText
 lookupTokenListRegister p conf =
     fromMaybe mempty $ scopedMapLookup tokenListRegister p conf
 
-lookupBoxRegister :: EightBitInt -> Config -> Maybe B.Box
+lookupBoxRegister :: EightBitInt -> Config -> Maybe (B.Box B.BoxContents)
 lookupBoxRegister = scopedMapLookup boxRegister
 
 setTeXIntRegister :: EightBitInt -> TeXIntVal -> GlobalFlag -> Config -> Config
 setTeXIntRegister =
     insertKey texIntRegister $ \c _map -> c { texIntRegister = _map }
 
-setLengthRegister :: EightBitInt -> LenVal -> GlobalFlag -> Config -> Config
+setLengthRegister :: EightBitInt -> TeXLength -> GlobalFlag -> Config -> Config
 setLengthRegister =
     insertKey lengthRegister $ \c _map -> c { lengthRegister = _map }
 
-setGlueRegister :: EightBitInt -> BL.Glue -> GlobalFlag -> Config -> Config
+setGlueRegister :: EightBitInt -> (BL.Glue TeXLength) -> GlobalFlag -> Config -> Config
 setGlueRegister = insertKey glueRegister $ \c _map -> c { glueRegister = _map }
 
 setMathGlueRegister
     :: EightBitInt
-    -> BL.MathGlue
+    -> (BL.Glue MathLength)
     -> GlobalFlag
     -> Config
     -> Config
@@ -587,14 +590,14 @@ setTokenListRegister
 setTokenListRegister =
     insertKey tokenListRegister $ \c _map -> c { tokenListRegister = _map }
 
-setBoxRegister :: EightBitInt -> B.Box -> GlobalFlag -> Config -> Config
+setBoxRegister :: EightBitInt -> B.Box B.BoxContents -> GlobalFlag -> Config -> Config
 setBoxRegister = insertKey boxRegister $ \c _map -> c { boxRegister = _map }
 
 delBoxRegister :: EightBitInt -> GlobalFlag -> Config -> Config
 delBoxRegister = deleteKey boxRegister $ \c _map -> c { boxRegister = _map }
 
 setBoxRegisterNullable :: EightBitInt
-                            -> GlobalFlag -> Maybe B.Box -> Config -> Config
+                            -> GlobalFlag -> Maybe (B.Box B.BoxContents) -> Config -> Config
 setBoxRegisterNullable idx global = \case
     -- If the fetched box is null, delete the left-hand
     -- register's contents. Otherwise set the register to

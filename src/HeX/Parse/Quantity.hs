@@ -15,12 +15,15 @@ import qualified HeX.Lex                   as Lex
 import           HeX.Parse.AST
 import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token           as T
-import           HeX.Unit                  (PhysicalUnit (..))
+import qualified HeX.Quantity              as Q
+
+parseSigned :: TeXParseable s e m => SimpleParsecT s m a -> SimpleParsecT s m (T.Signed a)
+parseSigned parseQuantity = T.Signed <$> parseSigns <*> parseQuantity
 
 -- TeXInt.
 
 parseTeXInt :: TeXParser s e m TeXInt
-parseTeXInt = TeXInt <$> parseSigns <*> parseUnsignedTeXInt
+parseTeXInt = parseSigned parseUnsignedTeXInt
 
 parseEightBitTeXInt :: TeXParser s e m EightBitTeXInt
 parseEightBitTeXInt = EightBitTeXInt <$> parseTeXInt
@@ -32,8 +35,8 @@ parseSigns = mconcat <$> parseOptionalSigns
         *> PC.sepEndBy (satisfyThen signToPos) skipOptionalSpaces
 
     signToPos t
-        | matchOtherToken '+' t = Just $ T.Sign True
-        | matchOtherToken '-' t = Just $ T.Sign False
+        | matchOtherToken '+' t = Just T.Positive
+        | matchOtherToken '-' t = Just T.Negative
         | otherwise = Nothing
 
 parseUnsignedTeXInt :: TeXParser s e m UnsignedTeXInt
@@ -43,7 +46,7 @@ parseUnsignedTeXInt = tryChoice [ NormalTeXIntAsUTeXInt <$> parseNormalTeXInt
 
 -- Restrict pure type, and therefore accumulator, to Int, to disallow
 -- overflow.
-digitsToTeXIntVal :: Integral n => n -> [n] -> TeXIntVal
+digitsToTeXIntVal :: Integral n => n -> [n] -> Q.TeXIntVal
 digitsToTeXIntVal base =
     foldl' (\a b -> a * fromIntegral base + fromIntegral b) 0
 
@@ -139,7 +142,7 @@ parseCoercedTeXInt = tryChoice [ InternalLengthAsInt <$> parseInternalLength
 
 -- Length.
 parseLength :: TeXParser s e m Length
-parseLength = Length <$> parseSigns <*> parseUnsignedLength
+parseLength = parseSigned parseUnsignedLength
 
 parseUnsignedLength :: TeXParser s e m UnsignedLength
 parseUnsignedLength = tryChoice [ NormalLengthAsULength <$> parseNormalLength
@@ -208,15 +211,15 @@ parseUnit =
     -- NOTE: Can't trim number of 'try's naïvely, because they all suck up
     -- initial space, which would also need backtracking.
     parsePhysicalUnitLit = tryChoice
-        [ parseKeywordToValue "bp" BigPoint
-        , parseKeywordToValue "cc" Cicero
-        , parseKeywordToValue "cm" Centimetre
-        , parseKeywordToValue "dd" Didot
-        , parseKeywordToValue "in" Inch
-        , parseKeywordToValue "mm" Millimetre
-        , parseKeywordToValue "pc" Pica
-        , parseKeywordToValue "pt" Point
-        , parseKeywordToValue "sp" ScaledPoint
+        [ parseKeywordToValue "bp" Q.BigPoint
+        , parseKeywordToValue "cc" Q.Cicero
+        , parseKeywordToValue "cm" Q.Centimetre
+        , parseKeywordToValue "dd" Q.Didot
+        , parseKeywordToValue "in" Q.Inch
+        , parseKeywordToValue "mm" Q.Millimetre
+        , parseKeywordToValue "pc" Q.Pica
+        , parseKeywordToValue "pt" Q.Point
+        , parseKeywordToValue "sp" Q.ScaledPoint
         ]
 
 parseCoercedLength :: TeXParser s e m CoercedLength
@@ -224,7 +227,7 @@ parseCoercedLength = InternalGlueAsLength <$> parseInternalGlue
 
 -- Math length.
 parseMathLength :: TeXParser s e m MathLength
-parseMathLength = MathLength <$> parseSigns <*> parseUnsignedMathLength
+parseMathLength = parseSigned parseUnsignedMathLength
 
 parseUnsignedMathLength :: TeXParser s e m UnsignedMathLength
 parseUnsignedMathLength =
@@ -248,7 +251,7 @@ parseCoercedMathLength = InternalMathGlueAsMathLength <$> parseInternalMathGlue
 -- Glue.
 parseGlue :: TeXParser s e m Glue
 parseGlue = tryChoice [ ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> parseFlex "minus"
-                      , InternalGlue <$> parseSigns <*> parseInternalGlue
+                      , InternalGlue <$> parseSigned parseInternalGlue
                       ]
 
 parseFlex :: [CharCode] -> TeXParser s e m (Maybe Flex)
@@ -261,8 +264,8 @@ parseFlex s = tryChoice [ Just <$> parsePresentFlex
         *> tryChoice [FiniteFlex <$> parseLength, FilFlex <$> parseFilLength]
 
 parseFilLength :: TeXParser s e m FilLength
-parseFilLength = (FilLength <$> parseSigns <*> parseFactor <*> parseOrder)
-    <* skipOptionalSpaces
+parseFilLength =
+    (FilLength <$> parseSigned parseFactor <*> parseOrder) <* skipOptionalSpaces
   where
     parseSomeLs = PC.some $ skipSatisfied $ matchNonActiveCharacterUncased 'l'
 
@@ -349,13 +352,13 @@ parseInternalTeXInt =
               , satisfyEquals T.BadnessTok $> Badness
               ]
 
-parseCharToken :: TeXParser s e m TeXIntVal
+parseCharToken :: TeXParser s e m Q.TeXIntVal
 parseCharToken = satisfyThen $
     \case
         T.IntRefTok T.CharQuantity c -> Just c
         _ -> Nothing
 
-parseMathCharToken :: TeXParser s e m TeXIntVal
+parseMathCharToken :: TeXParser s e m Q.TeXIntVal
 parseMathCharToken = satisfyThen $
     \case
         T.IntRefTok T.MathCharQuantity c -> Just c
@@ -385,7 +388,7 @@ parseFontRef = tryChoice [ FontTokenRef <$> parseFontRefToken
                          , FamilyMemberFontRef <$> parseFamilyMember
                          ]
 
-parseFontRefToken :: TeXParser s e m TeXIntVal
+parseFontRefToken :: TeXParser s e m Q.TeXIntVal
 parseFontRefToken = satisfyThen $
     \case
         T.FontRefToken n -> Just n

@@ -3,9 +3,9 @@ module HeX.Command.Commands where
 import           HeXlude
 
 import qualified Data.HashMap.Strict as HMap
+import qualified Data.Path           as D.Path
 import qualified Data.Text           as Text
 
-import qualified Data.Path           as D.Path
 import           TFM                 (TexFont (..))
 import qualified TFM
 
@@ -19,7 +19,7 @@ import           HeX.Config
 import           HeX.Evaluate
 import qualified HeX.Lex             as Lex
 import qualified HeX.Parse           as HP
-import qualified HeX.Unit            as Unit
+import           HeX.Quantity
 
 glueToElem
     :: ( HP.TeXStream s
@@ -36,9 +36,9 @@ ruleToElem
        , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
        )
     => HP.Rule
-    -> m LenVal
-    -> m LenVal
-    -> m LenVal
+    -> m TeXLength
+    -> m TeXLength
+    -> m TeXLength
     -> m BL.VListElem
 ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD =
     do
@@ -60,14 +60,14 @@ ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD 
 -- Then set \prevdepth to the depth of the new box.
 addVListElem
     :: MonadState Config m
-    => BL.ForwardVList
+    => BL.VList
     -> BL.VListElem
-    -> m BL.ForwardVList
-addVListElem acc e = case e of
+    -> m BL.VList
+addVListElem (BL.VList accSeq) e = case e of
     (BL.VListBaseElem (B.ElemBox b)) -> addVListBox b
-    _                                -> pure (acc ->. e)
+    _                                -> pure (BL.VList (accSeq :|> e))
   where
-    addVListBox :: MonadState Config m => B.Box -> m BL.ForwardVList
+    addVListBox :: MonadState Config m => B.Box B.BoxContents -> m BL.VList
     addVListBox b =
         do
         _prevDepth <- gets $ lookupSpecialLength HP.PrevDepth
@@ -75,9 +75,9 @@ addVListElem acc e = case e of
         skipLimit <- gets $ lookupLengthParameter HP.LineSkipLimit
         skip <- gets $ lookupGlueParameter HP.LineSkip
         modify $ setSpecialLength HP.PrevDepth $ naturalDepth e
-        pure $ if _prevDepth <= -Unit.oneKPt
+        pure $ BL.VList $ if _prevDepth <= -oneKPt
             then
-                acc ->. e
+                accSeq :|> e
             else
                 let proposedBaselineLength = blineLength - _prevDepth - naturalHeight b
                 -- Intuition: set the distance between baselines to \baselineskip, but no
@@ -86,7 +86,7 @@ addVListElem acc e = case e of
                     glue = BL.ListGlue $ if proposedBaselineLength >= skipLimit
                         then BL.Glue proposedBaselineLength blineStretch blineShrink
                         else skip
-                in (acc ->. glue) ->. e
+                in (accSeq :|> glue) :|> e
 
 hModeAddHGlue
     :: ( HP.TeXStream s
@@ -131,8 +131,8 @@ hModeAddRule
 hModeAddRule rule =
     BL.HVListElem <$> readOnConfState (ruleToElem rule defaultWidth defaultHeight defaultDepth)
   where
-    defaultWidth = pure (Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point)
-    defaultHeight = pure (Unit.toScaledPointApprox (10 :: Int) Unit.Point)
+    defaultWidth = pure (toScaledPointApprox (0.4 :: Rational) Point)
+    defaultHeight = pure (toScaledPointApprox (10 :: Int) Point)
     defaultDepth = pure 0
 
 hModeStartParagraph
@@ -171,7 +171,7 @@ vModeAddRule rule =
     readOnConfState $ ruleToElem rule defaultWidth defaultHeight defaultDepth
   where
     defaultWidth = gets $ lookupLengthParameter HP.HSize
-    defaultHeight = pure $ Unit.toScaledPointApprox (0.4 :: Rational) Unit.Point
+    defaultHeight = pure $ toScaledPointApprox (0.4 :: Rational) Point
     defaultDepth = pure 0
 
 -- Horizontal mode commands.
@@ -197,7 +197,7 @@ spaceGlue
     :: ( MonadReader Config m
        , MonadErrorAnyOf e m '[ConfigError]
        )
-    => m BL.Glue
+    => m (BL.Glue TeXLength)
 spaceGlue = do
     fontMetrics@TexFont { spacing, spaceStretch, spaceShrink } <- currentFontMetrics
     let toSP   = TFM.designScaleSP fontMetrics
@@ -238,7 +238,7 @@ loadFont (HP.TeXFilePath path) fontSpec = do
     fNr <- addFont info
     -- TODO: Improve mapping of name and path.
     pure B.FontDefinition { B.fontDefChecksum    = TFM.checksum fontMetrics
-                          , B.fontDefDesignSize  = round designSizeSP
+                          , B.fontDefDesignSize  = designSizeSP
                           , B.fontDefDesignScale = TFM.designScaleSP fontMetrics scaleRatio
                           , B.fontNr             = fNr
                           , B.fontPath           = path
@@ -265,7 +265,7 @@ showLexTok = \case
         Text.singleton char
     Lex.CharCatToken cc -> showT cc
     Lex.ControlSequenceToken (Lex.ControlSequence cs) ->
-        "\\" <> toS (fUndirected cs)
+        "\\" <> toS cs
 
 showPrimTok :: HP.PrimitiveToken -> Text
 showPrimTok = \case
@@ -275,7 +275,7 @@ showPrimTok = \case
     pt                     -> showT pt
 
 showBalancedText :: HP.BalancedText -> Text
-showBalancedText (HP.BalancedText txt) = Text.concat $ showLexTok <$> txt
+showBalancedText (HP.BalancedText txt) = Text.concat $ showLexTok <$> (toList txt)
 
 showExpandedBalancedText :: HP.ExpandedBalancedText -> Text
 showExpandedBalancedText (HP.ExpandedBalancedText txt) =

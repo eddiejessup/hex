@@ -2,24 +2,44 @@ module HeX.Parse.Token where
 
 import           HeXlude
 
-import           Data.Hashable   (Hashable)
-import qualified Data.Map.Strict as Map
-import           GHC.Generics    (Generic)
+import           Data.Hashable      (Hashable)
+import qualified Data.Map.Strict    as Map
 
-
-import           HeX.Box         (VBoxAlignType)
-import qualified HeX.Lex         as Lex
+import qualified HeX.BreakList.Elem as BL.E
+import qualified HeX.Lex            as Lex
+import           HeX.Quantity
 
 -- mconcat on this newtype wrapper should get the final sign of a list of
 -- signs. Bit pretentious, sorry.
-newtype Sign = Sign { getSign :: Bool }
+data Sign
+    = Positive
+    | Negative
     deriving (Show, Eq)
 
 instance Semigroup Sign where
-    Sign x <> Sign y = Sign $ x == y
+    a <> b = if a == b then Positive else Negative
 
 instance Monoid Sign where
-    mempty = Sign True
+    mempty = Positive
+
+instance Readable Sign where
+    describe Positive = "+"
+    describe Negative = "-"
+
+data Signed a = Signed Sign a
+    deriving (Functor)
+
+deriving instance Show a => Show (Signed a)
+
+instance Readable a => Readable (Signed a) where
+    describe (Signed sign v) = case sign of
+        Positive -> describe v
+        Negative -> "-" <> describe v
+
+evalSigned :: Num a => Signed a -> a
+evalSigned (Signed sign a) = case sign of
+    Positive -> a
+    Negative -> -a
 
 data TeXIntParameter
     = PreTolerance           -- Badness tolerance before hyphenation
@@ -319,7 +339,7 @@ charToDigit '8' = Just Eight
 charToDigit '9' = Just Nine
 charToDigit _   = Nothing
 
-newtype BalancedText = BalancedText [Lex.Token]
+newtype BalancedText = BalancedText (Seq Lex.Token)
     deriving (Show, Eq, Semigroup, Monoid)
 
 newtype ExpandedBalancedText = ExpandedBalancedText [PrimitiveToken]
@@ -358,7 +378,7 @@ data RemovableItem
 
 data ExplicitBox
     = ExplicitHBox -- \hbox
-    | ExplicitVBox VBoxAlignType
+    | ExplicitVBox BL.E.VBoxAlignType
     deriving (Show, Eq)
 
 data PrimitiveToken
