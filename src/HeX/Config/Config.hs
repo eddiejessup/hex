@@ -183,7 +183,7 @@ findFilePath findPolicy extraPaths p =
     dirs <- asks searchDirectories <&> (<> extraPaths)
     getTgtPath
         >>= Path.IO.findFile dirs
-        >>= liftMaybe (throw $ ConfigError $ "Could not find file: " <> show p)
+        >>= note (throw $ ConfigError $ "Could not find file: " <> show p)
   where
     getTgtPath = case findPolicy of
         NoImplicitExtension ->
@@ -216,7 +216,7 @@ lookupFontInfo
     => Int
     -> m FontInfo
 lookupFontInfo fNr = (!? fNr) <$> asks fontInfos
-    >>= liftMaybe (throw (ConfigError "No such font number"))
+    >>= note (throw (ConfigError "No such font number"))
 
 addFont :: MonadState Config m => FontInfo -> m Int
 addFont newInfo = do
@@ -358,7 +358,7 @@ mLookupCurrentFontNr
        )
     => m Int
 mLookupCurrentFontNr =
-    asks lookupCurrentFontNr >>= liftMaybe (throw $ ConfigError "Font number isn't set")
+    asks lookupCurrentFontNr >>= note (throw $ ConfigError "Font number isn't set")
 
 selectFontNr :: Int -> GlobalFlag -> Config -> Config
 selectFontNr n globalFlag c@Config{ globalScope, groups } =
@@ -389,7 +389,7 @@ lookupFontFamilyMember
     => (FontRange, Int)
     -> m Int
 lookupFontFamilyMember k = asks (scopedMapLookup familyMemberFonts k)
-    >>= liftMaybe (throw $ ConfigError $ "Family member undefined: " <> show k)
+    >>= note (throw $ ConfigError $ "Family member undefined: " <> show k)
 
 -- Control sequences.
 lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
@@ -460,7 +460,7 @@ updateCharCodeMap t c n globalFlag = do
            )
         => Maybe a
         -> m a
-    liftMay = liftMaybe (throw $ ConfigError $
+    liftMay = note (throw $ ConfigError $
                          "Invalid target value for code type "
                          <> show t
                          <> ": "

@@ -21,7 +21,7 @@ stripExtension
     -> m (Path b File)
 stripExtension p =
     Path.setFileExtension "" p
-    & liftMaybe (throw $ PathError $ "Could not strip extension for: " <> show p)
+    & note (throw $ PathError $ "Could not strip extension for: " <> show p)
 
 fileNameText
     :: MonadErrorAnyOf e m '[PathError]
@@ -38,4 +38,4 @@ setFileExtension
     -> m (Path b File)
 setFileExtension p ext =
     Path.setFileExtension (toS ext) p
-    & liftMaybe (throw $ PathError $ "Path not valid with extension: " <> show p)
+    & note (throw $ PathError $ "Path not valid with extension: " <> show p)

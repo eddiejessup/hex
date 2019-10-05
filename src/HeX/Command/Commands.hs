@@ -63,12 +63,8 @@ addVListElem
     => BL.VList
     -> BL.VListElem
     -> m BL.VList
-addVListElem (BL.VList accSeq) e = case e of
-    (BL.VListBaseElem (B.ElemBox b)) -> addVListBox b
-    _                                -> pure (BL.VList (accSeq :|> e))
-  where
-    addVListBox :: MonadState Config m => B.Box B.BoxContents -> m BL.VList
-    addVListBox b =
+addVListElem (BL.VList accSeq) = \case
+    e@(BL.VListBaseElem (B.ElemBox b)) ->
         do
         _prevDepth <- gets $ lookupSpecialLength HP.PrevDepth
         BL.Glue blineLength blineStretch blineShrink <- gets $ lookupGlueParameter HP.BaselineSkip
@@ -87,6 +83,9 @@ addVListElem (BL.VList accSeq) e = case e of
                         then BL.Glue proposedBaselineLength blineStretch blineShrink
                         else skip
                 in (accSeq :|> glue) :|> e
+    e ->
+        pure (BL.VList (accSeq :|> e))
+
 
 hModeAddHGlue
     :: ( HP.TeXStream s
@@ -186,7 +185,7 @@ characterBox char = do
     fontMetrics <- currentFontMetrics
     let toSP = TFM.designScaleSP fontMetrics
     TFM.Character { TFM.width, TFM.height, TFM.depth } <-
-        liftMaybe (throw $ ConfigError "No such character") $ HMap.lookup char (characters fontMetrics)
+        note (throw $ ConfigError "No such character") $ HMap.lookup char (characters fontMetrics)
     pure B.Character { B.char       = char
                      , B.charWidth  = toSP width
                      , B.charHeight = toSP height

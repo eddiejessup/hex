@@ -154,11 +154,11 @@ getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
             ]
     pure $ EncodableInstruction _op args
   where
-    liftMaybeAscii v = liftMaybe (throw $ D.Path.PathError $ "Could not represent as ASCII: " <> show v) v
+    noteAscii v = note (throw $ D.Path.PathError $ "Could not represent as ASCII: " <> show v) v
 
-    pathToAscii p = Asc.fromChars (Path.toFilePath p) & liftMaybeAscii
+    pathToAscii p = Asc.fromChars (Path.toFilePath p) & noteAscii
 
-    textToAscii t = Asc.fromText t & liftMaybeAscii
+    textToAscii t = Asc.fromText t & noteAscii
 
     asciiLength = BS.length . Asc.toByteString
 

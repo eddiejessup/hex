@@ -15,7 +15,6 @@ module HeXlude
     , seqHeadMay
     , module Data.Witherable
     , id
-    , liftMaybe
     , liftThrow
     , (>>>)
     , atEith
@@ -56,13 +55,8 @@ type MonadErrorVariant e m = MonadError (Variant e) m
 
 type MonadErrorAnyOf e m es = (MonadErrorVariant e m, e `CouldBeAnyOf` es)
 
-liftMaybe :: MonadError e m => e -> Maybe a -> m a
-liftMaybe e = \case
-    Nothing -> throwError e
-    Just a -> pure a
-
 liftThrow :: (MonadIO m, MonadError e m) => e -> MaybeT IO a -> m a
-liftThrow e v = liftIO (runMaybeT v) >>= liftMaybe e
+liftThrow e v = liftIO (runMaybeT v) >>= note e
 
 atEith :: Show a => Text -> [a] -> Int -> Either Text a
 atEith str xs i = maybeToRight

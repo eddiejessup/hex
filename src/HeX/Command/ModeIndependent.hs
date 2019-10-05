@@ -160,7 +160,7 @@ handleModeIndependentCommand = \case
                 eVal <- evalOnConfState val
                 liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
                 liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
-                idxChar <- liftMaybe (throw $ ConfigError $ "Invalid character code index: " <> show eIdx) (toEnumMay eIdx)
+                idxChar <- note (throw $ ConfigError $ "Invalid character code index: " <> show eIdx) (toEnumMay eIdx)
                 liftIO $ putText $ "Setting " <> show codeType <> "@" <> show eIdx <> " (" <> show idxChar <> ") to " <> show eVal
                 HP.runConfState $ updateCharCodeMap codeType idxChar eVal global
                 pure DoNothing

@@ -99,7 +99,7 @@ instance TeXEvaluable AST.EightBitTeXInt where
     texEvaluate (AST.EightBitTeXInt n) =
         texEvaluate n >>= toEighBit
       where
-        toEighBit i = liftMaybe (throw (EvaluationError ("TeXInt not in range: " <> show i))) (newEightBitInt i)
+        toEighBit i = note (throw (EvaluationError ("TeXInt not in range: " <> show i))) (newEightBitInt i)
 
 getRegisterIdx
     :: ( MonadReader Config m
@@ -135,7 +135,7 @@ instance TeXEvaluable AST.CodeTableRef where
         let
             lookupFrom :: Enum v => (Scope -> HashMap Char v) -> Maybe Int
             lookupFrom getMap = fromEnum <$> scopedMapLookup getMap idx conf
-        liftMaybe (throw (EvaluationError "err")) $ case q of
+        note (throw (EvaluationError "err")) $ case q of
             T.CategoryCodeType            -> lookupFrom catCodes
             T.MathCodeType                -> lookupFrom mathCodes
             T.ChangeCaseCodeType Upward   -> lookupFrom uppercaseCodes

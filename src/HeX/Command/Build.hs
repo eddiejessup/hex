@@ -132,6 +132,14 @@ handleCommandInHBoxMode hList@(BL.HList hElemSeq) command _ =
 
 newtype VBoxResult = VBoxResult VList
 
+addVListElemAndLoop
+    :: ( HP.TeXStream s
+       , MonadState s m)
+    => VList
+    -> BL.VListElem
+    -> m (RecursionResult VList b)
+addVListElemAndLoop vl e = LoopAgain <$> HP.runConfState (addVListElem vl e)
+
 handleCommandInVBoxMode
     :: ( MonadState s m
        , HP.TeXParseable s e m
@@ -144,14 +152,14 @@ handleCommandInVBoxMode
     -> HP.Command
     -> s
     -> m (RecursionResult VList VBoxResult)
-handleCommandInVBoxMode vList@(BL.VList vElemSeq) command oldStream =
+handleCommandInVBoxMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
             throwM $ BuildError "End not allowed in internal vertical mode"
         HP.VModeCommand (HP.AddVGlue g) ->
-            addElem <$> vModeAddVGlue g
+            vModeAddVGlue g >>= addElem
         HP.VModeCommand (HP.AddVRule rule) ->
-            addElem <$> vModeAddRule rule
+            vModeAddRule rule >>= addElem
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -165,9 +173,11 @@ handleCommandInVBoxMode vList@(BL.VList vElemSeq) command oldStream =
         HP.ModeIndependentCommand modeIndependentCommand ->
             handleModeIndependentCommand modeIndependentCommand >>= \case
                 AddElem extraElem ->
-                    pure $ addElem extraElem
+                    addElem extraElem
                 EnterBoxMode desiredLength boxType boxIntent ->
-                    addMaybeElem' <$> extractVSubBox desiredLength boxIntent boxType
+                    extractVSubBox desiredLength boxIntent boxType >>= \case
+                        Nothing -> pure doNothing
+                        Just box -> addElem box
                 FinishBoxMode ->
                     pure $ endLoop vList
                 DoNothing ->
@@ -176,8 +186,7 @@ handleCommandInVBoxMode vList@(BL.VList vElemSeq) command oldStream =
             panic $ "Not implemented, outer V mode: " <> show oth
   where
     doNothing = LoopAgain vList
-    addElem e = LoopAgain $ BL.VList $ vElemSeq :|> e
-    addMaybeElem' mayE = LoopAgain $ BL.VList $ addMaybeElem vElemSeq mayE
+    addElem e = addVListElemAndLoop vList e
     endLoop = EndLoop . VBoxResult
 
     addPara indentFlag =
@@ -235,14 +244,14 @@ handleCommandInMainVMode
     -> HP.Command
     -> s
     -> m (RecursionResult VList MainVModeResult)
-handleCommandInMainVMode vList@(BL.VList vElemSeq) command oldStream =
+handleCommandInMainVMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
             pure $ endLoop vList
         HP.VModeCommand (HP.AddVGlue g) ->
-            addElem <$> vModeAddVGlue g
+            vModeAddVGlue g >>= addElem
         HP.VModeCommand (HP.AddVRule rule) ->
-            addElem <$> vModeAddRule rule
+            vModeAddRule rule >>= addElem
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -256,9 +265,11 @@ handleCommandInMainVMode vList@(BL.VList vElemSeq) command oldStream =
         HP.ModeIndependentCommand modeIndependentCommand ->
             handleModeIndependentCommand modeIndependentCommand >>= \case
                 AddElem extraElem ->
-                    pure $ addElem extraElem
+                    addElem extraElem
                 EnterBoxMode desiredLength boxType boxIntent ->
-                    addMaybeElem' <$> extractVSubBox desiredLength boxIntent boxType
+                    extractVSubBox desiredLength boxIntent boxType >>= \case
+                        Nothing -> pure doNothing
+                        Just box -> addElem box
                 FinishBoxMode ->
                     throwM $ BuildError "No box to end: in main V mode"
                 DoNothing ->
@@ -267,8 +278,7 @@ handleCommandInMainVMode vList@(BL.VList vElemSeq) command oldStream =
             panic $ "Not implemented, outer V mode: " <> show oth
   where
     doNothing = LoopAgain vList
-    addElem e = LoopAgain $ BL.VList $ vElemSeq :|> e
-    addMaybeElem' mayE = LoopAgain $ BL.VList $ addMaybeElem vElemSeq mayE
+    addElem = addVListElemAndLoop vList
     endLoop = EndLoop . MainVModeResult
 
     addPara indentFlag =
@@ -417,4 +427,5 @@ extractBreakAndSetVList =
         Just _condState -> throwM $ BuildError $ "Cannot end: in condition block: " <> showT _condState
     readOnConfState (asks finaliseConfig) >>= liftIO
     desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
+    putText $ describe finalMainVList
     pure $ BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList

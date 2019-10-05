@@ -3,7 +3,6 @@ module HeX.BreakList.Elem where
 import           HeXlude
 
 import           Data.Adjacent
-import qualified Data.Text               as Text
 
 import           HeX.Box
 import           HeX.BreakList.BreakList (BreakItem (..),
@@ -88,6 +87,10 @@ instance Dimensioned VList where
             case lastMay elemList of
                 Nothing  -> 0
                 Just lst -> naturalLength BoxDepth lst
+
+instance Readable VList where
+    describe (VList elems) =
+        describeListHeaded 1 "VList" elems
 
 data VBoxAlignType = DefaultAlign -- \vbox
                    | TopAlign -- \vtop
@@ -177,22 +180,3 @@ instance Readable HListElem where
     describe = \case
         HVListElem vListElem -> describe vListElem
         HListHBaseElem hBaseElem -> describe hBaseElem
-
--- Just used to show an HList more compactly.
-data CondensedHListElem = Sentence Text | NonSentence HListElem
-    deriving ( Show )
-
-condenseHList :: HList -> [CondensedHListElem]
-condenseHList (HList elems) = foldr append mempty elems
-  where
-    append (HListHBaseElem (ElemCharacter Character{char})) [] =
-        [ Sentence $ Text.singleton char ]
-    append e [] =
-        [ NonSentence e ]
-    append e r@(x : xs) = case (x, e) of
-        (Sentence cs, HListHBaseElem (ElemCharacter Character{char})) ->
-            Sentence (Text.cons char cs) : xs
-        (_, HListHBaseElem (ElemCharacter Character{char})) ->
-            Sentence (Text.singleton char) : r
-        _ ->
-            NonSentence e : r

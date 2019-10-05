@@ -1,15 +1,16 @@
 module HeX.Box.Elem
-    ( FontDefinition(..)
-    , FontSelection(..)
-    , Rule(..)
-    , Character(..)
+    ( DVI.D.FontDefinition(..)
+    , DVI.D.FontSelection(..)
+    , DVI.D.Rule(..)
+    , DVI.D.Character(..)
     , module HeX.Box.Elem
     ) where
 
 import           HeXlude
 
-import           DVI.Document (Character (..), FontDefinition (..),
-                               FontSelection (..), Rule (..))
+import qualified Data.Text               as Text
+
+import qualified DVI.Document            as DVI.D
 
 import           HeX.Quantity
 
@@ -30,8 +31,38 @@ newtype HBox = HBox (Seq HBoxElem)
     deriving (Show, Semigroup, Monoid)
 
 instance Readable HBox where
-    describe (HBox hElems) =
-        describeListHeaded 1 "HBox" hElems
+    describe (HBox elems) =
+        describeListHeaded 1 "HBox" (condenseChary elems toMaybeChar)
+      where
+        toMaybeChar = \case
+            HBoxHBaseElem (ElemCharacter DVI.D.Character { DVI.D.char }) ->
+                Just char
+            _ ->
+                Nothing
+
+-- Just used to show an HList more compactly.
+data Sentential a = Sentence Text | NonSentence a
+    deriving (Show, Functor, Foldable)
+
+instance Readable a => Readable (Sentential a) where
+    describe = \case
+        Sentence s -> "\"" <> s <> "\""
+        NonSentence a -> describe a
+
+condenseChary :: Foldable t => t a -> (a -> Maybe Char) -> Seq (Sentential a)
+condenseChary elems toMaybeChar = foldl' append mempty elems
+  where
+    append r e = case toMaybeChar e of
+        Just c ->
+            case r of
+                Empty ->
+                    singleton $ Sentence $ Text.singleton c
+                (xs :|> Sentence cs) ->
+                    xs :|> Sentence (Text.snoc cs c)
+                _ ->
+                    r :|> Sentence (Text.singleton c)
+        Nothing ->
+            r :|> NonSentence e
 
 newtype VBox = VBox (Seq VBoxElem)
     deriving (Show, Semigroup, Monoid)
@@ -55,9 +86,9 @@ instance Dimensioned (Box BoxContents) where
         BoxDepth -> dep
 
 data BaseElem = ElemBox (Box BoxContents)
-              | ElemRule Rule
-              | ElemFontDefinition FontDefinition
-              | ElemFontSelection FontSelection
+              | ElemRule DVI.D.Rule
+              | ElemFontDefinition DVI.D.FontDefinition
+              | ElemFontSelection DVI.D.FontSelection
               | ElemKern Kern
     deriving (Show)
 
@@ -87,7 +118,7 @@ instance Dimensioned VBoxElem where
     naturalLength = axisVBoxElemNaturalLength Vertical
 
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
-newtype HBaseElem = ElemCharacter Character
+newtype HBaseElem = ElemCharacter DVI.D.Character
     deriving (Show)
 
 instance Dimensioned HBaseElem where
@@ -136,8 +167,9 @@ instance Readable HBoxElem where
 
 instance Readable a => Readable (Box a) where
     describe Box { contents, boxWidth, boxHeight, boxDepth } =
-        "Box<w=" <> describe boxWidth <> ", h=" <> describe boxHeight <> ", d=" <> describe boxDepth <> ">"
+        "Box<w=" <> describe boxWidth <> ", h=" <> describe boxHeight <> ", d=" <> describe boxDepth <> "> [[["
         <> "\n" <> describe contents
+        <> "\n]]] Box"
 
 instance Readable DesiredLength where
     describe = \case
@@ -147,10 +179,8 @@ instance Readable DesiredLength where
 
 instance Readable BoxContents where
     describe = \case
-        HBoxContents hBox ->
-            describe hBox
-        VBoxContents vBox ->
-            describe vBox
+        HBoxContents hBox -> describe hBox
+        VBoxContents vBox -> describe vBox
 
 instance Readable Page where
     describe (Page vBoxElems) =

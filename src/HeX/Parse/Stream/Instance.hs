@@ -443,7 +443,7 @@ fetchResolvedToken stream =
         Just (lt, newStream) ->
             do
             let lkp cs = Conf.lookupCS cs $ config newStream
-            rt <- liftMaybe (throw $ ExpansionError $ "Could not resolve token:" <> showT lt) $ resolveToken lkp (expansionMode newStream) lt
+            rt <- note (throw $ ExpansionError $ "Could not resolve token:" <> showT lt) $ resolveToken lkp (expansionMode newStream) lt
             pure $ Just (lt, rt, newStream)
 
 fetchAndExpandToken
