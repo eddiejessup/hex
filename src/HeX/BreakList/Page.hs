@@ -14,7 +14,7 @@ import           HeX.Config.Parameters
 import           HeX.Quantity
 
 data PageBreakJudgment =
-    DoNotBreak | BreakPageAtBest | BreakPageHere | TrackCost !Int
+    DoNotBreak | BreakPageAtBest | BreakPageHere | TrackCost !TeXInt
     deriving ( Show )
 
 pageBreakJudgment
@@ -48,7 +48,7 @@ setPage (LenParamVal h) vList =
 
 data CurrentPage = CurrentPage
     { items            :: VList
-    , bestPointAndCost :: Maybe (Int, Int)
+    , bestPointAndCost :: Maybe (TeXInt, TeXInt)
     }
 
 newCurrentPage :: CurrentPage
@@ -108,7 +108,7 @@ runPageBuilder
                                     -- If c = ∞, we break at the best breakpoint so far.
                                     -- The current vlist material following that best breakpoint is
                                     -- returned to the recent contributions, to consider again.
-                                    (BreakPageAtBest, Just (iBest, _)) ->
+                                    (BreakPageAtBest, Just (TeXInt iBest, _)) ->
                                         let
                                             (newPageElemSeq, leftoverListElemSeq) = Seq.splitAt iBest curPageElemSeq
                                         in
@@ -120,7 +120,7 @@ runPageBuilder
                                     -- If the resulting cost <= the smallest cost seen so far, remember
                                     -- the current breakpoint as the best so far.
                                     (TrackCost cHere, _) ->
-                                        let thisPointAndCost = Just (length curPageElemSeq, cHere)
+                                        let thisPointAndCost = Just (TeXInt (length curPageElemSeq), cHere)
                                             newBestPointAndCost = case _bestPointAndCost of
                                                 Nothing         -> thisPointAndCost
                                                 Just (_, cBest) -> if cHere > cBest

@@ -3,14 +3,14 @@ module HeX.Command.ModeIndependent where
 import           HeXlude
 
 import           Control.Monad        (when)
-import qualified Data.Path             as D.Path
-import           Safe                 (toEnumMay)
+import qualified Data.Path            as D.Path
 
 import           TFM                  (TFMError)
 
 import qualified HeX.Box              as B
 import qualified HeX.BreakList        as BL
 import qualified HeX.Command.Commands as Com
+import qualified HeX.Config.Codes     as Code
 import           HeX.Command.Common
 import           HeX.Config
 import           HeX.Evaluate
@@ -63,7 +63,7 @@ handleModeIndependentCommand = \case
         let _handle = case stdOutStream of
                 HP.StdOut -> stdout
                 HP.StdErr -> stderr
-        liftIO $ hPutStrLn _handle $ Com.showExpandedBalancedText eTxt
+        liftIO $ hPutStrLn _handle (Code.codesToS (Com.showExpandedBalancedText eTxt) :: Text)
         pure DoNothing
     HP.Relax ->
         pure DoNothing
@@ -160,7 +160,7 @@ handleModeIndependentCommand = \case
                 eVal <- evalOnConfState val
                 liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
                 liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
-                idxChar <- note (throw $ ConfigError $ "Invalid character code index: " <> show eIdx) (toEnumMay eIdx)
+                idxChar <- note (throw $ ConfigError $ "Invalid character code index: " <> show eIdx) (fromTeXInt eIdx)
                 liftIO $ putText $ "Setting " <> show codeType <> "@" <> show eIdx <> " (" <> show idxChar <> ") to " <> show eVal
                 HP.runConfState $ updateCharCodeMap codeType idxChar eVal global
                 pure DoNothing
@@ -216,7 +216,7 @@ handleModeIndependentCommand = \case
             do
             en <- texEvaluate n
             fStreams <- asks outFileStreams
-            let txtStr = Com.showExpandedBalancedText eTxt
+            let txtTxt = Code.codesToS (Com.showExpandedBalancedText eTxt)
             -- Write to:
             -- if stream number corresponds to existing, open file:
             --     file
@@ -225,14 +225,14 @@ handleModeIndependentCommand = \case
             --     unless stream number is negative: terminal
             case Com.getFileStream fStreams en of
                 Just fStream ->
-                     liftIO $ hPutStrLn fStream txtStr
+                     liftIO $ hPutStrLn fStream txtTxt
                 Nothing ->
                     do
                     -- Write to terminal.
-                    when (en >= 0) $ liftIO $ putText txtStr
+                    when (en >= 0) $ liftIO $ putText txtTxt
                     -- Write to log
                     logHandle <- asks logStream
-                    liftIO $ hPutStrLn logHandle txtStr
+                    liftIO $ hPutStrLn logHandle txtTxt
             pure DoNothing
     -- Start a new level of grouping.
     HP.ChangeScope HP.Positive trig ->

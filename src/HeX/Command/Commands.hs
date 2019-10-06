@@ -2,9 +2,10 @@ module HeX.Command.Commands where
 
 import           HeXlude
 
-import qualified Data.HashMap.Strict as HMap
+import qualified Data.Map.Strict     as Map
+import qualified Data.IntMap.Strict  as IntMap
 import qualified Data.Path           as D.Path
-import qualified Data.Text           as Text
+import qualified Data.Sequence       as Seq
 
 import           TFM                 (TexFont (..))
 import qualified TFM
@@ -12,8 +13,7 @@ import qualified TFM
 import qualified HeX.Box             as B
 import           HeX.BreakList       (HListElem, VListElem)
 import qualified HeX.BreakList       as BL
-import qualified HeX.Categorise      as Cat
-import           HeX.Categorise      (CharCode)
+import qualified HeX.Config.Codes    as Code
 import           HeX.Command.Common
 import           HeX.Config
 import           HeX.Evaluate
@@ -36,9 +36,9 @@ ruleToElem
        , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
        )
     => HP.Rule
-    -> m TeXLength
-    -> m TeXLength
-    -> m TeXLength
+    -> m Length
+    -> m Length
+    -> m Length
     -> m BL.VListElem
 ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD =
     do
@@ -185,7 +185,8 @@ characterBox char = do
     fontMetrics <- currentFontMetrics
     let toSP = TFM.designScaleSP fontMetrics
     TFM.Character { TFM.width, TFM.height, TFM.depth } <-
-        note (throw $ ConfigError "No such character") $ HMap.lookup char (characters fontMetrics)
+        note (throw $ ConfigError "No such character")
+        $ IntMap.lookup (fromIntegral $ Code.codeWord char) (characters fontMetrics)
     pure B.Character { B.char       = char
                      , B.charWidth  = toSP width
                      , B.charHeight = toSP height
@@ -196,7 +197,7 @@ spaceGlue
     :: ( MonadReader Config m
        , MonadErrorAnyOf e m '[ConfigError]
        )
-    => m (BL.Glue TeXLength)
+    => m (BL.Glue Length)
 spaceGlue = do
     fontMetrics@TexFont { spacing, spaceStretch, spaceShrink } <- currentFontMetrics
     let toSP   = TFM.designScaleSP fontMetrics
@@ -244,38 +245,32 @@ loadFont (HP.TeXFilePath path) fontSpec = do
                           , B.fontName           = fontName
                           }
 
-selectFont :: MonadState Config m => Int -> HP.GlobalFlag -> m ()
+selectFont :: MonadState Config m => TeXInt -> HP.GlobalFlag -> m ()
 selectFont n globalFlag = modify $ selectFontNr n globalFlag
 
-getFileStream :: HMap.HashMap FourBitInt Handle -> TeXIntVal -> Maybe Handle
-getFileStream strms n = do
-    fourBitn <- newFourBitInt n
-    HMap.lookup fourBitn strms
+getFileStream :: Map.Map FourBitInt Handle -> TeXInt -> Maybe Handle
+getFileStream strms (TeXInt n) = do
+    fourBitN <- newFourBitInt n
+    Map.lookup fourBitN strms
 
 -- Showing things.
 
-showLexTok :: Lex.Token -> Text
+showLexTok :: Lex.Token -> Seq CharCode
 showLexTok = \case
-    Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Cat.Letter } ->
-        Text.singleton char
-    Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Cat.Other } ->
-        Text.singleton char
-    Lex.CharCatToken Lex.CharCat { Lex.char, Lex.cat = Cat.Space } ->
-        Text.singleton char
-    Lex.CharCatToken cc -> showT cc
-    Lex.ControlSequenceToken (Lex.ControlSequence cs) ->
-        "\\" <> toS cs
+    Lex.CharCatToken Lex.CharCat { Lex.char } ->
+        singleton char
+    Lex.ControlSequenceToken (Lex.ControlSequence ccs) ->
+        singleton (Code.CharCode_ '\\') <> ccs
 
-showPrimTok :: HP.PrimitiveToken -> Text
+showPrimTok :: HP.PrimitiveToken -> Seq CharCode
 showPrimTok = \case
-    HP.UnexpandedTok   t   -> showLexTok t
-    HP.SubParserError  err -> err
-    HP.ResolutionError cs  -> "Unknown control sequence: " <> showT cs
-    pt                     -> showT pt
+    HP.UnexpandedTok t -> showLexTok t
+    pt                 -> Seq.fromList $ codesFromStr (show pt)
 
-showBalancedText :: HP.BalancedText -> Text
-showBalancedText (HP.BalancedText txt) = Text.concat $ showLexTok <$> (toList txt)
+showBalancedText :: HP.BalancedText -> Seq CharCode
+showBalancedText (HP.BalancedText lexToks) =
+    mconcat $ showLexTok <$> lexToks
 
-showExpandedBalancedText :: HP.ExpandedBalancedText -> Text
-showExpandedBalancedText (HP.ExpandedBalancedText txt) =
-    Text.concat $ showPrimTok <$> txt
+showExpandedBalancedText :: HP.ExpandedBalancedText -> Seq CharCode
+showExpandedBalancedText (HP.ExpandedBalancedText primToks) =
+    mconcat $ showPrimTok <$> primToks

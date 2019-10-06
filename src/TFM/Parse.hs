@@ -10,7 +10,6 @@ import           Data.Ascii           (Ascii)
 import qualified Data.Binary.Get      as B.G
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BS.L
-import           Data.HashMap.Strict
 
 import           TFM.Character
 import           TFM.Common
@@ -34,7 +33,7 @@ data TexFont = TexFont
     , extraSpace            :: Rational
     , extraParams           :: Maybe F.ExtraFontParams
     , ligKerns              :: [LigKernInstr]
-    , characters            :: HashMap Char Character
+    , characters            :: IntMap Character
     }
 
 runGetEith :: Text -> B.G.Get b -> BS.ByteString -> Either Text b

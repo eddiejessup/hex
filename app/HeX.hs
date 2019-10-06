@@ -1,15 +1,13 @@
 module Main where
 
 import           HeXlude
-import qualified Prelude
 
 import           Control.Monad             (when)
 import qualified Data.ByteString           as BS
 import qualified System.Console.GetOpt     as Opt
 
-import qualified Data.Path                 as D.Path
 import qualified Data.Sequence             as Seq
-import           HeX.Categorise            (CharCode)
+import qualified HeX.Config.Codes          as Code
 import           HeX.Command.Run
 import           HeX.Parse.Stream.Instance (newExpandStream)
 import qualified Path.IO
@@ -65,11 +63,11 @@ usage = toS $ Opt.usageInfo header options
   where
     header = "Usage: hex [OPTION...] [file]"
 
-preamble :: Seq CharCode
-preamble = "\\font\\thefont=cmr10 \\thefont\n\n"
+preamble :: Seq Code.CharCode
+preamble = Seq.fromList $ Code.codesFromStr "\\font\\thefont=cmr10 \\thefont\n\n"
 
-postamble :: Seq CharCode
-postamble = "\n\n\\end\n"
+postamble :: Seq Code.CharCode
+postamble = Seq.fromList $ Code.codesFromStr "\n\n\\end\n"
 
 parseArgs :: [Text] -> IO ([Flag], [Text])
 parseArgs argStr =
@@ -84,12 +82,12 @@ main = do
     (inputRaw, maybePath) <- case args of
         ["-"] ->
             do
-            xs <- Prelude.getContents
-            pure (Seq.fromList xs, Nothing)
+            cs <- fmap Code.CharCode . Seq.fromList . BS.unpack <$> liftIO BS.getContents
+            pure (cs, Nothing)
         [pathStr] -> do
             path <- Path.IO.resolveFile' (toS pathStr)
-            xs <- D.Path.readPathChars path
-            pure (Seq.fromList xs, Just path)
+            cs <- Code.readCharCodes path
+            pure (cs, Just path)
     let
         input = if Amble `elem` flags
             then preamble <> inputRaw <> postamble

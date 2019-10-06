@@ -12,12 +12,14 @@ import qualified Path
 import qualified Text.Megaparsec           as P
 
 import           HeX.Evaluate
-import qualified HeX.Categorise            as Cat
+import           HeX.Config.Codes          (codesFromStr)
+import qualified HeX.Config.Codes          as Code
 import qualified HeX.Lex                   as Lex
 import           HeX.Parse.AST
 import           HeX.Parse.Quantity
 import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token           as T
+import qualified HeX.Quantity              as Q
 
 parseAssignment :: TeXParser s e m Assignment
 parseAssignment = tryChoice [parseDefineMacro, parseNonMacroAssignment]
@@ -180,7 +182,7 @@ parseVariableModification =
         skipOptionalBy
         f var <$> valParser
 
-    skipOptionalBy = tryChoice [void (parseOptionalKeyword "by"), skipOptionalSpaces]
+    skipOptionalBy = tryChoice [void (parseOptionalKeyword (codesFromStr "by")), skipOptionalSpaces]
 
     parseNumericVariable =
         tryChoice [ TeXIntNumericVariable <$> parseTeXIntVariable
@@ -225,8 +227,8 @@ parseSetParShape = do
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
     nrPairs <- parseTeXInt
-    eNrPairs <- P.getInput <&> getConfig >>= runReaderT (texEvaluate nrPairs)
-    SetParShape <$> PC.count eNrPairs parseLengthPair
+    (Q.TeXInt eNrPairsInt) <- P.getInput <&> getConfig >>= runReaderT (texEvaluate nrPairs)
+    SetParShape <$> PC.count eNrPairsInt parseLengthPair
   where
     parseLengthPair = (,) <$> parseLength <*> parseLength
 
@@ -234,7 +236,7 @@ parseReadToControlSequence :: TeXParser s e m AssignmentBody
 parseReadToControlSequence = do
     satisfyEquals T.ReadTok
     nr <- parseTeXInt
-    skipKeyword "to"
+    skipKeyword (codesFromStr "to")
     skipOptionalSpaces
     cs <- parseCSName
     pure $ DefineControlSequence cs (ReadTarget nr)
@@ -249,34 +251,24 @@ parseFileName :: TeXParser s e m TeXFilePath
 parseFileName = do
     skipOptionalSpaces
     fileNameChars <- PC.some $ satisfyThen $ \case
-        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Letter)) ->
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
             Just c
-        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other)) | isValidOther c ->
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) | isValidOther c ->
             Just c
         _ -> Nothing
     skipSatisfied isSpace
-    case Path.parseRelFile fileNameChars of
+    case Path.parseRelFile (Code.codeAsChar <$> fileNameChars) of
         Just p  -> pure $ TeXFilePath p
         Nothing -> panic $ show fileNameChars
 
   where
     isValidOther = \case
-        -- 'Other' Characters for decimal digits are OK.
-        '0' -> True
-        '1' -> True
-        '2' -> True
-        '3' -> True
-        '4' -> True
-        '5' -> True
-        '6' -> True
-        '7' -> True
-        '8' -> True
-        '9' -> True
         -- Not in the spec, but let's say these are OK.
-        '/' -> True
-        '.' -> True
-        '_' -> True
-        _ -> False
+        Code.CharCode_ '/' -> True
+        Code.CharCode_ '.'-> True
+        Code.CharCode_ '_' -> True
+        -- 'Other' Characters for decimal digits are OK.
+        cc -> Code.isDigitChar cc
 
 -- \font <control-sequence> <equals> <file-name> <at-clause>
 parseNewFontAssignment :: TeXParser s e m AssignmentBody
@@ -294,9 +286,9 @@ parseNewFontAssignment = do
                   , skipOptionalSpaces $> NaturalFont
                   ]
 
-    parseFontSpecAt = skipKeyword "at" >> (FontAt <$> parseLength)
+    parseFontSpecAt = skipKeyword (codesFromStr "at") >> (FontAt <$> parseLength)
 
-    parseFontSpecScaled = skipKeyword "scaled" >> (FontScaled <$> parseTeXInt)
+    parseFontSpecScaled = skipKeyword (codesFromStr "scaled") >> (FontScaled <$> parseTeXInt)
 
 parseSetFontDimension :: TeXParser s e m AssignmentBody
 parseSetFontDimension =

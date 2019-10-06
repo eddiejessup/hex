@@ -9,7 +9,8 @@ import           Data.Functor              (($>))
 import           Data.List.NonEmpty        (NonEmpty(..))
 import qualified Text.Megaparsec           as P
 
-import qualified HeX.Categorise            as Cat
+import           HeX.Config.Codes          (codesFromStr)
+import qualified HeX.Config.Codes          as Code
 import qualified HeX.Lex                   as Lex
 import           HeX.Parse.Assignment
 import           HeX.Parse.AST
@@ -83,17 +84,17 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
             Nothing      -> pure rule
 
     parseRuleWidth rule = do
-        skipKeyword "width"
+        skipKeyword (codesFromStr "width")
         ln <- parseLength
         pure rule { width = Just ln }
 
     parseRuleHeight rule = do
-        skipKeyword "height"
+        skipKeyword (codesFromStr "height")
         ln <- parseLength
         pure rule { height = Just ln }
 
     parseRuleDepth rule = do
-        skipKeyword "depth"
+        skipKeyword (codesFromStr "depth")
         ln <- parseLength
         pure rule { depth = Just ln }
 
@@ -133,9 +134,9 @@ parseModeIndependentCommand =
 parseChangeScope :: TeXParser s e m ModeIndependentCommand
 parseChangeScope = satisfyThen $
     \t -> if
-        | primTokHasCategory Cat.BeginGroup t -> Just $
+        | primTokHasCategory Code.BeginGroup t -> Just $
             ChangeScope T.Positive CharCommandTrigger
-        | primTokHasCategory Cat.EndGroup t -> Just $
+        | primTokHasCategory Code.EndGroup t -> Just $
             ChangeScope T.Negative CharCommandTrigger
         | (T.ChangeScopeCSTok sign)
             <- t -> Just $ ChangeScope sign CSCommandTrigger
@@ -284,7 +285,7 @@ parseCommand =
             , satisfyEquals T.ItalicCorrectionTok $> AddItalicCorrection
             , parseAddDiscretionaryText
             , satisfyEquals T.DiscretionaryHyphenTok $> AddDiscretionaryHyphen
-            , skipSatisfied (primTokHasCategory Cat.MathShift) $> EnterMathMode
+            , skipSatisfied (primTokHasCategory Code.MathShift) $> EnterMathMode
             , AddHGlue <$> parseModedGlue Horizontal
             , AddHLeaders <$> parseLeadersSpec Horizontal
             , AddHRule <$> parseModedRule Horizontal
@@ -307,9 +308,9 @@ parseCharCodeRef =
   where
     parseAddCharacterCharOrTok = satisfyThen $
         \case
-            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Letter)) ->
+            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
                 Just $ CharRef c
-            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other)) ->
+            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
                 Just $ CharRef c
             T.IntRefTok T.CharQuantity i -> Just $ CharTokenRef i
             _ -> Nothing

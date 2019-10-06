@@ -24,9 +24,13 @@ getFixWord :: Get Rational
 getFixWord = (* fixWordScale) . fromIntegral <$> getWord32beInt
 
 -- Read integers encoded as big-endian byte sequences.
-getWord8Int, getWord16beInt, getWord32beInt :: Get Int
+getWord8Int :: Get Int
 getWord8Int = fromIntegral <$> B.G.getWord8
+
+getWord16beInt :: Get Int
 getWord16beInt = fromIntegral <$> B.G.getWord16be
+
+getWord32beInt :: Get Int
 getWord32beInt = fromIntegral <$> B.G.getWord32be
 
 getChunks :: Get v -> Get [v]

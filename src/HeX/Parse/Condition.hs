@@ -11,12 +11,11 @@ import qualified HeX.Parse.Token        as T
 import qualified Text.Megaparsec        as P
 
 parseRelation :: TeXParser s e m Ordering
-parseRelation = satisfyThen $
-    \t -> if
-        | matchOtherToken '<' t -> Just LT
-        | matchOtherToken '>' t -> Just GT
-        | isEquals t -> Just EQ
-        | otherwise -> Nothing
+parseRelation = satisfyThen $ \t -> if
+    | matchOtherToken '<' t -> Just LT
+    | matchOtherToken '>' t -> Just GT
+    | matchOtherToken '=' t -> Just EQ
+    | otherwise -> Nothing
 
 conditionHeadParser :: T.ConditionHeadTok -> TeXParser s e m ConditionHead
 conditionHeadParser = \case

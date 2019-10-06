@@ -22,11 +22,11 @@ instance Semigroup GlueFlex where
 instance Monoid GlueFlex where
     mempty = GlueFlex 0 0
 
-scaleFlex :: GlueFlex -> Int -> GlueFlex
-scaleFlex (GlueFlex f o) i = GlueFlex (f * fromIntegral i) o
+scaleFlex :: GlueFlex -> TeXInt -> GlueFlex
+scaleFlex (GlueFlex f o) (TeXInt i) = GlueFlex (f * fromIntegral i) o
 
-shrinkFlex :: GlueFlex -> Int -> GlueFlex
-shrinkFlex (GlueFlex f o) i = GlueFlex (f / fromIntegral i) o
+shrinkFlex :: GlueFlex -> TeXInt -> GlueFlex
+shrinkFlex (GlueFlex f o) (TeXInt i) = GlueFlex (f / fromIntegral i) o
 
 noFlex :: GlueFlex
 noFlex = mempty
@@ -54,33 +54,33 @@ instance Num a => Semigroup (Glue a) where
 instance Num a => Monoid (Glue a) where
     mempty = Glue 0 mempty mempty
 
-instance Readable (Glue TeXLength) where
+instance Readable (Glue Length) where
     describe (Glue d (GlueFlex 0 0) (GlueFlex 0 0)) =
         "{- " <> showSP d <> " -}"
     describe (Glue d str shr) =
         "{" <> showSP d <> ("+" <> show str) <> ("-" <> show shr) <> "}"
 
 
-scaleTeXLengthGlue :: (Glue TeXLength) -> Int -> Glue TeXLength
-scaleTeXLengthGlue ( (Glue dim str shr)) i =
-    Glue (scaleTeXLength dim i) (scaleFlex str i) (scaleFlex shr i)
+scaleLengthGlue :: Glue Length -> TeXInt -> Glue Length
+scaleLengthGlue (Glue dim str shr) i =
+    Glue (scaleLength dim i) (scaleFlex str i) (scaleFlex shr i)
 
 -- \divide <glue> by 2’ halves all three components of <glue>.
-shrinkTeXLengthGlue :: Glue TeXLength -> Int -> Glue TeXLength
-shrinkTeXLengthGlue (Glue dim str shr) i =
-    Glue (shrinkTeXLength dim i) (shrinkFlex str i) (shrinkFlex shr i)
+shrinkLengthGlue :: Glue Length -> TeXInt -> Glue Length
+shrinkLengthGlue (Glue dim str shr) i =
+    Glue (shrinkLength dim i) (shrinkFlex str i) (shrinkFlex shr i)
 
 filGlue :: Integral a => Glue a
 filGlue = Glue { dimen = 0, stretch = filFlex, shrink = noFlex }
 
-fixedGlue :: TeXLength -> Glue TeXLength
+fixedGlue :: Length -> Glue Length
 fixedGlue d = Glue { dimen = d, stretch = noFlex, shrink = noFlex }
 
 
-scaleMathGlue :: Glue MathLength -> Int -> Glue MathLength
+scaleMathGlue :: Glue MathLength -> TeXInt -> Glue MathLength
 scaleMathGlue (Glue d str shr) i =
     Glue (scaleMathLength d i) (scaleFlex str i) (scaleFlex shr i)
 
-shrinkMathGlue :: Glue MathLength -> Int -> Glue MathLength
+shrinkMathGlue :: Glue MathLength -> TeXInt -> Glue MathLength
 shrinkMathGlue (Glue d str shr) i =
     Glue (shrinkMathLength d i) (shrinkFlex str i) (shrinkFlex shr i)

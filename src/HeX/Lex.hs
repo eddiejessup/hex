@@ -4,26 +4,26 @@ module HeX.Lex where
 
 import           HeXlude
 
-import           Data.Hashable  (Hashable)
-import qualified Data.Sequence as Seq
-import           HeX.Categorise (CatCode, CharCode)
-import qualified HeX.Categorise as Cat
+import           Data.Hashable    (Hashable)
+import qualified Data.Sequence    as Seq
+import qualified HeX.Categorise   as Cat
+import qualified HeX.Config.Codes as Code
 
-newtype ControlSequence = ControlSequence (Seq CharCode)
-    deriving stock (Show, Eq, Generic)
-    deriving newtype (Hashable)
+newtype ControlSequence = ControlSequence (Seq Code.CharCode) deriving stock (Show, Eq, Generic)
+    deriving anyclass (Hashable)
 
 instance Readable ControlSequence where
     describe (ControlSequence ccs) = "\\" <> toS ccs
 
 data ControlSequenceLike
-    = ActiveCharacter CharCode
+    = ActiveCharacter Code.CharCode
     | ControlSequenceProper ControlSequence
-    deriving (Show, Eq, Generic, Hashable)
+    deriving stock (Show, Eq, Generic)
+    deriving anyclass (Hashable)
 
 data CharCat = CharCat
-    { char :: CharCode
-    , cat  :: Cat.CoreCatCode
+    { char :: Code.CharCode
+    , cat  :: Code.CoreCatCode
     } deriving (Show, Eq)
 
 instance Readable CharCat where
@@ -48,7 +48,7 @@ data LexState
     deriving (Eq, Show)
 
 spaceTok :: Token
-spaceTok = CharCatToken $ CharCat ' ' Cat.Space
+spaceTok = CharCatToken $ CharCat (Code.CharCode_ ' ') Code.Space
 
 chopDropWhile :: ([b] -> Maybe (a, [b])) -> (a -> Bool) -> [b] -> [b]
 chopDropWhile _       _    [] = []
@@ -65,7 +65,7 @@ chopBreak
     :: (b -> Maybe (a, b))
     -> b
     -> (Seq a, b)
-chopBreak getNext xs = go Empty xs
+chopBreak getNext = go Empty
   where
     go acc cs = case getNext cs of
         Nothing ->
@@ -74,13 +74,13 @@ chopBreak getNext xs = go Empty xs
             go (acc :|> next) csRest
 
 parToken :: Token
-parToken = ControlSequenceToken $ ControlSequence ("par")
+parToken = ControlSequenceToken $ ControlSequence (toS ("par" :: [Char]))
 
 extractToken
-    :: (CharCode -> CatCode)
+    :: (Code.CharCode -> Code.CatCode)
     -> LexState
-    -> Seq CharCode
-    -> Maybe (Token, LexState, Seq CharCode)
+    -> Seq Code.CharCode
+    -> Maybe (Token, LexState, Seq Code.CharCode)
 extractToken _     _     Empty = Nothing
 extractToken charToCat _state cs =
     do
@@ -91,58 +91,58 @@ extractToken charToCat _state cs =
 
     getLetterCC xs =
         getCC xs >>= \case
-            r@(Cat.CharCat _ (Cat.CoreCatCode Cat.Letter), _) ->
+            r@(Cat.CharCat _ (Code.CoreCatCode Code.Letter), _) ->
                 pure r
             _ ->
                 Nothing
 
     extractTokenRest (Cat.CharCat n cat1) rest = case (cat1, _state) of
         -- Control sequence: Grab it.
-        (Cat.Escape, _) ->
+        (Code.Escape, _) ->
             do
             (csCC1@(Cat.CharCat _ ctrlSeqCat1), restPostEscape) <- getCC rest
             let (ctrlSeqCCs, restPostCtrlSeq) = case ctrlSeqCat1 of
-                    Cat.CoreCatCode Cat.Letter ->
+                    Code.CoreCatCode Code.Letter ->
                         let (ctrlWordCCsPostFirst, restPostCtrlWord) = chopBreak getLetterCC restPostEscape
-                        in  ((csCC1 :<| ctrlWordCCsPostFirst), restPostCtrlWord)
+                        in  (csCC1 :<| ctrlWordCCsPostFirst, restPostCtrlWord)
                     _ ->
                         (singleton csCC1, restPostEscape)
                 nextState = case ctrlSeqCat1 of
-                    Cat.CoreCatCode Cat.Space  -> SkippingBlanks
-                    Cat.CoreCatCode Cat.Letter -> SkippingBlanks
+                    Code.CoreCatCode Code.Space  -> SkippingBlanks
+                    Code.CoreCatCode Code.Letter -> SkippingBlanks
                     _                          -> LineMiddle
             pure ( ControlSequenceToken $ ControlSequence $ Cat.char <$> ctrlSeqCCs
                  , nextState
                  , restPostCtrlSeq
                  )
         -- Comment: Ignore rest of line and switch to line-begin.
-        (Cat.Comment, _) ->
+        (Code.Comment, _) ->
             extractToken charToCat LineBegin $
-                Seq.dropWhileL (\c -> charToCat c /= Cat.EndOfLine) rest
+                Seq.dropWhileL (\c -> charToCat c /= Code.EndOfLine) rest
         -- Space at the start of a line: Ignore.
-        (Cat.CoreCatCode Cat.Space, LineBegin) ->
+        (Code.CoreCatCode Code.Space, LineBegin) ->
             extractToken charToCat _state rest
         -- Empty line: Make a paragraph.
-        (Cat.EndOfLine, LineBegin) ->
+        (Code.EndOfLine, LineBegin) ->
             pure (parToken, LineBegin, rest)
         -- Space, or end of line, while skipping blanks: Ignore.
-        (Cat.CoreCatCode Cat.Space, SkippingBlanks) ->
+        (Code.CoreCatCode Code.Space, SkippingBlanks) ->
             extractToken charToCat _state rest
-        (Cat.EndOfLine, SkippingBlanks) ->
+        (Code.EndOfLine, SkippingBlanks) ->
             extractToken charToCat  _state rest
         -- Space in middle of line: Make a space token and start skipping blanks.
-        (Cat.CoreCatCode Cat.Space, LineMiddle) ->
+        (Code.CoreCatCode Code.Space, LineMiddle) ->
             pure (spaceTok, SkippingBlanks, rest)
         -- End of line in middle of line: Make a space token and go to line begin.
-        (Cat.EndOfLine, LineMiddle) ->
+        (Code.EndOfLine, LineMiddle) ->
             pure (spaceTok, LineBegin, rest)
         -- Ignored: Ignore.
-        (Cat.Ignored, _) ->
+        (Code.Ignored, _) ->
             extractToken charToCat _state rest
         -- Invalid: Print error message and ignore.
         -- TODO: TeXbook says to print an error message in this case.
-        (Cat.Invalid, _) ->
+        (Code.Invalid, _) ->
             extractToken charToCat _state rest
         -- Simple tokeniser cases.
-        (Cat.CoreCatCode cc, _) ->
+        (Code.CoreCatCode cc, _) ->
             pure (CharCatToken $ CharCat n cc, LineMiddle, rest)

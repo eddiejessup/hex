@@ -4,10 +4,10 @@ import           HeXlude
 
 import qualified Path
 
-import           HeX.Categorise  (CharCode)
-import qualified HeX.Lex         as Lex
-import qualified HeX.Parse.Token as T
-import qualified HeX.Quantity    as Q
+import qualified HeX.Lex          as Lex
+import qualified HeX.Parse.Token  as T
+import qualified HeX.Quantity     as Q
+import qualified HeX.Config.Codes as Code
 
 -- TeXInt.
 
@@ -16,18 +16,18 @@ type TeXInt = T.Signed UnsignedTeXInt
 newtype EightBitTeXInt = EightBitTeXInt TeXInt
     deriving ( Show )
 
-constTeXInt :: Q.TeXIntVal -> TeXInt
+constTeXInt :: Q.TeXInt -> TeXInt
 constTeXInt n = T.Signed T.Positive $ constUTeXInt n
 
 data UnsignedTeXInt =
     NormalTeXIntAsUTeXInt NormalTeXInt | CoercedTeXInt CoercedTeXInt
     deriving ( Show )
 
-constUTeXInt :: Q.TeXIntVal -> UnsignedTeXInt
+constUTeXInt :: Q.TeXInt -> UnsignedTeXInt
 constUTeXInt n = NormalTeXIntAsUTeXInt $ TeXIntConstant n
 
 -- Think: 'un-coerced integer'.
-data NormalTeXInt = TeXIntConstant Int | InternalTeXInt InternalTeXInt
+data NormalTeXInt = TeXIntConstant Q.TeXInt | InternalTeXInt InternalTeXInt
     deriving ( Show )
 
 zeroTeXInt :: NormalTeXInt
@@ -201,8 +201,8 @@ data InternalTeXInt =
       InternalTeXIntVariable TeXIntVariable
     | InternalSpecialTeXInt T.SpecialTeXInt
     | InternalCodeTableRef CodeTableRef
-    | InternalCharToken Q.TeXIntVal
-    | InternalMathCharToken Q.TeXIntVal
+    | InternalCharToken Q.TeXInt
+    | InternalMathCharToken Q.TeXInt
     | InternalFontCharRef FontCharRef
     | LastPenalty
     | ParShape
@@ -217,7 +217,7 @@ data FontCharRef = FontCharRef T.FontChar FontRef
     deriving ( Show )
 
 data FontRef =
-    FontTokenRef Int | CurrentFontRef | FamilyMemberFontRef FamilyMember
+    FontTokenRef Q.TeXInt | CurrentFontRef | FamilyMemberFontRef FamilyMember
     deriving ( Show )
 
 data FamilyMember = FamilyMember T.FontRange TeXInt
@@ -265,7 +265,7 @@ data AssignmentBody =
     | SetVariable VariableAssignment
     | ModifyVariable VariableModification
     | AssignCode CodeAssignment
-    | SelectFont Q.TeXIntVal
+    | SelectFont Q.TeXInt
     | SetFamilyMember FamilyMember FontRef
     | SetParShape [(Length, Length)]
     | SetBoxRegister EightBitTeXInt Box
@@ -447,12 +447,12 @@ data BoxPlacement = NaturalPlacement | ShiftedPlacement Axis Direction Length
     deriving ( Show )
 
 data CharCodeRef =
-    CharRef CharCode | CharTokenRef Q.TeXIntVal | CharCodeNrRef TeXInt
+    CharRef Code.CharCode | CharTokenRef Q.TeXInt | CharCodeNrRef TeXInt
     deriving ( Show )
 
 instance Readable CharCodeRef where
     describe = \case
-        CharRef c -> toS $ "\"" <> [c] <> "\""
+        CharRef c -> describe c
         v -> show v
 
 -- Condition heads.

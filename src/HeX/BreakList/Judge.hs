@@ -49,7 +49,7 @@ data GlueStatus =
     NaturallyGood | UnfixablyBare | FixablyBad LengthJudgment FixParams
     deriving ( Show )
 
-glueStatus :: TeXLength -> Glue a -> GlueStatus
+glueStatus :: Length -> Glue a -> GlueStatus
 glueStatus excessLength (Glue _ _stretch _shrink) =
     case compare excessLength 0 of
         -- The glue ratio is r = [excess length]/[flex]i.
@@ -79,7 +79,7 @@ glueStatus excessLength (Glue _ _stretch _shrink) =
         | otherwise =
             FixablyBad Full FixParams { ratio = toRatio f, setOrder = o }
 
-data TargetLength = TargetLength GlueStatus TeXLength
+data TargetLength = TargetLength GlueStatus Length
     deriving (Show)
 
 data LazyTargetLength
@@ -87,7 +87,7 @@ data LazyTargetLength
     | ComputedTargetLength TargetLength
     deriving (Show)
 
-listGlueStatusConcreteTarget :: BreakableList a => TeXLength -> a -> TargetLength
+listGlueStatusConcreteTarget :: BreakableList a => Length -> a -> TargetLength
 listGlueStatusConcreteTarget toLen bList =
     TargetLength (glueStatus (naturalSpan bList - toLen) ( totalGlue bList)) toLen
 
@@ -103,7 +103,7 @@ listGlueStatusAbstractTarget desiredLength bList =
                 listGlueStatusConcreteTarget toLen bList
 
 -- TODO: Use types to ensure number is within bounds, such as <= tenK.
-data Badness = FiniteBadness Int | InfiniteBadness
+data Badness = FiniteBadness TeXInt | InfiniteBadness
     deriving ( Show )
 
 -- The badness of a line is approximately 100 times the cube

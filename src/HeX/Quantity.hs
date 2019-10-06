@@ -5,13 +5,13 @@ import           HeXlude
 import           Data.Ratio ((%))
 import           Data.Text  (Text)
 
-tenK :: Int
+tenK :: TeXInt
 tenK = 10000
 
-hunK :: Int
+hunK :: TeXInt
 hunK = 100000
 
-oneKPt :: TeXLength
+oneKPt :: Length
 oneKPt = toScaledPointApprox (1000 :: Int) Point
 
 -- Functions related to units used in the TeX world.
@@ -111,28 +111,36 @@ showSP :: Real n => n -> Text
 showSP n =
   showFrac ((realToFrac n * realToFrac (scaledPointIn Point)) :: Double) <> "pt"
 
-type TeXIntVal = Int
+newtype TeXInt = TeXInt { unInt :: Int }
+    deriving stock (Show, Generic)
+    deriving newtype (Num, Eq, Ord, Enum, Bounded, Real, Integral, Hashable, Bits,
+                      FiniteBits)
 
-newtype TeXLength = TeXLength { unLength :: Int }
-    deriving (Show, Num, Eq, Ord, Enum, Real, Integral)
+newtype Length = Length { unLength :: Int }
+    deriving stock (Show)
+    deriving newtype (Num, Eq, Ord, Enum, Real, Integral)
 
-scaleTeXLength :: TeXLength -> Int -> TeXLength
-scaleTeXLength (TeXLength d) n = TeXLength (d * n)
+lengthToInt :: Length -> TeXInt
+lengthToInt (Length x) = TeXInt x
 
-shrinkTeXLength :: TeXLength -> Int -> TeXLength
-shrinkTeXLength (TeXLength d) n = TeXLength (d `quot` n)
+scaleLength :: Length -> TeXInt -> Length
+scaleLength (Length d) (TeXInt n) = Length (d * n)
 
-instance Readable TeXLength where
+shrinkLength :: Length -> TeXInt -> Length
+shrinkLength (Length d) (TeXInt n) = Length (d `quot` n)
+
+instance Readable Length where
     describe = showSP
 
 newtype MathLength = MathLength { unMathLength :: Int }
-    deriving (Show, Num, Eq, Ord, Enum, Real, Integral)
+    deriving stock (Show)
+    deriving newtype (Num, Eq, Ord, Enum, Real, Integral)
 
-scaleMathLength :: MathLength -> Int -> MathLength
-scaleMathLength (MathLength d) n = MathLength (d * n)
+scaleMathLength :: MathLength -> TeXInt -> MathLength
+scaleMathLength (MathLength d) (TeXInt n) = MathLength (d * n)
 
-shrinkMathLength :: MathLength -> Int -> MathLength
-shrinkMathLength (MathLength d) n = MathLength (d `quot` n)
+shrinkMathLength :: MathLength -> TeXInt -> MathLength
+shrinkMathLength (MathLength d) (TeXInt n) = MathLength (d `quot` n)
 
 newNBitInt :: Alternative f => (Int -> a) -> Int ->  Int -> f a
 newNBitInt f nBits n
@@ -142,40 +150,38 @@ newNBitInt f nBits n
 
 -- 8-bit.
 
-newtype EightBitInt = EightBitInt TeXIntVal
-    deriving (Show, Eq, Generic, Enum)
+newtype EightBitInt = EightBitInt Int
+    deriving stock (Show, Generic)
+    deriving newtype (Eq, Ord, Enum)
 
-instance Hashable EightBitInt
-
-instance Bounded EightBitInt where
-    minBound = EightBitInt 0
-    maxBound = EightBitInt (2 ^ (8 :: Int) - 1)
+-- instance Bounded EightBitInt where
+--     minBound = EightBitInt 0
+--     maxBound = EightBitInt (2 ^ (8 :: Int) - 1)
 
 newEightBitInt :: Alternative f => Int -> f EightBitInt
 newEightBitInt = newNBitInt EightBitInt 8
 
 -- 4-bit.
 
-newtype FourBitInt = FourBitInt TeXIntVal
-    deriving (Show, Eq, Generic, Enum)
+newtype FourBitInt = FourBitInt Int
+    deriving stock (Show, Generic)
+    deriving newtype (Eq, Ord, Enum, Hashable)
 
-instance Hashable FourBitInt
-
-instance Bounded FourBitInt where
-    minBound = FourBitInt 0
-    maxBound = FourBitInt (2 ^ (4 :: Int) - 1)
+-- instance Bounded FourBitInt where
+--     minBound = FourBitInt 0
+--     maxBound = FourBitInt (2 ^ (4 :: Int) - 1)
 
 newFourBitInt :: Alternative f => Int -> f FourBitInt
 newFourBitInt = newNBitInt FourBitInt 4
 
 class Dimensioned a where
-    naturalLength :: BoxDim -> a -> TeXLength
+    naturalLength :: BoxDim -> a -> Length
 
-naturalWidth, naturalHeight, naturalDepth :: Dimensioned a => a -> TeXLength
+naturalWidth, naturalHeight, naturalDepth :: Dimensioned a => a -> Length
 naturalWidth  = naturalLength BoxWidth
 naturalHeight = naturalLength BoxHeight
 naturalDepth  = naturalLength BoxDepth
 
-axisNaturalSpan :: Dimensioned a => Axis -> a -> TeXLength
+axisNaturalSpan :: Dimensioned a => Axis -> a -> Length
 axisNaturalSpan Vertical   a = naturalHeight a + naturalDepth a
 axisNaturalSpan Horizontal a = naturalWidth a

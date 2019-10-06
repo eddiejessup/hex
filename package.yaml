@@ -21,6 +21,7 @@ dependencies:
 - hashable
 - ilist
 - megaparsec
+- mono-traversable
 - mtl
 - parser-combinators
 - path
@@ -32,6 +33,7 @@ dependencies:
 - transformers
 - unordered-containers
 - witherable
+- pretty-simple
 
 library:
   source-dirs: src

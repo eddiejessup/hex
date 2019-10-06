@@ -5,9 +5,9 @@ import           HeXlude
 import           Control.Monad.IO.Class   (MonadIO)
 import           Control.Monad.Reader     (MonadReader, asks)
 import           Control.Monad.State.Lazy (MonadState, gets, modify)
-import qualified Data.HashMap.Strict      as HMap
-import           Data.IntMap.Strict       (IntMap, (!?))
-import qualified Data.IntMap.Strict       as IntMap
+import qualified Data.Containers          as D.C
+import           Data.Map.Strict          (Map, (!?))
+import qualified Data.Map.Strict          as Map
 import           Data.Maybe               (fromMaybe)
 import qualified Data.Path                as D.Path
 import           Path                     (Abs, Dir, File, Path, Rel,
@@ -17,15 +17,12 @@ import           System.Directory
 import           System.IO                (Handle, IOMode (..), hClose,
                                            openFile)
 
-import           Safe                     (toEnumMay)
-
 import           TFM                      (TexFont)
 import qualified TFM
 
 import qualified HeX.Box                  as B
 import qualified HeX.BreakList            as BL
-import qualified HeX.Categorise           as Cat
-import           HeX.Config.Codes
+import qualified HeX.Config.Codes         as Code
 import           HeX.Config.Parameters
 import qualified HeX.Lex                  as Lex
 import qualified HeX.Parse.AST            as AST
@@ -43,30 +40,30 @@ data ScopeGroup
     | ExplicitBoxGroup
     deriving ( Show )
 
-type RegisterMap v = HMap.HashMap EightBitInt v
+type RegisterMap v = Map EightBitInt v
 
 data Scope =
     Scope { -- Fonts.
-            currentFontNr :: Maybe Int
-          , familyMemberFonts :: HMap.HashMap (FontRange, Int) Int
+            currentFontNr :: Maybe TeXInt
+          , familyMemberFonts :: Map (FontRange, TeXInt) TeXInt
             -- Control sequences.
           , csMap :: CSMap
             -- Char-code attribute maps.
-          , catCodes :: Cat.CatCodes
-          , mathCodes :: Cat.CharCodeMap MathCode
-          , lowercaseCodes, uppercaseCodes :: Cat.CharCodeMap CaseChangeCode
-          , spaceFactors :: Cat.CharCodeMap SpaceFactorCode
-          , delimiterCodes :: Cat.CharCodeMap DelimiterCode
+          , catCodes :: Code.CatCodes
+          , mathCodes :: Code.CharCodeMap Code.MathCode
+          , lowercaseCodes, uppercaseCodes :: Code.CharCodeMap Code.CaseChangeCode
+          , spaceFactors :: Code.CharCodeMap Code.SpaceFactorCode
+          , delimiterCodes :: Code.CharCodeMap Code.DelimiterCode
             -- Parameters.
-          , texIntParameters :: HMap.HashMap TeXIntParameter TeXIntVal
-          , lengthParameters :: HMap.HashMap LengthParameter TeXLength
-          , glueParameters :: HMap.HashMap GlueParameter (BL.Glue TeXLength)
-          , mathGlueParameters :: HMap.HashMap MathGlueParameter (BL.Glue MathLength)
-          , tokenListParameters :: HMap.HashMap TokenListParameter BalancedText
+          , texIntParameters :: Map TeXIntParameter TeXInt
+          , lengthParameters :: Map LengthParameter Length
+          , glueParameters :: Map GlueParameter (BL.Glue Length)
+          , mathGlueParameters :: Map MathGlueParameter (BL.Glue MathLength)
+          , tokenListParameters :: Map TokenListParameter BalancedText
             -- Registers.
-          , texIntRegister :: RegisterMap TeXIntVal
-          , lengthRegister :: RegisterMap TeXLength
-          , glueRegister :: RegisterMap (BL.Glue TeXLength)
+          , texIntRegister :: RegisterMap TeXInt
+          , lengthRegister :: RegisterMap Length
+          , glueRegister :: RegisterMap (BL.Glue Length)
           , mathGlueRegister :: RegisterMap (BL.Glue MathLength)
           , tokenListRegister :: RegisterMap BalancedText
           , boxRegister :: RegisterMap (B.Box B.BoxContents)
@@ -76,59 +73,59 @@ data Scope =
 newGlobalScope :: Scope
 newGlobalScope =
     Scope { currentFontNr = Nothing
-          , familyMemberFonts = HMap.empty
+          , familyMemberFonts = mempty
           , csMap = defaultCSMap
-          , catCodes = Cat.usableCatCodes
-          , mathCodes = newMathCodes
-          , lowercaseCodes = newLowercaseCodes
-          , uppercaseCodes = newUppercaseCodes
-          , spaceFactors = newSpaceFactors
-          , delimiterCodes = newDelimiterCodes
+          , catCodes = Code.usableCatCodes
+          , mathCodes = Code.newMathCodes
+          , lowercaseCodes = Code.newLowercaseCodes
+          , uppercaseCodes = Code.newUppercaseCodes
+          , spaceFactors = Code.newSpaceFactors
+          , delimiterCodes = Code.newDelimiterCodes
           , texIntParameters = usableTeXIntParameters
           , lengthParameters = usableLengthParameters
           , glueParameters = usableGlueParameters
           , mathGlueParameters = newMathGlueParameters
           , tokenListParameters = newTokenListParameters
-          , texIntRegister = HMap.empty
-          , lengthRegister = HMap.empty
-          , glueRegister = HMap.empty
-          , mathGlueRegister = HMap.empty
-          , tokenListRegister = HMap.empty
-          , boxRegister = HMap.empty
+          , texIntRegister = mempty
+          , lengthRegister = mempty
+          , glueRegister = mempty
+          , mathGlueRegister = mempty
+          , tokenListRegister = mempty
+          , boxRegister = mempty
           }
 
 newLocalScope :: Scope
 newLocalScope =
     Scope { currentFontNr = Nothing
-          , familyMemberFonts = HMap.empty
-          , csMap = HMap.empty
-          , catCodes = HMap.empty
-          , mathCodes = HMap.empty
-          , lowercaseCodes = HMap.empty
-          , uppercaseCodes = HMap.empty
-          , spaceFactors = HMap.empty
-          , delimiterCodes = HMap.empty
-          , texIntParameters = HMap.empty
-          , lengthParameters = HMap.empty
-          , glueParameters = HMap.empty
-          , mathGlueParameters = HMap.empty
-          , tokenListParameters = HMap.empty
-          , texIntRegister = HMap.empty
-          , lengthRegister = HMap.empty
-          , glueRegister = HMap.empty
-          , mathGlueRegister = HMap.empty
-          , tokenListRegister = HMap.empty
-          , boxRegister = HMap.empty
+          , familyMemberFonts = mempty
+          , csMap = mempty
+          , catCodes = mempty
+          , mathCodes = mempty
+          , lowercaseCodes = mempty
+          , uppercaseCodes = mempty
+          , spaceFactors = mempty
+          , delimiterCodes = mempty
+          , texIntParameters = mempty
+          , lengthParameters = mempty
+          , glueParameters = mempty
+          , mathGlueParameters = mempty
+          , tokenListParameters = mempty
+          , texIntRegister = mempty
+          , lengthRegister = mempty
+          , glueRegister = mempty
+          , mathGlueRegister = mempty
+          , tokenListRegister = mempty
+          , boxRegister = mempty
           }
 
 data Config =
-    Config { fontInfos            :: IntMap FontInfo
+    Config { fontInfos            :: Map TeXInt FontInfo
            , searchDirectories    :: [Path Abs Dir]
-           , specialTeXInts       :: HMap.HashMap SpecialTeXInt TeXIntVal
-           , specialLengths       :: HMap.HashMap SpecialLength TeXLength
+           , specialTeXInts       :: Map SpecialTeXInt TeXInt
+           , specialLengths       :: Map SpecialLength Length
              -- File streams.
            , logStream            :: Handle
-           , outFileStreams       :: HMap.HashMap FourBitInt Handle
+           , outFileStreams       :: Map FourBitInt Handle
            , afterAssignmentToken :: Maybe Lex.Token
            , globalScope          :: Scope
            , groups               :: [Group]
@@ -148,12 +145,12 @@ newConfig = do
                 , cwdRaw
                 ]
     logHandle <- openFile "hex.log" WriteMode
-    pure Config { fontInfos = IntMap.empty
+    pure Config { fontInfos = Map.empty
                 , searchDirectories = _searchDirectories
                 , specialTeXInts = newSpecialTeXInts
                 , specialLengths = newSpecialLengths
                 , logStream = logHandle
-                , outFileStreams = HMap.empty
+                , outFileStreams = mempty
                 , afterAssignmentToken = Nothing
                 , globalScope = newGlobalScope
                 , groups = []
@@ -194,7 +191,7 @@ findFilePath findPolicy extraPaths p =
 -- Font info.
 
 data FontInfo =
-    FontInfo { fontMetrics :: TexFont, hyphenChar, skewChar :: TeXIntVal }
+    FontInfo { fontMetrics :: TexFont, hyphenChar, skewChar :: TeXInt }
 
 readFontInfo
     :: ( MonadReader Config m
@@ -213,40 +210,40 @@ lookupFontInfo
     :: ( MonadReader Config m
        , MonadErrorAnyOf e m '[ConfigError]
        )
-    => Int
+    => TeXInt
     -> m FontInfo
 lookupFontInfo fNr = (!? fNr) <$> asks fontInfos
     >>= note (throw (ConfigError "No such font number"))
 
-addFont :: MonadState Config m => FontInfo -> m Int
+addFont :: MonadState Config m => FontInfo -> m TeXInt
 addFont newInfo = do
     infos <- gets fontInfos
-    let newKey = case IntMap.lookupMax infos of
+    let newKey = case Map.lookupMax infos of
             Nothing     -> 0
             Just (i, _) -> succ i
-        newInfos = IntMap.insert newKey newInfo infos
+        newInfos = Map.insert newKey newInfo infos
     modify (\conf -> conf { fontInfos = newInfos })
     pure newKey
 
-modifyFont :: MonadState Config m => Int -> (FontInfo -> FontInfo) -> m ()
+modifyFont :: MonadState Config m => TeXInt -> (FontInfo -> FontInfo) -> m ()
 modifyFont fNr f = modify (\c@Config{fontInfos} ->
-                           c { fontInfos = IntMap.adjust f fNr fontInfos })
+                           c { fontInfos = Map.adjust f fNr fontInfos })
 
 -- Special quantities.
 
-lookupSpecialTeXInt :: SpecialTeXInt -> Config -> TeXIntVal
-lookupSpecialTeXInt p c = HMap.lookupDefault 0 p (specialTeXInts c)
+lookupSpecialTeXInt :: SpecialTeXInt -> Config -> TeXInt
+lookupSpecialTeXInt p c = Map.findWithDefault 0 p (specialTeXInts c)
 
-lookupSpecialLength :: SpecialLength -> Config -> TeXLength
-lookupSpecialLength p c = HMap.lookupDefault (TeXLength 0) p (specialLengths c)
+lookupSpecialLength :: SpecialLength -> Config -> Length
+lookupSpecialLength p c = Map.findWithDefault (Length 0) p (specialLengths c)
 
-setSpecialTeXInt :: SpecialTeXInt -> TeXIntVal -> Config -> Config
+setSpecialTeXInt :: SpecialTeXInt -> TeXInt -> Config -> Config
 setSpecialTeXInt p v c =
-    c{ specialTeXInts = HMap.insert p v $ specialTeXInts c }
+    c{ specialTeXInts = Map.insert p v $ specialTeXInts c }
 
-setSpecialLength :: SpecialLength -> TeXLength -> Config -> Config
+setSpecialLength :: SpecialLength -> Length -> Config -> Config
 setSpecialLength p v c =
-    c{ specialLengths = HMap.insert p v $ specialLengths c }
+    c{ specialLengths = Map.insert p v $ specialLengths c }
 
 -- Scoped.
 
@@ -286,11 +283,11 @@ modGroupScope f = \case
     nonScopeGroup ->
         nonScopeGroup
 
-modifyKey :: (Eq k, Hashable k)
-          => (Scope -> HMap.HashMap k v)
-          -> (Scope -> HMap.HashMap k v -> Scope)
-          -> k
-          -> KeyOperation v
+modifyKey :: D.C.IsMap map
+          => (Scope -> map)
+          -> (Scope -> map -> Scope)
+          -> D.C.ContainerKey map
+          -> KeyOperation (D.C.MapValue map)
           -> GlobalFlag
           -> Config
           -> Config
@@ -307,23 +304,23 @@ modifyKey getMap upD k keyOp globalFlag c@Config{ groups, globalScope } =
         DeleteVal   -> deleteKeyFromScope
         InsertVal v -> insertKeyToScope v
 
-    insertKeyToScope v scope = upD scope $ HMap.insert k v $ getMap scope
-    deleteKeyFromScope scope = upD scope $ HMap.delete k $ getMap scope
+    insertKeyToScope v scope = upD scope $ D.C.insertMap k v $ getMap scope
+    deleteKeyFromScope scope = upD scope $ D.C.deleteMap k $ getMap scope
 
-insertKey :: (Eq k, Hashable k)
-          => (Scope -> HMap.HashMap k v)
-          -> (Scope -> HMap.HashMap k v -> Scope)
-          -> k
-          -> v
+insertKey :: D.C.IsMap map
+          => (Scope -> map)
+          -> (Scope -> map -> Scope)
+          -> D.C.ContainerKey map
+          -> D.C.MapValue map
           -> GlobalFlag
           -> Config
           -> Config
 insertKey getMap upD k v = modifyKey getMap upD k (InsertVal v)
 
-deleteKey :: (Eq k, Hashable k)
-          => (Scope -> HMap.HashMap k v)
-          -> (Scope -> HMap.HashMap k v -> Scope)
-          -> k
+deleteKey :: D.C.IsMap map
+          => (Scope -> map)
+          -> (Scope -> map -> Scope)
+          -> D.C.ContainerKey map
           -> GlobalFlag
           -> Config
           -> Config
@@ -341,26 +338,26 @@ scopedLookup f c@Config{ globalScope, groups } =
             scopedLookup f c{ groups = outerGroups }
 
 scopedMapLookup
-    :: (Eq k, Hashable k)
-    => (Scope -> HMap.HashMap k v)
-    -> k
+    :: D.C.IsMap map
+    => (Scope -> map)
+    -> D.C.ContainerKey map
     -> Config
-    -> Maybe v
-scopedMapLookup getMap k = scopedLookup (HMap.lookup k . getMap)
+    -> Maybe (D.C.MapValue map)
+scopedMapLookup getMap k = scopedLookup (D.C.lookup k . getMap)
 
 -- Font number (scoped).
-lookupCurrentFontNr :: Config -> Maybe Int
+lookupCurrentFontNr :: Config -> Maybe TeXInt
 lookupCurrentFontNr = scopedLookup currentFontNr
 
 mLookupCurrentFontNr
     :: ( MonadReader Config m
        , MonadErrorAnyOf e m '[ConfigError]
        )
-    => m Int
+    => m TeXInt
 mLookupCurrentFontNr =
     asks lookupCurrentFontNr >>= note (throw $ ConfigError "Font number isn't set")
 
-selectFontNr :: Int -> GlobalFlag -> Config -> Config
+selectFontNr :: TeXInt -> GlobalFlag -> Config -> Config
 selectFontNr n globalFlag c@Config{ globalScope, groups } =
     case globalFlag of
         Global ->
@@ -374,8 +371,8 @@ selectFontNr n globalFlag c@Config{ globalScope, groups } =
     selectFontInScope scope = scope{ currentFontNr = Just n }
 
 setFamilyMemberFont
-    :: (FontRange, Int)
-    -> Int
+    :: (FontRange, TeXInt)
+    -> TeXInt
     -> GlobalFlag
     -> Config
     -> Config
@@ -386,8 +383,8 @@ lookupFontFamilyMember
     :: ( MonadReader Config m
        , MonadErrorAnyOf e m '[ConfigError]
        )
-    => (FontRange, Int)
-    -> m Int
+    => (FontRange, TeXInt)
+    -> m TeXInt
 lookupFontFamilyMember k = asks (scopedMapLookup familyMemberFonts k)
     >>= note (throw $ ConfigError $ "Family member undefined: " <> show k)
 
@@ -407,47 +404,47 @@ setControlSequence
 setControlSequence = insertKey csMap $ \c _map -> c { csMap = _map }
 
 -- Codes.
-lookupCatCode :: Cat.CharCode -> Config -> Cat.CatCode
-lookupCatCode t conf = Cat.catDefault $ scopedMapLookup catCodes t conf
+lookupCatCode :: Code.CharCode -> Config -> Code.CatCode
+lookupCatCode t conf = Code.catDefault $ scopedMapLookup catCodes t conf
 
-lookupChangeCaseCode :: VDirection -> Cat.CharCode -> Config -> CaseChangeCode
+lookupChangeCaseCode :: VDirection -> Code.CharCode -> Config -> Code.CaseChangeCode
 lookupChangeCaseCode d t conf =
     let field = case d of
             Upward   -> uppercaseCodes
             Downward -> lowercaseCodes
     in
-        fromMaybe NoCaseChange $ scopedMapLookup field t conf
+        fromMaybe Code.NoCaseChange $ scopedMapLookup field t conf
 
 updateCharCodeMap
     :: ( MonadErrorAnyOf e m '[ConfigError]
        , MonadState Config m
        )
     => CodeType
-    -> Cat.CharCode
-    -> TeXIntVal
+    -> Code.CharCode
+    -> TeXInt
     -> GlobalFlag
     -> m ()
 updateCharCodeMap t c n globalFlag = do
     insert <- case t of
-        CategoryCodeType       -> do
-            v <- liftMay $ toEnumMay n
-            pure $ insertKey catCodes (\cnf m -> cnf { catCodes = m }) c v
+        CategoryCodeType       ->
+            noteConfigError (Code.fromTeXInt n) <&>
+                insertKey catCodes (\cnf m -> cnf { catCodes = m }) c
         MathCodeType           -> do
-            v <- liftMay $ toEnumMay n
+            v <- noteConfigError $ Code.fromTeXInt n
             pure $ insertKey mathCodes (\cnf m -> cnf { mathCodes = m }) c v
         ChangeCaseCodeType dir -> do
-            v <- liftMay $ toEnumMay n
+            v <- noteConfigError $ Code.fromTeXInt n
             pure $ case dir of
                 Upward ->
                     insertKey uppercaseCodes (\cnf m -> cnf { uppercaseCodes = m }) c v
                 Downward ->
                     insertKey lowercaseCodes (\cnf m -> cnf { lowercaseCodes = m }) c v
         SpaceFactorCodeType    -> do
-            v <- liftMay $ toEnumMay n
+            v <- noteConfigError $ Code.fromTeXInt n
             pure $
                 insertKey spaceFactors (\cnf m -> cnf { spaceFactors = m }) c v
         DelimiterCodeType      -> do
-            v <- liftMay $ toEnumMay n
+            v <- noteConfigError $ Code.fromTeXInt n
             pure $
                 insertKey delimiterCodes
                           (\cnf m -> cnf { delimiterCodes = m })
@@ -455,31 +452,25 @@ updateCharCodeMap t c n globalFlag = do
                           v
     modify $ insert globalFlag
   where
-    liftMay
-        :: ( MonadErrorAnyOf e m '[ConfigError]
-           )
-        => Maybe a
-        -> m a
-    liftMay = note (throw $ ConfigError $
-                         "Invalid target value for code type "
-                         <> show t
-                         <> ": "
-                         <> show n)
+    noteConfigError :: MonadErrorAnyOf e m '[ConfigError] => Maybe a -> m a
+    noteConfigError =
+        note (throw $ ConfigError $ "Invalid target value for code type "
+              <> show t <> ": " <> show n)
 
 -- Parameters and special quantities.
-lookupTeXIntParameter :: TeXIntParameter -> Config -> TeXIntVal
+lookupTeXIntParameter :: TeXIntParameter -> Config -> TeXInt
 lookupTeXIntParameter p conf =
     fromMaybe 0 $ scopedMapLookup texIntParameters p conf
 
-lookupLengthParameter :: LengthParameter -> Config -> TeXLength
+lookupLengthParameter :: LengthParameter -> Config -> Length
 lookupLengthParameter p conf =
     fromMaybe 0 $ scopedMapLookup lengthParameters p conf
 
-lookupGlueParameter :: GlueParameter -> Config -> (BL.Glue TeXLength)
+lookupGlueParameter :: GlueParameter -> Config -> BL.Glue Length
 lookupGlueParameter p conf =
     fromMaybe mempty $ scopedMapLookup glueParameters p conf
 
-lookupMathGlueParameter :: MathGlueParameter -> Config -> (BL.Glue MathLength)
+lookupMathGlueParameter :: MathGlueParameter -> Config -> BL.Glue MathLength
 lookupMathGlueParameter p conf =
     fromMaybe mempty $ scopedMapLookup mathGlueParameters p conf
 
@@ -489,7 +480,7 @@ lookupTokenListParameter p conf =
 
 setTeXIntParameter
     :: TeXIntParameter
-    -> TeXIntVal
+    -> TeXInt
     -> GlobalFlag
     -> Config
     -> Config
@@ -498,20 +489,20 @@ setTeXIntParameter =
 
 setLengthParameter
     :: LengthParameter
-    -> TeXLength
+    -> Length
     -> GlobalFlag
     -> Config
     -> Config
 setLengthParameter =
     insertKey lengthParameters $ \c _map -> c { lengthParameters = _map }
 
-setGlueParameter :: GlueParameter -> (BL.Glue TeXLength) -> GlobalFlag -> Config -> Config
+setGlueParameter :: GlueParameter -> BL.Glue Length -> GlobalFlag -> Config -> Config
 setGlueParameter =
     insertKey glueParameters $ \c _map -> c { glueParameters = _map }
 
 setMathGlueParameter
     :: MathGlueParameter
-    -> (BL.Glue MathLength)
+    -> BL.Glue MathLength
     -> GlobalFlag
     -> Config
     -> Config
@@ -538,19 +529,19 @@ parIndentBox conf = BL.HVListElem $
         }
 
 -- Registers.
-lookupTeXIntRegister :: EightBitInt -> Config -> TeXIntVal
+lookupTeXIntRegister :: EightBitInt -> Config -> TeXInt
 lookupTeXIntRegister p conf =
     fromMaybe 0 $ scopedMapLookup texIntRegister p conf
 
-lookupLengthRegister :: EightBitInt -> Config -> TeXLength
+lookupLengthRegister :: EightBitInt -> Config -> Length
 lookupLengthRegister p conf =
     fromMaybe 0 $ scopedMapLookup lengthRegister p conf
 
-lookupGlueRegister :: EightBitInt -> Config -> (BL.Glue TeXLength)
+lookupGlueRegister :: EightBitInt -> Config -> BL.Glue Length
 lookupGlueRegister p conf =
     fromMaybe mempty $ scopedMapLookup glueRegister p conf
 
-lookupMathGlueRegister :: EightBitInt -> Config -> (BL.Glue MathLength)
+lookupMathGlueRegister :: EightBitInt -> Config -> BL.Glue MathLength
 lookupMathGlueRegister p conf =
     fromMaybe mempty $ scopedMapLookup mathGlueRegister p conf
 
@@ -561,20 +552,20 @@ lookupTokenListRegister p conf =
 lookupBoxRegister :: EightBitInt -> Config -> Maybe (B.Box B.BoxContents)
 lookupBoxRegister = scopedMapLookup boxRegister
 
-setTeXIntRegister :: EightBitInt -> TeXIntVal -> GlobalFlag -> Config -> Config
+setTeXIntRegister :: EightBitInt -> TeXInt -> GlobalFlag -> Config -> Config
 setTeXIntRegister =
     insertKey texIntRegister $ \c _map -> c { texIntRegister = _map }
 
-setLengthRegister :: EightBitInt -> TeXLength -> GlobalFlag -> Config -> Config
+setLengthRegister :: EightBitInt -> Length -> GlobalFlag -> Config -> Config
 setLengthRegister =
     insertKey lengthRegister $ \c _map -> c { lengthRegister = _map }
 
-setGlueRegister :: EightBitInt -> (BL.Glue TeXLength) -> GlobalFlag -> Config -> Config
+setGlueRegister :: EightBitInt -> BL.Glue Length -> GlobalFlag -> Config -> Config
 setGlueRegister = insertKey glueRegister $ \c _map -> c { glueRegister = _map }
 
 setMathGlueRegister
     :: EightBitInt
-    -> (BL.Glue MathLength)
+    -> BL.Glue MathLength
     -> GlobalFlag
     -> Config
     -> Config

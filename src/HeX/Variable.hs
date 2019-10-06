@@ -83,8 +83,8 @@ instance TeXVariable HP.SpecialLength where
 
 class TeXVariable a => TeXNumericVariable a where
     advanceOp :: Proxy a -> EvalTarget a -> EvalTarget a -> EvalTarget a
-    scaleUpOp :: Proxy a -> EvalTarget a -> TeXIntVal -> EvalTarget a
-    scaleDownOp :: Proxy a -> EvalTarget a -> TeXIntVal -> EvalTarget a
+    scaleUpOp :: Proxy a -> EvalTarget a -> TeXInt -> EvalTarget a
+    scaleDownOp :: Proxy a -> EvalTarget a -> TeXInt -> EvalTarget a
 
     advanceValueFromAST
         :: ( MonadState Config m
@@ -98,9 +98,8 @@ class TeXVariable a => TeXNumericVariable a where
         -> b
         -> m ()
     advanceValueFromAST var globalFlag astPlusVal =
-        do
-        newVal <- readOnState $ advanceOp (Proxy @a) <$> texEvaluate var <*> texEvaluate astPlusVal
-        setValue var globalFlag newVal
+        readOnState (advanceOp (Proxy @a) <$> texEvaluate var <*> texEvaluate astPlusVal)
+            >>= setValue var globalFlag
 
     scaleValueFromAST
         :: ( MonadState Config m
@@ -117,8 +116,8 @@ class TeXVariable a => TeXNumericVariable a where
         let op = case vDir of
                 Upward   -> scaleUpOp
                 Downward -> scaleDownOp
-        newVal <- readOnState $ (op (Proxy @a)) <$> texEvaluate var <*> texEvaluate scaleVal
-        setValue var globalFlag newVal
+        readOnState ((op (Proxy @a)) <$> texEvaluate var <*> texEvaluate scaleVal)
+            >>= setValue var globalFlag
 
 instance TeXNumericVariable HP.TeXIntVariable where
     advanceOp _ = (+)
@@ -130,13 +129,13 @@ instance TeXNumericVariable HP.TeXIntVariable where
 
 instance TeXNumericVariable HP.LengthVariable where
     advanceOp _ = (+)
-    scaleUpOp _ = scaleTeXLength
-    scaleDownOp _ = shrinkTeXLength
+    scaleUpOp _ = scaleLength
+    scaleDownOp _ = shrinkLength
 
 instance TeXNumericVariable HP.GlueVariable where
     advanceOp _ = mappend
-    scaleUpOp _ = BL.scaleTeXLengthGlue
-    scaleDownOp _ = BL.shrinkTeXLengthGlue
+    scaleUpOp _ = BL.scaleLengthGlue
+    scaleDownOp _ = BL.shrinkLengthGlue
 
 instance TeXNumericVariable HP.MathGlueVariable where
     advanceOp _ = mappend

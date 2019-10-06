@@ -5,8 +5,7 @@ import           HeXlude
 import qualified Data.HashMap.Strict as HMap
 
 import qualified HeX.BreakList.Elem  as BL.E
-import qualified HeX.Categorise      as Cat
-import           HeX.Categorise      (CharCode)
+import qualified HeX.Config.Codes    as Code
 import qualified HeX.Lex             as Lex
 import           HeX.Parse.Token
 
@@ -22,11 +21,11 @@ resolveToken :: (Lex.ControlSequenceLike -> Maybe ResolvedToken)
 resolveToken _ NotExpanding t = pure $ primTok $ UnexpandedTok t
 resolveToken csLookup Expanding t = case t of
     Lex.ControlSequenceToken cs -> csLookup $ Lex.ControlSequenceProper cs
-    Lex.CharCatToken (Lex.CharCat c Cat.Active) -> csLookup $ Lex.ActiveCharacter c
+    Lex.CharCatToken (Lex.CharCat c Code.Active) -> csLookup $ Lex.ActiveCharacter c
     _ -> pure $ primTok $ UnexpandedTok t
 
-_cs :: Seq CharCode -> Lex.ControlSequenceLike
-_cs = Lex.ControlSequenceProper . Lex.ControlSequence
+_cs :: [Char] -> Lex.ControlSequenceLike
+_cs = Lex.ControlSequenceProper . Lex.ControlSequence . toS
 
 syntaxTok :: SyntaxCommandHeadToken -> ResolvedToken
 syntaxTok = SyntaxCommandHeadToken

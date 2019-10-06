@@ -1,9 +1,11 @@
 module Data.Path where
 
 import           HeXlude
-import qualified Prelude
 
-import           Path    (File, Path)
+import qualified Data.ByteString as BS
+import qualified Data.Sequence   as Seq
+import qualified Data.Word       as Word
+import           Path            (File, Path)
 import qualified Path
 
 newtype PathError = PathError Text
@@ -12,8 +14,8 @@ newtype PathError = PathError Text
 readPathText :: Path a File -> IO Text
 readPathText = Path.toFilePath >>> readFile
 
-readPathChars :: Path a File -> IO [Char]
-readPathChars = Path.toFilePath >>> Prelude.readFile
+readPathBytes :: Path a File -> IO (Seq Word.Word8)
+readPathBytes = Path.toFilePath >>> BS.readFile >>> fmap (BS.unpack >>> Seq.fromList)
 
 stripExtension
     :: MonadErrorAnyOf e m '[PathError]

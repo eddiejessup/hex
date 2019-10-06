@@ -15,10 +15,10 @@ import           HeX.BreakList.Set
 import           HeX.Config.Parameters
 import           HeX.Quantity
 
-newtype BadnessSize = BadnessSize { unBadnessSize :: Int }
+newtype BadnessSize = BadnessSize { unBadnessSize :: TeXInt }
     deriving ( Eq, Show, Num )
 
-newtype Demerit = Demerit { unDemerit :: Int }
+newtype Demerit = Demerit { unDemerit :: TeXInt }
     deriving ( Show, Eq, Ord, Num )
 
 data DiscardingState

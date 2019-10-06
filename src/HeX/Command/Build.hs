@@ -186,7 +186,7 @@ handleCommandInVBoxMode vList command oldStream =
             panic $ "Not implemented, outer V mode: " <> show oth
   where
     doNothing = LoopAgain vList
-    addElem e = addVListElemAndLoop vList e
+    addElem = addVListElemAndLoop vList
     endLoop = EndLoop . VBoxResult
 
     addPara indentFlag =

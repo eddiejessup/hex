@@ -23,6 +23,7 @@ import           HeX.Categorise
 import           HeX.Command.Build
 import           HeX.Command.Common
 import           HeX.Config                (ConfigError)
+import qualified HeX.Config.Codes          as Code
 import           HeX.Evaluate              (EvaluationError)
 import           HeX.Lex                   (LexState (..), extractToken)
 import           HeX.Parse                 (ExpandedStream, ExpansionMode (..),
@@ -53,15 +54,15 @@ newtype App a
              , Alternative
              )
 
-usableCatLookup :: CharCode -> CatCode
-usableCatLookup = catLookup usableCatCodes
+usableCatLookup :: Code.CharCode -> Code.CatCode
+usableCatLookup = Code.catLookup Code.usableCatCodes
 
 -- Cat
 
 runCat
     :: ( MonadIO m
        )
-    => Seq CharCode
+    => Seq Code.CharCode
     -> m ()
 runCat xs = case extractCharCat usableCatLookup xs of
     Just (cc, xs') ->
@@ -74,7 +75,7 @@ runCat xs = case extractCharCat usableCatLookup xs of
 runLex
     :: ( MonadIO m
        )
-    => Seq CharCode
+    => Seq Code.CharCode
     -> m ()
 runLex _xs = extractAndPrint (LineBegin, _xs)
   where
@@ -92,7 +93,7 @@ runLex _xs = extractAndPrint (LineBegin, _xs)
 runResolved
     :: ( MonadIO m
        )
-    => Seq CharCode
+    => Seq Code.CharCode
     -> m ()
 runResolved _xs = extractAndPrint (LineBegin, _xs)
   where

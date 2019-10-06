@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE PatternSynonyms      #-}
 {-# LANGUAGE RankNTypes           #-}
 
 module HeXlude
@@ -47,6 +47,7 @@ import qualified Data.Sequence             as Seq
 import           Data.Witherable           (Filterable (..))
 import           Debug.Readable            as Readable
 import           GHC.Generics              (Generic)
+import           HeX.Orphans               ()
 
 import           Data.Variant              hiding (fold)
 
@@ -91,11 +92,6 @@ seqHeadMay = \case
     x :<| _ -> Just x
     _ -> Nothing
 
-instance StringConv (Seq Char) Text where
-    strConv leniency = strConv leniency . toList
-
-instance Hashable a => Hashable (Seq a) where
-    hashWithSalt s x = hashWithSalt s (toList x)
 
 -- Concepts.
 

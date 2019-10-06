@@ -27,11 +27,10 @@ import           HeXlude
 -- > 3, 'ext_tag': this character code represents an extensible character, that
 --   is, a character that is built from smaller pieces so that it can be made
 --   arbitrarily large. The pieces are specified in 'exten[remainder]'.
-import qualified Data.Binary.Get   as B.G
-import           Data.Bits         (shiftR, (.&.))
-import           Data.Char         (chr)
-import           Data.HashMap.Lazy
-import           Data.List.Index   (indexed)
+import qualified Data.Binary.Get    as B.G
+import           Data.Bits          (shiftR, (.&.))
+import           Data.IntMap.Strict
+import           Data.List.Index    (indexed)
 
 import           TFM.Common
 import           TFM.Recipe
@@ -91,11 +90,11 @@ readCharacters
     -> [CharInfo]
     -> [ExtensibleRecipe]
     -> [Rational] -> [Rational] -> [Rational] -> [Rational]
-    -> Either Text (HashMap Char Character)
+    -> Either Text (IntMap Character)
 readCharacters _minCode charInfos recipes widths heights depths italicCorrs =
     do
     charList <- mapM (character recipes widths heights depths italicCorrs) charInfos
-    pure $ fromList $ (\(idx, c) -> (chr $ idx + _minCode, c)) <$> indexed charList
+    pure $ fromList $ (\(idx, c) -> (idx + _minCode, c)) <$> indexed charList
 
 data CharInfo = CharInfo
     { widthIdx
@@ -120,10 +119,11 @@ getCharInfo =
     heightDepthByte <- getWord8Int
     italicTagByte <- getWord8Int
     _remainder <- getWord8Int
-    pure $ CharInfo
+    pure CharInfo
         { widthIdx = _widthIdx
         , heightIdx = heightDepthByte `shiftR` 4
         , depthIdx = heightDepthByte .&. 0xF
         , italicIdx = italicTagByte `shiftR` 6
         , tag = toEnum $ italicTagByte .&. 0x3
-        , remainder = _remainder }
+        , remainder = _remainder
+        }

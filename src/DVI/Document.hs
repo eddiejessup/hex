@@ -3,19 +3,18 @@ module DVI.Document where
 import           HeXlude
 
 import           Data.Byte       (ByteError)
-import           Data.Char       (ord)
 import           Data.Path       (PathError)
-import qualified Data.Text       as Txt
 import           Path            (Path)
 import qualified Path
 
 import           HeX.Quantity
+import           HeX.Config.Codes
 
 import           DVI.Encode      (encLength)
 import           DVI.Instruction
 import           DVI.Operation   (Operation (DefineFontNr))
 
-data Rule = Rule { ruleWidth, ruleHeight, ruleDepth :: !TeXLength }
+data Rule = Rule { ruleWidth, ruleHeight, ruleDepth :: !Length }
     deriving ( Show )
 
 instance Dimensioned Rule where
@@ -25,7 +24,7 @@ instance Dimensioned Rule where
         BoxDepth  -> ruleDepth
 
 data Character =
-    Character { char :: !Char, charWidth, charHeight, charDepth :: !TeXLength }
+    Character { char :: CharCode, charWidth, charHeight, charDepth :: !Length }
     deriving ( Show )
 
 instance Dimensioned Character where
@@ -35,22 +34,22 @@ instance Dimensioned Character where
         BoxDepth  -> charDepth
 
 instance Readable Character where
-    describe v = "'" <> Txt.singleton (char v) <> "'"
+    describe Character { char } = describe char
 
 data FontDefinition =
     FontDefinition { fontDefChecksum    :: Int
-                   , fontDefDesignSize  :: TeXLength
-                   , fontDefDesignScale :: TeXLength
+                   , fontDefDesignSize  :: Length
+                   , fontDefDesignScale :: Length
                    , fontPath           :: !(Path Path.Rel Path.File)
                    , fontName           :: !Text
-                   , fontNr             :: !Int
+                   , fontNr             :: !TeXInt
                    }
     deriving ( Show )
 
 instance Readable FontDefinition where
     describe v = "Font at " <> show (fontPath v)
 
-newtype FontSelection = FontSelection Int
+newtype FontSelection = FontSelection TeXInt
     deriving ( Show )
 
 instance Readable FontSelection where
@@ -60,7 +59,7 @@ data Instruction =
       AddCharacter !Character
     | AddRule !Rule
     | BeginNewPage
-    | Move Axis !TeXLength
+    | Move Axis !Length
     | DefineFont !FontDefinition
     | SelectFont !FontSelection
     | PushStack
@@ -81,7 +80,7 @@ instance Readable Instruction where
 
 data ParseState =
     ParseState { instrs :: !(Seq EncodableInstruction)
-               , curFontNr :: !(Maybe Int)
+               , curFontNr :: !(Maybe TeXInt)
                , beginPagePointers :: ![Int]
                , stackDepth :: !Int
                , maxStackDepth :: !Int
@@ -109,7 +108,7 @@ parseMundaneInstruction st = \case
         st' <- addInstruction st <$> getSelectFontNrInstruction n
         pure st' { curFontNr = Just n }
     AddCharacter Character{char = c} ->
-        addInstruction st <$> getCharacterInstruction (ord c) Set
+        addInstruction st <$> getCharacterInstruction c Set
     AddRule Rule{ruleWidth = w, ruleHeight = h, ruleDepth = d} ->
         pure $ addInstruction st $ getRuleInstruction Set (h + d) w
     Move ax dist -> addInstruction st <$> getMoveInstruction ax dist

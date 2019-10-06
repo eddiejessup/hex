@@ -1,11 +1,15 @@
+{-# LANGUAGE DeriveAnyClass #-}
+
 module HeX.Parse.Token where
 
 import           HeXlude
 
+import           Data.Ascii
 import           Data.Hashable      (Hashable)
 import qualified Data.Map.Strict    as Map
 
 import qualified HeX.BreakList.Elem as BL.E
+import           HeX.Config.Codes
 import qualified HeX.Lex            as Lex
 import           HeX.Quantity
 
@@ -97,9 +101,8 @@ data TeXIntParameter
     | ShowBoxBreadth         -- Maximum items per level when boxes are shown
     | ShowBoxDepth           -- Maximum level when boxes are shown
     | ErrorContextLines      -- Maximum extra context shown when errors occur
-    deriving (Show, Eq, Generic, Enum, Bounded)
-
-instance Hashable TeXIntParameter
+    deriving stock (Show, Eq, Ord, Generic)
+    deriving anyclass (Hashable)
 
 data LengthParameter
     = HFuzz                  -- Maximum overrun before overfull hbox messages occur
@@ -123,9 +126,8 @@ data LengthParameter
     | HangIndent             -- Amount of hanging indentation
     | HOffset                -- Horizontal offset in \shipout
     | VOffset                -- Vertical offset in \shipout
-    deriving (Show, Eq, Generic, Enum, Bounded)
-
-instance Hashable LengthParameter
+    deriving stock (Show, Eq, Ord, Generic)
+    deriving anyclass (Hashable)
 
 data GlueParameter
     = BaselineSkip           -- Desired glue between baselines
@@ -143,17 +145,15 @@ data GlueParameter
     | SpaceSkip              -- Glue between words, if nonzero
     | XSpaceSkip             -- Glue between sentences, if nonzero
     | ParFillSkip            -- Additional \rightskip at end of paragraphs
-    deriving (Show, Eq, Generic, Enum, Bounded)
-
-instance Hashable GlueParameter
+    deriving stock (Show, Eq, Ord, Generic)
+    deriving anyclass (Hashable)
 
 data MathGlueParameter
     = ThinMuSkip             -- Thin space in math formulas
     | MedMuSkip              -- Medium space in math formulas
     | ThickMuSkip            -- Thick space in math formulas
-    deriving (Show, Eq, Generic, Enum, Bounded)
-
-instance Hashable MathGlueParameter
+    deriving stock (Show, Eq, Ord, Generic)
+    deriving anyclass (Hashable)
 
 data TokenListParameter
     = Output                 -- The user's output routine
@@ -165,18 +165,16 @@ data TokenListParameter
     | EveryJob               -- Tokens to insert when the job begins
     | EveryCR                -- Tokens to insert after every \cr or nonredundant \crcr
     | ErrHelp                -- Tokens that supplement an \errmessage
-    deriving (Show, Eq, Generic, Enum, Bounded)
-
-instance Hashable TokenListParameter
+    deriving stock (Show, Eq, Ord, Generic)
+    deriving anyclass (Hashable)
 
 data SpecialTeXInt
     = SpaceFactorTeXInt
     | PrevGrafTeXInt
     | DeadCyclesTeXInt
     | InsertPenaltiesTeXInt
-    deriving (Show, Eq, Generic, Enum, Bounded)
-
-instance Hashable SpecialTeXInt
+    deriving stock (Show, Eq, Ord, Generic)
+    deriving anyclass (Hashable)
 
 data SpecialLength
     = PrevDepth
@@ -188,9 +186,8 @@ data SpecialLength
     | PageFilllStretch
     | PageShrink
     | PageDepth
-    deriving (Show, Eq, Generic, Enum, Bounded)
-
-instance Hashable SpecialLength
+    deriving stock (Show, Eq, Ord, Generic)
+    deriving anyclass (Hashable)
 
 data AssignPrefixTok
     = LongTok
@@ -258,7 +255,7 @@ data FontRange
     = TextSizeFontRange -- \textfont
     | ScriptSizeFontRange -- \scriptfont
     | ScriptScriptSizeFontRange -- \scriptscriptfont
-    deriving (Show, Eq, Generic, Enum, Bounded)
+    deriving (Show, Eq, Ord, Generic)
 
 instance Hashable FontRange
 
@@ -316,34 +313,38 @@ data Digit
     | Nine
     deriving (Eq, Ord, Bounded, Enum, Show)
 
-digitToChar :: Digit -> Char
-digitToChar One   = '1'
-digitToChar Two   = '2'
-digitToChar Three = '3'
-digitToChar Four  = '4'
-digitToChar Five  = '5'
-digitToChar Six   = '6'
-digitToChar Seven = '7'
-digitToChar Eight = '8'
-digitToChar Nine  = '9'
+digitToChar :: Digit -> CharCode
+digitToChar d = CharCode $ ascii $ case d of
+    One   -> '1'
+    Two   -> '2'
+    Three -> '3'
+    Four  -> '4'
+    Five  -> '5'
+    Six   -> '6'
+    Seven -> '7'
+    Eight -> '8'
+    Nine  -> '9'
 
-charToDigit :: Char -> Maybe Digit
-charToDigit '1' = Just One
-charToDigit '2' = Just Two
-charToDigit '3' = Just Three
-charToDigit '4' = Just Four
-charToDigit '5' = Just Five
-charToDigit '6' = Just Six
-charToDigit '7' = Just Seven
-charToDigit '8' = Just Eight
-charToDigit '9' = Just Nine
-charToDigit _   = Nothing
+charCodeToDigit :: CharCode -> Maybe Digit
+charCodeToDigit cc = case codeAsChar cc of
+    '1' -> Just One
+    '2' -> Just Two
+    '3' -> Just Three
+    '4' -> Just Four
+    '5' -> Just Five
+    '6' -> Just Six
+    '7' -> Just Seven
+    '8' -> Just Eight
+    '9' -> Just Nine
+    _   -> Nothing
 
 newtype BalancedText = BalancedText (Seq Lex.Token)
-    deriving (Show, Eq, Semigroup, Monoid)
+    deriving stock (Show)
+    deriving newtype (Eq, Semigroup, Monoid)
 
-newtype ExpandedBalancedText = ExpandedBalancedText [PrimitiveToken]
-    deriving (Show, Eq, Semigroup, Monoid)
+newtype ExpandedBalancedText = ExpandedBalancedText (Seq PrimitiveToken)
+    deriving stock (Show)
+    deriving newtype (Eq, Semigroup, Monoid)
 
 -- We use a map to restrict our parameter keys' domain to [1..9].
 type MacroParameters = Map.Map Digit BalancedText
@@ -359,7 +360,7 @@ data MacroTextToken
     deriving (Eq, Show)
 
 -- A macro template.
-newtype MacroText = MacroText [MacroTextToken]
+newtype MacroText = MacroText (Seq MacroTextToken)
     deriving (Show, Eq)
 
 data MacroContents = MacroContents
@@ -438,7 +439,7 @@ data PrimitiveToken
     | SpecialTeXIntTok SpecialTeXInt -- \example: \spacefactor
     | SpecialLengthTok SpecialLength -- \example: \pagestretch
     -- Tokens storing integers defined by short-hand definitions.
-    | IntRefTok QuantityType TeXIntVal
+    | IntRefTok QuantityType TeXInt
     -- A char-cat pair defined by a 'let' assignment. This differs from a
     -- \chardef target, because \chardef maps to a character number, which is
     -- categorised at the time of use, while a \let maps to a static char-cat
@@ -446,7 +447,7 @@ data PrimitiveToken
     | LetCharCat Lex.CharCat
     -- A control sequence representing a particular font, such as defined through
     -- \font.
-    | FontRefToken TeXIntVal
+    | FontRefToken TeXInt
     -- Heads of register references.
     | RegisterVariableTok RegisterType
     -- Heads of int-ref definitions.
@@ -490,9 +491,6 @@ data PrimitiveToken
     | HyphenationPatternsTok -- \patterns
     -- > Setting interaction mode.
     | InteractionModeTok InteractionMode
-
-    | ResolutionError Lex.ControlSequenceLike
-    | SubParserError Text
 
     | UnexpandedTok Lex.Token
     deriving (Show, Eq)

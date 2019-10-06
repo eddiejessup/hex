@@ -7,45 +7,37 @@ newtype ByteError = ByteError Text
 
 data Signedness = Signed | Unsigned
 
-data SignableInt = SignableInt !Signedness !Int
+data SignableInt a = SignableInt Signedness a
 
-isSignedNrExpressibleInNBits :: Int -> Int -> Bool
+newtype UnsignedVal a = UnsignedVal a
+
+isSignedNrExpressibleInNBits :: Integral a => Int -> a -> Bool
 isSignedNrExpressibleInNBits nrBits n =
     let x = 2 ^ (nrBits - 1)
     in
         (-x <= n) && (n <= x - 1)
 
-toSignableInt
-    :: MonadErrorAnyOf e m '[ByteError]
-    => Signedness
-    -> Int
-    -> m SignableInt
-toSignableInt Unsigned n
+toUnsigned
+    :: (Num a, Ord a, Show a, MonadErrorAnyOf e m '[ByteError])
+    => a
+    -> m (UnsignedVal a)
+toUnsigned n
     | n < 0 = throwM $ ByteError $ "Number argument for unsigned is negative: " <> show n
-    | otherwise = pure $ SignableInt Unsigned n
-toSignableInt Signed n = pure $ SignableInt Signed n
+    | otherwise = pure (UnsignedVal n)
 
-toSignedInt
-    :: MonadErrorAnyOf e m '[ByteError]
-    => Int
-    -> m SignableInt
-toSignedInt = toSignableInt Signed
+bytesNeededUnsigned :: (FiniteBits a, Integral a) => a -> Int
+bytesNeededUnsigned n
+    | n > 0 = 1 + logBase2 n `div` 8
+    | n == 0 = 1
+    | otherwise = panic $ "Asked for bytes needed for negative number: " <> show (fromIntegral n :: Int)
+  where
+    logBase2 x = finiteBitSize x - 1 - countLeadingZeros x
 
-toUnsignedInt
-    :: MonadErrorAnyOf e m '[ByteError]
-    => Int
-    -> m SignableInt
-toUnsignedInt = toSignableInt Unsigned
-
-bytesNeededUnsigned :: Int -> Int
-bytesNeededUnsigned n = 1
-    + floor ((logBase 256.0 $ fromIntegral $ abs n) :: Double)
-
-bytesNeeded :: SignableInt -> Int
-bytesNeeded = \case
-    SignableInt _ 0        -> 1
-    SignableInt Unsigned n -> bytesNeededUnsigned n
-    SignableInt Signed n   ->
+bytesNeededSigned :: (Integral a, FiniteBits a) => a -> Int
+bytesNeededSigned = \case
+    0 ->
+        1
+    n ->
         let nrBytesUnsigned = bytesNeededUnsigned n
         in
             if isSignedNrExpressibleInNBits (8 * nrBytesUnsigned) n

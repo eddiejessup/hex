@@ -1,16 +1,17 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module HeX.Parse.Quantity where
 
 import           HeXlude
 
 import qualified Control.Monad.Combinators as PC
+import qualified Data.Ascii                as Ascii
 import           Data.Foldable             (foldl')
 import           Data.Functor              (($>))
 import           Data.Ratio                ((%))
-
-import qualified HeX.Categorise            as Cat
-import           HeX.Categorise            (CharCode)
+import           HeX.Config.Codes          (codesFromStr)
+import qualified HeX.Config.Codes          as Code
 import qualified HeX.Lex                   as Lex
 import           HeX.Parse.AST
 import           HeX.Parse.Stream.Class
@@ -44,11 +45,9 @@ parseUnsignedTeXInt = tryChoice [ NormalTeXIntAsUTeXInt <$> parseNormalTeXInt
                                 , CoercedTeXInt <$> parseCoercedTeXInt
                                 ]
 
--- Restrict pure type, and therefore accumulator, to Int, to disallow
--- overflow.
-digitsToTeXIntVal :: Integral n => n -> [n] -> Q.TeXIntVal
-digitsToTeXIntVal base =
-    foldl' (\a b -> a * fromIntegral base + fromIntegral b) 0
+digitsToTeXInt :: Int -> [Int] -> Q.TeXInt
+digitsToTeXInt base digs =
+    Q.TeXInt $ foldl' (\a b -> a * base + b) 0 digs
 
 parseNormalTeXInt :: TeXParser s e m NormalTeXInt
 parseNormalTeXInt =
@@ -56,84 +55,40 @@ parseNormalTeXInt =
               , TeXIntConstant <$> parseConstantInt <* skipOneOptionalSpace
               ]
   where
-    parseConstantInt = tryChoice [ parseConstant, parseCharacter ]
+    parseConstantInt = tryChoice
+        [ parseConstant
+        , Code.toTeXInt <$> parseCharacter ]
 
-    parseConstant = do
-        (digits, base) <- tryChoice [ (, 10) <$> PC.some parseDecimalTeXIntDigit
-                                   , (, 16) <$> parseHexadecimalTeXIntDigits
-                                   , (, 8) <$> parseOctalTeXIntDigits
-                                   ]
-        pure $ fromIntegral $ digitsToTeXIntVal base digits
+    parseConstant =
+        tryChoice
+            [ digitsToTeXInt 10 <$> PC.some (satisfyThen decCharToInt)
+            , digitsToTeXInt 16 <$> (skipSatisfied (matchOtherToken '"') *> PC.some (satisfyThen hexCharToInt))
+            , digitsToTeXInt 8  <$> (skipSatisfied (matchOtherToken '\'') *> PC.some (satisfyThen octCharToInt))
+            ]
 
     parseCharacter = skipSatisfied (matchOtherToken '`') *> parseCharLike
 
-parseDecimalTeXIntDigit :: TeXParser s e m Int
-parseDecimalTeXIntDigit = satisfyThen $
-    \case
-        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other)) ->
-            case c of
-                '0' -> Just 0
-                '1' -> Just 1
-                '2' -> Just 2
-                '3' -> Just 3
-                '4' -> Just 4
-                '5' -> Just 5
-                '6' -> Just 6
-                '7' -> Just 7
-                '8' -> Just 8
-                '9' -> Just 9
-                _   -> Nothing
-        _ -> Nothing
+decCharToInt :: T.PrimitiveToken -> Maybe Int
+decCharToInt = \case
+    T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
+        Ascii.fromDigit $ Code.codeWord c
+    _ ->
+        Nothing
 
-parseHexadecimalTeXIntDigits :: TeXParser s e m [Int]
-parseHexadecimalTeXIntDigits = skipSatisfied (matchOtherToken '"')
-    *> PC.some (satisfyThen hexCharToInt)
-  where
-    hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other))) = case c of
-        '0' -> Just 0
-        '1' -> Just 1
-        '2' -> Just 2
-        '3' -> Just 3
-        '4' -> Just 4
-        '5' -> Just 5
-        '6' -> Just 6
-        '7' -> Just 7
-        '8' -> Just 8
-        '9' -> Just 9
-        'A' -> Just 10
-        'B' -> Just 11
-        'C' -> Just 12
-        'D' -> Just 13
-        'E' -> Just 14
-        'F' -> Just 15
-        _   -> Nothing
-    hexCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Letter))) =
-        case c of
-            'A' -> Just 10
-            'B' -> Just 11
-            'C' -> Just 12
-            'D' -> Just 13
-            'E' -> Just 14
-            'F' -> Just 15
-            _   -> Nothing
-    hexCharToInt _ = Nothing
+hexCharToInt :: T.PrimitiveToken -> Maybe Int
+hexCharToInt = \case
+    T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
+        Ascii.fromUpHexDigit $ Code.codeWord c
+    T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
+        Code.safeFromUpAF $ Code.codeWord c
+    _ -> Nothing
 
-parseOctalTeXIntDigits :: TeXParser s e m [Int]
-parseOctalTeXIntDigits = skipSatisfied (matchOtherToken '\'')
-    *> PC.some (satisfyThen octCharToInt)
-  where
-    octCharToInt (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Cat.Other))) =
-        case c of
-            '0' -> Just 0
-            '1' -> Just 1
-            '2' -> Just 2
-            '3' -> Just 3
-            '4' -> Just 4
-            '5' -> Just 5
-            '6' -> Just 6
-            '7' -> Just 7
-            _   -> Nothing
-    octCharToInt _ = Nothing
+octCharToInt :: T.PrimitiveToken -> Maybe Int
+octCharToInt = \case
+    T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
+        Ascii.fromOctDigit $ Code.codeWord c
+    _ ->
+        Nothing
 
 parseCoercedTeXInt :: TeXParser s e m CoercedTeXInt
 parseCoercedTeXInt = tryChoice [ InternalLengthAsInt <$> parseInternalLength
@@ -166,19 +121,18 @@ parseFactor = tryChoice
 
 parseRationalConstant :: TeXParser s e m Rational
 parseRationalConstant = do
-    wholeNr <- decDigitsToTeXInt <$> PC.many parseDecimalTeXIntDigit
+    wholeNr <- decDigitsToTeXInt <$> PC.many (satisfyThen decCharToInt)
     skipSatisfied (\t -> matchOtherToken ',' t || matchOtherToken '.' t)
     -- The fractional part represents its integer interpretation, divided by
     -- the next largest power of 10.
     -- TODO: If performance matters, maybe we can infer the denominator
     -- faster from the integer itself than the digits.
-    fracDigits <- PC.many parseDecimalTeXIntDigit
-    let fraction = fromIntegral (decDigitsToTeXInt fracDigits)
-            % (10 ^ length fracDigits)
+    fracDigits <- PC.many (satisfyThen decCharToInt)
+    let fraction = fromIntegral (decDigitsToTeXInt fracDigits) % (10 ^ length fracDigits)
     -- Convert the whole number to a rational, and add it to the fraction.
     pure $ fromIntegral wholeNr + fraction
   where
-    decDigitsToTeXInt = digitsToTeXIntVal 10
+    decDigitsToTeXInt = digitsToTeXInt 10
 
 parseUnit :: TeXParser s e m Unit
 parseUnit =
@@ -195,10 +149,10 @@ parseUnit =
                   ]
 
     parseInternalUnitLit =
-        tryChoice [ parseKeywordToValue "em" Em, parseKeywordToValue "ex" Ex ]
+        tryChoice [ parseKeywordToValue (codesFromStr "em") Em, parseKeywordToValue (codesFromStr "ex") Ex ]
 
     parseFrame = do
-        isTrue <- parseOptionalKeyword "true"
+        isTrue <- parseOptionalKeyword (codesFromStr "true")
         pure $
             if isTrue
             then TrueFrame
@@ -211,15 +165,15 @@ parseUnit =
     -- NOTE: Can't trim number of 'try's naïvely, because they all suck up
     -- initial space, which would also need backtracking.
     parsePhysicalUnitLit = tryChoice
-        [ parseKeywordToValue "bp" Q.BigPoint
-        , parseKeywordToValue "cc" Q.Cicero
-        , parseKeywordToValue "cm" Q.Centimetre
-        , parseKeywordToValue "dd" Q.Didot
-        , parseKeywordToValue "in" Q.Inch
-        , parseKeywordToValue "mm" Q.Millimetre
-        , parseKeywordToValue "pc" Q.Pica
-        , parseKeywordToValue "pt" Q.Point
-        , parseKeywordToValue "sp" Q.ScaledPoint
+        [ parseKeywordToValue (codesFromStr "bp") Q.BigPoint
+        , parseKeywordToValue (codesFromStr "cc") Q.Cicero
+        , parseKeywordToValue (codesFromStr "cm") Q.Centimetre
+        , parseKeywordToValue (codesFromStr "dd") Q.Didot
+        , parseKeywordToValue (codesFromStr "in") Q.Inch
+        , parseKeywordToValue (codesFromStr "mm") Q.Millimetre
+        , parseKeywordToValue (codesFromStr "pc") Q.Pica
+        , parseKeywordToValue (codesFromStr "pt") Q.Point
+        , parseKeywordToValue (codesFromStr "sp") Q.ScaledPoint
         ]
 
 parseCoercedLength :: TeXParser s e m CoercedLength
@@ -241,7 +195,7 @@ parseNormalMathLength =
 
 parseMathUnit :: TeXParser s e m MathUnit
 parseMathUnit =
-    tryChoice [ skipKeyword "mu" >> skipOneOptionalSpace $> Mu
+    tryChoice [ skipKeyword (codesFromStr "mu") >> skipOneOptionalSpace $> Mu
               , skipOptionalSpaces *> (InternalMathGlueAsUnit <$> parseInternalMathGlue)
               ]
 
@@ -250,11 +204,11 @@ parseCoercedMathLength = InternalMathGlueAsMathLength <$> parseInternalMathGlue
 
 -- Glue.
 parseGlue :: TeXParser s e m Glue
-parseGlue = tryChoice [ ExplicitGlue <$> parseLength <*> parseFlex "plus" <*> parseFlex "minus"
+parseGlue = tryChoice [ ExplicitGlue <$> parseLength <*> parseFlex (codesFromStr "plus") <*> parseFlex (codesFromStr "minus")
                       , InternalGlue <$> parseSigned parseInternalGlue
                       ]
 
-parseFlex :: [CharCode] -> TeXParser s e m (Maybe Flex)
+parseFlex :: [Code.CharCode] -> TeXParser s e m (Maybe Flex)
 parseFlex s = tryChoice [ Just <$> parsePresentFlex
                         , skipOptionalSpaces $> Nothing
                         ]
@@ -267,18 +221,18 @@ parseFilLength :: TeXParser s e m FilLength
 parseFilLength =
     (FilLength <$> parseSigned parseFactor <*> parseOrder) <* skipOptionalSpaces
   where
-    parseSomeLs = PC.some $ skipSatisfied $ matchNonActiveCharacterUncased 'l'
+    parseSomeLs = PC.some $ skipSatisfied $ matchNonActiveCharacterUncased (Code.codeFromChar 'l')
 
-    parseOrder = skipKeyword "fi" *> (length <$> parseSomeLs)
+    parseOrder = skipKeyword (codesFromStr "fi") *> (length <$> parseSomeLs)
 
 -- Math glue.
 parseMathGlue :: TeXParser s e m MathGlue
 parseMathGlue =
-    tryChoice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFlex "plus" <*> parseMathFlex "minus"
+    tryChoice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFlex (codesFromStr "plus") <*> parseMathFlex (codesFromStr "minus")
               , InternalMathGlue <$> parseSigns <*> parseInternalMathGlue
               ]
 
-parseMathFlex :: [CharCode] -> TeXParser s e m (Maybe MathFlex)
+parseMathFlex :: [Code.CharCode] -> TeXParser s e m (Maybe MathFlex)
 parseMathFlex s = tryChoice [ Just <$> parsePresentFlex
                             , skipOptionalSpaces $> Nothing
                             ]
@@ -352,13 +306,13 @@ parseInternalTeXInt =
               , satisfyEquals T.BadnessTok $> Badness
               ]
 
-parseCharToken :: TeXParser s e m Q.TeXIntVal
+parseCharToken :: TeXParser s e m Q.TeXInt
 parseCharToken = satisfyThen $
     \case
         T.IntRefTok T.CharQuantity c -> Just c
         _ -> Nothing
 
-parseMathCharToken :: TeXParser s e m Q.TeXIntVal
+parseMathCharToken :: TeXParser s e m Q.TeXInt
 parseMathCharToken = satisfyThen $
     \case
         T.IntRefTok T.MathCharQuantity c -> Just c
@@ -388,7 +342,7 @@ parseFontRef = tryChoice [ FontTokenRef <$> parseFontRefToken
                          , FamilyMemberFontRef <$> parseFamilyMember
                          ]
 
-parseFontRefToken :: TeXParser s e m Q.TeXIntVal
+parseFontRefToken :: TeXParser s e m Q.TeXInt
 parseFontRefToken = satisfyThen $
     \case
         T.FontRefToken n -> Just n
@@ -462,7 +416,7 @@ parseVSplitBox :: TeXParser s e m Box
 parseVSplitBox = do
     satisfyEquals T.SplitVBoxTok
     nr <- parseTeXInt
-    skipKeyword "to"
+    skipKeyword (codesFromStr "to")
     VSplitBox nr <$> parseLength
 
 parseExplicitBox :: TeXParser s e m Box
@@ -473,8 +427,8 @@ parseExplicitBox = do
     pure $ ExplicitBox bs bt
   where
     parseBoxSpecification =
-        tryChoice [ skipKeyword "to" *> (To <$> parseLength)
-                  , skipKeyword "spread" *> (Spread <$> parseLength)
+        tryChoice [ skipKeyword (codesFromStr "to") *> (To <$> parseLength)
+                  , skipKeyword (codesFromStr "spread") *> (Spread <$> parseLength)
                   , pure Natural
                   ]
         <* skipFiller

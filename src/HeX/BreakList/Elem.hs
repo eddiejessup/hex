@@ -11,9 +11,9 @@ import           HeX.BreakList.Glue
 import           HeX.Quantity
 
 class BreakableList a where
-    naturalSpan :: a -> TeXLength
+    naturalSpan :: a -> Length
 
-    totalGlue :: a -> (Glue TeXLength)
+    totalGlue :: a -> Glue Length
 
 newtype HList = HList (Seq HListElem)
     deriving (Show, Semigroup, Monoid)
@@ -24,16 +24,16 @@ instance Dimensioned HList where
         BoxHeight -> maxLength BoxHeight elemSeq
         BoxDepth -> maxLength BoxDepth elemSeq
 
-subLengths :: Dimensioned a => BoxDim -> Seq a -> Seq TeXLength
+subLengths :: Dimensioned a => BoxDim -> Seq a -> Seq Length
 subLengths dim cs = naturalLength dim <$> cs
 
-maxLength :: Dimensioned a => BoxDim -> Seq a -> TeXLength
+maxLength :: Dimensioned a => BoxDim -> Seq a -> Length
 maxLength dim cs = max 0 $ maximumDef 0 (toList $ subLengths dim cs)
 
-hPlusD :: Dimensioned a => a -> TeXLength
+hPlusD :: Dimensioned a => a -> Length
 hPlusD e = naturalLength BoxHeight e + naturalLength BoxDepth e
 
-sumLength :: Dimensioned a => BoxDim -> Seq a -> TeXLength
+sumLength :: Dimensioned a => BoxDim -> Seq a -> Length
 sumLength dim cs = sum (subLengths dim cs)
 
 instance BreakableList HList where
@@ -99,7 +99,7 @@ data VBoxAlignType = DefaultAlign -- \vbox
 -- Vertical list.
 data VListElem
     = VListBaseElem BaseElem
-    | ListGlue (Glue TeXLength)
+    | ListGlue (Glue Length)
     | ListPenalty Penalty
     deriving ( Show )
 
@@ -126,11 +126,11 @@ instance BreakableListElem VListElem where
         Adj _ (ListPenalty p) _ -> Just $ PenaltyBreak p
         _ -> Nothing
 
-axisVListElemNaturalLength :: Axis -> BoxDim -> VListElem -> TeXLength
+axisVListElemNaturalLength :: Axis -> BoxDim -> VListElem -> Length
 axisVListElemNaturalLength ax dim e = case e of
     VListBaseElem be -> axisBaseElemNaturalLength ax dim be
     ListGlue g       -> spacerNaturalLength ax dim $ dimen g
-    ListPenalty _    -> TeXLength 0
+    ListPenalty _    -> Length 0
 
 instance Dimensioned VListElem where
     naturalLength = axisVListElemNaturalLength Vertical

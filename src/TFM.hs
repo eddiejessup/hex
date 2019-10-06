@@ -24,10 +24,10 @@ newtype TFMError = TFMError Text
 designSizeRational :: TexFont -> Rational
 designSizeRational f = toScaledPoint (designFontSize f) Point
 
-designSizeSP :: TexFont -> TeXLength
+designSizeSP :: TexFont -> Length
 designSizeSP f = round $ designSizeRational f
 
-designScaleSP :: TexFont -> Rational -> TeXLength
+designScaleSP :: TexFont -> Rational -> Length
 designScaleSP f x = round $ designSizeRational f * x
 
 readTFM

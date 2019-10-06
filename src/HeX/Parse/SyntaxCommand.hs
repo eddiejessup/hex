@@ -6,11 +6,11 @@ import           HeXlude
 
 import qualified Data.Sequence          as Seq
 
-import qualified HeX.Categorise         as Cat
+import qualified HeX.Config.Codes       as Code
 import           HeX.Parse.Stream.Class
 import           HeX.Parse.Token
 
-parseCSNameArgs :: TeXParser s e m (Seq Cat.CharCode)
+parseCSNameArgs :: TeXParser s e m (Seq Code.CharCode)
 parseCSNameArgs =
     do
     cs <- Seq.fromList <$> parseManyChars

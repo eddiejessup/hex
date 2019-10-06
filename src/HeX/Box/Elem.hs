@@ -13,17 +13,18 @@ import qualified Data.Text               as Text
 import qualified DVI.Document            as DVI.D
 
 import           HeX.Quantity
+import           HeX.Config.Codes
 
-data DesiredLength = Natural | Spread TeXLength | To TeXLength
+data DesiredLength = Natural | Spread Length | To Length
     deriving (Show)
 
-newtype Kern = Kern { kernDimen :: TeXLength }
+newtype Kern = Kern { kernDimen :: Length }
     deriving (Show)
 
 newtype SetGlue a = SetGlue { glueDimen :: a }
     deriving (Show)
 
-instance Readable (SetGlue TeXLength) where
+instance Readable (SetGlue Length) where
 
     describe SetGlue{glueDimen} = "Glue<" <> showSP glueDimen <> ">"
 
@@ -36,7 +37,7 @@ instance Readable HBox where
       where
         toMaybeChar = \case
             HBoxHBaseElem (ElemCharacter DVI.D.Character { DVI.D.char }) ->
-                Just char
+                Just $ codeAsChar char
             _ ->
                 Nothing
 
@@ -76,7 +77,7 @@ data BoxContents
     | VBoxContents VBox
     deriving (Show)
 
-data Box a = Box { contents :: a, boxWidth, boxHeight, boxDepth :: TeXLength }
+data Box a = Box { contents :: a, boxWidth, boxHeight, boxDepth :: Length }
     deriving (Show, Functor, Foldable)
 
 instance Dimensioned (Box BoxContents) where
@@ -92,24 +93,24 @@ data BaseElem = ElemBox (Box BoxContents)
               | ElemKern Kern
     deriving (Show)
 
-spacerNaturalLength :: Axis -> BoxDim -> TeXLength -> TeXLength
+spacerNaturalLength :: Axis -> BoxDim -> Length -> Length
 spacerNaturalLength ax dim d = case (ax, dim) of
     (Vertical, BoxHeight)  -> d
     (Horizontal, BoxWidth) -> d
     _                      -> 0
 
-axisBaseElemNaturalLength :: Axis -> BoxDim -> BaseElem -> TeXLength
+axisBaseElemNaturalLength :: Axis -> BoxDim -> BaseElem -> Length
 axisBaseElemNaturalLength ax dim e = case e of
-    ElemFontSelection _  -> TeXLength 0
-    ElemFontDefinition _ -> TeXLength 0
+    ElemFontSelection _  -> Length 0
+    ElemFontDefinition _ -> Length 0
     ElemBox r            -> naturalLength dim r
     ElemRule r           -> naturalLength dim r
     ElemKern k           -> spacerNaturalLength ax dim $ kernDimen k
 
-data VBoxElem = VBoxBaseElem BaseElem | BoxGlue (SetGlue TeXLength)
+data VBoxElem = VBoxBaseElem BaseElem | BoxGlue (SetGlue Length)
     deriving (Show)
 
-axisVBoxElemNaturalLength :: Axis -> BoxDim -> VBoxElem -> TeXLength
+axisVBoxElemNaturalLength :: Axis -> BoxDim -> VBoxElem -> Length
 axisVBoxElemNaturalLength ax dim e = case e of
     VBoxBaseElem be -> axisBaseElemNaturalLength ax dim be
     BoxGlue g       -> spacerNaturalLength ax dim $ glueDimen g

@@ -5,23 +5,20 @@ module HeX.Parse.Stream.Instance where
 import           HeXlude                   hiding (show)
 
 import           Control.Monad.Reader      (runReaderT)
-import           Data.Char                 (chr)
 import qualified Data.List.NonEmpty        as L.NE
 import           Data.Map.Strict           ((!?))
 import qualified Data.Map.Strict           as Map
-import qualified Data.Sequence             as Seq
-import qualified Data.Path                 as D.Path
 import           Path                      (Abs, File, Path)
 import qualified Path
 import qualified Path.IO
 import qualified Text.Megaparsec           as P
 import           Text.Show
 
-import           HeX.Categorise            (CharCode)
-import qualified HeX.Categorise            as Cat
+import qualified HeX.Config.Codes          as Code
 import qualified HeX.Config                as Conf
 import           HeX.Evaluate
 import qualified HeX.Lex                   as Lex
+import qualified HeX.Quantity              as Q
 import           HeX.Parse.Assignment
 import           HeX.Parse.AST
 import           HeX.Parse.Command
@@ -41,17 +38,17 @@ data ExpandedStream = ExpandedStream
 
 data TokenSource = TokenSource
     { sourcePath      :: Maybe (Path Abs File)
-    , sourceCharCodes :: Seq Cat.CharCode
+    , sourceCharCodes :: Seq Code.CharCode
     , sourceLexTokens :: Seq Lex.Token
     }
     deriving ( Show )
 
 instance Show ExpandedStream where
     show _ = "ExpandedStream {..}"
-newTokenSource :: Maybe (Path Abs File) -> Seq CharCode -> TokenSource
+newTokenSource :: Maybe (Path Abs File) -> Seq Code.CharCode -> TokenSource
 newTokenSource maybePath cs = TokenSource maybePath cs mempty
 
-newExpandStream :: Maybe (Path Abs File) -> Seq Cat.CharCode -> IO ExpandedStream
+newExpandStream :: Maybe (Path Abs File) -> Seq Code.CharCode -> IO ExpandedStream
 newExpandStream maybePath cs =
     do
     conf <- Conf.newConfig
@@ -147,7 +144,7 @@ instance TeXStream ExpandedStream where
 
 -- Expanding syntax commands.
 
-expandCSName :: Applicative t => Seq CharCode -> t Lex.Token
+expandCSName :: Applicative t => Seq Code.CharCode -> t Lex.Token
 expandCSName charToks =
     -- TODO: if control sequence doesn't exist, define one that holds
     -- '\relax'.
@@ -156,16 +153,19 @@ expandCSName charToks =
 expandString :: Conf.IntParamVal Conf.EscapeChar
              -> Lex.Token
              -> Seq Lex.Token
-expandString (Conf.IntParamVal escapeCharCode) tok =
+expandString (Conf.IntParamVal escapeCharCodeInt) tok =
     case tok of
         Lex.CharCatToken _ ->
             singleton tok
         Lex.ControlSequenceToken (Lex.ControlSequence s) ->
             charCodeAsMadeToken <$> addEscapeChar s
   where
-    addEscapeChar = if (escapeCharCode < 0) || (escapeCharCode > 255)
-        then id
-        else (chr escapeCharCode :<|)
+    addEscapeChar = case Code.fromTeXInt escapeCharCodeInt of
+        Nothing -> id
+        Just escapeCharCode ->
+            if (escapeCharCodeInt < 0) || (escapeCharCodeInt > 255)
+                then id
+                else (escapeCharCode :<|)
 
 expandMacro :: MonadErrorAnyOf e m '[ExpansionError]
             => MacroContents
@@ -190,7 +190,7 @@ expandMacro MacroContents{replacementTokens = (MacroText replaceToks)} args =
 -- Set the character code of each character token to its
 -- \uccode or \lccode value, if that value is non-zero.
 -- Don't change the category code.
-expandChangeCase :: (CharCode -> Conf.CaseChangeCode)
+expandChangeCase :: (Code.CharCode -> Conf.CaseChangeCode)
                  -> BalancedText
                  -> Seq Lex.Token
 expandChangeCase lookupChangeCaseCode (BalancedText caseToks) =
@@ -247,12 +247,12 @@ skipToIfDelim blk stream = go stream 1
 skipUpToCaseBlock
     :: forall e m
     .  TeXParseable ExpandedStream e m
-    => Int
+    => Q.TeXInt
     -> ExpandedStream
     -> m (Maybe ExpandedStream)
 skipUpToCaseBlock tgt stream = go stream 0 1
   where
-    go :: ExpandedStream -> Int -> Int -> m (Maybe ExpandedStream)
+    go :: ExpandedStream -> Q.TeXInt -> Int -> m (Maybe ExpandedStream)
     go _stream cur n
             | n == 1, cur == tgt =
                 -- If we are at top condition depth,
@@ -383,8 +383,7 @@ expandSyntaxCommand strm = \case
                 Nothing -> []
         absPath <- Path.IO.makeAbsolute texPath
         path <- runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)
-        newCodes <- liftIO (D.Path.readPathChars path)
-        let newSource = newTokenSource (Just absPath) (Seq.fromList newCodes)
+        newSource <- newTokenSource (Just absPath) <$> Code.readCharCodes path
         pure $ Just (resultStream{ streamTokenSources = newSource `L.NE.cons` streamTokenSources }, mempty)
     EndInputTok ->
         panic "Not implemented: syntax command EndInputTok"
