@@ -25,7 +25,7 @@ resolveToken csLookup Expanding t = case t of
     _ -> pure $ primTok $ UnexpandedTok t
 
 _cs :: [Char] -> Lex.ControlSequenceLike
-_cs = Lex.ControlSequenceProper . Lex.ControlSequence . toS
+_cs = Lex.ControlSequenceProper . Lex.mkControlSequence . toS
 
 syntaxTok :: SyntaxCommandHeadToken -> ResolvedToken
 syntaxTok = SyntaxCommandHeadToken

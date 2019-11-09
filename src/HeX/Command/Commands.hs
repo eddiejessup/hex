@@ -259,8 +259,8 @@ showLexTok :: Lex.Token -> Seq CharCode
 showLexTok = \case
     Lex.CharCatToken Lex.CharCat { Lex.char } ->
         singleton char
-    Lex.ControlSequenceToken (Lex.ControlSequence ccs) ->
-        singleton (Code.CharCode_ '\\') <> ccs
+    Lex.ControlSequenceToken Lex.ControlSequence { Lex.csChars } ->
+        singleton (Code.CharCode_ '\\') <> csChars
 
 showPrimTok :: HP.PrimitiveToken -> Seq CharCode
 showPrimTok = \case

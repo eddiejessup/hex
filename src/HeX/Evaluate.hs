@@ -4,7 +4,6 @@ import           HeXlude
 
 import           Control.Monad.Reader (MonadReader, ask, asks)
 import qualified Data.HashMap.Strict  as HashMap
-import qualified Data.Vector          as V
 
 import qualified TFM
 

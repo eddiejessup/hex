@@ -12,7 +12,6 @@ import           Data.Hashable        (Hashable)
 import qualified Data.Vector          as V
 import qualified Data.Map.Strict      as Map
 import qualified Data.HashMap.Strict  as HashMap
-import qualified Data.Path            as D.Path
 import qualified Data.Sequence        as Seq
 import qualified Data.Text            as Text
 import           Path                 (File, Path)
@@ -29,8 +28,7 @@ class TeXCode a where
 
 
 newtype CharCode = CharCode { codeWord :: Word8 }
-    deriving stock (Show, Generic)
-    deriving newtype (Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits, Hashable)
+    deriving newtype (Show, Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits, Hashable)
 
 codeInt :: CharCode -> Int
 codeInt = fromIntegral . codeWord
@@ -61,6 +59,18 @@ instance StringConv [Char] (Seq CharCode) where
 
 instance StringConv [Char] [CharCode] where
     strConv _ chars = CharCode . ascii <$> chars
+
+-- Helper.
+data SPInt = SP !Int !Int
+
+instance Hashable (Seq CharCode) where
+    hashWithSalt salt0 arr = finalise (foldl' step (SP salt0 0) arr)
+      where
+        finalise (SP salt len) = hashWithSalt salt len
+        step (SP salt len) x = SP (hashWithSalt salt x) (len + 1)
+
+-- instance Hashable (Seq CharCode) where
+--     hashWithSalt s x = hashWithSalt s (toList x)
 
 codesToS :: (StringConv [Char] a, Functor f, Foldable f) => f CharCode -> a
 codesToS cs = toS $ toList $ codeAsChar <$> cs
@@ -119,7 +129,7 @@ initialiseCharCodeHashMap val = HashMap.fromList $
     (\c -> (c, val c)) <$> [minBound..maxBound]
 
 initialiseCharCodeVector :: (CharCode -> v) -> V.Vector (Maybe v)
-initialiseCharCodeVector val = V.fromList $ (Just . val) <$> [minBound..maxBound]
+initialiseCharCodeVector val = V.fromList $ Just . val <$> [minBound..maxBound]
 
 
 
@@ -390,10 +400,10 @@ usableCatCodes :: CatCodes
 usableCatCodes = foldl' (\m (k, v) -> HashMap.insert k v m) newCatCodes extras
   where
     extras =
-      [ (CharCode_ '^', (CoreCatCode Superscript))
-      , (CharCode_ '{', (CoreCatCode BeginGroup))
-      , (CharCode_ '}', (CoreCatCode EndGroup))
-      , (CharCode_ '#', (CoreCatCode Parameter))
+      [ (CharCode_ '^', CoreCatCode Superscript)
+      , (CharCode_ '{', CoreCatCode BeginGroup)
+      , (CharCode_ '}', CoreCatCode EndGroup)
+      , (CharCode_ '#', CoreCatCode Parameter)
       ]
 
 catLookup :: CatCodes -> CharCode -> CatCode

@@ -150,7 +150,7 @@ expandCSName :: Applicative t => Seq Code.CharCode -> t Lex.Token
 expandCSName charToks =
     -- TODO: if control sequence doesn't exist, define one that holds
     -- '\relax'.
-    pure (Lex.ControlSequenceToken $ Lex.ControlSequence charToks)
+    pure (Lex.ControlSequenceToken $ Lex.mkControlSequence charToks)
 
 expandString :: Conf.IntParamVal Conf.EscapeChar
              -> Lex.Token
@@ -159,8 +159,8 @@ expandString (Conf.IntParamVal escapeCharCodeInt) tok =
     case tok of
         Lex.CharCatToken _ ->
             singleton tok
-        Lex.ControlSequenceToken (Lex.ControlSequence s) ->
-            charCodeAsMadeToken <$> addEscapeChar s
+        Lex.ControlSequenceToken Lex.ControlSequence { Lex.csChars } ->
+            charCodeAsMadeToken <$> addEscapeChar csChars
   where
     addEscapeChar = case Code.fromTeXInt escapeCharCodeInt of
         Nothing -> id

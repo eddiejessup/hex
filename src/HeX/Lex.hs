@@ -1,27 +1,51 @@
-{-# LANGUAGE DeriveAnyClass #-}
-
 module HeX.Lex where
 
 import           HeXlude
 
 import qualified Data.ByteString.Lazy as BS.L
 import           Data.Hashable        (Hashable)
-import qualified Data.Sequence        as Seq
 import qualified HeX.Categorise       as Cat
 import qualified HeX.Config.Codes     as Code
 
-newtype ControlSequence = ControlSequence (Seq Code.CharCode)
-    deriving stock (Show, Eq, Generic)
-    deriving newtype (Hashable)
+data ControlSequence
+    = ControlSequence
+        { csChars :: !(Seq Code.CharCode)
+        , csHash  :: !Int
+        }
+        deriving stock (Show, Eq)
+
+mkControlSequence :: Seq Code.CharCode -> ControlSequence
+mkControlSequence csChars = ControlSequence { csChars, csHash = hash csChars }
+
+instance Hashable ControlSequence where
+
+    hashWithSalt salt ControlSequence { csHash }
+        = salt + csHash
+
+    hash ControlSequence { csHash }
+        = csHash
 
 instance Readable ControlSequence where
-    describe (ControlSequence ccs) = "\\" <> toS ccs
+    describe ControlSequence { csChars } = "\\" <> toS csChars
 
 data ControlSequenceLike
-    = ActiveCharacter Code.CharCode
-    | ControlSequenceProper ControlSequence
-    deriving stock (Show, Eq, Generic)
-    deriving anyclass (Hashable)
+    = ActiveCharacter !Code.CharCode
+    | ControlSequenceProper !ControlSequence
+    deriving stock (Show, Eq)
+
+instance Hashable ControlSequenceLike where
+
+    hashWithSalt salt csLike = salt + case csLike of
+        ActiveCharacter c ->
+            Code.codeInt c
+        ControlSequenceProper cs ->
+            hashWithSalt salt cs
+
+    hash = \case
+        ActiveCharacter c ->
+            Code.codeInt c
+        ControlSequenceProper cs ->
+            hash cs
 
 data CharCat = CharCat
     { char :: Code.CharCode
@@ -76,7 +100,7 @@ chopBreak getNext = go Empty
             go (acc :|> c) csRest
 
 parToken :: Token
-parToken = ControlSequenceToken $ ControlSequence (toS ("par" :: [Char]))
+parToken = ControlSequenceToken (mkControlSequence (toS ("par" :: [Char])))
 
 extractToken
     :: (Code.CharCode -> Code.CatCode)
@@ -104,7 +128,7 @@ extractToken charToCat = go
                         Code.CoreCatCode Code.Space  -> SkippingBlanks
                         Code.CoreCatCode Code.Letter -> SkippingBlanks
                         _                          -> LineMiddle
-                pure ( ControlSequenceToken $ ControlSequence $ Cat.char <$> ctrlSeqCCs
+                pure ( ControlSequenceToken $ mkControlSequence (Cat.char <$> ctrlSeqCCs)
                      , nextState
                      , restPostCtrlSeq
                      )

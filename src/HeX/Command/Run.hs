@@ -126,12 +126,12 @@ benchLex
        )
     => BS.L.ByteString
     -> m ()
-benchLex xs0 = go (LineBegin, xs0)
+benchLex = go LineBegin
   where
-    go (lexState, xs) =
+    go lexState xs =
         case extractToken usableCatLookup lexState xs of
             Just (_, lexState1, xs1) ->
-                go (lexState1, xs1)
+                go lexState1 xs1
             Nothing ->
                 pure ()
 
@@ -140,36 +140,34 @@ runLex
        )
     => BS.L.ByteString
     -> m ()
-runLex _xs = go (LineBegin, _xs)
+runLex = go LineBegin
   where
-    go (lexState, xs) =
+    go lexState xs =
         case extractToken usableCatLookup lexState xs of
             Just (tok, lexState1, xs1) ->
                 do
                 print tok
-                go (lexState1, xs1)
+                go lexState1 xs1
             Nothing ->
                 pure ()
 
 -- Resolve.
 
--- runResolved
---     :: ( MonadIO m
---        )
---     => Seq Code.CharCode
---     -> m ()
--- runResolved _xs = extractAndPrint (LineBegin, _xs)
---   where
---     extractAndPrint (lexState, xs) =
---         case extractToken usableCatLookup lexState xs of
---             Just (tok, lexState', s') ->
---                 do
---                 print $ resolveToken lookupCS Expanding tok
---                 extractAndPrint (lexState', s')
---             Nothing ->
---                 pure ()
+runResolved
+    :: ( MonadIO m
+       )
+    => BS.L.ByteString
+    -> m ()
+runResolved = go LineBegin
+  where
+    go lexState xs =
+        case extractToken usableCatLookup lexState xs of
+            Just (tok, lexState1, xs1) ->
+                seq (resolveToken lookupCS Expanding tok) (go lexState1 xs1)
+            Nothing ->
+                pure ()
 
---     lookupCS cs = HMap.lookup cs defaultCSMap
+    lookupCS cs = HMap.lookup cs defaultCSMap
 
 -- Expand.
 

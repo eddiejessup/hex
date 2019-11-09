@@ -403,9 +403,9 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
 unsafeParseCharLike :: TeXParser s e m Code.CharCode
 unsafeParseCharLike = handleLex tokToCharLike
   where
-    tokToCharLike (Lex.CharCatToken CharCat{char = c}) =
+    tokToCharLike (Lex.CharCatToken CharCat { char = c }) =
         Just c
-    tokToCharLike (Lex.ControlSequenceToken (Lex.ControlSequence (c :<| Empty))) =
+    tokToCharLike (Lex.ControlSequenceToken Lex.ControlSequence { Lex.csChars = c :<| Empty }) =
         Just c
     tokToCharLike _ =
         Nothing
