@@ -20,6 +20,7 @@ data Mode
     | CommandMode
     | ParaListMode
     | ParaSetMode
+    | PageListMode
     | PageMode
     | DVIMode
     | RawDVIMode
@@ -52,6 +53,7 @@ options =
         Just "command"  -> CommandMode
         Just "paralist" -> ParaListMode
         Just "paraset"  -> ParaSetMode
+        Just "pagelist" -> PageListMode
         Just "page"     -> PageMode
         Just "dvi"      -> DVIMode
         Just "rawdvi"   -> RawDVIMode
@@ -84,10 +86,13 @@ main = do
             do
             cs <- fmap Code.CharCode . Seq.fromList . BS.unpack <$> liftIO BS.getContents
             pure (cs, Nothing)
-        [pathStr] -> do
+        [pathStr] ->
+            do
             path <- Path.IO.resolveFile' (toS pathStr)
             cs <- Code.readCharCodes path
             pure (cs, Just path)
+        _ ->
+            panic "Please specify a file to execute, or '-' to read from the standard-input stream"
     let
         input = if Amble `elem` flags
             then preamble <> inputRaw <> postamble
@@ -103,6 +108,7 @@ main = do
         CommandMode  -> makeStream >>= runCommand
         ParaListMode -> makeStream >>= runPara
         ParaSetMode  -> makeStream >>= runSetPara
+        PageListMode -> makeStream >>= runPageList
         PageMode     -> makeStream >>= runPages
         DVIMode      -> makeStream >>= runDVI
         RawDVIMode   -> makeStream >>= runDVIRaw

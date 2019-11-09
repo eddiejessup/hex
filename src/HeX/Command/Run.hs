@@ -57,6 +57,9 @@ newtype App a
 usableCatLookup :: Code.CharCode -> Code.CatCode
 usableCatLookup = Code.catLookup Code.usableCatCodes
 
+printLine :: (Readable a, Foldable t, Functor t) => t a -> IO ()
+printLine = putStrLn . describeLined
+
 -- Cat
 
 runCat
@@ -161,35 +164,33 @@ extractParaHList :: App HList
 extractParaHList =
     (\(ParaResult _ hList) -> hList) <$> extractPara Indent
 
-codesToParaList :: ExpandedStream -> IO HList
-codesToParaList s = runApp s extractParaHList
-
 runPara :: ExpandedStream -> IO ()
 runPara s =
     do
-    HList elemSeq <- codesToParaList s
+    HList elemSeq <- runApp s extractParaHList
     printLine elemSeq
 
 -- Paragraph boxes.
 
 codesToParaBoxes :: ExpandedStream -> IO (Seq (Box HBox))
 codesToParaBoxes s =
-    runApp s $
-        do
-        hList <- extractParaHList
-        readOnConfState (hListToParaLineBoxes hList)
-
+    runApp s $ extractParaHList <&> hListToParaLineBoxes >>= readOnConfState
 
 runSetPara :: ExpandedStream -> IO ()
 runSetPara s = codesToParaBoxes s >>= putStrLn . describeDoubleLined
 
 -- Pages list.
 
+runPageList :: ExpandedStream -> IO ()
+runPageList s =
+    do
+    MainVModeResult (VList vList) <- runApp s extractMainVList
+    printLine vList
+
+-- Pages boxes.
+
 codesToPages :: ExpandedStream -> IO (Seq Page)
 codesToPages s = runApp s extractBreakAndSetVList
-
-printLine :: (Readable a, Foldable t, Functor t) => t a -> IO ()
-printLine = putStrLn . describeLined
 
 runPages :: ExpandedStream -> IO ()
 runPages s = codesToPages s >>= printLine
