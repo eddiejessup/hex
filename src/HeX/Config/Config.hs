@@ -6,6 +6,9 @@ import           Control.Monad.IO.Class   (MonadIO)
 import           Control.Monad.Reader     (MonadReader, asks)
 import           Control.Monad.State.Lazy (MonadState, gets, modify)
 import qualified Data.Containers          as D.C
+import qualified Data.Sequences           as D.S
+import qualified Data.MonoTraversable     as D.MT
+
 import           Data.Map.Strict          (Map, (!?))
 import qualified Data.Map.Strict          as Map
 import           Data.Maybe               (fromMaybe)
@@ -345,6 +348,14 @@ scopedMapLookup
     -> Maybe (D.C.MapValue map)
 scopedMapLookup getMap k = scopedLookup (D.C.lookup k . getMap)
 
+scopedSequenceLookup
+    :: (D.S.IsSequence seq, D.MT.Element seq ~ Maybe v)
+    => (Scope -> seq)
+    -> D.S.Index seq
+    -> Config
+    -> Maybe v
+scopedSequenceLookup getSeq i = scopedLookup (\sc -> fromMaybe Nothing (D.S.index (getSeq sc) i))
+
 -- Font number (scoped).
 lookupCurrentFontNr :: Config -> Maybe TeXInt
 lookupCurrentFontNr = scopedLookup currentFontNr
@@ -405,7 +416,7 @@ setControlSequence = insertKey csMap $ \c _map -> c { csMap = _map }
 
 -- Codes.
 lookupCatCode :: Code.CharCode -> Config -> Code.CatCode
-lookupCatCode t conf = Code.catDefault $ scopedMapLookup catCodes t conf
+lookupCatCode t conf = fromMaybe Code.Invalid $ scopedMapLookup catCodes t conf
 
 lookupChangeCaseCode :: VDirection -> Code.CharCode -> Config -> Code.CaseChangeCode
 lookupChangeCaseCode d t conf =

@@ -10,5 +10,5 @@ extra-deps:
 extra-package-dbs: []
 
 build:
-  library-profiling: false
-  executable-profiling: false
+  library-profiling: true
+  executable-profiling: true

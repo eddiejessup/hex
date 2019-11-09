@@ -34,6 +34,7 @@ dependencies:
 - unordered-containers
 - witherable
 - pretty-simple
+- vector
 
 library:
   source-dirs: src
@@ -55,7 +56,17 @@ ghc-options:
 executables:
   hex:
     main:                HeX.hs
-    source-dirs:         app
+    source-dirs:         hex
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - hex
+
+  bench:
+    main:                Bench.hs
+    source-dirs:         bench
     ghc-options:
     - -threaded
     - -rtsopts

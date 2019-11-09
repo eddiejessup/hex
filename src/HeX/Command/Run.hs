@@ -10,6 +10,8 @@ import           Control.Monad.Trans.Maybe (MaybeT (..))
 import qualified Data.HashMap.Strict       as HMap
 import           Data.Path                 (PathError)
 import           Data.Byte                 (ByteError)
+import qualified Data.ByteString           as BS
+import qualified Data.ByteString.Lazy      as BS.L
 import           DVI.Document              (Instruction, parseInstructions)
 import           DVI.Encode                (encode)
 import           DVI.Instruction           (EncodableInstruction, DVIError)
@@ -44,7 +46,7 @@ type AppError =
              ]
 
 newtype App a
-    = App { unMonadBuild :: MaybeT (ExceptT AppError (StateT ExpandedStream IO)) a }
+    = App { unApp :: MaybeT (ExceptT AppError (StateT ExpandedStream IO)) a }
     deriving ( Functor
              , Applicative
              , Monad
@@ -62,54 +64,112 @@ printLine = putStrLn . describeLined
 
 -- Cat
 
-runCat
+-- benchCat
+--     :: ( MonadIO m
+--        )
+--     => Seq Code.CharCode
+--     -> m ()
+-- benchCat xs = case extractCharCat usableCatLookup xs of
+--     Just (_, xs') ->
+--         benchCat xs'
+--     Nothing ->
+--         pure ()
+
+benchCatBSLike
     :: ( MonadIO m
        )
     => Seq Code.CharCode
     -> m ()
-runCat xs = case extractCharCat usableCatLookup xs of
-    Just (cc, xs') ->
-        print cc >> runCat xs'
+benchCatBSLike xs = case extractCharCatBSLike usableCatLookup xs of
+    Just (_, xs') ->
+        benchCatBSLike xs'
     Nothing ->
         pure ()
 
+benchCatBS
+    :: ( MonadIO m
+       )
+    => BS.ByteString
+    -> m ()
+benchCatBS xs = case extractCharCatBS Code.usableCatCodes xs of
+    Just (_, xs1) ->
+        benchCatBS xs1
+    Nothing ->
+        pure ()
+
+benchCatBSL
+    :: ( MonadIO m
+       )
+    => BS.L.ByteString
+    -> m ()
+benchCatBSL xs = case extractCharCatBSL (Code.catLookup Code.usableCatCodes) xs of
+    Just (_, xs') ->
+        benchCatBSL xs'
+    Nothing ->
+        pure ()
+
+-- runCat
+--     :: ( MonadIO m
+--        )
+--     => Seq Code.CharCode
+--     -> m ()
+-- runCat xs = case extractCharCat usableCatLookup xs of
+--     Just (cc, xs') ->
+--         print cc >> runCat xs'
+--     Nothing ->
+--         pure ()
+
 -- Lex.
+
+benchLex
+    :: ( MonadIO m
+       )
+    => BS.L.ByteString
+    -> m ()
+benchLex xs0 = go (LineBegin, xs0)
+  where
+    go (lexState, xs) =
+        case extractToken usableCatLookup lexState xs of
+            Just (_, lexState1, xs1) ->
+                go (lexState1, xs1)
+            Nothing ->
+                pure ()
 
 runLex
     :: ( MonadIO m
        )
-    => Seq Code.CharCode
+    => BS.L.ByteString
     -> m ()
-runLex _xs = extractAndPrint (LineBegin, _xs)
+runLex _xs = go (LineBegin, _xs)
   where
-    extractAndPrint (lexState, xs) =
+    go (lexState, xs) =
         case extractToken usableCatLookup lexState xs of
-            Just (tok, lexState', s') ->
+            Just (tok, lexState1, xs1) ->
                 do
                 print tok
-                extractAndPrint (lexState', s')
+                go (lexState1, xs1)
             Nothing ->
                 pure ()
 
 -- Resolve.
 
-runResolved
-    :: ( MonadIO m
-       )
-    => Seq Code.CharCode
-    -> m ()
-runResolved _xs = extractAndPrint (LineBegin, _xs)
-  where
-    extractAndPrint (lexState, xs) =
-        case extractToken usableCatLookup lexState xs of
-            Just (tok, lexState', s') ->
-                do
-                print $ resolveToken lookupCS Expanding tok
-                extractAndPrint (lexState', s')
-            Nothing ->
-                pure ()
+-- runResolved
+--     :: ( MonadIO m
+--        )
+--     => Seq Code.CharCode
+--     -> m ()
+-- runResolved _xs = extractAndPrint (LineBegin, _xs)
+--   where
+--     extractAndPrint (lexState, xs) =
+--         case extractToken usableCatLookup lexState xs of
+--             Just (tok, lexState', s') ->
+--                 do
+--                 print $ resolveToken lookupCS Expanding tok
+--                 extractAndPrint (lexState', s')
+--             Nothing ->
+--                 pure ()
 
-    lookupCS cs = HMap.lookup cs defaultCSMap
+--     lookupCS cs = HMap.lookup cs defaultCSMap
 
 -- Expand.
 
@@ -151,7 +211,7 @@ runApp
     :: ExpandedStream
     -> App a
     -> IO a
-runApp s f = evalStateT (runExceptT $ runMaybeT $ unMonadBuild f) s >>= strEitherToIO
+runApp s f = evalStateT (runExceptT $ runMaybeT $ unApp f) s >>= strEitherToIO
   where
     strEitherToIO = \case
         Left err -> panic $ show err

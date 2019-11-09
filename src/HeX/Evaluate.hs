@@ -3,6 +3,8 @@ module HeX.Evaluate where
 import           HeXlude
 
 import           Control.Monad.Reader (MonadReader, ask, asks)
+import qualified Data.HashMap.Strict  as HashMap
+import qualified Data.Vector          as V
 
 import qualified TFM
 
@@ -135,8 +137,11 @@ instance TeXEvaluable AST.CodeTableRef where
         let
             lookupFrom :: TeXCode v => (Scope -> CharCodeMap v) -> Maybe TeXInt
             lookupFrom getMap = toTeXInt <$> scopedMapLookup getMap idxChar conf
+
+            lookupFromHashMap :: forall v. TeXCode v => (Scope -> HashMap.HashMap CharCode v) -> Maybe TeXInt
+            lookupFromHashMap getMap = toTeXInt <$> scopedMapLookup getMap idxChar conf
         note (throw (EvaluationError "err")) $ case q of
-            T.CategoryCodeType            -> lookupFrom catCodes
+            T.CategoryCodeType            -> lookupFromHashMap catCodes
             T.MathCodeType                -> lookupFrom mathCodes
             T.ChangeCaseCodeType Upward   -> lookupFrom uppercaseCodes
             T.ChangeCaseCodeType Downward -> lookupFrom lowercaseCodes

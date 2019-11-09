@@ -5,6 +5,7 @@ module HeX.Parse.Stream.Instance where
 import           HeXlude                   hiding (show)
 
 import           Control.Monad.Reader      (runReaderT)
+import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.List.NonEmpty        as L.NE
 import           Data.Map.Strict           ((!?))
 import qualified Data.Map.Strict           as Map
@@ -38,17 +39,18 @@ data ExpandedStream = ExpandedStream
 
 data TokenSource = TokenSource
     { sourcePath      :: Maybe (Path Abs File)
-    , sourceCharCodes :: Seq Code.CharCode
+    , sourceCharCodes :: BS.L.ByteString
     , sourceLexTokens :: Seq Lex.Token
     }
     deriving ( Show )
 
 instance Show ExpandedStream where
     show _ = "ExpandedStream {..}"
-newTokenSource :: Maybe (Path Abs File) -> Seq Code.CharCode -> TokenSource
+
+newTokenSource :: Maybe (Path Abs File) -> BS.L.ByteString -> TokenSource
 newTokenSource maybePath cs = TokenSource maybePath cs mempty
 
-newExpandStream :: Maybe (Path Abs File) -> Seq Code.CharCode -> IO ExpandedStream
+newExpandStream :: Maybe (Path Abs File) -> BS.L.ByteString -> IO ExpandedStream
 newExpandStream maybePath cs =
     do
     conf <- Conf.newConfig

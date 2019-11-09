@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveAnyClass  #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns    #-}
 
@@ -7,13 +6,17 @@ module HeX.Config.Codes where
 import           HeXlude
 
 import           Data.Ascii.Word8
-import           Data.Bits           (shiftL, shiftR, (.&.))
-import           Data.Hashable       (Hashable)
-import qualified Data.Map.Strict     as Map
-import qualified Data.Path           as D.Path
-import qualified Data.Sequence       as Seq
-import qualified Data.Text           as Text
-import           Path                (File, Path)
+import           Data.Bits            (shiftL, shiftR, (.&.))
+import qualified Data.ByteString.Lazy as BS.L
+import           Data.Hashable        (Hashable)
+import qualified Data.Vector          as V
+import qualified Data.Map.Strict      as Map
+import qualified Data.HashMap.Strict  as HashMap
+import qualified Data.Path            as D.Path
+import qualified Data.Sequence        as Seq
+import qualified Data.Text            as Text
+import           Path                 (File, Path)
+import qualified Path
 
 import           HeX.Quantity
 
@@ -27,8 +30,10 @@ class TeXCode a where
 
 newtype CharCode = CharCode { codeWord :: Word8 }
     deriving stock (Show, Generic)
-    deriving newtype (Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits)
-    deriving anyclass (Hashable)
+    deriving newtype (Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits, Hashable)
+
+codeInt :: CharCode -> Int
+codeInt = fromIntegral . codeWord
 
 instance Readable CharCode where
   describe c = "'" <> Text.singleton (codeAsChar c) <> "'"
@@ -60,8 +65,8 @@ instance StringConv [Char] [CharCode] where
 codesToS :: (StringConv [Char] a, Functor f, Foldable f) => f CharCode -> a
 codesToS cs = toS $ toList $ codeAsChar <$> cs
 
-readCharCodes :: MonadIO m => Path a File -> m (Seq CharCode)
-readCharCodes path = fmap CharCode <$> liftIO (D.Path.readPathBytes path)
+readCharCodes :: MonadIO m => Path a File -> m BS.L.ByteString
+readCharCodes path = liftIO (BS.L.readFile (Path.toFilePath path))
 
 pattern CharCode_ :: Char -> CharCode
 pattern CharCode_ c <- (codeAsChar -> c)
@@ -103,10 +108,18 @@ safeFromUpAF w
 
 
 type CharCodeMap v = Map CharCode v
+type CharCodeHashMap v = HashMap.HashMap CharCode v
 
 initialiseCharCodeMap :: (CharCode -> v) -> CharCodeMap v
 initialiseCharCodeMap val = Map.fromList $
     (\c -> (c, val c)) <$> [minBound..maxBound]
+
+initialiseCharCodeHashMap :: (CharCode -> v) -> CharCodeHashMap v
+initialiseCharCodeHashMap val = HashMap.fromList $
+    (\c -> (c, val c)) <$> [minBound..maxBound]
+
+initialiseCharCodeVector :: (CharCode -> v) -> V.Vector (Maybe v)
+initialiseCharCodeVector val = V.fromList $ (Just . val) <$> [minBound..maxBound]
 
 
 
@@ -358,10 +371,10 @@ instance TeXCode CatCode where
         15 -> Just Invalid
         _ -> Nothing
 
-type CatCodes = CharCodeMap CatCode
+type CatCodes = HashMap.HashMap CharCode CatCode
 
 newCatCodes :: CatCodes
-newCatCodes = initialiseCharCodeMap $ \case
+newCatCodes = initialiseCharCodeHashMap $ \case
     CharCode_ '\\'    -> Escape
     CharCode_ ' '     -> CoreCatCode Space
     CharCode_ '%'     -> Comment
@@ -374,17 +387,16 @@ newCatCodes = initialiseCharCodeMap $ \case
 
 -- Add useful extras beyond the technical defaults.
 usableCatCodes :: CatCodes
-usableCatCodes = foldl' (\m (k, v) -> Map.insert k v m) newCatCodes extras
+usableCatCodes = foldl' (\m (k, v) -> HashMap.insert k v m) newCatCodes extras
   where
     extras =
-      [ (CharCode_ '^', CoreCatCode Superscript)
-      , (CharCode_ '{', CoreCatCode BeginGroup)
-      , (CharCode_ '}', CoreCatCode EndGroup)
-      , (CharCode_ '#', CoreCatCode Parameter)
+      [ (CharCode_ '^', (CoreCatCode Superscript))
+      , (CharCode_ '{', (CoreCatCode BeginGroup))
+      , (CharCode_ '}', (CoreCatCode EndGroup))
+      , (CharCode_ '#', (CoreCatCode Parameter))
       ]
 
-catDefault :: Maybe CatCode -> CatCode
-catDefault = fromMaybe Invalid
-
 catLookup :: CatCodes -> CharCode -> CatCode
-catLookup m n = catDefault $ Map.lookup n m
+-- catLookup m n = Map.findWithDefault Invalid n m
+catLookup m n = HashMap.lookupDefault Invalid n m
+-- catLookup m (CharCode w) = fromMaybe Invalid $ fromMaybe (Just Invalid) (m V.!? (fromIntegral w))
