@@ -21,6 +21,7 @@ module HeXlude
     , traceText
     , mconcat
     , mconcatMap
+    , flap
 
     , HDirection(..)
     , VDirection(..)
@@ -73,6 +74,11 @@ mconcat = foldl' (<>) mempty
 
 mconcatMap :: (Monoid c, Foldable t, Functor t) => (a -> c) -> t a -> c
 mconcatMap f = mconcat . (f <$>)
+
+-- Stolen from relude.
+flap :: Functor f => f (a -> b) -> a -> f b
+flap ff x = (\f -> f x) <$> ff
+{-# INLINE flap #-}
 
 -- Sequence.
 

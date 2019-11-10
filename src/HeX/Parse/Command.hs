@@ -22,12 +22,12 @@ import qualified HeX.Parse.Token           as T
 
 parseInternalQuantity :: TeXParser s e m InternalQuantity
 parseInternalQuantity = PC.choice
-    [ InternalTeXIntQuantity <$> parseInternalTeXInt
-    , InternalLengthQuantity <$> parseInternalLength
-    , InternalGlueQuantity <$> parseInternalGlue
-    , InternalMathGlueQuantity <$> parseInternalMathGlue
-    , FontQuantity <$> parseFontRef
-    , TokenListVariableQuantity <$> parseTokenListVariable
+    [ InternalTeXIntQuantity    <$> parseHeaded headToParseInternalTeXInt
+    , InternalLengthQuantity    <$> parseHeaded headToParseInternalLength
+    , InternalGlueQuantity      <$> parseHeaded headToParseInternalGlue
+    , InternalMathGlueQuantity  <$> parseHeaded headToParseInternalMathGlue
+    , FontQuantity              <$> parseHeaded headToParseFontRef
+    , TokenListVariableQuantity <$> parseHeaded headToParseTokenListVariable
     ]
 
 parseStartParagraph :: TeXParser s e m Command
@@ -102,7 +102,7 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
 parseModeIndependentCommand :: TeXParser s e m ModeIndependentCommand
 parseModeIndependentCommand =
     PC.choice
-        [ Assign <$> parseAssignment
+        [ Assign <$> P.try parseAssignment
         , satisfyEquals T.RelaxTok $> Relax
         , satisfyEquals T.IgnoreSpacesTok
             >> skipOptionalSpaces $> IgnoreSpaces

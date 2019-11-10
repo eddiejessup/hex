@@ -34,7 +34,7 @@ data ExpandedStream = ExpandedStream
     , lexState           :: !Lex.LexState
     , expansionMode      :: !ExpansionMode
     , config             :: !Conf.Config
-    , skipState          :: !([ConditionBodyState])
+    , skipState          :: ![ConditionBodyState]
     }
 
 data TokenSource = TokenSource

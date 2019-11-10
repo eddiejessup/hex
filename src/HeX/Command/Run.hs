@@ -138,8 +138,8 @@ runResolved = go LineBegin
 -- Expand.
 
 runParseLoop
-    :: ( Show a
-       , Show s
+    :: ( Show s
+       -- , Show a
        , Show (P.Token s)
        )
     => SimpleParsecT s (ExceptT (Variant TeXStreamE) IO) a
@@ -148,10 +148,12 @@ runParseLoop
 runParseLoop p = go
   where
     go s = runExceptT (runSimpleRunParserT' p s) >>= \case
-        Left err ->
+        Left _ ->
             -- panic $ show err
             pure ()
         Right (s1, _) ->
+        -- Right (s1, c) ->
+            -- print c >> go s1
             go s1
 
 runExpand

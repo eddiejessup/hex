@@ -132,6 +132,13 @@ skipManySatisfied = PC.skipMany . skipSatisfied
 skipSatisfiedChunk :: Seq (P.Token s) -> TeXParser s e m ()
 skipSatisfiedChunk = foldr (satisfyEquals >>> (>>)) (pure ())
 
+choiceFlap :: P.MonadParsec e s m => [P.Token s -> m a] -> P.Token s -> m a
+choiceFlap headsToParsers t =
+    PC.choice (flap headsToParsers t)
+
+parseHeaded :: P.MonadParsec e s m => (P.Token s -> m a) -> m a
+parseHeaded = (P.anySingle >>=)
+
 -- Inhibition.
 
 inhibitExpansion, enableExpansion :: TeXStream s => s -> s
