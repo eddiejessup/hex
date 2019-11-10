@@ -132,10 +132,7 @@ skipManySatisfied = PC.skipMany . skipSatisfied
 skipSatisfiedChunk :: Seq (P.Token s) -> TeXParser s e m ()
 skipSatisfiedChunk = foldr (satisfyEquals >>> (>>)) (pure ())
 
--- Trying.
-
-tryChoice :: (Foldable f, Functor f, P.MonadParsec e s m) => f (m a) -> m a
-tryChoice ps = P.choice $ P.try <$> ps
+-- Inhibition.
 
 inhibitExpansion, enableExpansion :: TeXStream s => s -> s
 inhibitExpansion = setExpansion NotExpanding
@@ -298,7 +295,7 @@ parseParamDelims = BalancedText . Seq.fromList <$> manySatisfiedThen tokToDelimT
 
 maybeParseParametersFrom :: Digit -> TeXParser s e m MacroParameters
 maybeParseParametersFrom dig =
-    tryChoice [parseEndOfParams, parseParametersFrom]
+    PC.choice [parseEndOfParams, parseParametersFrom]
     -- Parse the left-brace that indicates the end of parameters.
   where
     parseEndOfParams = skipSatisfied (primTokHasCategory Code.BeginGroup)

@@ -3,13 +3,13 @@ module Main where
 import           HeXlude
 
 import           Control.Monad             (when)
-import qualified Data.ByteString           as BS
 import qualified Data.ByteString.Lazy      as BS.L
 import qualified System.Console.GetOpt     as Opt
 
 import qualified Data.Sequence             as Seq
 import qualified HeX.Config.Codes          as Code
 import           HeX.Command.Run
+import           HeX.Parse                 (newExpandStream)
 import qualified Path
 import qualified Path.IO
 
@@ -83,17 +83,6 @@ main = do
     (flags, args) <- ((toS <$>) <$> getArgs) >>= parseArgs
     when (Help `elem` flags) $ panic usage
 
-    -- inputRaw <- case args of
-    --     ["-"] ->
-    --         liftIO BS.getContents
-    --     [pathStr] ->
-    --         do
-    --         path <- Path.IO.resolveFile' (toS pathStr)
-    --         BS.readFile (Path.toFilePath path)
-    --     _ ->
-    --         panic "Please specify a file to execute, or '-' to read from the standard-input stream"
-    -- benchCatBS inputRaw
-
     inputRaw <- case args of
         ["-"] ->
             liftIO BS.L.getContents
@@ -103,16 +92,14 @@ main = do
             BS.L.readFile (Path.toFilePath path)
         _ ->
             panic "Please specify a file to execute, or '-' to read from the standard-input stream"
-    -- benchCatBSL inputRaw
-    benchLex inputRaw
 
-    -- inputRaw <- case args of
-    --     ["-"] ->
-    --         fmap Code.CharCode . Seq.fromList . BS.unpack <$> liftIO BS.getContents
-    --     [pathStr] ->
-    --         do
-    --         path <- Path.IO.resolveFile' (toS pathStr)
-    --         Code.readCharCodes path
-    --     _ ->
-    --         panic "Please specify a file to execute, or '-' to read from the standard-input stream"
-    -- benchCatBSLike inputRaw
+    -- runResolved inputRaw
+
+    stream <- newExpandStream Nothing inputRaw
+
+    -- benchFetchLex stream
+    -- benchTake stream
+    runCommand stream
+
+    -- runPageList stream
+    -- runPageList stream

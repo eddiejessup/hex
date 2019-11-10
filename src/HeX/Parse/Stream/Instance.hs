@@ -30,17 +30,17 @@ import           HeX.Parse.SyntaxCommand
 import           HeX.Parse.Token
 
 data ExpandedStream = ExpandedStream
-    { streamTokenSources :: L.NE.NonEmpty TokenSource
-    , lexState           :: Lex.LexState
-    , expansionMode      :: ExpansionMode
-    , config             :: Conf.Config
-    , skipState          :: [ConditionBodyState]
+    { streamTokenSources :: !(L.NE.NonEmpty TokenSource)
+    , lexState           :: !Lex.LexState
+    , expansionMode      :: !ExpansionMode
+    , config             :: !Conf.Config
+    , skipState          :: !([ConditionBodyState])
     }
 
 data TokenSource = TokenSource
-    { sourcePath      :: Maybe (Path Abs File)
-    , sourceCharCodes :: BS.L.ByteString
-    , sourceLexTokens :: Seq Lex.Token
+    { sourcePath      :: !(Maybe (Path Abs File))
+    , sourceCharCodes :: !BS.L.ByteString
+    , sourceLexTokens :: !(Seq Lex.Token)
     }
     deriving ( Show )
 

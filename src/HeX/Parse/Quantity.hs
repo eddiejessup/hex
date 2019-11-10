@@ -41,9 +41,10 @@ parseSigns = mconcat <$> parseOptionalSigns
         | otherwise = Nothing
 
 parseUnsignedTeXInt :: TeXParser s e m UnsignedTeXInt
-parseUnsignedTeXInt = tryChoice [ NormalTeXIntAsUTeXInt <$> parseNormalTeXInt
-                                , CoercedTeXInt <$> parseCoercedTeXInt
-                                ]
+parseUnsignedTeXInt = PC.choice
+    [ NormalTeXIntAsUTeXInt <$> parseNormalTeXInt
+    , CoercedTeXInt <$> parseCoercedTeXInt
+    ]
 
 digitsToTeXInt :: Int -> [Int] -> Q.TeXInt
 digitsToTeXInt base digs =
@@ -51,16 +52,16 @@ digitsToTeXInt base digs =
 
 parseNormalTeXInt :: TeXParser s e m NormalTeXInt
 parseNormalTeXInt =
-    tryChoice [ InternalTeXInt <$> parseInternalTeXInt
+    PC.choice [ InternalTeXInt <$> parseInternalTeXInt
               , TeXIntConstant <$> parseConstantInt <* skipOneOptionalSpace
               ]
   where
-    parseConstantInt = tryChoice
+    parseConstantInt = PC.choice
         [ parseConstant
         , Code.toTeXInt <$> parseCharacter ]
 
     parseConstant =
-        tryChoice
+        PC.choice
             [ digitsToTeXInt 10 <$> PC.some (satisfyThen decCharToInt)
             , digitsToTeXInt 16 <$> (skipSatisfied (matchOtherToken '"') *> PC.some (satisfyThen hexCharToInt))
             , digitsToTeXInt 8  <$> (skipSatisfied (matchOtherToken '\'') *> PC.some (satisfyThen octCharToInt))
@@ -91,7 +92,7 @@ octCharToInt = \case
         Nothing
 
 parseCoercedTeXInt :: TeXParser s e m CoercedTeXInt
-parseCoercedTeXInt = tryChoice [ InternalLengthAsInt <$> parseInternalLength
+parseCoercedTeXInt = PC.choice [ InternalLengthAsInt <$> parseInternalLength
                                , InternalGlueAsInt <$> parseInternalGlue
                                ]
 
@@ -100,12 +101,12 @@ parseLength :: TeXParser s e m Length
 parseLength = parseSigned parseUnsignedLength
 
 parseUnsignedLength :: TeXParser s e m UnsignedLength
-parseUnsignedLength = tryChoice [ NormalLengthAsULength <$> parseNormalLength
+parseUnsignedLength = PC.choice [ NormalLengthAsULength <$> parseNormalLength
                                 , CoercedLength <$> parseCoercedLength
                                 ]
 
 parseNormalLength :: TeXParser s e m NormalLength
-parseNormalLength = tryChoice [ LengthSemiConstant <$> parseFactor <*> parseUnit
+parseNormalLength = PC.choice [ LengthSemiConstant <$> parseFactor <*> parseUnit
                               , InternalLength <$> parseInternalLength
                               ]
 
@@ -114,7 +115,7 @@ parseFactor :: TeXParser s e m Factor
 -- NOTE: The parser order matters because TeX's grammar is ambiguous: '2.2'
 -- could be parsed as an integer constant, '2', followed by '.2'. We break the
 -- ambiguity by prioritising the rational constant parser.
-parseFactor = tryChoice
+parseFactor = PC.choice
     [ RationalConstant <$> parseRationalConstant
     , NormalTeXIntFactor <$> parseNormalTeXInt
     ]
@@ -136,20 +137,20 @@ parseRationalConstant = do
 
 parseUnit :: TeXParser s e m Unit
 parseUnit =
-    tryChoice [ skipOptionalSpaces *> (InternalUnit <$> parseInternalUnit)
+    PC.choice [ skipOptionalSpaces *> (InternalUnit <$> parseInternalUnit)
              , (PhysicalUnit <$> parseFrame <*> parsePhysicalUnitLit)
                    <* skipOneOptionalSpace
              ]
   where
     parseInternalUnit =
-        tryChoice [ parseInternalUnitLit <* skipOneOptionalSpace
+        PC.choice [ parseInternalUnitLit <* skipOneOptionalSpace
                   , InternalTeXIntUnit <$> parseInternalTeXInt
                   , InternalLengthUnit <$> parseInternalLength
                   , InternalGlueUnit <$> parseInternalGlue
                   ]
 
     parseInternalUnitLit =
-        tryChoice [ parseKeywordToValue (codesFromStr "em") Em, parseKeywordToValue (codesFromStr "ex") Ex ]
+        PC.choice [ parseKeywordToValue (codesFromStr "em") Em, parseKeywordToValue (codesFromStr "ex") Ex ]
 
     parseFrame = do
         isTrue <- parseOptionalKeyword (codesFromStr "true")
@@ -164,7 +165,7 @@ parseUnit =
     -- TODO: Should we omit the last try in such cases?
     -- NOTE: Can't trim number of 'try's naïvely, because they all suck up
     -- initial space, which would also need backtracking.
-    parsePhysicalUnitLit = tryChoice
+    parsePhysicalUnitLit = PC.choice
         [ parseKeywordToValue (codesFromStr "bp") Q.BigPoint
         , parseKeywordToValue (codesFromStr "cc") Q.Cicero
         , parseKeywordToValue (codesFromStr "cm") Q.Centimetre
@@ -185,7 +186,7 @@ parseMathLength = parseSigned parseUnsignedMathLength
 
 parseUnsignedMathLength :: TeXParser s e m UnsignedMathLength
 parseUnsignedMathLength =
-    tryChoice [ NormalMathLengthAsUMathLength <$> parseNormalMathLength
+    PC.choice [ NormalMathLengthAsUMathLength <$> parseNormalMathLength
               , CoercedMathLength <$> parseCoercedMathLength
               ]
 
@@ -195,7 +196,7 @@ parseNormalMathLength =
 
 parseMathUnit :: TeXParser s e m MathUnit
 parseMathUnit =
-    tryChoice [ skipKeyword (codesFromStr "mu") >> skipOneOptionalSpace $> Mu
+    PC.choice [ skipKeyword (codesFromStr "mu") >> skipOneOptionalSpace $> Mu
               , skipOptionalSpaces *> (InternalMathGlueAsUnit <$> parseInternalMathGlue)
               ]
 
@@ -204,18 +205,18 @@ parseCoercedMathLength = InternalMathGlueAsMathLength <$> parseInternalMathGlue
 
 -- Glue.
 parseGlue :: TeXParser s e m Glue
-parseGlue = tryChoice [ ExplicitGlue <$> parseLength <*> parseFlex (codesFromStr "plus") <*> parseFlex (codesFromStr "minus")
+parseGlue = PC.choice [ ExplicitGlue <$> parseLength <*> parseFlex (codesFromStr "plus") <*> parseFlex (codesFromStr "minus")
                       , InternalGlue <$> parseSigned parseInternalGlue
                       ]
 
 parseFlex :: [Code.CharCode] -> TeXParser s e m (Maybe Flex)
-parseFlex s = tryChoice [ Just <$> parsePresentFlex
+parseFlex s = PC.choice [ Just <$> parsePresentFlex
                         , skipOptionalSpaces $> Nothing
                         ]
   where
     parsePresentFlex =
         skipKeyword s
-        *> tryChoice [FiniteFlex <$> parseLength, FilFlex <$> parseFilLength]
+        *> PC.choice [FiniteFlex <$> parseLength, FilFlex <$> parseFilLength]
 
 parseFilLength :: TeXParser s e m FilLength
 parseFilLength =
@@ -228,18 +229,18 @@ parseFilLength =
 -- Math glue.
 parseMathGlue :: TeXParser s e m MathGlue
 parseMathGlue =
-    tryChoice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFlex (codesFromStr "plus") <*> parseMathFlex (codesFromStr "minus")
+    PC.choice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFlex (codesFromStr "plus") <*> parseMathFlex (codesFromStr "minus")
               , InternalMathGlue <$> parseSigns <*> parseInternalMathGlue
               ]
 
 parseMathFlex :: [Code.CharCode] -> TeXParser s e m (Maybe MathFlex)
-parseMathFlex s = tryChoice [ Just <$> parsePresentFlex
+parseMathFlex s = PC.choice [ Just <$> parsePresentFlex
                             , skipOptionalSpaces $> Nothing
                             ]
   where
     parsePresentFlex =
         skipKeyword s
-        *> tryChoice [ FiniteMathFlex <$> parseMathLength
+        *> PC.choice [ FiniteMathFlex <$> parseMathLength
                      , FilMathFlex <$> parseFilLength]
 
 -- Internal quantities.
@@ -248,7 +249,7 @@ parseQuantityVariable
     -> T.RegisterType
     -> TeXParser s e m (QuantVariable p)
 parseQuantityVariable getParam rTyp =
-    tryChoice [ ParamVar <$> satisfyThen getParam
+    PC.choice [ ParamVar <$> satisfyThen getParam
               , RegisterVar <$> parseShortRegRef
               , RegisterVar <$> parseRegRef
               ]
@@ -294,7 +295,7 @@ parseTokenListVariable = parseQuantityVariable getParam T.RegTokenList
 
 parseInternalTeXInt :: TeXParser s e m InternalTeXInt
 parseInternalTeXInt =
-    tryChoice [ InternalTeXIntVariable <$> parseTeXIntVariable
+    PC.choice [ InternalTeXIntVariable <$> parseTeXIntVariable
               , InternalSpecialTeXInt <$> parseSpecialTeXInt
               , InternalCodeTableRef <$> parseCodeTableRef
               , InternalCharToken <$> parseCharToken
@@ -337,7 +338,7 @@ parseFontCharRef = FontCharRef <$> satisfyThen tokToFontChar <*> parseFontRef
     tokToFontChar _                 = Nothing
 
 parseFontRef :: TeXParser s e m FontRef
-parseFontRef = tryChoice [ FontTokenRef <$> parseFontRefToken
+parseFontRef = PC.choice [ FontTokenRef <$> parseFontRefToken
                          , satisfyEquals T.FontTok $> CurrentFontRef
                          , FamilyMemberFontRef <$> parseFamilyMember
                          ]
@@ -357,7 +358,7 @@ parseFamilyMember = FamilyMember <$> satisfyThen tokToFontRange
 
 parseInternalLength :: TeXParser s e m InternalLength
 parseInternalLength =
-    tryChoice [ InternalLengthVariable <$> parseLengthVariable
+    PC.choice [ InternalLengthVariable <$> parseLengthVariable
               , InternalSpecialLength <$> parseSpecialLength
               , InternalFontDimensionRef <$> parseFontDimensionRef
               , InternalBoxDimensionRef <$> parseBoxDimensionRef
@@ -387,18 +388,18 @@ parseBoxDimension = satisfyThen $
         _ -> Nothing
 
 parseInternalGlue :: TeXParser s e m InternalGlue
-parseInternalGlue = tryChoice [ InternalGlueVariable <$> parseGlueVariable
+parseInternalGlue = PC.choice [ InternalGlueVariable <$> parseGlueVariable
                               , satisfyEquals T.LastGlueTok $> LastGlue
                               ]
 
 parseInternalMathGlue :: TeXParser s e m InternalMathGlue
 parseInternalMathGlue =
-    tryChoice [ InternalMathGlueVariable <$> parseMathGlueVariable
+    PC.choice [ InternalMathGlueVariable <$> parseMathGlueVariable
               , satisfyEquals T.LastGlueTok $> LastMathGlue
               ]
 
 parseBox :: TeXParser s e m Box
-parseBox = tryChoice [ parseRegisterBox
+parseBox = PC.choice [ parseRegisterBox
                      , satisfyEquals T.LastBoxTok $> LastBox
                      , parseVSplitBox
                      , parseExplicitBox
@@ -427,7 +428,7 @@ parseExplicitBox = do
     pure $ ExplicitBox bs bt
   where
     parseBoxSpecification =
-        tryChoice [ skipKeyword (codesFromStr "to") *> (To <$> parseLength)
+        PC.choice [ skipKeyword (codesFromStr "to") *> (To <$> parseLength)
                   , skipKeyword (codesFromStr "spread") *> (Spread <$> parseLength)
                   , pure Natural
                   ]

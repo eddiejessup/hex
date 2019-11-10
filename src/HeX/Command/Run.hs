@@ -10,7 +10,6 @@ import           Control.Monad.Trans.Maybe (MaybeT (..))
 import qualified Data.HashMap.Strict       as HMap
 import           Data.Path                 (PathError)
 import           Data.Byte                 (ByteError)
-import qualified Data.ByteString           as BS
 import qualified Data.ByteString.Lazy      as BS.L
 import           DVI.Document              (Instruction, parseInstructions)
 import           DVI.Encode                (encode)
@@ -29,10 +28,10 @@ import qualified HeX.Config.Codes          as Code
 import           HeX.Evaluate              (EvaluationError)
 import           HeX.Lex                   (LexState (..), extractToken)
 import           HeX.Parse                 (ExpandedStream, ExpansionMode (..),
-                                            IndentFlag (..), TeXStream,
+                                            IndentFlag (..),
                                             ExpansionError,
                                             defaultCSMap,
-                                            parseCommand, resolveToken,
+                                            parseCommand, resolveToken, fetchLexToken,
                                             TeXStreamE, runSimpleRunParserT',
                                             SimpleParsecT)
 
@@ -64,60 +63,27 @@ printLine = putStrLn . describeLined
 
 -- Cat
 
--- benchCat
---     :: ( MonadIO m
---        )
---     => Seq Code.CharCode
---     -> m ()
--- benchCat xs = case extractCharCat usableCatLookup xs of
---     Just (_, xs') ->
---         benchCat xs'
---     Nothing ->
---         pure ()
-
-benchCatBSLike
-    :: ( MonadIO m
-       )
-    => Seq Code.CharCode
-    -> m ()
-benchCatBSLike xs = case extractCharCatBSLike usableCatLookup xs of
-    Just (_, xs') ->
-        benchCatBSLike xs'
-    Nothing ->
-        pure ()
-
 benchCatBS
-    :: ( MonadIO m
-       )
-    => BS.ByteString
-    -> m ()
-benchCatBS xs = case extractCharCatBS Code.usableCatCodes xs of
-    Just (_, xs1) ->
-        benchCatBS xs1
-    Nothing ->
-        pure ()
-
-benchCatBSL
     :: ( MonadIO m
        )
     => BS.L.ByteString
     -> m ()
-benchCatBSL xs = case extractCharCatBSL (Code.catLookup Code.usableCatCodes) xs of
+benchCatBS xs = case extractCharCat (Code.catLookup Code.usableCatCodes) xs of
     Just (_, xs') ->
-        benchCatBSL xs'
+        benchCatBS xs'
     Nothing ->
         pure ()
 
--- runCat
---     :: ( MonadIO m
---        )
---     => Seq Code.CharCode
---     -> m ()
--- runCat xs = case extractCharCat usableCatLookup xs of
---     Just (cc, xs') ->
---         print cc >> runCat xs'
---     Nothing ->
---         pure ()
+runCat
+    :: ( MonadIO m
+       )
+    => BS.L.ByteString
+    -> m ()
+runCat xs = case extractCharCat usableCatLookup xs of
+    Just (cc, xs1) ->
+        print cc >> runCat xs1
+    Nothing ->
+        pure ()
 
 -- Lex.
 
@@ -163,7 +129,7 @@ runResolved = go LineBegin
     go lexState xs =
         case extractToken usableCatLookup lexState xs of
             Just (tok, lexState1, xs1) ->
-                seq (resolveToken lookupCS Expanding tok) (go lexState1 xs1)
+                print (resolveToken lookupCS Expanding tok) >> go lexState1 xs1
             Nothing ->
                 pure ()
 
@@ -172,23 +138,24 @@ runResolved = go LineBegin
 -- Expand.
 
 runParseLoop
-    :: ( TeXStream s
-       , Show a
+    :: ( Show a
        , Show s
        , Show (P.Token s)
        )
     => SimpleParsecT s (ExceptT (Variant TeXStreamE) IO) a
     -> s
     -> IO ()
-runParseLoop p s = runExceptT (runSimpleRunParserT' p s) >>= \case
-    Left err ->
-        panic $ show err
-    Right (newS, tok) ->
-        print tok >> runParseLoop p newS
+runParseLoop p = go
+  where
+    go s = runExceptT (runSimpleRunParserT' p s) >>= \case
+        Left err ->
+            -- panic $ show err
+            pure ()
+        Right (s1, _) ->
+            go s1
 
 runExpand
-    :: ( TeXStream s
-       , Show s
+    :: ( Show s
        , Show (P.Token s)
        , P.Stream s (ExceptT (Variant TeXStreamE) IO)
        )
@@ -202,6 +169,21 @@ runCommand
     :: ExpandedStream
     -> IO ()
 runCommand = runParseLoop parseCommand
+
+benchTake
+    :: ExpandedStream
+    -> IO ()
+benchTake s = runExceptT (P.take1_ s) >>= \case
+    Left (err :: AppError) -> panic $ show err
+    Right Nothing -> pure ()
+    Right (Just (_, s1)) -> benchTake s1
+
+benchFetchLex
+    :: ExpandedStream
+    -> IO ()
+benchFetchLex s = case fetchLexToken s of
+    Nothing -> pure ()
+    Just (_, s1) -> benchFetchLex s1
 
 -- Generic.
 

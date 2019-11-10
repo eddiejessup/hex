@@ -227,14 +227,14 @@ loadFont (HP.TeXFilePath path) fontSpec = do
     info@FontInfo{ fontMetrics } <- readOnState $ findFilePath (WithImplicitExtension "tfm") [] path >>= readFontInfo
     let designSizeSP = TFM.designSizeSP fontMetrics
     scaleRatio <- readOnState $ evaluateFontSpecification designSizeSP fontSpec
-    liftIO
-        $  putText
-        $  "Loading font: "
-        <> show path
-        <> ", with design size: "
-        <> show designSizeSP
-        <> ", with scale ratio: "
-        <> show scaleRatio
+    -- liftIO
+    --     $  putText
+    --     $  "Loading font: "
+    --     <> show path
+    --     <> ", with design size: "
+    --     <> show designSizeSP
+    --     <> ", with scale ratio: "
+    --     <> show scaleRatio
     fNr <- addFont info
     -- TODO: Improve mapping of name and path.
     pure B.FontDefinition { B.fontDefChecksum    = TFM.checksum fontMetrics

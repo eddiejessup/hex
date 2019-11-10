@@ -163,7 +163,7 @@ extractToken charToCat = go
             (Code.CoreCatCode cc, _) ->
                 pure (CharCatToken $ CharCat n1 cc, LineMiddle, rest)
 
-    getCC = Cat.extractCharCatBSL charToCat
+    getCC = Cat.extractCharCat charToCat
 
     getLetterCC xs =
         getCC xs >>= \case

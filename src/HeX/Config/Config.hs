@@ -1,3 +1,5 @@
+{-# LANGUAGE StrictData #-}
+
 module HeX.Config.Config where
 
 import           HeXlude

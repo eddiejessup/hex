@@ -111,7 +111,7 @@ handleModeIndependentCommand = \case
                         pure (Just boxElem, fontRefTok)
                     oth ->
                         panic $ "Not implemented: DefineControlSequence target " <> show oth
-                liftIO $ putText $ "Setting CS " <> show cs <> " to token: " <> show newCSTok <> (if global == HP.Global then " globally" else " locally")
+                -- liftIO $ putText $ "Setting CS " <> show cs <> " to token: " <> show newCSTok <> (if global == HP.Global then " globally" else " locally")
                 modConfState $ setControlSequence cs newCSTok global
                 pure $ maybe DoNothing AddElem maybeElem
             HP.SetVariable ass ->
@@ -158,10 +158,10 @@ handleModeIndependentCommand = \case
                 do
                 eIdx <- evalOnConfState idx
                 eVal <- evalOnConfState val
-                liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
-                liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
+                -- liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
+                -- liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
                 idxChar <- note (throw $ ConfigError $ "Invalid character code index: " <> show eIdx) (fromTeXInt eIdx)
-                liftIO $ putText $ "Setting " <> show codeType <> "@" <> show eIdx <> " (" <> show idxChar <> ") to " <> show eVal
+                -- liftIO $ putText $ "Setting " <> show codeType <> "@" <> show eIdx <> " (" <> show idxChar <> ") to " <> show eVal
                 HP.runConfState $ updateCharCodeMap codeType idxChar eVal global
                 pure DoNothing
             HP.SelectFont fNr ->

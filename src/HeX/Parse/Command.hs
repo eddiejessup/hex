@@ -21,7 +21,7 @@ import qualified HeX.Parse.Token           as T
 -- Parse.
 
 parseInternalQuantity :: TeXParser s e m InternalQuantity
-parseInternalQuantity = tryChoice
+parseInternalQuantity = PC.choice
     [ InternalTeXIntQuantity <$> parseInternalTeXInt
     , InternalLengthQuantity <$> parseInternalLength
     , InternalGlueQuantity <$> parseInternalGlue
@@ -55,10 +55,11 @@ parseFetchedBoxRef tgtAxis = do
     pure $ FetchedBoxRef n fetchMode
 
 parseBoxOrRule :: TeXParser s e m BoxOrRule
-parseBoxOrRule = tryChoice [ BoxOrRuleBox <$> parseBox
-                          , BoxOrRuleRule Horizontal <$> parseModedRule Horizontal
-                          , BoxOrRuleRule Vertical <$> parseModedRule Vertical
-                          ]
+parseBoxOrRule = PC.choice
+    [ BoxOrRuleBox <$> parseBox
+    , BoxOrRuleRule Horizontal <$> parseModedRule Horizontal
+    , BoxOrRuleRule Vertical <$> parseModedRule Vertical
+    ]
 
 parseModedRule :: Axis -> TeXParser s e m Rule
 parseModedRule axis =
@@ -74,7 +75,7 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
     parseRuleSpecification rule =
         do
         skipOptionalSpaces
-        PC.optional $ tryChoice
+        PC.optional $ PC.choice
             [ parseRuleWidth rule
             , parseRuleHeight rule
             , parseRuleDepth rule
@@ -100,10 +101,9 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
 
 parseModeIndependentCommand :: TeXParser s e m ModeIndependentCommand
 parseModeIndependentCommand =
-    tryChoice
+    PC.choice
         [ Assign <$> parseAssignment
-        , satisfyEquals T.RelaxTok
-            $> Relax
+        , satisfyEquals T.RelaxTok $> Relax
         , satisfyEquals T.IgnoreSpacesTok
             >> skipOptionalSpaces $> IgnoreSpaces
         , satisfyEquals T.PenaltyTok
@@ -157,7 +157,7 @@ parseRemoveItem =
 
 parseModedGlue :: Axis -> TeXParser s e m Glue
 parseModedGlue axis =
-    tryChoice
+    PC.choice
         [ parseSpecifiedGlue
         , parsePresetGlue T.Fil
         , parsePresetGlue T.Fill
@@ -250,7 +250,7 @@ parseAddShiftedBox = AddBox <$> parsePlacement <*> parseBox
 
 parseCommand :: TeXParser s e m Command
 parseCommand =
-    tryChoice
+    PC.choice
         [ ModeIndependentCommand <$> parseModeIndependentCommand
         , satisfyEquals T.ShowTokenTok
             >> (ShowToken <$> parseLexToken)
@@ -269,8 +269,7 @@ parseCommand =
         , skipSatisfied isSpace
             $> AddSpace
         , parseStartParagraph
-        , satisfyEquals T.EndParagraphTok
-            $> EndParagraph
+        , satisfyEquals T.EndParagraphTok $> EndParagraph
           -- , parseAlign mode
 
         , HModeCommand <$> parseHModeCommand
@@ -278,7 +277,7 @@ parseCommand =
         ]
   where
     parseHModeCommand =
-        tryChoice
+        PC.choice
             [ satisfyEquals T.ControlSpaceTok $> AddControlSpace
             , AddCharacter <$> parseCharCodeRef
             , parseAddAccentedCharacter
@@ -293,7 +292,7 @@ parseCommand =
             ]
 
     parseVModeCommand =
-        tryChoice
+        PC.choice
             [ satisfyEquals T.EndTok $> End
             , satisfyEquals T.DumpTok $> Dump
             , AddVGlue <$> parseModedGlue Vertical
@@ -304,7 +303,7 @@ parseCommand =
 
 parseCharCodeRef :: TeXParser s e m CharCodeRef
 parseCharCodeRef =
-    tryChoice [ parseAddCharacterCharOrTok, parseAddControlCharacter ]
+    PC.choice [ parseAddCharacterCharOrTok, parseAddControlCharacter ]
   where
     parseAddCharacterCharOrTok = satisfyThen $
         \case

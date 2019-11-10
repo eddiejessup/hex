@@ -22,7 +22,7 @@ import qualified HeX.Parse.Token           as T
 import qualified HeX.Quantity              as Q
 
 parseAssignment :: TeXParser s e m Assignment
-parseAssignment = tryChoice [parseDefineMacro, parseNonMacroAssignment]
+parseAssignment = PC.choice [parseDefineMacro, parseNonMacroAssignment]
 
 -- Parse Macro.
 parseDefineMacro :: TeXParser s e m Assignment
@@ -68,28 +68,28 @@ parseNonMacroAssignment :: TeXParser s e m Assignment
 parseNonMacroAssignment =
     flip Assignment <$> parseNonMacroGlobal <*> parseNonMacroAssignmentBody
   where
-    parseNonMacroAssignmentBody =
-        tryChoice [ AssignCode <$> parseCodeAssignment
-                  , ModifyVariable <$> parseVariableModification
-                  , SetVariable <$> parseVariableAssignment
-                  , parseLet
-                  , parseFutureLet
-                  , parseShortMacroAssignment
-                  , SelectFont <$> parseFontRefToken
-                  , parseSetFamilyMember
-                  , parseSetParShape
-                  , parseReadToControlSequence
-                  , parseSetBoxRegister
-                  , parseNewFontAssignment
-                  , parseSetFontDimension
-                  , parseSetFontChar
-                  , satisfyEquals T.HyphenationTok
-                        >> (SetHyphenation <$> parseGeneralText)
-                  , satisfyEquals T.HyphenationPatternsTok
-                        >> (SetHyphenationPatterns <$> parseGeneralText)
-                  , parseSetBoxDimension
-                  , SetInteractionMode <$> satisfyThen tokToInteractionMode
-                  ]
+    parseNonMacroAssignmentBody = PC.choice
+        [ AssignCode <$> parseCodeAssignment
+        , ModifyVariable <$> parseVariableModification
+        , SetVariable <$> parseVariableAssignment
+        , parseLet
+        , parseFutureLet
+        , parseShortMacroAssignment
+        , SelectFont <$> parseFontRefToken
+        , parseSetFamilyMember
+        , parseSetParShape
+        , parseReadToControlSequence
+        , parseSetBoxRegister
+        , parseNewFontAssignment
+        , parseSetFontDimension
+        , parseSetFontChar
+        , satisfyEquals T.HyphenationTok
+              >> (SetHyphenation <$> parseGeneralText)
+        , satisfyEquals T.HyphenationPatternsTok
+              >> (SetHyphenationPatterns <$> parseGeneralText)
+        , parseSetBoxDimension
+        , SetInteractionMode <$> satisfyThen tokToInteractionMode
+        ]
 
     tokToInteractionMode (T.InteractionModeTok m) = Just m
     tokToInteractionMode _                        = Nothing
@@ -135,32 +135,34 @@ parseVarEqVal (varParser, valParser) f =
 
 parseVariableAssignment :: TeXParser s e m VariableAssignment
 parseVariableAssignment =
-    tryChoice [ parseVarEqVal numVarValPair TeXIntVariableAssignment
-              , parseVarEqVal lenVarValPair LengthVariableAssignment
-              , parseVarEqVal glueVarValPair GlueVariableAssignment
-              , parseVarEqVal mathGlueVarValPair MathGlueVariableAssignment
-              , parseVarEqVal tokenListVarValPair TokenListVariableAssignment
-              , TokenListVariableAssignment <$> parseTokenListVariable
-                    <* skipFiller
-                    <*> (TokenListAssignmentVar <$> parseTokenListVariable)
-                -- Unofficial variable assignments, separated because of being
-                -- global in the TeXbook.
-              , parseVarEqVal (parseSpecialTeXInt, parseTeXInt)
-                              SpecialTeXIntVariableAssignment
-              , parseVarEqVal (parseSpecialLength, parseLength)
-                              SpecialLengthVariableAssignment
-              ]
+    PC.choice
+        [ parseVarEqVal numVarValPair TeXIntVariableAssignment
+        , parseVarEqVal lenVarValPair LengthVariableAssignment
+        , parseVarEqVal glueVarValPair GlueVariableAssignment
+        , parseVarEqVal mathGlueVarValPair MathGlueVariableAssignment
+        , parseVarEqVal tokenListVarValPair TokenListVariableAssignment
+        , TokenListVariableAssignment <$> parseTokenListVariable
+              <* skipFiller
+              <*> (TokenListAssignmentVar <$> parseTokenListVariable)
+          -- Unofficial variable assignments, separated because of being
+          -- global in the TeXbook.
+        , parseVarEqVal (parseSpecialTeXInt, parseTeXInt)
+                        SpecialTeXIntVariableAssignment
+        , parseVarEqVal (parseSpecialLength, parseLength)
+                        SpecialLengthVariableAssignment
+        ]
 
 parseVariableModification :: forall s e m. TeXParser s e m VariableModification
 parseVariableModification =
-    tryChoice [ parseAdvanceVar
-              , parseScaleVar
-              ]
+    PC.choice
+        [ parseAdvanceVar
+        , parseScaleVar
+        ]
   where
     parseAdvanceVar =
         do
         satisfyEquals T.AdvanceVarTok
-        tryChoice
+        PC.choice
             [ parseModVarArgs numVarValPair AdvanceTeXIntVariable
             , parseModVarArgs lenVarValPair AdvanceLengthVariable
             , parseModVarArgs glueVarValPair AdvanceGlueVariable
@@ -182,14 +184,15 @@ parseVariableModification =
         skipOptionalBy
         f var <$> valParser
 
-    skipOptionalBy = tryChoice [void (parseOptionalKeyword (codesFromStr "by")), skipOptionalSpaces]
+    skipOptionalBy = PC.choice [void (parseOptionalKeyword (codesFromStr "by")), skipOptionalSpaces]
 
     parseNumericVariable =
-        tryChoice [ TeXIntNumericVariable <$> parseTeXIntVariable
-                  , LengthNumericVariable <$> parseLengthVariable
-                  , GlueNumericVariable <$> parseGlueVariable
-                  , MathGlueNumericVariable <$> parseMathGlueVariable
-                  ]
+        PC.choice
+            [ TeXIntNumericVariable <$> parseTeXIntVariable
+            , LengthNumericVariable <$> parseLengthVariable
+            , GlueNumericVariable <$> parseGlueVariable
+            , MathGlueNumericVariable <$> parseMathGlueVariable
+            ]
 
 parseCodeAssignment :: TeXParser s e m CodeAssignment
 parseCodeAssignment =
@@ -281,10 +284,11 @@ parseNewFontAssignment = do
     pure $ DefineControlSequence cs (FontTarget fontSpec fname)
   where
     parseFontSpecification =
-        tryChoice [ parseFontSpecAt
-                  , parseFontSpecScaled
-                  , skipOptionalSpaces $> NaturalFont
-                  ]
+        PC.choice
+            [ parseFontSpecAt
+            , parseFontSpecScaled
+            , skipOptionalSpaces $> NaturalFont
+            ]
 
     parseFontSpecAt = skipKeyword (codesFromStr "at") >> (FontAt <$> parseLength)
 

@@ -301,15 +301,11 @@ extractPara
     => HP.IndentFlag
     -> m ParaResult
 extractPara indentFlag =
-    do
-    bx <- BL.HList <$> case indentFlag of
+    runCommandLoop handleCommandInParaMode =<< BL.HList <$> case indentFlag of
         HP.Indent ->
-            do
-            indentElem <- readOnConfState (asks parIndentBox)
-            pure (Seq.singleton indentElem)
+            Seq.singleton <$> readOnConfState (asks parIndentBox)
         HP.DoNotIndent ->
             pure mempty
-    runCommandLoop handleCommandInParaMode bx
 
 extractParaFromVMode
     :: ( MonadErrorAnyOf e m
