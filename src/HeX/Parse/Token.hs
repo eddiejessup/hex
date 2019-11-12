@@ -193,7 +193,7 @@ data AssignPrefixTok
     = LongTok
     | OuterTok
     | GlobalTok
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 data IndentFlag
     = Indent

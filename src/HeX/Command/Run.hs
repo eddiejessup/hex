@@ -6,7 +6,6 @@ import           HeXlude
 
 import           Control.Monad.Except      (runExceptT)
 import           Control.Monad.State.Lazy  (evalStateT)
-import           Control.Monad.Trans.Maybe (MaybeT (..))
 import qualified Data.HashMap.Strict       as HMap
 import           Data.Path                 (PathError)
 import           Data.Byte                 (ByteError)
@@ -45,14 +44,13 @@ type AppError =
              ]
 
 newtype App a
-    = App { unApp :: MaybeT (ExceptT AppError (StateT ExpandedStream IO)) a }
+    = App { unApp :: ExceptT AppError (StateT ExpandedStream IO) a }
     deriving ( Functor
              , Applicative
              , Monad
              , MonadState ExpandedStream
              , MonadIO
              , MonadError AppError
-             , Alternative
              )
 
 usableCatLookup :: Code.CharCode -> Code.CatCode
@@ -139,7 +137,7 @@ runResolved = go LineBegin
 
 runParseLoop
     :: ( Show s
-       -- , Show a
+       , Show a
        , Show (P.Token s)
        )
     => SimpleParsecT s (ExceptT (Variant TeXStreamE) IO) a
@@ -148,12 +146,12 @@ runParseLoop
 runParseLoop p = go
   where
     go s = runExceptT (runSimpleRunParserT' p s) >>= \case
-        Left _ ->
-            -- panic $ show err
-            pure ()
-        Right (s1, _) ->
-        -- Right (s1, c) ->
-            -- print c >> go s1
+        Left err ->
+            panic $ show err
+            -- pure ()
+        Right (s1, c) ->
+            do
+            print c
             go s1
 
 runExpand
@@ -193,12 +191,11 @@ runApp
     :: ExpandedStream
     -> App a
     -> IO a
-runApp s f = evalStateT (runExceptT $ runMaybeT $ unApp f) s >>= strEitherToIO
+runApp s f = evalStateT (runExceptT $ unApp f) s >>= strEitherToIO
   where
     strEitherToIO = \case
         Left err -> panic $ show err
-        Right Nothing -> panic "Unexpectedly ran out of input"
-        Right (Just v) -> pure v
+        Right v -> pure v
 
 -- Paragraph list.
 

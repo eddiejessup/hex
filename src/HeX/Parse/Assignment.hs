@@ -22,59 +22,48 @@ import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token           as T
 import qualified HeX.Quantity              as Q
 
-parseAssignment :: TeXParser s e m Assignment
-parseAssignment =
-    do
-    -- Macro prefixes.
-    prefixes <- PC.many $ satisfyThen $ \case
-        T.AssignPrefixTok t -> Just t
-        _ -> Nothing
-    P.anySingle >>= choiceFlap
-        [ headToParseMacroAssignment prefixes
-        , headToParseNonMacroAssignment
-        ]
+headToParseAssignment :: T.PrimitiveToken -> TeXParser s e m Assignment
+headToParseAssignment = go []
+  where
+    go prefixes = \case
+        T.AssignPrefixTok prefix ->
+            P.anySingle >>= go (prefix : prefixes)
+        T.DefineMacroTok defGlobalType defExpandType ->
+            do
+            -- Macro's name.
+            cs <- parseCSName
+            -- Parameter text.
+            (preParamTokens, parameters) <- parseParamText
 
-headToParseNonMacroAssignment :: TeXParseable s e m => T.PrimitiveToken -> SimpleParsecT s m Assignment
-headToParseNonMacroAssignment t =
-    do
-    -- TODO, HACK:
-    let global = T.Local
-    body <- parseNonMacroAssignmentBody t
-    pure $ Assignment { body, global }
+            when (defExpandType == T.ExpandDef) $ panic "Not implemented: ExpandDef"
 
-headToParseMacroAssignment :: TeXParseable s e m => [T.AssignPrefixTok] -> T.PrimitiveToken -> SimpleParsecT s m Assignment
-headToParseMacroAssignment prefixes = \case
-    T.DefineMacroTok defGlobalType defExpandType ->
-        do
-        -- Macro's name.
-        cs <- parseCSName
-        -- Parameter text.
-        (preParamTokens, parameters) <- parseParamText
+            -- Replacement text.
+            replacementTokens <- parseMacroText
+            let tgt = T.MacroContents { T.preParamTokens = preParamTokens
+                                      , T.parameters = parameters
+                                      , T.replacementTokens = replacementTokens
+                                      , T.long = T.LongTok `elem` prefixes
+                                      , T.outer = T.OuterTok `elem` prefixes
+                                      }
+            let body = DefineControlSequence cs (MacroTarget tgt)
+            pure $ Assignment
+                { body
+                , global = if defGlobalType == T.Global || T.GlobalTok `elem` prefixes
+                                then T.Global
+                                else T.Local
+                }
+        t ->
+            do
+            body <- headToParseNonMacroAssignmentBody t
+            pure $ Assignment
+                { body
+                , global = if T.GlobalTok `elem` prefixes
+                                then T.Global
+                                else T.Local
+                }
 
-        when (defExpandType == T.ExpandDef) $ panic "Not implemented: ExpandDef"
-
-        -- Replacement text.
-        replacementTokens <- parseMacroText
-        let tgt = T.MacroContents { T.preParamTokens = preParamTokens
-                                  , T.parameters = parameters
-                                  , T.replacementTokens = replacementTokens
-                                  , T.long = T.LongTok `elem` prefixes
-                                  , T.outer = T.OuterTok `elem` prefixes
-                                  }
-        pure Assignment { body   = DefineControlSequence cs (MacroTarget tgt)
-                        , global = case defGlobalType of
-                            T.Global ->
-                                T.Global
-                            T.Local | T.GlobalTok `elem` prefixes ->
-                                T.Global
-                            _ ->
-                                T.Local
-                        }
-    t ->
-        P.failure (Just (P.Tokens (t :| []))) (Set.singleton (P.Label ('M' :| "acro assignment")))
-
-parseNonMacroAssignmentBody :: forall s e m. TeXParseable s e m => T.PrimitiveToken -> SimpleParsecT s m AssignmentBody
-parseNonMacroAssignmentBody =
+headToParseNonMacroAssignmentBody :: forall s e m. TeXParseable s e m => T.PrimitiveToken -> SimpleParsecT s m AssignmentBody
+headToParseNonMacroAssignmentBody =
     choiceFlap
         [ \case
             T.HyphenationTok ->
@@ -242,7 +231,7 @@ parseNonMacroAssignmentBody =
             uncurry SetBoxRegister <$> parseVarSepVal
                 parseEightBitTeXInt
                 skipOptionalEquals
-                (skipFiller >> parseBox)
+                (skipFiller >> parseHeaded headToParseBox)
         _ ->
             empty
 

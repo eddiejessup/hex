@@ -542,6 +542,12 @@ liftLexPred f = \case
 skipOneOptionalSpace :: TeXParser s e m ()
 skipOneOptionalSpace = skipOneOptionalSatisfied isSpace
 
+tryChoice
+    :: (Foldable f, Functor f, P.MonadParsec e s m)
+    => f (m a)
+    -> m a
+tryChoice = PC.choice . (P.try <$>)
+
 -- TODO: Maybe other things can act as left braces.
 skipLeftBrace :: TeXParser s e m ()
 skipLeftBrace = skipSatisfied $ primTokHasCategory Code.BeginGroup
@@ -559,9 +565,6 @@ skipKeyword s = skipOptionalSpaces
 
 parseOptionalKeyword :: [Code.CharCode] -> TeXParser s e m Bool
 parseOptionalKeyword s = isJust <$> optional (skipKeyword s)
-
-parseKeywordToValue :: [Code.CharCode] -> b -> TeXParser s e m b
-parseKeywordToValue s = (skipKeyword s $>)
 
 parseManyChars :: TeXParser s e m [Code.CharCode]
 parseManyChars = PC.many $ satisfyThen tokToChar

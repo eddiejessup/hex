@@ -18,10 +18,8 @@ import           HeX.Parse.Quantity
 import           HeX.Parse.Stream.Class
 import qualified HeX.Parse.Token           as T
 
--- Parse.
-
 parseInternalQuantity :: TeXParser s e m InternalQuantity
-parseInternalQuantity = PC.choice
+parseInternalQuantity = tryChoice
     [ InternalTeXIntQuantity    <$> parseHeaded headToParseInternalTeXInt
     , InternalLengthQuantity    <$> parseHeaded headToParseInternalLength
     , InternalGlueQuantity      <$> parseHeaded headToParseInternalGlue
@@ -55,8 +53,8 @@ parseFetchedBoxRef tgtAxis = do
     pure $ FetchedBoxRef n fetchMode
 
 parseBoxOrRule :: TeXParser s e m BoxOrRule
-parseBoxOrRule = PC.choice
-    [ BoxOrRuleBox <$> parseBox
+parseBoxOrRule = tryChoice
+    [ BoxOrRuleBox <$> parseHeaded headToParseBox
     , BoxOrRuleRule Horizontal <$> parseModedRule Horizontal
     , BoxOrRuleRule Vertical <$> parseModedRule Vertical
     ]
@@ -75,7 +73,7 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
     parseRuleSpecification rule =
         do
         skipOptionalSpaces
-        PC.optional $ PC.choice
+        PC.optional $ tryChoice
             [ parseRuleWidth rule
             , parseRuleHeight rule
             , parseRuleDepth rule
@@ -101,46 +99,90 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
 
 parseModeIndependentCommand :: TeXParser s e m ModeIndependentCommand
 parseModeIndependentCommand =
-    PC.choice
-        [ Assign <$> P.try parseAssignment
-        , satisfyEquals T.RelaxTok $> Relax
-        , satisfyEquals T.IgnoreSpacesTok
-            >> skipOptionalSpaces $> IgnoreSpaces
-        , satisfyEquals T.PenaltyTok
-            >> (AddPenalty <$> parseTeXInt)
-        , satisfyEquals T.KernTok
-            >> (AddKern <$> parseLength)
-        , satisfyEquals T.MathKernTok
-            >> (AddMathKern <$> parseMathLength)
-        , parseRemoveItem
-        , satisfyEquals T.SetAfterAssignmentTokenTok
-              >> (SetAfterAssignmentToken <$> parseLexToken)
-        , satisfyEquals T.AddToAfterGroupTokensTok
-              >> (AddToAfterGroupTokens <$> parseLexToken)
-        , parseMessage
-        , parseOpenInput
-        , satisfyEquals T.CloseInputTok
-              >> (ModifyFileStream FileInput Close <$> parseTeXInt)
-        , parseOpenOutput
-        , parseCloseOutput
-        , parseWriteToStream
-        , satisfyEquals T.DoSpecialTok
-              >> (DoSpecial <$> parseExpandedGeneralText)
-        , parseAddShiftedBox
-        , AddBox NaturalPlacement <$> parseBox
-        , parseChangeScope
+    P.anySingle >>= choiceFlap
+        [ fmap Assign <$> headToParseAssignment
+        , \case
+            T.RelaxTok ->
+                pure Relax
+            T.IgnoreSpacesTok ->
+                do
+                skipOptionalSpaces
+                pure IgnoreSpaces
+            T.PenaltyTok ->
+                AddPenalty <$> parseTeXInt
+            T.KernTok ->
+                AddKern <$> parseLength
+            T.MathKernTok ->
+                AddMathKern <$> parseMathLength
+            T.SetAfterAssignmentTokenTok ->
+                SetAfterAssignmentToken <$> parseLexToken
+            T.AddToAfterGroupTokensTok ->
+                AddToAfterGroupTokens <$> parseLexToken
+            T.CloseInputTok ->
+                ModifyFileStream FileInput Close <$> parseTeXInt
+            T.DoSpecialTok ->
+                DoSpecial <$> parseExpandedGeneralText
+            T.RemoveItemTok i ->
+                pure (RemoveItem i)
+            T.MessageTok str ->
+                Message str <$> parseExpandedGeneralText
+            T.OpenInputTok ->
+                parseModifyFileStream FileInput
+            T.ImmediateTok ->
+                tryChoice
+                    [ parseHeaded (headToParseOpenOutput Immediate)
+                    , parseHeaded (headToParseCloseOutput Immediate)
+                    , parseHeaded (headToParseWriteToStream Immediate)
+                    ]
+            T.ModedCommand axis (T.ShiftedBoxTok direction) ->
+                do
+                placement <- ShiftedPlacement axis direction <$> parseLength
+                AddBox placement <$> parseHeaded headToParseBox
+            -- Change scope.
+            T.ChangeScopeCSTok sign ->
+                pure $ ChangeScope sign CSCommandTrigger
+            t
+                | primTokHasCategory Code.BeginGroup t ->
+                    pure $ ChangeScope T.Positive CharCommandTrigger
+                | primTokHasCategory Code.EndGroup t ->
+                    pure $ ChangeScope T.Negative CharCommandTrigger
+            _ ->
+                empty
+        , headToParseOpenOutput Deferred
+        , headToParseCloseOutput Deferred
+        , headToParseWriteToStream Deferred
+        , fmap (AddBox NaturalPlacement) <$> headToParseBox
         ]
+  where
+    parseModifyFileStream fileStreamType =
+        do
+        n <- parseTeXInt
+        skipOptionalEquals
+        fn <- parseFileName
+        pure $ ModifyFileStream fileStreamType (Open fn) n
 
-parseChangeScope :: TeXParser s e m ModeIndependentCommand
-parseChangeScope = satisfyThen $
-    \t -> if
-        | primTokHasCategory Code.BeginGroup t -> Just $
-            ChangeScope T.Positive CharCommandTrigger
-        | primTokHasCategory Code.EndGroup t -> Just $
-            ChangeScope T.Negative CharCommandTrigger
-        | (T.ChangeScopeCSTok sign)
-            <- t -> Just $ ChangeScope sign CSCommandTrigger
-        | otherwise -> Nothing
+    headToParseOpenOutput writePolicy = \case
+        T.OpenOutputTok ->
+            parseModifyFileStream (FileOutput writePolicy)
+        _ ->
+            empty
+
+    headToParseCloseOutput writePolicy = \case
+        T.CloseOutputTok ->
+            ModifyFileStream (FileOutput writePolicy) Close <$> parseTeXInt
+        _ ->
+            empty
+
+    headToParseWriteToStream writePolicy = \case
+        T.WriteTok ->
+            do
+            n <- parseTeXInt
+            txt <- case writePolicy of
+                Immediate -> ImmediateWriteText <$> parseExpandedGeneralText
+                Deferred  -> DeferredWriteText <$> parseGeneralText
+            pure $ WriteToStream n txt
+        _ ->
+            empty
 
 satisfyThenGetMode :: T.ModedCommandPrimitiveToken -> TeXParser s e m Axis
 satisfyThenGetMode validTok = satisfyThen $ \case
@@ -149,15 +191,9 @@ satisfyThenGetMode validTok = satisfyThen $ \case
     _ ->
         Nothing
 
-parseRemoveItem :: TeXParser s e m ModeIndependentCommand
-parseRemoveItem =
-    RemoveItem <$> satisfyThen (\case
-        T.RemoveItemTok i -> Just i
-        _ -> Nothing)
-
 parseModedGlue :: Axis -> TeXParser s e m Glue
 parseModedGlue axis =
-    PC.choice
+    tryChoice
         [ parseSpecifiedGlue
         , parsePresetGlue T.Fil
         , parsePresetGlue T.Fill
@@ -186,88 +222,19 @@ parseModedGlue axis =
 
     noLengthGlue = ExplicitGlue zeroLength
 
-parseMessage :: TeXParser s e m ModeIndependentCommand
-parseMessage = Message <$> parseMsgStream <*> parseExpandedGeneralText
-  where
-    parseMsgStream = satisfyThen $
-        \case
-            T.MessageTok str -> Just str
-            _ -> Nothing
-
-parseOpenInput :: TeXParser s e m ModeIndependentCommand
-parseOpenInput =
-    do
-    satisfyEquals T.OpenInputTok
-    parseModifyFileStream FileInput
-
-parseModifyFileStream :: FileStreamType -> TeXParser s e m ModeIndependentCommand
-parseModifyFileStream fileStreamType =
-    do
-    n <- parseTeXInt
-    skipOptionalEquals
-    fn <- parseFileName
-    pure $ ModifyFileStream fileStreamType (Open fn) n
-
-parseOptionalImmediate :: TeXParser s e m WritePolicy
-parseOptionalImmediate =
-    PC.option Deferred $ satisfyEquals T.ImmediateTok $> Immediate
-
-parseOpenOutput :: TeXParser s e m ModeIndependentCommand
-parseOpenOutput = do
-    writePolicy <- parseOptionalImmediate
-    satisfyEquals T.OpenOutputTok
-    parseModifyFileStream (FileOutput writePolicy)
-
-parseCloseOutput :: TeXParser s e m ModeIndependentCommand
-parseCloseOutput = do
-    writePolicy <- parseOptionalImmediate
-    satisfyEquals T.CloseOutputTok
-        >> (ModifyFileStream (FileOutput writePolicy) Close <$> parseTeXInt)
-
-parseWriteToStream :: TeXParser s e m ModeIndependentCommand
-parseWriteToStream = do
-    writePolicy <- parseOptionalImmediate
-    satisfyEquals T.WriteTok
-    n <- parseTeXInt
-    txt <- case writePolicy of
-        Immediate -> ImmediateWriteText <$> parseExpandedGeneralText
-        Deferred  -> DeferredWriteText <$> parseGeneralText
-    pure $ WriteToStream n txt
-
-parseAddShiftedBox :: TeXParser s e m ModeIndependentCommand
-parseAddShiftedBox = AddBox <$> parsePlacement <*> parseBox
-  where
-    parseDirection = satisfyThen $ \case
-        T.ModedCommand axis (T.ShiftedBoxTok d) ->
-            Just (axis, d)
-        _ ->
-            Nothing
-
-    parsePlacement =
-        do
-        (axis, direction) <- parseDirection
-        ShiftedPlacement axis direction <$> parseLength
-
 parseCommand :: TeXParser s e m Command
 parseCommand =
-    PC.choice
+    tryChoice
         [ ModeIndependentCommand <$> parseModeIndependentCommand
-        , satisfyEquals T.ShowTokenTok
-            >> (ShowToken <$> parseLexToken)
-        , satisfyEquals T.ShowBoxTok
-            >> (ShowBox <$> parseTeXInt)
-        , satisfyEquals T.ShowListsTok
-            $> ShowLists
-        , satisfyEquals T.ShowTheInternalQuantityTok
-            >> (ShowTheInternalQuantity <$> parseInternalQuantity)
-        , satisfyEquals T.ShipOutTok
-            >> (ShipOut <$> parseBox)
-        , satisfyEquals T.MarkTok
-            >> (AddMark <$> parseGeneralText)
+        , satisfyEquals T.ShowTokenTok >> (ShowToken <$> parseLexToken)
+        , satisfyEquals T.ShowBoxTok >> (ShowBox <$> parseTeXInt)
+        , satisfyEquals T.ShowListsTok $> ShowLists
+        , satisfyEquals T.ShowTheInternalQuantityTok >> (ShowTheInternalQuantity <$> parseInternalQuantity)
+        , satisfyEquals T.ShipOutTok >> (ShipOut <$> parseHeaded headToParseBox)
+        , satisfyEquals T.MarkTok >> (AddMark <$> parseGeneralText)
           -- , parseInsert
           -- , parseVAdjust
-        , skipSatisfied isSpace
-            $> AddSpace
+        , skipSatisfied isSpace $> AddSpace
         , parseStartParagraph
         , satisfyEquals T.EndParagraphTok $> EndParagraph
           -- , parseAlign mode
@@ -277,7 +244,7 @@ parseCommand =
         ]
   where
     parseHModeCommand =
-        PC.choice
+        tryChoice
             [ satisfyEquals T.ControlSpaceTok $> AddControlSpace
             , AddCharacter <$> parseCharCodeRef
             , parseAddAccentedCharacter
@@ -292,7 +259,7 @@ parseCommand =
             ]
 
     parseVModeCommand =
-        PC.choice
+        tryChoice
             [ satisfyEquals T.EndTok $> End
             , satisfyEquals T.DumpTok $> Dump
             , AddVGlue <$> parseModedGlue Vertical
@@ -303,7 +270,7 @@ parseCommand =
 
 parseCharCodeRef :: TeXParser s e m CharCodeRef
 parseCharCodeRef =
-    PC.choice [ parseAddCharacterCharOrTok, parseAddControlCharacter ]
+    tryChoice [ parseAddCharacterCharOrTok, parseAddControlCharacter ]
   where
     parseAddCharacterCharOrTok = satisfyThen $
         \case
@@ -328,7 +295,7 @@ parseAddAccentedCharacter =
     -- ⟨optional assignments⟩ stands for zero or more ⟨assignment⟩ commands
     -- other than \setbox.
     parseNonSetBoxAssignment =
-        parseAssignment >>= \case
+        parseHeaded headToParseAssignment >>= \case
             Assignment (SetBoxRegister _ _) _ -> P.failure (Just (P.Label ('S' :| "etBoxRegister"))) mempty
             a -> pure a
 
