@@ -85,7 +85,7 @@ def is_important(ln):
     for field in ['entries', 'nr']:
         dat[field] = int(dat[field])
 
-    return max(dat[f] for f in PERC_FIELDS) > 2
+    return max(dat[f] for f in PERC_FIELDS) > 5
 
 important_body_lns = list(filter(is_important, body_lns))
 

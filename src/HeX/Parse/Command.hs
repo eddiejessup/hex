@@ -5,7 +5,6 @@ module HeX.Parse.Command where
 import           HeXlude
 
 import qualified Control.Monad.Combinators as PC
-import           Data.Functor              (($>))
 import           Data.List.NonEmpty        (NonEmpty(..))
 import qualified Text.Megaparsec           as P
 
@@ -27,41 +26,6 @@ parseInternalQuantity = tryChoice
     , FontQuantity              <$> parseHeaded headToParseFontRef
     , TokenListVariableQuantity <$> parseHeaded headToParseTokenListVariable
     ]
-
-parseStartParagraph :: TeXParser s e m Command
-parseStartParagraph = StartParagraph <$> satisfyThen (\case
-    T.StartParagraphTok _indent -> Just _indent
-    _ -> Nothing)
-
-parseLeadersSpec :: Axis -> TeXParser s e m LeadersSpec
-parseLeadersSpec axis =
-    LeadersSpec <$> parseLeaders <*> parseBoxOrRule <*> parseModedGlue axis
-  where
-    parseLeaders = satisfyThen $
-        \case
-            T.LeadersTok t -> Just t
-            _ -> Nothing
-
-parseFetchedBoxRef :: Axis -> TeXParser s e m FetchedBoxRef
-parseFetchedBoxRef tgtAxis = do
-    fetchMode <- satisfyThen $ \case
-        T.ModedCommand seenAxis (T.UnwrappedFetchedBoxTok fm) | tgtAxis == seenAxis ->
-            Just fm
-        _ ->
-            Nothing
-    n <- parseTeXInt
-    pure $ FetchedBoxRef n fetchMode
-
-parseBoxOrRule :: TeXParser s e m BoxOrRule
-parseBoxOrRule = tryChoice
-    [ BoxOrRuleBox <$> parseHeaded headToParseBox
-    , BoxOrRuleRule Horizontal <$> parseModedRule Horizontal
-    , BoxOrRuleRule Vertical <$> parseModedRule Vertical
-    ]
-
-parseModedRule :: Axis -> TeXParser s e m Rule
-parseModedRule axis =
-    satisfyEquals (T.ModedCommand axis T.RuleTok) >> parseRule
 
 -- \hrule and such.
 parseRule :: TeXParser s e m Rule
@@ -97,11 +61,10 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
         ln <- parseLength
         pure rule { depth = Just ln }
 
-parseModeIndependentCommand :: TeXParser s e m ModeIndependentCommand
-parseModeIndependentCommand =
-    P.anySingle >>= choiceFlap
-        [ fmap Assign <$> headToParseAssignment
-        , \case
+headToParseModeIndependentCommand :: T.PrimitiveToken -> TeXParser s e m ModeIndependentCommand
+headToParseModeIndependentCommand =
+    choiceFlap
+        [ \case
             T.RelaxTok ->
                 pure Relax
             T.IgnoreSpacesTok ->
@@ -148,6 +111,7 @@ parseModeIndependentCommand =
                     pure $ ChangeScope T.Negative CharCommandTrigger
             _ ->
                 empty
+        , fmap Assign <$> headToParseAssignment
         , headToParseOpenOutput Deferred
         , headToParseCloseOutput Deferred
         , headToParseWriteToStream Deferred
@@ -184,114 +148,97 @@ parseModeIndependentCommand =
         _ ->
             empty
 
-satisfyThenGetMode :: T.ModedCommandPrimitiveToken -> TeXParser s e m Axis
-satisfyThenGetMode validTok = satisfyThen $ \case
-    T.ModedCommand axis seenTok | seenTok == validTok ->
-        Just axis
-    _ ->
-        Nothing
-
-parseModedGlue :: Axis -> TeXParser s e m Glue
-parseModedGlue axis =
-    tryChoice
-        [ parseSpecifiedGlue
-        , parsePresetGlue T.Fil
-        , parsePresetGlue T.Fill
-        , parsePresetGlue T.StretchOrShrink
-        , parsePresetGlue T.FilNeg
-        ]
-  where
-    -- \hskip 10pt and such.
-    parseSpecifiedGlue =
-        satisfyEquals (T.ModedCommand axis T.SpecifiedGlueTok)
-        >> parseGlue
-
-    parsePresetGlue t =
-        satisfyEquals (T.ModedCommand axis (T.PresetGlueTok t))
-        $> presetToSpecifiedGlue t
-
-    -- \{v,h}fil:    0pt plus 1fil
-    -- \{v,h}fill:   0pt plus 1fill
-    -- \{v,h}ss:     0pt plus 1fil minus 1fil
-    -- \{v,h}filneg: 0pt plus -1fil
-    presetToSpecifiedGlue = \case
-        T.Fil -> noLengthGlue (Just oneFilFlex) Nothing
-        T.Fill -> noLengthGlue (Just oneFillFlex) Nothing
-        T.StretchOrShrink -> noLengthGlue (Just oneFilFlex) (Just oneFilFlex)
-        T.FilNeg -> noLengthGlue (Just minusOneFilFlex) Nothing
-
-    noLengthGlue = ExplicitGlue zeroLength
-
 parseCommand :: TeXParser s e m Command
 parseCommand =
-    tryChoice
-        [ ModeIndependentCommand <$> parseModeIndependentCommand
-        , satisfyEquals T.ShowTokenTok >> (ShowToken <$> parseLexToken)
-        , satisfyEquals T.ShowBoxTok >> (ShowBox <$> parseTeXInt)
-        , satisfyEquals T.ShowListsTok $> ShowLists
-        , satisfyEquals T.ShowTheInternalQuantityTok >> (ShowTheInternalQuantity <$> parseInternalQuantity)
-        , satisfyEquals T.ShipOutTok >> (ShipOut <$> parseHeaded headToParseBox)
-        , satisfyEquals T.MarkTok >> (AddMark <$> parseGeneralText)
+    P.anySingle >>= choiceFlap
+        [ \case
+            T.ShowTokenTok ->
+                ShowToken <$> parseLexToken
+            T.ShowBoxTok ->
+                ShowBox <$> parseTeXInt
+            T.ShowListsTok ->
+                pure ShowLists
+            T.ShowTheInternalQuantityTok ->
+                ShowTheInternalQuantity <$> parseInternalQuantity
+            T.ShipOutTok ->
+                ShipOut <$> parseHeaded headToParseBox
+            T.MarkTok ->
+                AddMark <$> parseGeneralText
+            T.StartParagraphTok _indent ->
+                pure $ StartParagraph _indent
+            T.EndParagraphTok ->
+                pure EndParagraph
+            t | isSpace t ->
+                pure AddSpace
+            _ ->
+                empty
           -- , parseInsert
           -- , parseVAdjust
-        , skipSatisfied isSpace $> AddSpace
-        , parseStartParagraph
-        , satisfyEquals T.EndParagraphTok $> EndParagraph
           -- , parseAlign mode
-
-        , HModeCommand <$> parseHModeCommand
-        , VModeCommand <$> parseVModeCommand
+        , fmap ModeIndependentCommand <$> headToParseModeIndependentCommand
+        , fmap HModeCommand <$> headToParseHModeCommand
+        , fmap VModeCommand <$> headToParseVModeCommand
         ]
   where
-    parseHModeCommand =
-        tryChoice
-            [ satisfyEquals T.ControlSpaceTok $> AddControlSpace
-            , AddCharacter <$> parseCharCodeRef
-            , parseAddAccentedCharacter
-            , satisfyEquals T.ItalicCorrectionTok $> AddItalicCorrection
-            , parseAddDiscretionaryText
-            , satisfyEquals T.DiscretionaryHyphenTok $> AddDiscretionaryHyphen
-            , skipSatisfied (primTokHasCategory Code.MathShift) $> EnterMathMode
-            , AddHGlue <$> parseModedGlue Horizontal
-            , AddHLeaders <$> parseLeadersSpec Horizontal
-            , AddHRule <$> parseModedRule Horizontal
-            , AddUnwrappedFetchedHBox <$> parseFetchedBoxRef Horizontal
+    headToParseHModeCommand =
+        choiceFlap
+            [ \case
+                T.ControlSpaceTok ->
+                    pure AddControlSpace
+                T.ItalicCorrectionTok ->
+                    pure AddItalicCorrection
+                T.DiscretionaryHyphenTok ->
+                    pure AddDiscretionaryHyphen
+                t | primTokHasCategory Code.MathShift t ->
+                    pure EnterMathMode
+                T.AccentTok ->
+                    AddAccentedCharacter
+                        <$> parseTeXInt
+                        <*> PC.many parseNonSetBoxAssignment
+                        <*> PC.optional (parseHeaded headToParseCharCodeRef)
+                T.DiscretionaryTextTok ->
+                    AddDiscretionaryText
+                        <$> parseGeneralText
+                        <*> parseGeneralText
+                        <*> parseGeneralText
+                _ ->
+                    empty
+            , fmap AddCharacter <$> headToParseCharCodeRef
+            , fmap AddHGlue <$> headToParseModedGlue Horizontal
+            , fmap AddHLeaders <$> headToParseLeadersSpec Horizontal
+            , fmap AddHRule <$> headToParseModedRule Horizontal
+            , fmap AddUnwrappedFetchedHBox <$> headToParseFetchedBoxRef Horizontal
             ]
 
-    parseVModeCommand =
-        tryChoice
-            [ satisfyEquals T.EndTok $> End
-            , satisfyEquals T.DumpTok $> Dump
-            , AddVGlue <$> parseModedGlue Vertical
-            , AddVLeaders <$> parseLeadersSpec Vertical
-            , AddVRule <$> parseModedRule Vertical
-            , AddUnwrappedFetchedVBox <$> parseFetchedBoxRef Vertical
+    headToParseVModeCommand =
+        choiceFlap
+            [ \case
+                T.EndTok ->
+                    pure End
+                T.DumpTok ->
+                    pure Dump
+                _ ->
+                    empty
+            , fmap AddVGlue <$> headToParseModedGlue Vertical
+            , fmap AddVLeaders <$> headToParseLeadersSpec Vertical
+            , fmap AddVRule <$> headToParseModedRule Vertical
+            , fmap AddUnwrappedFetchedVBox <$> headToParseFetchedBoxRef Vertical
             ]
 
-parseCharCodeRef :: TeXParser s e m CharCodeRef
-parseCharCodeRef =
-    tryChoice [ parseAddCharacterCharOrTok, parseAddControlCharacter ]
-  where
-    parseAddCharacterCharOrTok = satisfyThen $
-        \case
-            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
-                Just $ CharRef c
-            T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
-                Just $ CharRef c
-            T.IntRefTok T.CharQuantity i -> Just $ CharTokenRef i
-            _ -> Nothing
+    headToParseCharCodeRef = \case
+        -- Add character.
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
+            pure $ CharRef c
+        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
+            pure $ CharRef c
+        T.IntRefTok T.CharQuantity i ->
+            pure $ CharTokenRef i
+        T.ControlCharTok ->
+            CharCodeNrRef <$> parseTeXInt
+        _ ->
+            empty
+        -- /Add character.
 
-    parseAddControlCharacter = satisfyEquals T.ControlCharTok
-        >> (CharCodeNrRef <$> parseTeXInt)
-
-parseAddAccentedCharacter :: TeXParser s e m HModeCommand
-parseAddAccentedCharacter =
-    do
-    satisfyEquals T.AccentTok
-    AddAccentedCharacter <$> parseTeXInt
-        <*> PC.many parseNonSetBoxAssignment
-        <*> PC.optional parseCharCodeRef
-  where
     -- ⟨optional assignments⟩ stands for zero or more ⟨assignment⟩ commands
     -- other than \setbox.
     parseNonSetBoxAssignment =
@@ -299,10 +246,60 @@ parseAddAccentedCharacter =
             Assignment (SetBoxRegister _ _) _ -> P.failure (Just (P.Label ('S' :| "etBoxRegister"))) mempty
             a -> pure a
 
-parseAddDiscretionaryText :: TeXParser s e m HModeCommand
-parseAddDiscretionaryText =
-    satisfyEquals T.DiscretionaryTextTok
-    >> AddDiscretionaryText
-        <$> parseGeneralText
-        <*> parseGeneralText
-        <*> parseGeneralText
+    headToParseModedGlue :: Axis -> T.PrimitiveToken -> TeXParser s e m Glue
+    headToParseModedGlue axis = \case
+        T.ModedCommand tokenAxis modedTok | tokenAxis == axis ->
+            case modedTok of
+                -- \hskip 10pt and such.
+                T.SpecifiedGlueTok | tokenAxis == axis ->
+                    parseGlue
+                T.PresetGlueTok presetTok ->
+                    pure $ case presetTok of
+                        -- \{v,h}fil:    0pt plus 1fil
+                        T.Fil ->
+                            noLengthGlue (Just oneFilFlex) Nothing
+                        -- \{v,h}fill:   0pt plus 1fill
+                        T.Fill ->
+                            noLengthGlue (Just oneFillFlex) Nothing
+                        -- \{v,h}ss:     0pt plus 1fil minus 1fil
+                        T.StretchOrShrink ->
+                            noLengthGlue (Just oneFilFlex) (Just oneFilFlex)
+                        -- \{v,h}filneg: 0pt plus -1fil
+                        T.FilNeg ->
+                            noLengthGlue (Just minusOneFilFlex) Nothing
+                _ ->
+                    empty
+        _ ->
+            empty
+      where
+        noLengthGlue = ExplicitGlue zeroLength
+
+    headToParseLeadersSpec :: Axis -> T.PrimitiveToken -> TeXParser s e m LeadersSpec
+    headToParseLeadersSpec axis = \case
+            T.LeadersTok leaders ->
+                LeadersSpec leaders <$> parseBoxOrRule <*> parseHeaded (headToParseModedGlue axis)
+            _ ->
+                empty
+
+    parseBoxOrRule :: TeXParser s e m BoxOrRule
+    parseBoxOrRule = tryChoice
+        [ BoxOrRuleBox <$> parseHeaded headToParseBox
+        , BoxOrRuleRule Horizontal <$> parseHeaded (headToParseModedRule Horizontal)
+        , BoxOrRuleRule Vertical <$> parseHeaded (headToParseModedRule Vertical)
+        ]
+
+    headToParseModedRule :: Axis -> T.PrimitiveToken -> TeXParser s e m Rule
+    headToParseModedRule axis = \case
+        T.ModedCommand tokenAxis T.RuleTok | axis == tokenAxis ->
+            parseRule
+        _ ->
+            empty
+
+    headToParseFetchedBoxRef :: Axis -> T.PrimitiveToken -> TeXParser s e m FetchedBoxRef
+    headToParseFetchedBoxRef tgtAxis = \case
+        T.ModedCommand tokenAxis (T.UnwrappedFetchedBoxTok fetchMode) | tgtAxis == tokenAxis ->
+            do
+            n <- parseTeXInt
+            pure $ FetchedBoxRef n fetchMode
+        _ ->
+            empty

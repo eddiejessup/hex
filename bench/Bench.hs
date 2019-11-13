@@ -99,7 +99,7 @@ main = do
 
     -- benchFetchLex stream
     -- benchTake stream
-    runCommand stream
+    -- runCommand stream
 
     -- runPageList stream
-    -- runPageList stream
+    runPageList stream

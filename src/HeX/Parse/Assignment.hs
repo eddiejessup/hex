@@ -72,20 +72,65 @@ headToParseNonMacroAssignmentBody =
                 SetHyphenationPatterns <$> parseGeneralText
             T.InteractionModeTok intMode ->
                 pure (SetInteractionMode intMode)
+            T.LetTok ->
+                do
+                (cs, tok) <- parseVarSepVal
+                    parseCSName
+                    skipOptionalEquals
+                    parseLetArg
+                pure $ DefineControlSequence cs (LetTarget tok)
+            T.FutureLetTok ->
+                DefineControlSequence
+                    <$> parseCSName
+                    <*> (FutureLetTarget <$> parseLexToken <*> parseLexToken)
+            T.ShortDefHeadTok quant ->
+                do
+                (cs, n) <- parseVarSepVal
+                    parseCSName
+                    skipOptionalEquals
+                    parseTeXInt
+                pure $ DefineControlSequence cs (ShortDefineTarget quant n)
+            T.ParagraphShapeTok ->
+                do
+                skipOptionalEquals
+                -- In a ⟨shape assignment⟩ for which the ⟨number⟩ is n, the ⟨shape
+                -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
+                -- consecutive occurrences of ⟨dimen⟩
+                nrPairs <- parseTeXInt
+                (Q.TeXInt eNrPairsInt) <- P.getInput <&> getConfig >>= runReaderT (texEvaluate nrPairs)
+                let parseLengthPair = (,) <$> parseLength <*> parseLength
+                SetParShape <$> PC.count eNrPairsInt parseLengthPair
+            T.ReadTok ->
+                do
+                nr <- parseTeXInt
+                skipKeyword (codesFromStr "to")
+                skipOptionalSpaces
+                cs <- parseCSName
+                pure $ DefineControlSequence cs (ReadTarget nr)
+            T.SetBoxRegisterTok ->
+                uncurry SetBoxRegister <$> parseVarSepVal
+                    parseEightBitTeXInt
+                    skipOptionalEquals
+                    (skipFiller >> parseHeaded headToParseBox)
+            -- \font <control-sequence> <equals> <file-name> <at-clause>
+            T.FontTok ->
+                do
+                cs <- parseCSName
+                skipOptionalEquals
+                fname <- parseFileName
+                fontSpec <- tryChoice
+                    [ skipKeyword (codesFromStr "at") >> (FontAt <$> parseLength)
+                    , skipKeyword (codesFromStr "scaled") >> (FontScaled <$> parseTeXInt)
+                    , skipOptionalSpaces $> NaturalFont
+                    ]
+                pure $ DefineControlSequence cs (FontTarget fontSpec fname)
             _ ->
                 empty
         , headToParseCodeAssignment
-        , headToModifyVariable
-        , headToParseVariableAssignment
-        , headToParseLet
-        , headToParseFutureLet
-        , headToParseShortMacroAssignment
+        , fmap ModifyVariable <$> headToModifyVariable
+        , fmap SetVariable <$> headToParseVariableAssignment
         , fmap SelectFont <$> headToParseFontRefToken
         , headToParseSetFamilyMember
-        , headToParseSetParShape
-        , headToParseReadToControlSequence
-        , headToParseSetBoxRegister
-        , headToParseNewFontAssignment
         , headToParseSetFontDimension
         , headToParseSetFontChar
         , headToParseSetBoxDimension
@@ -97,9 +142,9 @@ headToParseNonMacroAssignmentBody =
         skipOptionalEquals
         AssignCode . CodeAssignment ref <$> parseTeXInt
 
-    headToModifyVariable t = ModifyVariable <$> case t of
+    headToModifyVariable = \case
         T.AdvanceVarTok ->
-            PC.choice
+            tryChoice
                 [ uncurry AdvanceTeXIntVariable <$> parseVarSepVal
                     (parseHeaded headToParseTeXIntVariable)
                     skipOptionalBy
@@ -122,11 +167,11 @@ headToParseNonMacroAssignmentBody =
                 parseNumericVariable
                 skipOptionalBy
                 parseTeXInt
-        _ ->
+        t ->
             P.failure (Just (P.Tokens (t :| []))) (Set.singleton (P.Label ('M' :| "odify variable")))
 
     parseNumericVariable =
-        PC.choice
+        tryChoice
             [ TeXIntNumericVariable <$> parseHeaded headToParseTeXIntVariable
             , LengthNumericVariable <$> parseHeaded headToParseLengthVariable
             , GlueNumericVariable <$> parseHeaded headToParseGlueVariable
@@ -134,13 +179,13 @@ headToParseNonMacroAssignmentBody =
             ]
 
     skipOptionalBy =
-        PC.choice
+        tryChoice
             [ void $ parseOptionalKeyword $ codesFromStr "by"
             , skipOptionalSpaces
             ]
 
     headToParseVariableAssignment t =
-        SetVariable <$> PC.choice
+        tryChoice
             [ uncurry TeXIntVariableAssignment <$> parseVarSepVal
                 (headToParseTeXIntVariable t)
                 skipOptionalEquals
@@ -177,86 +222,11 @@ headToParseNonMacroAssignmentBody =
                 parseLength
             ]
 
-    headToParseLet = \case
-        T.LetTok ->
-            do
-            (cs, tok) <- parseVarSepVal
-                parseCSName
-                skipOptionalEquals
-                parseLetArg
-            pure $ DefineControlSequence cs (LetTarget tok)
-        _ ->
-            empty
-
-    headToParseFutureLet = \case
-        T.FutureLetTok ->
-            DefineControlSequence <$> parseCSName <*> (FutureLetTarget <$> parseLexToken <*> parseLexToken)
-        _ ->
-            empty
-
     headToParseSetFamilyMember t =
         uncurry SetFamilyMember <$> parseVarSepVal
             (headToParseFamilyMember t)
             skipOptionalEquals
             (parseHeaded headToParseFontRef)
-
-    headToParseSetParShape = \case
-        T.ParagraphShapeTok ->
-            do
-            skipOptionalEquals
-            -- In a ⟨shape assignment⟩ for which the ⟨number⟩ is n, the ⟨shape
-            -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
-            -- consecutive occurrences of ⟨dimen⟩
-            nrPairs <- parseTeXInt
-            (Q.TeXInt eNrPairsInt) <- P.getInput <&> getConfig >>= runReaderT (texEvaluate nrPairs)
-            SetParShape <$> PC.count eNrPairsInt parseLengthPair
-        _ ->
-            empty
-      where
-        parseLengthPair = (,) <$> parseLength <*> parseLength
-
-    headToParseReadToControlSequence = \case
-        T.ReadTok ->
-            do
-            nr <- parseTeXInt
-            skipKeyword (codesFromStr "to")
-            skipOptionalSpaces
-            cs <- parseCSName
-            pure $ DefineControlSequence cs (ReadTarget nr)
-        _ ->
-            empty
-
-    headToParseSetBoxRegister = \case
-        T.SetBoxRegisterTok ->
-            uncurry SetBoxRegister <$> parseVarSepVal
-                parseEightBitTeXInt
-                skipOptionalEquals
-                (skipFiller >> parseHeaded headToParseBox)
-        _ ->
-            empty
-
-    -- \font <control-sequence> <equals> <file-name> <at-clause>
-    headToParseNewFontAssignment = \case
-        T.FontTok ->
-            do
-            cs <- parseCSName
-            skipOptionalEquals
-            fname <- parseFileName
-            fontSpec <- parseFontSpecification
-            pure $ DefineControlSequence cs (FontTarget fontSpec fname)
-        _ ->
-            empty
-      where
-        parseFontSpecification =
-            PC.choice
-                [ parseFontSpecAt
-                , parseFontSpecScaled
-                , skipOptionalSpaces $> NaturalFont
-                ]
-
-        parseFontSpecAt = skipKeyword (codesFromStr "at") >> (FontAt <$> parseLength)
-
-        parseFontSpecScaled = skipKeyword (codesFromStr "scaled") >> (FontScaled <$> parseTeXInt)
 
     headToParseSetFontDimension t =
         do
@@ -275,17 +245,6 @@ headToParseNonMacroAssignmentBody =
         var <- headToParseBoxDimensionRef t
         skipOptionalEquals
         SetBoxDimension var <$> parseLength
-
-    headToParseShortMacroAssignment = \case
-        T.ShortDefHeadTok quant ->
-            do
-            (cs, n) <- parseVarSepVal
-                parseCSName
-                skipOptionalEquals
-                parseTeXInt
-            pure $ DefineControlSequence cs (ShortDefineTarget quant n)
-        _ ->
-            empty
 
 parseVarSepVal
     :: ( TeXParseable s e m
