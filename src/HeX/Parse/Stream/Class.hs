@@ -6,9 +6,6 @@ import           HeXlude                   hiding (many)
 
 import           Control.Monad             (foldM, guard)
 import qualified Control.Monad.Combinators as PC
-import           Control.Monad.State.Lazy  (MonadState, StateT, modify,
-                                            runStateT)
-import           Data.Functor              (($>))
 import qualified Data.Map.Strict           as Map
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Path                 as D.Path
@@ -128,6 +125,7 @@ skipOneOptionalSatisfied = skipOptional . skipSatisfied
 
 skipManySatisfied :: MatchToken s -> TeXParser s e m ()
 skipManySatisfied = PC.skipMany . skipSatisfied
+-- skipManySatisfied = void . P.takeWhileP Nothing
 
 skipSatisfiedChunk :: Seq (P.Token s) -> TeXParser s e m ()
 skipSatisfiedChunk = foldr (satisfyEquals >>> (>>)) (pure ())
@@ -293,47 +291,59 @@ unsafeAnySingleLex = satisfyThen tokToLex
 parseParamDelims :: TeXParser s e m BalancedText
 parseParamDelims = BalancedText . Seq.fromList <$> manySatisfiedThen tokToDelimTok
   where
-    tokToDelimTok (UnexpandedTok lt)
-        | lexTokHasCategory Code.Parameter lt = Nothing
-        | lexTokHasCategory Code.BeginGroup lt = Nothing
-        | lexTokHasCategory Code.EndGroup lt = Nothing
-        | otherwise = Just lt
-    tokToDelimTok _ = Nothing
+    tokToDelimTok = \case
+        UnexpandedTok lt@(Lex.CharCatToken CharCat { cat }) -> case cat of
+            Code.Parameter -> Nothing
+            Code.BeginGroup -> Nothing
+            Code.EndGroup -> Nothing
+            _ -> Just lt
+        UnexpandedTok lt ->
+            Just lt
+        _ -> Nothing
 
-maybeParseParametersFrom :: Digit -> TeXParser s e m MacroParameters
-maybeParseParametersFrom dig =
-    PC.choice [parseEndOfParams, parseParametersFrom]
-    -- Parse the left-brace that indicates the end of parameters.
+headToMaybeParseParametersFrom :: Digit -> PrimitiveToken -> TeXParser s e m MacroParameters
+headToMaybeParseParametersFrom dig _t =
+    headToParseEndOfParams _t <|> headToParseParamsFrom _t
   where
-    parseEndOfParams = skipSatisfied (primTokHasCategory Code.BeginGroup)
-        $> Map.empty
+    -- Parse the left-brace that indicates the end of parameters.
+    headToParseEndOfParams t
+        | primTokHasCategory Code.BeginGroup t =
+            pure Map.empty
+        | otherwise =
+            empty
 
     -- Parse a present parameter, then the remaining parameters, if present.
-    parseParametersFrom = do
-        -- Parse, for example, '#3'.
-        skipSatisfied $ primTokHasCategory Code.Parameter
-        skipSatisfied $ liftLexPred matchesDigit
-        -- Parse delimiter tokens after the parameter number, if present.
-        thisParam <- parseParamDelims
-        -- Return this parameter, plus any remaining parameters.
-        Map.insert dig thisParam <$> case dig of
-            -- If we are parsing parameter nine, there can't be any more, so we
-            -- only expect to end the parameters.
-            Nine -> parseEndOfParams
-            -- Otherwise, we can either end the parameters, or have some more,
-            -- starting from the successor of this digit.
-            _    -> maybeParseParametersFrom (succ dig)
-
-    matchesDigit (Lex.CharCatToken CharCat{char = c, cat = cat}) =
-        (cat `elem` [ Code.Letter, Code.Other ]) && (c == digitToChar dig)
-    matchesDigit _ = False
+    -- Parse, for example, '#3'.
+    headToParseParamsFrom t
+        | primTokHasCategory Code.Parameter t =
+            do
+            skipSatisfied $ \case
+                UnexpandedTok (Lex.CharCatToken CharCat { char, cat }) -> case cat of
+                    Code.Letter ->
+                        char == digitToChar dig
+                    Code.Other ->
+                        char == digitToChar dig
+                    _ -> False
+                _ -> False
+            -- Parse delimiter tokens after the parameter number, if present.
+            thisParam <- parseParamDelims
+            -- Return this parameter, plus any remaining parameters.
+            Map.insert dig thisParam <$> case dig of
+                -- If we are parsing parameter nine, there can't be any more, so we
+                -- only expect to end the parameters.
+                Nine -> parseHeaded headToParseEndOfParams
+                -- Otherwise, we can either end the parameters, or have some more,
+                -- starting from the successor of this digit.
+                _    -> parseHeaded $ headToMaybeParseParametersFrom (succ dig)
+        | otherwise =
+            empty
 
 unsafeParseParamText :: TeXParser s e m (BalancedText, MacroParameters)
 unsafeParseParamText = do
     -- Pre-parameter text tokens.
     preParamToks <- parseParamDelims
     -- Parameters, if present.
-    params <- maybeParseParametersFrom minBound
+    params <- parseHeaded $ headToMaybeParseParametersFrom minBound
     pure (preParamToks, params)
 
 -- Case 7, general lists of token.
@@ -342,25 +352,29 @@ data TerminusPolicy = Include | Discard
     deriving ( Show, Eq )
 
 -- Nested expression with valid grouping.
-parseNestedExpr :: Int -> TeXParser s e m (a, Ordering) -> TerminusPolicy -> TeXParser s e m (Seq a)
-parseNestedExpr 0 _ _ = pure mempty
-parseNestedExpr n parseNext policy = do
-    (x, change) <- parseNext
-    -- Get next stack depth.
-    let nextN = case change of
-            LT -> pred n
-            GT -> succ n
-            EQ -> n
-    case nextN of
-        -- When we reach zero depth, we are done.
-        -- Catch it early, rather than recursing, to avoid returning the final ')',
-        -- because we don't want it.
-        0 -> pure $
-            case policy of
-                Include -> singleton x
-                Discard -> mempty
-        -- Otherwise, append our result and continue.
-        _ -> (x :<|) <$> parseNestedExpr nextN parseNext policy
+parseNestedExpr :: TeXParser s e m (a, Ordering) -> TerminusPolicy -> TeXParser s e m (Seq a)
+parseNestedExpr parseNext policy = go mempty (1 :: Int)
+  where
+    go acc = \case
+        0 -> pure acc
+        depth ->
+            do
+            (x, change) <- parseNext
+            -- Get next stack depth.
+            let nextDepth = case change of
+                    LT -> pred depth
+                    GT -> succ depth
+                    EQ -> depth
+            case nextDepth of
+                -- When we reach zero depth, we are done.
+                -- Catch it early, rather than recursing, to avoid returning the final ')',
+                -- because we don't want it.
+                0 -> pure $
+                    case policy of
+                        Include -> acc |> x
+                        Discard -> acc
+                -- Otherwise, append our result and continue.
+                _ -> go (acc |> x) nextDepth
 
 -- Part of case 7, \uppercase's body and such.
 tokToChange :: Lex.Token -> Ordering
@@ -372,7 +386,7 @@ tokToChange t
 -- This assumes we just parsed the '{' that starts the balanced text.
 unsafeParseBalancedText :: TerminusPolicy -> TeXParser s e m BalancedText
 unsafeParseBalancedText policy =
-    BalancedText <$> parseNestedExpr 1 parseNext policy
+    BalancedText <$> parseNestedExpr parseNext policy
   where
     parseNext = handleLex $ \t -> Just (t, tokToChange t)
 
@@ -382,7 +396,7 @@ unsafeParseBalancedText policy =
 -- This assumes we just parsed the '{' that starts the macro text.
 -- This function is like unsafeParseBalancedText, but extracts argument calls.
 unsafeParseMacroText :: TeXParser s e m MacroText
-unsafeParseMacroText = MacroText <$> parseNestedExpr 1 parseNext Discard
+unsafeParseMacroText = MacroText <$> parseNestedExpr parseNext Discard
   where
     parseNext = unsafeAnySingleLex >>= \case
         -- If we see a '#', parse the parameter number and return a token
@@ -441,11 +455,11 @@ parseLetArg = parseInhibited skipOneOptionalSpace >> parseLexToken
 
 -- Derived related parsers.
 skipFiller :: TeXParser s e m ()
-skipFiller = skipManySatisfied isFillerItem
+skipFiller = void $ P.takeWhileP Nothing isFillerItem
 
 parseExpandedBalancedText :: TerminusPolicy -> TeXParser s e m ExpandedBalancedText
 parseExpandedBalancedText policy =
-    ExpandedBalancedText <$> parseNestedExpr 1 parseNext policy
+    ExpandedBalancedText <$> parseNestedExpr parseNext policy
   where
     parseNext = satisfyThen $ \pt -> Just (pt, primTokToChange pt)
 
@@ -533,11 +547,6 @@ skipSatisfiedLexChunk ts = skipSatisfiedChunk (UnexpandedTok <$> ts)
 skipBalancedText :: BalancedText -> TeXParser s e m ()
 skipBalancedText (BalancedText toks) = skipSatisfiedLexChunk toks
 
-liftLexPred :: (Lex.Token -> Bool) -> PrimitiveToken -> Bool
-liftLexPred f = \case
-    UnexpandedTok lt -> f lt
-    _ -> False
-
 -- Parsers.
 skipOneOptionalSpace :: TeXParser s e m ()
 skipOneOptionalSpace = skipOneOptionalSatisfied isSpace
@@ -557,7 +566,7 @@ skipOptionalSpaces :: TeXParser s e m ()
 skipOptionalSpaces = skipManySatisfied isSpace
 
 skipOptionalEquals :: TeXParser s e m ()
-skipOptionalEquals = skipOptionalSpaces >> skipOneOptionalSatisfied (matchOtherToken '=')
+skipOptionalEquals = skipOptionalSpaces  >> skipOneOptionalSatisfied (matchOtherToken '=')
 
 skipKeyword :: [Code.CharCode] -> TeXParser s e m ()
 skipKeyword s = skipOptionalSpaces

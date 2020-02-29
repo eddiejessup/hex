@@ -268,21 +268,19 @@ getPreambleInstr mag = EncodableInstruction Preamble args
         <> [ UIntArgVal $ U1 0, StringArgVal "" ]
 
 getPostambleInstr :: [Int] -> Int -> Int -> Int -> Int -> EncodableInstruction
-getPostambleInstr beginPagePointers
-                  mag
-                  maxPageHeightPlusDepth
-                  maxPageWidth
-                  maxStackDepth = EncodableInstruction Postamble args
-  where
-    args = [ (SIntArgVal . S4 . fromIntegral) lastPointerArg ]
-        <> ambleArgs mag
-        <> [ (SIntArgVal . S4 . fromIntegral) maxPageHeightPlusDepth
-           , (SIntArgVal . S4 . fromIntegral) maxPageWidth
-           , (UIntArgVal . U2 . fromIntegral) maxStackDepth
-           , (UIntArgVal . U2 . fromIntegral . length) beginPagePointers
-           ]
+getPostambleInstr beginPagePointers mag maxPageHeightPlusDepth maxPageWidth maxStackDepth =
+    let
+        lastPointerArg = lastDef (-1) beginPagePointers
 
-    lastPointerArg = lastDef (-1) beginPagePointers
+        args = [ (SIntArgVal . S4 . fromIntegral) lastPointerArg ]
+            <> ambleArgs mag
+            <> [ (SIntArgVal . S4 . fromIntegral) maxPageHeightPlusDepth
+               , (SIntArgVal . S4 . fromIntegral) maxPageWidth
+               , (UIntArgVal . U2 . fromIntegral) maxStackDepth
+               , (UIntArgVal . U2 . fromIntegral . length) beginPagePointers
+               ]
+    in
+        EncodableInstruction Postamble args
 
 getPostPostambleInstr :: Int -> EncodableInstruction
 getPostPostambleInstr postamblePointer =

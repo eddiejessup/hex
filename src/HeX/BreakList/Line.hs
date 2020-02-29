@@ -13,6 +13,7 @@ import           HeX.BreakList.Glue
 import           HeX.BreakList.Judge
 import           HeX.BreakList.Set
 import           HeX.Config.Parameters
+import qualified HeX.Parse.Token         as HP
 import           HeX.Quantity
 
 newtype BadnessSize = BadnessSize { unBadnessSize :: TeXInt }
@@ -54,11 +55,11 @@ inEdgeCons e@InEdge{ elems = HList elemSeq, discarding } hElem =
 inEdgeConcat :: Seq ElemAdj -> InEdge -> InEdge
 inEdgeConcat xs e = foldl' inEdgeCons e (Adj.fromAdjacencies xs)
 
-edgeTarget :: LenParamVal HSize -> InEdge -> TargetLength
+edgeTarget :: LenParamVal 'HP.HSize -> InEdge -> TargetLength
 edgeTarget (LenParamVal dw) (InEdge hList _ _) =
     listGlueStatusConcreteTarget dw hList
 
-withTarget :: LenParamVal HSize -> InEdge -> (InEdge, TargetLength)
+withTarget :: LenParamVal 'HP.HSize -> InEdge -> (InEdge, TargetLength)
 withTarget dw e = (e, edgeTarget dw e)
 
 type SetHListArgs = (TargetLength, HList)
@@ -78,7 +79,7 @@ instance Eq Route where
 instance Ord Route where
     rA `compare` rB = routeDemerit rA `compare` routeDemerit rB
 
-lineDemerit :: IntParamVal LinePenalty -> BadnessSize -> BreakItem -> Demerit
+lineDemerit :: IntParamVal 'HP.LinePenalty -> BadnessSize -> BreakItem -> Demerit
 lineDemerit (IntParamVal lp) b br =
     let breakDemerit = breakPenalty br ^ (2 :: Int)
         listDemerit = (lp + unBadnessSize b) ^ (2 :: Int)
@@ -87,8 +88,8 @@ lineDemerit (IntParamVal lp) b br =
 
 toOnlyAcceptables
     :: Filterable f
-    => IntParamVal Tolerance
-    -> IntParamVal LinePenalty
+    => IntParamVal 'HP.Tolerance
+    -> IntParamVal 'HP.LinePenalty
     -> BreakItem
     -> f (InEdge, TargetLength)
     -> f (InEdge, TargetLength, Demerit)
@@ -104,7 +105,7 @@ toOnlyAcceptables (IntParamVal tol) lp br = mapMaybe toMaybeAcceptable
                 | otherwise ->
                     Just (edge, tgt, lineDemerit lp (BadnessSize b) br)
 
-isPromising :: LenParamVal HSize -> InEdge -> Bool
+isPromising :: LenParamVal 'HP.HSize -> InEdge -> Bool
 isPromising dw e = case edgeTarget dw e of
     TargetLength (FixablyBad Overfull _) _ -> False
     _                                      -> True
@@ -140,9 +141,9 @@ initialBreakingState =
 --   and will never become acceptable. We can remove such edges from
 --   consideration, because we know that once a line is not promising, it will
 --   never become acceptable.
-appendEntry :: LenParamVal HSize
-            -> IntParamVal Tolerance
-            -> IntParamVal LinePenalty
+appendEntry :: LenParamVal 'HP.HSize
+            -> IntParamVal 'HP.Tolerance
+            -> IntParamVal 'HP.LinePenalty
             -> BreakingState
             -> ElemAdj
             -> Either Text BreakingState
@@ -215,9 +216,9 @@ bestRoute decoratedInEdges nodeToBestRouteSeq =
         Route (rSoln :|> ln) (rDemerit + lnDemerit)
 
 breakAndSetParagraph
-    :: LenParamVal HSize
-    -> IntParamVal Tolerance
-    -> IntParamVal LinePenalty
+    :: LenParamVal 'HP.HSize
+    -> IntParamVal 'HP.Tolerance
+    -> IntParamVal 'HP.LinePenalty
     -> HList
     -> Either Text (Seq (B.Box B.HBox))
 breakAndSetParagraph _ _ _ (HList Empty) =

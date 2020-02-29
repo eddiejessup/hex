@@ -245,6 +245,7 @@ handleCommandInMainVMode
     -> s
     -> m (RecursionResult VList MainVModeResult)
 handleCommandInMainVMode vList command oldStream =
+    -- traceText ("in main v mode, handling command: " <> show command) $ case command of
     case command of
         HP.VModeCommand HP.End ->
             pure $ endLoop vList
@@ -414,7 +415,7 @@ extractBreakAndSetVList
        , HP.TeXParseable s e m
        , MonadState s m
        )
-    => m (Seq B.Page)
+    => m (Seq B.Page, IntParamVal 'HP.Mag)
 extractBreakAndSetVList =
     do
     MainVModeResult finalMainVList <- extractMainVList
@@ -423,5 +424,9 @@ extractBreakAndSetVList =
         Just _condState -> throwM $ BuildError $ "Cannot end: in condition block: " <> showT _condState
     readOnConfState (asks finaliseConfig) >>= liftIO
     desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
-    putText $ describe finalMainVList
-    pure $ BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
+    -- putText $ describe finalMainVList
+    let pages = BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
+    mag <- HP.runConfState $ gets $ IntParamVal . lookupTeXIntParameter HP.Mag
+    lenParams <- HP.runConfState $ gets $ lengthParameters . globalScope
+    putText $ describe lenParams
+    pure (pages, mag)

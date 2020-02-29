@@ -5,7 +5,6 @@ module HeX.Command.Run where
 import           HeXlude
 
 import           Control.Monad.Except      (runExceptT)
-import           Control.Monad.State.Lazy  (evalStateT)
 import qualified Data.HashMap.Strict       as HMap
 import           Data.Path                 (PathError)
 import           Data.Byte                 (ByteError)
@@ -22,33 +21,28 @@ import           HeX.BreakList
 import           HeX.Categorise
 import           HeX.Command.Build
 import           HeX.Command.Common
-import           HeX.Config                (ConfigError)
+import qualified HeX.Config                as Conf
 import qualified HeX.Config.Codes          as Code
 import           HeX.Evaluate              (EvaluationError)
 import           HeX.Lex                   (LexState (..), extractToken)
-import           HeX.Parse                 (ExpandedStream, ExpansionMode (..),
-                                            IndentFlag (..),
-                                            ExpansionError,
-                                            defaultCSMap,
-                                            parseCommand, resolveToken, fetchLexToken,
-                                            TeXStreamE, runSimpleRunParserT',
-                                            SimpleParsecT)
+import qualified HeX.Parse                 as HP
+import qualified HeX.Quantity              as Quantity
 
 type AppError =
     Variant '[ BuildError
-             , ConfigError
+             , Conf.ConfigError
              , EvaluationError
              , PathError
-             , ExpansionError
+             , HP.ExpansionError
              , TFMError
              ]
 
 newtype App a
-    = App { unApp :: ExceptT AppError (StateT ExpandedStream IO) a }
+    = App { unApp :: ExceptT AppError (StateT HP.ExpandedStream IO) a }
     deriving ( Functor
              , Applicative
              , Monad
-             , MonadState ExpandedStream
+             , MonadState HP.ExpandedStream
              , MonadIO
              , MonadError AppError
              )
@@ -127,11 +121,11 @@ runResolved = go LineBegin
     go lexState xs =
         case extractToken usableCatLookup lexState xs of
             Just (tok, lexState1, xs1) ->
-                print (resolveToken lookupCS Expanding tok) >> go lexState1 xs1
+                print (HP.resolveToken lookupCS HP.Expanding tok) >> go lexState1 xs1
             Nothing ->
                 pure ()
 
-    lookupCS cs = HMap.lookup cs defaultCSMap
+    lookupCS cs = HMap.lookup cs HP.defaultCSMap
 
 -- Expand.
 
@@ -140,15 +134,14 @@ runParseLoop
        , Show a
        , Show (P.Token s)
        )
-    => SimpleParsecT s (ExceptT (Variant TeXStreamE) IO) a
+    => HP.SimpleParsecT s (ExceptT (Variant HP.TeXStreamE) IO) a
     -> s
     -> IO ()
 runParseLoop p = go
   where
-    go s = runExceptT (runSimpleRunParserT' p s) >>= \case
+    go s = runExceptT (HP.runSimpleRunParserT' p s) >>= \case
         Left err ->
             panic $ show err
-            -- pure ()
         Right (s1, c) ->
             do
             print c
@@ -157,7 +150,7 @@ runParseLoop p = go
 runExpand
     :: ( Show s
        , Show (P.Token s)
-       , P.Stream s (ExceptT (Variant TeXStreamE) IO)
+       , P.Stream s (ExceptT (Variant HP.TeXStreamE) IO)
        )
     => s
     -> IO ()
@@ -166,12 +159,12 @@ runExpand = runParseLoop P.anySingle
 -- Command.
 
 runCommand
-    :: ExpandedStream
+    :: HP.ExpandedStream
     -> IO ()
-runCommand = runParseLoop parseCommand
+runCommand = runParseLoop HP.parseCommand
 
 benchTake
-    :: ExpandedStream
+    :: HP.ExpandedStream
     -> IO ()
 benchTake s = runExceptT (P.take1_ s) >>= \case
     Left (err :: AppError) -> panic $ show err
@@ -179,16 +172,16 @@ benchTake s = runExceptT (P.take1_ s) >>= \case
     Right (Just (_, s1)) -> benchTake s1
 
 benchFetchLex
-    :: ExpandedStream
+    :: HP.ExpandedStream
     -> IO ()
-benchFetchLex s = case fetchLexToken s of
+benchFetchLex s = case HP.fetchLexToken s of
     Nothing -> pure ()
     Just (_, s1) -> benchFetchLex s1
 
 -- Generic.
 
 runApp
-    :: ExpandedStream
+    :: HP.ExpandedStream
     -> App a
     -> IO a
 runApp s f = evalStateT (runExceptT $ unApp f) s >>= strEitherToIO
@@ -201,9 +194,9 @@ runApp s f = evalStateT (runExceptT $ unApp f) s >>= strEitherToIO
 
 extractParaHList :: App HList
 extractParaHList =
-    (\(ParaResult _ hList) -> hList) <$> extractPara Indent
+    (\(ParaResult _ hList) -> hList) <$> extractPara HP.Indent
 
-runPara :: ExpandedStream -> IO ()
+runPara :: HP.ExpandedStream -> IO ()
 runPara s =
     do
     HList elemSeq <- runApp s extractParaHList
@@ -211,16 +204,16 @@ runPara s =
 
 -- Paragraph boxes.
 
-codesToParaBoxes :: ExpandedStream -> IO (Seq (Box HBox))
+codesToParaBoxes :: HP.ExpandedStream -> IO (Seq (Box HBox))
 codesToParaBoxes s =
     runApp s $ extractParaHList <&> hListToParaLineBoxes >>= readOnConfState
 
-runSetPara :: ExpandedStream -> IO ()
+runSetPara :: HP.ExpandedStream -> IO ()
 runSetPara s = codesToParaBoxes s >>= putStrLn . describeDoubleLined
 
 -- Pages list.
 
-runPageList :: ExpandedStream -> IO ()
+runPageList :: HP.ExpandedStream -> IO ()
 runPageList s =
     do
     MainVModeResult (VList vList) <- runApp s extractMainVList
@@ -228,37 +221,39 @@ runPageList s =
 
 -- Pages boxes.
 
-codesToPages :: ExpandedStream -> IO (Seq Page)
+codesToPages :: HP.ExpandedStream -> IO (Seq Page, Conf.IntParamVal 'HP.Mag)
 codesToPages s = runApp s extractBreakAndSetVList
 
-runPages :: ExpandedStream -> IO ()
-runPages s = codesToPages s >>= printLine
+runPages :: HP.ExpandedStream -> IO ()
+runPages s = codesToPages s <&> fst >>= printLine
 
 -- DVI instructions.
 
-codesToDVI :: ExpandedStream -> IO (Seq Instruction)
-codesToDVI s = codesToPages s <&> pagesToDVI
+codesToDVI :: HP.ExpandedStream -> IO (Seq Instruction, Conf.IntParamVal 'HP.Mag)
+codesToDVI s =
+    do
+    (pages, mag) <- codesToPages s
+    pure (pagesToDVI pages, mag)
 
-runDVI :: ExpandedStream -> IO ()
-runDVI s = codesToDVI s >>= printLine
+runDVI :: HP.ExpandedStream -> IO ()
+runDVI s = codesToDVI s <&> fst >>= printLine
 
 -- Raw DVI instructions.
 
-codesToDVIRaw :: ExpandedStream -> IO (Seq EncodableInstruction)
+codesToDVIRaw :: HP.ExpandedStream -> IO (Seq EncodableInstruction)
 codesToDVIRaw s = do
-    let _mag = 1000
-    instrs <- codesToDVI s
-    strEitherToIO $ parseInstructions instrs _mag
+    (instrs, mag) <- codesToDVI s
+    strEitherToIO $ parseInstructions instrs $ Quantity.unInt $ Conf.unIntParam mag
   where
     strEitherToIO :: Either (Variant '[ByteError, DVIError, PathError]) v -> IO v
     strEitherToIO = \case
         Left err -> panic $ show err
         Right v -> pure v
 
-runDVIRaw :: ExpandedStream -> IO ()
+runDVIRaw :: HP.ExpandedStream -> IO ()
 runDVIRaw s = codesToDVIRaw s >>= printLine
 
 -- DVI byte strings.
 
-codesToDVIBytes :: ExpandedStream -> IO ByteString
+codesToDVIBytes :: HP.ExpandedStream -> IO ByteString
 codesToDVIBytes s = codesToDVIRaw s <&> encode

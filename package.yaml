@@ -13,13 +13,16 @@ description:         Please see the README on GitHub at <https://github.com/eddi
 
 dependencies:
 - ascii
-- base >= 4.7 && < 5
+- base
 - binary
 - bytestring
+- conduit
 - containers
 - directory
+- generic-lens
 - hashable
 - ilist
+- lens
 - megaparsec
 - mono-traversable
 - mtl
@@ -108,6 +111,7 @@ default-extensions:
 - OverloadedStrings
 - ScopedTypeVariables
 - StandaloneDeriving
+- StrictData
 - TupleSections
 - TypeApplications
 - TypeFamilies

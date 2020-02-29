@@ -4,12 +4,12 @@ import           HeXlude
 
 import           Control.Monad             (when)
 import qualified Data.ByteString           as BS
+import qualified Data.ByteString.Lazy      as BS.L
 import qualified System.Console.GetOpt     as Opt
 
-import qualified Data.Sequence             as Seq
-import qualified HeX.Config.Codes          as Code
 import           HeX.Command.Run
 import           HeX.Parse.Stream.Instance (newExpandStream)
+import qualified Path
 import qualified Path.IO
 
 data Mode
@@ -65,11 +65,11 @@ usage = toS $ Opt.usageInfo header options
   where
     header = "Usage: hex [OPTION...] [file]"
 
-preamble :: Seq Code.CharCode
-preamble = Seq.fromList $ Code.codesFromStr "\\font\\thefont=cmr10 \\thefont\n\n"
+preamble :: BS.L.ByteString
+preamble = "\\font\\thefont=cmr10 \\thefont\n\n"
 
-postamble :: Seq Code.CharCode
-postamble = Seq.fromList $ Code.codesFromStr "\n\n\\end\n"
+postamble :: BS.L.ByteString
+postamble = "\n\n\\end\n"
 
 parseArgs :: [Text] -> IO ([Flag], [Text])
 parseArgs argStr =
@@ -84,12 +84,12 @@ main = do
     (inputRaw, maybePath) <- case args of
         ["-"] ->
             do
-            cs <- fmap Code.CharCode . Seq.fromList . BS.unpack <$> liftIO BS.getContents
+            cs <- liftIO BS.L.getContents
             pure (cs, Nothing)
         [pathStr] ->
             do
             path <- Path.IO.resolveFile' (toS pathStr)
-            cs <- Code.readCharCodes path
+            cs <- BS.L.readFile (Path.toFilePath path)
             pure (cs, Just path)
         _ ->
             panic "Please specify a file to execute, or '-' to read from the standard-input stream"
@@ -97,9 +97,8 @@ main = do
         input = if Amble `elem` flags
             then preamble <> inputRaw <> postamble
             else inputRaw
-        mode = lastDef DVIWriteMode [ m | (Mode m) <- flags ]
-        destPathStr = lastDef "out.dvi" [ f | (Output f) <- flags ]
         makeStream = newExpandStream maybePath input
+        mode = lastDef DVIWriteMode [ m | Mode m <- flags ]
     case mode of
         CatMode      -> runCat input
         LexMode      -> runLex input
@@ -112,4 +111,6 @@ main = do
         PageMode     -> makeStream >>= runPages
         DVIMode      -> makeStream >>= runDVI
         RawDVIMode   -> makeStream >>= runDVIRaw
-        DVIWriteMode -> makeStream >>= codesToDVIBytes >>= BS.writeFile destPathStr
+        DVIWriteMode -> do
+            let destPathStr = lastDef "out.dvi" [ f | Output f <- flags ]
+            makeStream >>= codesToDVIBytes >>= BS.writeFile destPathStr

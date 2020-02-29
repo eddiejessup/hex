@@ -111,7 +111,8 @@ parseMundaneInstruction st = \case
         addInstruction st <$> getCharacterInstruction c Set
     AddRule Rule{ruleWidth = w, ruleHeight = h, ruleDepth = d} ->
         pure $ addInstruction st $ getRuleInstruction Set (h + d) w
-    Move ax dist -> addInstruction st <$> getMoveInstruction ax dist
+    Move ax dist ->
+        addInstruction st <$> getMoveInstruction ax dist
     BeginNewPage -> do
         let points = beginPagePointers st
             -- Get the instructions to finish off the current page.
@@ -171,12 +172,12 @@ parseInstructions _instrs magnification = do
     ParseState{instrs = mundaneInstrs, beginPagePointers, maxStackDepth}
         <- parseMundaneInstructions magnification _instrs
     let (maxPageHeightPlusDepth, maxPageWidth) = (1, 1)
-        postambleInstr =
-            getPostambleInstr beginPagePointers
-                              magnification
-                              maxPageHeightPlusDepth
-                              maxPageWidth
-                              maxStackDepth
+        postambleInstr = getPostambleInstr
+            beginPagePointers
+            magnification
+            maxPageHeightPlusDepth
+            maxPageWidth
+            maxStackDepth
         postamblePointer = encLength mundaneInstrs
         postPostambleInstr = getPostPostambleInstr postamblePointer
         fontDefinitions = filter isDefineFontInstr mundaneInstrs

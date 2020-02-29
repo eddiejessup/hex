@@ -4,8 +4,6 @@ module HeX.Command.Common where
 
 import           HeXlude
 
-import           Control.Monad.State.Lazy  (MonadState, StateT, get, modify)
-
 import           HeX.Config
 import           HeX.Evaluate
 import           HeX.Quantity

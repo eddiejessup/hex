@@ -1,3 +1,5 @@
+{-# LANGUAGE StrictData #-}
+
 module HeX.Lex where
 
 import           HeXlude
@@ -9,8 +11,8 @@ import qualified HeX.Config.Codes     as Code
 
 data ControlSequence
     = ControlSequence
-        { csChars :: !(Seq Code.CharCode)
-        , csHash  :: !Int
+        { csChars :: Seq Code.CharCode
+        , csHash  :: Int
         }
         deriving stock (Show, Eq)
 
@@ -29,8 +31,8 @@ instance Readable ControlSequence where
     describe ControlSequence { csChars } = "\\" <> toS csChars
 
 data ControlSequenceLike
-    = ActiveCharacter !Code.CharCode
-    | ControlSequenceProper !ControlSequence
+    = ActiveCharacter Code.CharCode
+    | ControlSequenceProper ControlSequence
     deriving stock (Show, Eq)
 
 instance Hashable ControlSequenceLike where

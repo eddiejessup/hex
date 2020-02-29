@@ -63,78 +63,72 @@ headToParseAssignment = go []
                 }
 
 headToParseNonMacroAssignmentBody :: forall s e m. TeXParseable s e m => T.PrimitiveToken -> SimpleParsecT s m AssignmentBody
-headToParseNonMacroAssignmentBody =
-    choiceFlap
-        [ \case
-            T.HyphenationTok ->
-                SetHyphenation <$> parseGeneralText
-            T.HyphenationPatternsTok ->
-                SetHyphenationPatterns <$> parseGeneralText
-            T.InteractionModeTok intMode ->
-                pure (SetInteractionMode intMode)
-            T.LetTok ->
-                do
-                (cs, tok) <- parseVarSepVal
-                    parseCSName
-                    skipOptionalEquals
-                    parseLetArg
-                pure $ DefineControlSequence cs (LetTarget tok)
-            T.FutureLetTok ->
-                DefineControlSequence
-                    <$> parseCSName
-                    <*> (FutureLetTarget <$> parseLexToken <*> parseLexToken)
-            T.ShortDefHeadTok quant ->
-                do
-                (cs, n) <- parseVarSepVal
-                    parseCSName
-                    skipOptionalEquals
-                    parseTeXInt
-                pure $ DefineControlSequence cs (ShortDefineTarget quant n)
-            T.ParagraphShapeTok ->
-                do
-                skipOptionalEquals
-                -- In a ⟨shape assignment⟩ for which the ⟨number⟩ is n, the ⟨shape
-                -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
-                -- consecutive occurrences of ⟨dimen⟩
-                nrPairs <- parseTeXInt
-                (Q.TeXInt eNrPairsInt) <- P.getInput <&> getConfig >>= runReaderT (texEvaluate nrPairs)
-                let parseLengthPair = (,) <$> parseLength <*> parseLength
-                SetParShape <$> PC.count eNrPairsInt parseLengthPair
-            T.ReadTok ->
-                do
-                nr <- parseTeXInt
-                skipKeyword (codesFromStr "to")
-                skipOptionalSpaces
-                cs <- parseCSName
-                pure $ DefineControlSequence cs (ReadTarget nr)
-            T.SetBoxRegisterTok ->
-                uncurry SetBoxRegister <$> parseVarSepVal
-                    parseEightBitTeXInt
-                    skipOptionalEquals
-                    (skipFiller >> parseHeaded headToParseBox)
-            -- \font <control-sequence> <equals> <file-name> <at-clause>
-            T.FontTok ->
-                do
-                cs <- parseCSName
-                skipOptionalEquals
-                fname <- parseFileName
-                fontSpec <- tryChoice
-                    [ skipKeyword (codesFromStr "at") >> (FontAt <$> parseLength)
-                    , skipKeyword (codesFromStr "scaled") >> (FontScaled <$> parseTeXInt)
-                    , skipOptionalSpaces $> NaturalFont
-                    ]
-                pure $ DefineControlSequence cs (FontTarget fontSpec fname)
-            _ ->
-                empty
-        , headToParseCodeAssignment
-        , fmap ModifyVariable <$> headToModifyVariable
-        , fmap SetVariable <$> headToParseVariableAssignment
-        , fmap SelectFont <$> headToParseFontRefToken
-        , headToParseSetFamilyMember
-        , headToParseSetFontDimension
-        , headToParseSetFontChar
-        , headToParseSetBoxDimension
-        ]
+headToParseNonMacroAssignmentBody = \case
+    T.HyphenationTok ->
+        SetHyphenation <$> parseGeneralText
+    T.HyphenationPatternsTok ->
+        SetHyphenationPatterns <$> parseGeneralText
+    T.InteractionModeTok intMode ->
+        pure (SetInteractionMode intMode)
+    T.LetTok ->
+        do
+        cs <- parseCSName
+        skipOptionalEquals
+        DefineControlSequence cs <$> (LetTarget <$> parseLetArg)
+    T.FutureLetTok ->
+        DefineControlSequence
+            <$> parseCSName
+            <*> (FutureLetTarget <$> parseLexToken <*> parseLexToken)
+    T.ShortDefHeadTok quant ->
+        do
+        cs <- parseCSName
+        skipOptionalEquals
+        DefineControlSequence cs <$> (ShortDefineTarget quant <$> parseTeXInt)
+    T.ParagraphShapeTok ->
+        do
+        skipOptionalEquals
+        -- In a ⟨shape assignment⟩ for which the ⟨number⟩ is n, the ⟨shape
+        -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
+        -- consecutive occurrences of ⟨dimen⟩
+        nrPairs <- parseTeXInt
+        (Q.TeXInt eNrPairsInt) <- P.getInput <&> getConfig >>= runReaderT (texEvaluate nrPairs)
+        let parseLengthPair = (,) <$> parseLength <*> parseLength
+        SetParShape <$> PC.count eNrPairsInt parseLengthPair
+    T.ReadTok ->
+        do
+        nr <- parseTeXInt
+        skipKeyword (codesFromStr "to")
+        skipOptionalSpaces
+        cs <- parseCSName
+        pure $ DefineControlSequence cs (ReadTarget nr)
+    T.SetBoxRegisterTok ->
+        do
+        var <- parseEightBitTeXInt
+        skipOptionalEquals
+        skipFiller
+        SetBoxRegister var <$> parseHeaded headToParseBox
+    -- \font <control-sequence> <equals> <file-name> <at-clause>
+    T.FontTok ->
+        do
+        cs <- parseCSName
+        skipOptionalEquals
+        fname <- parseFileName
+        fontSpec <- tryChoice
+            [ skipKeyword (codesFromStr "at") >> (FontAt <$> parseLength)
+            , skipKeyword (codesFromStr "scaled") >> (FontScaled <$> parseTeXInt)
+            , skipOptionalSpaces $> NaturalFont
+            ]
+        pure $ DefineControlSequence cs (FontTarget fontSpec fname)
+    t -> choiceFlap
+            [ headToParseCodeAssignment
+            , fmap ModifyVariable <$> headToModifyVariable
+            , fmap SetVariable <$> headToParseVariableAssignment
+            , fmap SelectFont <$> headToParseFontRefToken
+            , headToParseSetFamilyMember
+            , headToParseSetFontDimension
+            , headToParseSetFontChar
+            , headToParseSetBoxDimension
+            ] t
   where
     headToParseCodeAssignment t =
         do
@@ -145,28 +139,28 @@ headToParseNonMacroAssignmentBody =
     headToModifyVariable = \case
         T.AdvanceVarTok ->
             tryChoice
-                [ uncurry AdvanceTeXIntVariable <$> parseVarSepVal
-                    (parseHeaded headToParseTeXIntVariable)
+                [ do
+                    var <- parseHeaded headToParseTeXIntVariable
                     skipOptionalBy
-                    parseTeXInt
-                , uncurry AdvanceLengthVariable <$> parseVarSepVal
-                    (parseHeaded headToParseLengthVariable)
+                    AdvanceTeXIntVariable var <$> parseTeXInt
+                , do
+                    var <- parseHeaded headToParseLengthVariable
                     skipOptionalBy
-                    parseLength
-                , uncurry AdvanceGlueVariable <$> parseVarSepVal
-                    (parseHeaded headToParseGlueVariable)
+                    AdvanceLengthVariable var <$> parseLength
+                , do
+                    var <- parseHeaded headToParseGlueVariable
                     skipOptionalBy
-                    parseGlue
-                , uncurry AdvanceMathGlueVariable <$> parseVarSepVal
-                    (parseHeaded headToParseMathGlueVariable)
+                    AdvanceGlueVariable var <$> parseGlue
+                , do
+                    var <- parseHeaded headToParseMathGlueVariable
                     skipOptionalBy
-                    parseMathGlue
+                    AdvanceMathGlueVariable var <$> parseMathGlue
                 ]
         T.ScaleVarTok d ->
-            uncurry (ScaleVariable d) <$> parseVarSepVal
-                parseNumericVariable
-                skipOptionalBy
-                parseTeXInt
+            do
+            var <- parseNumericVariable
+            skipOptionalBy
+            ScaleVariable d var <$> parseTeXInt
         t ->
             P.failure (Just (P.Tokens (t :| []))) (Set.singleton (P.Label ('M' :| "odify variable")))
 
@@ -186,47 +180,47 @@ headToParseNonMacroAssignmentBody =
 
     headToParseVariableAssignment t =
         tryChoice
-            [ uncurry TeXIntVariableAssignment <$> parseVarSepVal
-                (headToParseTeXIntVariable t)
+            [ do
+                var <- headToParseTeXIntVariable t
                 skipOptionalEquals
-                parseTeXInt
-            , uncurry LengthVariableAssignment <$> parseVarSepVal
-                (headToParseLengthVariable t)
+                TeXIntVariableAssignment var <$> parseTeXInt
+            , do
+                var <- headToParseLengthVariable t
                 skipOptionalEquals
-                parseLength
-            , uncurry GlueVariableAssignment <$> parseVarSepVal
-                (headToParseGlueVariable t)
+                LengthVariableAssignment var <$> parseLength
+            , do
+                var <- headToParseGlueVariable t
                 skipOptionalEquals
-                parseGlue
-            , uncurry MathGlueVariableAssignment <$> parseVarSepVal
-                (headToParseMathGlueVariable t)
+                GlueVariableAssignment var <$> parseGlue
+            , do
+                var <- headToParseMathGlueVariable t
                 skipOptionalEquals
-                parseMathGlue
-            , uncurry TokenListVariableAssignment <$> parseVarSepVal
-                (headToParseTokenListVariable t)
+                MathGlueVariableAssignment var <$> parseMathGlue
+            , do
+                var <- headToParseTokenListVariable t
                 skipOptionalEquals
-                (TokenListAssignmentText <$> parseGeneralText)
-            , uncurry TokenListVariableAssignment <$> parseVarSepVal
-                (headToParseTokenListVariable t)
+                TokenListVariableAssignment var <$> (TokenListAssignmentText <$> parseGeneralText)
+            , do
+                var <- headToParseTokenListVariable t
                 skipFiller
-                (TokenListAssignmentVar <$> parseHeaded headToParseTokenListVariable)
+                TokenListVariableAssignment var <$> (TokenListAssignmentVar <$> parseHeaded headToParseTokenListVariable)
               -- Unofficial variable assignments, separated because of being
               -- global in the TeXbook.
-            , uncurry SpecialTeXIntVariableAssignment <$> parseVarSepVal
-                (headToParseSpecialTeXInt t)
+            , do
+                var <- headToParseSpecialTeXInt t
                 skipOptionalEquals
-                parseTeXInt
-            , uncurry SpecialLengthVariableAssignment <$> parseVarSepVal
-                (headToParseSpecialLength t)
+                SpecialTeXIntVariableAssignment var <$> parseTeXInt
+            , do
+                var <- headToParseSpecialLength t
                 skipOptionalEquals
-                parseLength
+                SpecialLengthVariableAssignment var <$> parseLength
             ]
 
     headToParseSetFamilyMember t =
-        uncurry SetFamilyMember <$> parseVarSepVal
-            (headToParseFamilyMember t)
-            skipOptionalEquals
-            (parseHeaded headToParseFontRef)
+        do
+        var <- headToParseFamilyMember t
+        skipOptionalEquals
+        SetFamilyMember var <$> parseHeaded headToParseFontRef
 
     headToParseSetFontDimension t =
         do
@@ -245,20 +239,6 @@ headToParseNonMacroAssignmentBody =
         var <- headToParseBoxDimensionRef t
         skipOptionalEquals
         SetBoxDimension var <$> parseLength
-
-parseVarSepVal
-    :: ( TeXParseable s e m
-       )
-    => SimpleParsecT s m a
-    -> SimpleParsecT s m ()
-    -> SimpleParsecT s m b
-    -> SimpleParsecT s m (a, b)
-parseVarSepVal varParser sepParser valParser =
-    do
-    var <- varParser
-    sepParser
-    val <- valParser
-    pure (var, val)
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
 parseFileName :: TeXParser s e m TeXFilePath

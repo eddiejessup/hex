@@ -1,3 +1,4 @@
+{-# LANGUAGE StrictData #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module HeX.Parse.Stream.Instance where
@@ -9,6 +10,7 @@ import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.List.NonEmpty        as L.NE
 import           Data.Map.Strict           ((!?))
 import qualified Data.Map.Strict           as Map
+import qualified Data.Sequence             as Seq
 import           Path                      (Abs, File, Path)
 import qualified Path
 import qualified Path.IO
@@ -30,17 +32,17 @@ import           HeX.Parse.SyntaxCommand
 import           HeX.Parse.Token
 
 data ExpandedStream = ExpandedStream
-    { streamTokenSources :: !(L.NE.NonEmpty TokenSource)
-    , lexState           :: !Lex.LexState
-    , expansionMode      :: !ExpansionMode
-    , config             :: !Conf.Config
-    , skipState          :: ![ConditionBodyState]
+    { streamTokenSources :: L.NE.NonEmpty TokenSource
+    , lexState           :: Lex.LexState
+    , expansionMode      :: ExpansionMode
+    , config             :: Conf.Config
+    , skipState          :: [ConditionBodyState]
     }
 
 data TokenSource = TokenSource
-    { sourcePath      :: !(Maybe (Path Abs File))
-    , sourceCharCodes :: !BS.L.ByteString
-    , sourceLexTokens :: !(Seq Lex.Token)
+    { sourcePath      :: Maybe (Path Abs File)
+    , sourceCharCodes :: BS.L.ByteString
+    , sourceLexTokens :: Seq Lex.Token
     }
     deriving ( Show )
 
@@ -66,12 +68,12 @@ instance ( MonadErrorAnyOf e m TeXStreamE
          ) => P.Stream ExpandedStream m where
     type Token ExpandedStream = PrimitiveToken
 
-    type Tokens ExpandedStream = [PrimitiveToken]
+    type Tokens ExpandedStream = Seq PrimitiveToken
 
     -- take1_ :: s -> m (Maybe (Token s, s))
     take1_ stream =
         withJust (fetchAndExpandToken stream) $ \(lts, rt, newStream) ->
-            case rt of
+            case newStream `seq` rt of
                 -- If it's a primitive token, provide that.
                 PrimitiveToken pt ->
                     pure $ Just (pt, newStream)
@@ -81,42 +83,40 @@ instance ( MonadErrorAnyOf e m TeXStreamE
                     P.take1_ $ insertLexTokens newStream lts
 
     -- tokensToChunk :: Proxy s -> Proxy m -> [Token s] -> Tokens s
-    tokensToChunk _ _ = id
+    tokensToChunk _ _ = Seq.fromList
 
     -- chunkToTokens :: Proxy s -> Proxy m -> Tokens s -> [Token s]
-    chunkToTokens _ _ = id
+    chunkToTokens _ _ = toList
 
     -- chunkLength :: Proxy s -> Proxy m -> Tokens s -> Int
     chunkLength _ _ = length
 
-    -- If n <= 0, reurn 'Just (mempty, s)', where s is the original stream.
+    -- If n <= 0, return 'Just (mempty, s)', where s is the original stream.
     -- If n > 0 and the stream is empty, return Nothing.
     -- Otherwise, take a chunk of length n, or shorter if the stream is
     -- not long enough, and return the chunk along with the rest of the stream.
     -- takeN_ :: Int -> s -> m (Maybe (Tokens s, s))
-    takeN_ n s
-        | n <= 0 = pure $ Just (mempty, s)
-        | otherwise =
-            P.take1_ s >>= \case
-                Nothing -> pure Nothing
-                Just (t, newS) ->
-                    do
-                    (tsRest, finalS) <- P.takeN_ (pred n) newS <&> \case
-                        Nothing               -> ([],     newS)
-                        Just (tsRest, finalS) -> (tsRest, finalS)
-                    pure $ Just (t:tsRest, finalS)
+    takeN_ = go mempty
+      where
+        go acc n strm
+            | n <= 0 = pure $ Just (acc, strm)
+            | otherwise =
+                P.take1_ strm >>= \case
+                    Nothing -> pure $ case acc of
+                        Empty -> Nothing
+                        _ -> Just (acc, strm)
+                    Just (t, newS) ->
+                        go (acc |> t) (pred n) newS
 
     -- Extract chunk while the supplied predicate returns True.
     -- takeWhile_ :: (Token s -> Bool) -> s -> m (Tokens s, s)
-    takeWhile_ f s =
-        P.take1_ s >>= \case
-            Nothing ->
-                pure ([], s)
-            Just (t, newS) ->
-                do
-                (tsRest, finalS) <- if f t then P.takeWhile_ f newS
-                                           else pure ([], newS)
-                pure (t:tsRest, finalS)
+    takeWhile_ f = go mempty
+      where
+        go acc s = P.take1_ s >>= \case
+            Just (t, newS) | f t ->
+                go (acc |> t) newS
+            _ ->
+                pure (acc, s)
 
     -- showTokens :: Proxy s -> Proxy m -> NonEmpty (Token s) -> String
     showTokens _ _ = show
@@ -152,7 +152,7 @@ expandCSName charToks =
     -- '\relax'.
     pure (Lex.ControlSequenceToken $ Lex.mkControlSequence charToks)
 
-expandString :: Conf.IntParamVal Conf.EscapeChar
+expandString :: Conf.IntParamVal 'EscapeChar
              -> Lex.Token
              -> Seq Lex.Token
 expandString (Conf.IntParamVal escapeCharCodeInt) tok =
@@ -404,34 +404,73 @@ expandSyntaxCommand strm = \case
         pure $ Just (stream, v)
 
 -- Get the next lex token, and update our stream.
+-- fetchLexToken :: ExpandedStream -> Maybe (Lex.Token, ExpandedStream)
+-- fetchLexToken (!stream) =
+--     let
+--         lkpCatCode t = Conf.lookupCatCode t (config stream)
+--     in
+--         case Lex.extractToken lkpCatCode (lexState stream) sourceCharCodes of
+--             Just (fetchedLexToken, newLexState, newCodes) ->
+--                 let
+--                     newCurTokSource = curTokSource{ sourceCharCodes = newCodes }
+--                 in
+--                     Just ( fetchedLexToken,
+--                          stream{ streamTokenSources = seq outerStreams (newCurTokSource :| outerStreams), lexState = newLexState })
+--             Nothing ->
+--                 do
+--                 nonEmptyOuterStreams <- L.NE.nonEmpty outerStreams
+--                 fetchLexToken stream{ streamTokenSources = nonEmptyOuterStreams }
+--   where
+--     curTokSource@TokenSource{ sourceCharCodes, sourceLexTokens } :| outerStreams = streamTokenSources stream
+-- fetchLexToken :: ExpandedStream -> Maybe (Lex.Token, ExpandedStream)
+-- fetchLexToken (!stream) =
+--     let
+--         lkpCatCode t = Conf.lookupCatCode t (config stream)
+--     in
+--         case Lex.extractToken lkpCatCode (lexState stream) sourceCharCodes of
+--             Just (fetchedLexToken, newLexState, newCodes) ->
+--                 let
+--                     newCurTokSource = curTokSource{ sourceCharCodes = newCodes }
+--                 in
+--                     Just ( fetchedLexToken,
+--                          stream{ streamTokenSources = newCurTokSource :| outerStreams, lexState = newLexState })
+--             Nothing ->
+--                 Nothing
+--                 -- do
+--                 -- nonEmptyOuterStreams <- L.NE.nonEmpty outerStreams
+--                 -- fetchLexToken stream{ streamTokenSources = nonEmptyOuterStreams }
+--   where
+--     curTokSource@TokenSource{ sourceCharCodes, sourceLexTokens } :| outerStreams = streamTokenSources stream
 fetchLexToken :: ExpandedStream -> Maybe (Lex.Token, ExpandedStream)
 fetchLexToken stream =
-    case sourceLexTokens of
-        -- If there is a lex token in the buffer, use that.
-        fstLexToken :<| laterLexTokens ->
-            let
-                newCurTokSource = curTokSource{ sourceLexTokens = laterLexTokens }
-            in
-                Just (fstLexToken, stream{ streamTokenSources = newCurTokSource :| outerStreams })
-        -- If the lex token buffer is empty, extract a token and use it.
-        Empty ->
-            let
-                lkpCatCode t = Conf.lookupCatCode t (config stream)
-            in
-                case Lex.extractToken lkpCatCode (lexState stream) sourceCharCodes of
-                    Just (fetchedLexToken, newLexState, newCodes) ->
-                        let
-                            newCurTokSource = curTokSource{ sourceCharCodes = newCodes }
-                        in
-                            Just ( fetchedLexToken,
-                                 stream{ streamTokenSources = newCurTokSource :| outerStreams,
-                                 lexState = newLexState })
-                    Nothing ->
-                        do
-                        nonEmptyOuterStreams <- L.NE.nonEmpty outerStreams
-                        fetchLexToken stream{ streamTokenSources = nonEmptyOuterStreams }
+    do
+    (lt, newLexState, newStreamTokenSources) <- fetchFromSources (streamTokenSources stream)
+    pure (lt, stream { streamTokenSources = newStreamTokenSources, lexState = newLexState })
   where
-    curTokSource@TokenSource{ sourceCharCodes, sourceLexTokens } :| outerStreams = streamTokenSources stream
+    lkpCatCode t = Conf.lookupCatCode t (config stream)
+
+    curLexState = lexState stream
+
+    -- TODO:
+    -- [a] -> (a -> Maybe b) -> Maybe (b, [a])
+    fetchFromSources (curTokSource :| outerTokSources) =
+        case fetchFromSource curTokSource of
+            Nothing ->
+                nonEmpty outerTokSources >>= fetchFromSources
+            Just (lt, lexState, newCurTokSource) ->
+                Just $ seq outerTokSources (lt, lexState, newCurTokSource :| outerTokSources)
+
+    fetchFromSource tokSource@TokenSource { sourceCharCodes, sourceLexTokens } =
+        case sourceLexTokens of
+            -- If there is a lex token in the buffer, use that.
+            fstLexToken :<| laterLexTokens ->
+                let newCurTokSource = tokSource { sourceLexTokens = laterLexTokens }
+                in  Just (fstLexToken, curLexState, newCurTokSource)
+            -- If the lex token buffer is empty, extract a token and use it.
+            Empty ->
+                Lex.extractToken lkpCatCode curLexState sourceCharCodes
+                <&> \(fetchedLexToken, newLexState, newCodes) ->
+                        (fetchedLexToken, newLexState, tokSource { sourceCharCodes = newCodes })
 
 fetchResolvedToken
     :: ( MonadErrorAnyOf e m '[ExpansionError]

@@ -4,7 +4,7 @@ import           HeXlude
 
 import qualified Data.Sequence as Seq
 
-data Adj a = Adj { adjPre :: !(Maybe a), adjVal :: !a, adjPost :: !(Maybe a) }
+data Adj a = Adj { adjPre :: Maybe a, adjVal :: a, adjPost :: Maybe a }
     deriving ( Show )
 
 data ToAdjState a

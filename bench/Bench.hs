@@ -7,8 +7,11 @@ import qualified Data.ByteString.Lazy      as BS.L
 import qualified System.Console.GetOpt     as Opt
 
 import qualified Data.Sequence             as Seq
+import qualified HeX.Config.Config         as Conf
 import qualified HeX.Config.Codes          as Code
+import qualified HeX.Lex                   as Lex
 import           HeX.Command.Run
+import qualified HeX.Parse                 as Parse
 import           HeX.Parse                 (newExpandStream)
 import qualified Path
 import qualified Path.IO
@@ -95,11 +98,25 @@ main = do
 
     -- runResolved inputRaw
 
-    stream <- newExpandStream Nothing inputRaw
+    -- conf0 <- Conf.newConfig
+    -- let setCS name confIn =
+    --         Conf.setControlSequence
+    --             (Lex.ControlSequenceProper $ Lex.mkControlSequence name)
+    --             (Parse.PrimitiveToken Parse.RelaxTok)
+    --             Parse.Local
+    --             confIn
+    -- let conf1 = setCS (toS ("notpar" :: [Char])) conf0
+    -- let conf2 = doN (setCS (toS ("par" :: [Char]))) 100000 conf1
+    -- seq conf2 (pure ())
 
+    stream <- newExpandStream Nothing inputRaw
+    runPageList stream
     -- benchFetchLex stream
     -- benchTake stream
     -- runCommand stream
 
-    -- runPageList stream
-    runPageList stream
+doN f n0 v0 = go n0 v0
+  where
+    go n v
+        | n == 0 = v
+        | otherwise = let nv = f v in seq nv (go (pred n) (f v))

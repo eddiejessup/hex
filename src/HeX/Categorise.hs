@@ -1,3 +1,5 @@
+{-# LANGUAGE StrictData #-}
+
 module HeX.Categorise where
 
 import           HeXlude

@@ -2,8 +2,6 @@ module HeX.Variable where
 
 import           HeXlude
 
-import           Control.Monad.State.Lazy (MonadState, modify)
-
 import qualified HeX.BreakList            as BL
 import           HeX.Command.Common
 import           HeX.Config

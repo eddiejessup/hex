@@ -12,6 +12,7 @@ import           HeX.BreakList.Judge
 import           HeX.BreakList.Set
 import           HeX.Config.Parameters
 import           HeX.Quantity
+import           HeX.Parse.Token (LengthParameter(..))
 
 data PageBreakJudgment =
     DoNotBreak | BreakPageAtBest | BreakPageHere | TrackCost !TeXInt
@@ -20,7 +21,7 @@ data PageBreakJudgment =
 pageBreakJudgment
     :: VList
     -> BreakItem
-    -> LenParamVal VSize
+    -> LenParamVal 'VSize
     -> PageBreakJudgment
 pageBreakJudgment vList breakItem (LenParamVal h) =
     let TargetLength status _ = listGlueStatusConcreteTarget h vList
@@ -42,7 +43,7 @@ pageBreakJudgment vList breakItem (LenParamVal h) =
     p = breakPenalty breakItem
     q = 0
 
-setPage :: LenParamVal VSize -> VList -> B.Page
+setPage :: LenParamVal 'VSize -> VList -> B.Page
 setPage (LenParamVal h) vList =
     B.Page $ setVList vList (B.To h) DefaultAlign
 
@@ -55,7 +56,7 @@ newCurrentPage :: CurrentPage
 newCurrentPage = CurrentPage mempty Nothing
 
 runPageBuilder
-    :: LenParamVal VSize
+    :: LenParamVal 'VSize
     -> CurrentPage
     -> VList
     -> Seq B.Page

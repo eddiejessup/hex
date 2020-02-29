@@ -10,6 +10,8 @@ module HeXlude
     , MonadErrorVariant
     , MonadErrorAnyOf
 
+    , field
+
     , seqLookupEith
     , seqLastMay
     , seqHeadMay
@@ -41,6 +43,7 @@ import           Control.Arrow             ((>>>))
 import           Control.Monad.Except      (MonadError, liftIO, throwError)
 import           Control.Monad.IO.Class    (MonadIO)
 import           Control.Monad.Trans.Maybe (MaybeT, runMaybeT)
+import           Data.Generics.Product     (field)
 import           Data.Function             ((&))
 import           Data.Functor              ((<&>))
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)

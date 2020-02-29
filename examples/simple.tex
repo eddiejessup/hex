@@ -1,43 +1,65 @@
-\font\thefont=cmr10 \thefont
+\input plain_min
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque vitae maximus justo, sed luctus arcu. Suspendisse tincidunt facilisis auctor. Quisque ipsum erat, consectetur ut dolor sit amet, aliquam molestie odio. Proin commodo tellus nec aliquet lobortis. Donec nec eros ultrices, convallis erat quis, suscipit odio. Vestibulum pharetra nisi non semper dictum. Nulla ante elit, malesuada eget fringilla quis, feugiat in eros. Phasellus non urna mauris. Praesent porta pretium egestas. Donec vel consectetur magna, volutpat pellentesque nunc. Duis ultrices luctus risus placerat finibus.
+% Plain TeX for a 1 page document
 
-Donec odio magna, euismod a imperdiet sed, malesuada ut odio. Mauris mattis vel mi ut dictum. Proin lacinia nulla sed tortor viverra volutpat. Pellentesque gravida suscipit libero et tempus. Quisque posuere arcu non rhoncus sagittis. Integer metus dolor, hendrerit nec mi vitae, laoreet accumsan lectus. Praesent consequat interdum urna, ac pulvinar magna. Donec interdum neque imperdiet, vehicula orci et, euismod arcu. Donec maximus orci ac mauris aliquam, eget porta diam consequat. Aenean varius commodo arcu eu euismod. Vestibulum aliquam, dui et sagittis efficitur, orci ex vulputate quam, non malesuada mi ipsum non tortor. Etiam ornare purus in mattis luctus. Nullam volutpat felis quam, eget convallis arcu porta ut.
+%% The lines between the two rows of %'s are more or less compulsory.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Maecenas posuere accumsan luctus. Pellentesque ut vestibulum enim, sed venenatis enim. Phasellus facilisis luctus est vel elementum. Praesent feugiat ultricies rhoncus. Morbi vel gravida risus. Aliquam ligula quam, porta non justo accumsan, pellentesque sodales nisi. Morbi tempor tellus accumsan nisi semper, id tempus libero varius. Duis commodo ac tellus quis interdum. Sed ut augue condimentum, sodales eros et, auctor dolor. Cras quis augue ipsum. Sed ut elit eget ex consequat accumsan. Etiam in aliquam ipsum, non eleifend libero.
+\magnification=\magstep1
+\baselineskip=12pt
+\hsize=6.3truein
+\vsize=8.7truein
+% \font\footsc=cmcsc10 at 8truept
+% \font\footbf=cmbx10 at 8truept
+% \font\footrm=cmr10 at 10truept
+% \footline={\footsc the electronic journal of combinatorics
+%    {\footbf 16} (2009), \#R00\hfil\footrm\folio}
 
-Nulla auctor condimentum lobortis. Mauris eu tempus ex, eu faucibus diam. Morbi elementum a ex at consequat. Pellentesque non orci id lectus tristique sagittis in eget enim. Suspendisse arcu orci, dignissim ac accumsan eu, imperdiet in neque. Proin eu sapien massa. Quisque non metus fermentum erat dignissim finibus ut vestibulum neque. Aenean ullamcorper imperdiet lacus ut dapibus. Curabitur ac dictum elit. Praesent tincidunt augue at ligula pellentesque consequat. In hac habitasse platea dictumst. Sed rutrum luctus porta. In mollis, sapien non hendrerit sollicitudin, elit erat eleifend lacus, malesuada tincidunt urna lacus vitae magna.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% The further structure of the front page need not be exactly as below,
+%% but the header must contain the names and addresses of the authors
+%% as well as the submission and acceptance dates.
 
-Cras vehicula enim at dignissim blandit. Praesent finibus quis magna a gravida. Pellentesque ac arcu nisi. Aliquam elementum rhoncus malesuada. Sed iaculis vitae erat in dignissim. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus erat ante, semper at molestie sed, feugiat vitae diam. Nunc facilisis facilisis dictum. Praesent eget eros vel ante pretium aliquet vel ut massa. Phasellus mollis sed dui non ullamcorper. Suspendisse ut fringilla velit. Vestibulum porta risus leo, in elementum est tincidunt et. Ut sed euismod enim. Etiam eu faucibus neque, non lacinia lorem.
+\font\bigrm=cmr12 at 24pt
+\centerline{\bigrm An elementary proof of the reconstruction conjecture}
+\bigskip\bigskip
 
-Morbi sollicitudin, dui in consectetur dictum, lectus neque accumsan sem, et tincidunt augue nisl ut metus. Nullam condimentum sem vitae lacinia aliquet. Cras quis quam egestas, pretium dolor eget, vestibulum mi. Quisque feugiat orci egestas tellus condimentum tincidunt. Donec sit amet lacus in dui elementum finibus quis vitae nibh. Curabitur pellentesque posuere posuere. Quisque vitae urna scelerisque, ornare metus sit amet, eleifend ligula. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Vestibulum eu magna dignissim mauris cursus egestas vel vel dui. In id maximus turpis. Etiam luctus, sapien quis euismod ultrices, sem nisl malesuada odio, pulvinar rhoncus diam augue sagittis turpis. Proin pellentesque ultricies enim, vel ornare dolor congue sit amet. Nullam at sodales ipsum. Fusce blandit nunc vel porttitor placerat. Cras vel justo in magna faucibus suscipit eget ac nisi. Ut nibh dolor, aliquam non finibus eu, tempor porttitor elit.
+\centerline{D. RemifaThanks to
+  the editors of this wonderful journal!}
+% \centerline{D. Remifa\footnote*{Thanks to
+%   the editors of this wonderful journal!}}
+\smallskip
+\centerline{Department of Inconsequential Studies}
+\centerline{Solatido College, North Kentucky, USA}
+\centerline{\tt remifa@dis.solatido.edu}
 
-Maecenas quis est a velit pulvinar ultrices. Morbi libero orci, ultrices non sagittis eget, sagittis et lorem. Sed laoreet sed lectus ac sagittis. Sed maximus ac dui in dictum. Maecenas vitae interdum lectus, ut vestibulum ex. Phasellus nunc nisi, suscipit ac laoreet in, interdum ut tellus. Suspendisse at tortor vitae urna interdum euismod sit amet ac nisl. Aliquam id placerat velit. Etiam hendrerit ante purus, sed pellentesque diam ultrices eget. Nullam ex quam, vestibulum posuere mauris a, lobortis euismod augue. Maecenas posuere feugiat sem, vel bibendum nibh bibendum ut. Nullam vel orci nibh. Proin laoreet mi dui, quis convallis quam vulputate ut. Aenean suscipit sit amet urna vel semper.
+% \bigskip
 
-Suspendisse tincidunt neque nec sodales commodo. Sed malesuada feugiat mi, vel tincidunt est porta at. Praesent viverra felis vitae ipsum posuere tempus. Donec non nunc erat. Phasellus eget erat nulla. Mauris ut nunc interdum, viverra nulla at, vestibulum enim. Vivamus consectetur, est nec semper egestas, arcu ligula rutrum est, ultricies suscipit eros augue ac leo. Praesent nulla ante, efficitur nec lorem et, tempus imperdiet nibh. Donec arcu mauris, mattis a lacinia ac, tempus at ante. Quisque commodo, nulla quis fermentum elementum, magna ex feugiat justo, eu auctor nisl ipsum non sapien.
+% \centerline{\footrm
+% Submitted: Jan 1, 2009; Accepted: Jan 2, 2009; Published: Jan 3, 2009}
+% \centerline{\footrm Mathematics Subject Classifications: 05C88, 05C89}
 
-Sed sapien magna, venenatis suscipit nunc sed, fermentum pulvinar est. Cras posuere at dolor ac ornare. Praesent bibendum ligula in ex aliquet, et eleifend mi porta. Proin lacinia cursus facilisis. Vestibulum vehicula sem id blandit tristique. Fusce tincidunt semper dui sed rutrum. Aliquam aliquam, sem et facilisis bibendum, felis magna sodales turpis, a egestas purus sem sit amet massa.
+% \bigskip\bigskip
 
-Nullam eleifend ligula sem, scelerisque eleifend elit interdum eget. Sed id malesuada purus, id fringilla elit. Nullam sodales non nulla id lacinia. Phasellus porta, lacus nec finibus sollicitudin, nulla enim interdum nibh, non semper nulla diam id urna. Donec consequat vel justo ac suscipit. Vestibulum at quam euismod ante faucibus euismod. Integer venenatis suscipit felis, quis aliquam diam facilisis hendrerit. Proin vel euismod tellus.
+% \centerline{\bf Abstract}
+% \smallskip
 
-Vivamus suscipit risus at scelerisque fringilla. Duis neque enim, laoreet id hendrerit condimentum, faucibus quis nulla. Nulla porta diam a ullamcorper vehicula. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Donec et dictum augue. Phasellus interdum posuere erat. Maecenas ut velit arcu. Nullam sollicitudin purus nibh, ac eleifend nulla luctus vitae. Etiam eu suscipit ligula. Duis convallis tristique metus, eu tempus risus egestas quis. Donec a odio eu magna elementum faucibus id sit amet metus. Pellentesque dictum dignissim commodo. Nunc sagittis vitae ipsum id ornare. Mauris porta porttitor hendrerit. Etiam justo sem, iaculis eu commodo at, dignissim at nibh. Donec ac turpis vitae sapien vehicula accumsan.
+% The reconstruction conjecture states that the multiset of unlabeled
+% vertex-deleted subgraphs of a graph determines the graph, provided it
+% has at least 3 vertices.  A version of the problem was first stated
+% by Stanis\l aw Ulam.  In this paper, we show that the conjecture can
+% be proved by elementary methods.  It is only necessary to integrate
+% the Lenkle potential of the Broglington manifold over the quantum
+% supervacillatory measure in order to reduce the set of possible
+% counterexamples to a small number (less than a trillion).  A simple
+% computer program that implements Pipletti's classification theorem
+% for torsion-free Aramaic groups with simplectic socles can then
+% finish the remaining cases.\par
 
-Aenean faucibus ac sem facilisis bibendum. Nullam laoreet, ipsum non aliquam iaculis, lacus dui interdum elit, vitae tempor augue mi et nulla. Fusce nec luctus velit, vel ornare ex. Curabitur a orci sed lorem imperdiet rutrum. Nunc eu aliquet augue. Phasellus in urna sapien. Mauris a tellus erat. Suspendisse fringilla enim nec blandit porta. Nunc sollicitudin vestibulum sapien, eu accumsan velit. Ut non luctus justo. Aenean at sagittis arcu. Mauris egestas odio id neque gravida vulputate. Nunc maximus placerat interdum. Aliquam rutrum urna nec porta eleifend. Fusce suscipit fringilla ipsum, dictum mollis massa finibus id.
+% \bigskip
 
-Aliquam vulputate auctor massa, vel laoreet urna egestas ut. Fusce hendrerit, arcu ac laoreet dictum, nibh arcu placerat elit, eu efficitur nibh felis elementum sem. Donec eu suscipit nunc. Cras sapien mauris, eleifend ut lobortis eget, scelerisque eget ipsum. Cras varius pretium turpis, at fermentum ipsum. Sed et ligula ut magna hendrerit facilisis. Donec fermentum nulla mi, quis vehicula purus dictum in. Vivamus est nunc, congue quis feugiat et, ultricies et lacus.
+% \beginsection 1. Introduction.
 
-Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Maecenas quis orci eget orci posuere imperdiet. Nullam at odio dui. Nulla auctor massa aliquam lorem consequat, ac vestibulum leo posuere. Maecenas euismod at magna id pretium. Cras quis eros faucibus, ornare massa ac, volutpat lacus. Nullam viverra pulvinar sem, quis pretium nisi sagittis et. Integer ac eros vitae justo gravida aliquet. Donec sit amet magna eu libero faucibus luctus ac ac libero. Aenean ut tempus justo.
+% This is the start of the introduction.
 
-Quisque eleifend varius massa sit amet pellentesque. Praesent eu posuere diam. Maecenas gravida tellus vel massa blandit, vel volutpat ex elementum. Cras mi neque, convallis eu quam quis, congue posuere quam. Nulla eu tincidunt augue. Fusce at nibh nulla. Donec quis nibh sit amet lectus imperdiet ornare a eu lectus. Pellentesque fringilla purus libero, sit amet imperdiet libero lacinia vitae. Nulla id accumsan turpis. Donec erat purus, pharetra ac dui eget, imperdiet viverra urna.
-
-Morbi in luctus leo. Proin laoreet enim eget nulla finibus bibendum. Aenean sapien est, tempor pulvinar mollis eget, porttitor vitae neque. Proin id nulla tristique, pulvinar diam sed, aliquet elit. Donec eros mi, pharetra ut elit sit amet, tincidunt pharetra ex. Aenean ac feugiat tortor, a bibendum enim. Proin mi ipsum, volutpat ut feugiat vel, lobortis sed odio. Donec et turpis molestie, gravida lectus a, porttitor risus.
-
-Nullam tincidunt, dui nec varius posuere, massa mi eleifend est, sed efficitur lacus enim eu erat. Phasellus ut mi interdum risus laoreet porta. Donec ornare diam diam, sit amet sollicitudin lacus pharetra at. Cras a aliquet sem. Nulla vel sem risus. Nulla facilisi. In dignissim imperdiet euismod. Quisque a congue lectus. Pellentesque nec nisl posuere, tempus erat eu, maximus justo. Curabitur dignissim elit ipsum, nec commodo massa lacinia sit amet. Suspendisse tincidunt et risus sed cursus.
-
-Aliquam in lacus nec velit euismod scelerisque sit amet nec risus. Pellentesque fringilla ultricies ipsum nec luctus. Aliquam sit amet odio lacus. Donec a consequat sem, sit amet maximus sapien. Nunc volutpat tincidunt porta. Nullam sed odio id nisl laoreet volutpat. Nam ipsum elit, lacinia vel lorem nec, varius pharetra justo. Aliquam erat volutpat. Quisque pharetra ex ipsum, sed mollis lacus hendrerit vitae. Ut vitae ligula at tellus lacinia efficitur ut non metus. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Vivamus consequat neque dolor, ac finibus enim interdum vitae. Vivamus quis enim est. Vivamus tincidunt erat in lectus laoreet, nec molestie diam fermentum. Curabitur eleifend tempus faucibus.
-
-Proin ornare, risus sit amet sollicitudin pharetra, ex dolor fermentum tortor, id venenatis tortor tortor sed eros. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Duis blandit dapibus mauris vitae semper. Nam maximus quam ligula, vitae tristique elit convallis porttitor. Sed aliquet mauris arcu, quis sodales velit finibus id. Praesent ornare risus vel velit volutpat, nec ornare tortor tincidunt. Maecenas efficitur dictum ante, ac commodo erat tristique in. Suspendisse auctor ipsum ut placerat dignissim. Fusce ex turpis, maximus eget tristique eu, sagittis eget erat.
-
-Mauris iaculis vel arcu placerat ullamcorper. Vestibulum et lectus nunc. Sed lobortis consequat condimentum. Pellentesque vestibulum lorem in velit faucibus, vitae interdum tortor tincidunt. Nullam faucibus dolor nec metus fringilla, ac dapibus nulla tempor. Duis a ante elit. Integer egestas nisl nec ante efficitur, et consectetur mauris consectetur. Nunc id ante ut arcu malesuada luctus id at turpis. Sed vel eros lacus. Sed condimentum et elit nec ornare. Quisque urna justo, pretium ac tortor a, scelerisque feugiat purus.
-
-\end
+\bye

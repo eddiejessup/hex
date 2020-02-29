@@ -1,15 +1,17 @@
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE RankNTypes #-}
 
 module HeX.Config.Config where
 
 import           HeXlude
 
+import           Control.Lens
 import           Control.Monad.IO.Class   (MonadIO)
 import           Control.Monad.Reader     (MonadReader, asks)
-import           Control.Monad.State.Lazy (MonadState, gets, modify)
 import qualified Data.Containers          as D.C
 import qualified Data.Sequences           as D.S
 import qualified Data.MonoTraversable     as D.MT
+import qualified Data.Generics.Product    as G.P
 
 import           Data.Map.Strict          (Map, (!?))
 import qualified Data.Map.Strict          as Map
@@ -56,7 +58,8 @@ data Scope =
             -- Char-code attribute maps.
           , catCodes :: Code.CatCodes
           , mathCodes :: Code.CharCodeMap Code.MathCode
-          , lowercaseCodes, uppercaseCodes :: Code.CharCodeMap Code.CaseChangeCode
+          , lowercaseCodes :: Code.CharCodeMap Code.CaseChangeCode
+          , uppercaseCodes :: Code.CharCodeMap Code.CaseChangeCode
           , spaceFactors :: Code.CharCodeMap Code.SpaceFactorCode
           , delimiterCodes :: Code.CharCodeMap Code.DelimiterCode
             -- Parameters.
@@ -73,7 +76,7 @@ data Scope =
           , tokenListRegister :: RegisterMap BalancedText
           , boxRegister :: RegisterMap (B.Box B.BoxContents)
           }
-    deriving ( Show )
+    deriving (Show, Generic)
 
 newGlobalScope :: Scope
 newGlobalScope =
@@ -135,6 +138,7 @@ data Config =
            , globalScope          :: Scope
            , groups               :: [Group]
            }
+    deriving (Generic)
 
 newtype ConfigError = ConfigError Text
     deriving (Show)
@@ -252,20 +256,32 @@ setSpecialLength p v c =
 
 -- Scoped.
 
-modLocalScope :: Config -> (Scope -> Scope) -> Config
-modLocalScope c@Config{ globalScope, groups } f =
-    case groups of
-        [] -> c{ globalScope = f globalScope }
-        ScopeGroup scope scopeGroupType : outerGroups ->
-            c{ groups = ScopeGroup (f scope) scopeGroupType : outerGroups }
-        nonScopeGroup : outerGroups ->
-            let
-                -- Get result if this non-scoped group hadn't existed.
-                cWithoutGroup@Config{ groups = groupsWithoutGroup }
-                    = modLocalScope c{ groups = outerGroups } f
-            in
-                -- Append non-scope group to that result.
-                cWithoutGroup{ groups = nonScopeGroup:groupsWithoutGroup }
+localScopeL :: Lens' Config Scope
+localScopeL = lens getter setter
+  where
+    getter :: Config -> Scope
+    getter Config{ globalScope, groups } = fromMaybe globalScope $ asum $ toScope <$> groups
+      where
+        toScope = \case
+            ScopeGroup scope _ ->
+                Just scope
+            _ ->
+                Nothing
+
+    setter :: Config -> Scope -> Config
+    setter c@Config{ globalScope, groups } sc =
+        let (newGlob, newGroups) = go [] groups
+        in c
+            & G.P.field @"globalScope" .~ newGlob
+            & G.P.field @"groups" .~ newGroups
+      where
+        go befGroups aftGroups  = case aftGroups of
+                [] ->
+                    (sc, befGroups)
+                ScopeGroup _ scopeGroupType : restAftGroups ->
+                    (globalScope, befGroups ++ (ScopeGroup sc scopeGroupType : restAftGroups))
+                nonScopeGroup : restAftGroups ->
+                    go (befGroups ++ [nonScopeGroup]) restAftGroups
 
 pushGroup :: Group -> Config -> Config
 pushGroup group c@Config{ groups } =
@@ -289,47 +305,44 @@ modGroupScope f = \case
         nonScopeGroup
 
 modifyKey :: D.C.IsMap map
-          => (Scope -> map)
-          -> (Scope -> map -> Scope)
+          => Lens' Scope map
           -> D.C.ContainerKey map
           -> KeyOperation (D.C.MapValue map)
           -> GlobalFlag
           -> Config
           -> Config
-modifyKey getMap upD k keyOp globalFlag c@Config{ groups, globalScope } =
+modifyKey mapLens k keyOp globalFlag c =
     case globalFlag of
         Global ->
-            c{ globalScope = modOp globalScope
-             , groups = modGroupScope deleteKeyFromScope <$> groups
-             }
+            c   & G.P.field @"globalScope" %~ modOp
+                & G.P.field @"groups" %~ (fmap (modGroupScope deleteKeyFromScope))
         Local ->
-            modLocalScope c modOp
+            c & localScopeL %~ modOp
   where
     modOp = case keyOp of
         DeleteVal   -> deleteKeyFromScope
         InsertVal v -> insertKeyToScope v
 
-    insertKeyToScope v scope = upD scope $ D.C.insertMap k v $ getMap scope
-    deleteKeyFromScope scope = upD scope $ D.C.deleteMap k $ getMap scope
+    insertKeyToScope v = over mapLens (D.C.insertMap k v)
+
+    deleteKeyFromScope = over mapLens (D.C.deleteMap k)
 
 insertKey :: D.C.IsMap map
-          => (Scope -> map)
-          -> (Scope -> map -> Scope)
+          => Lens' Scope map
           -> D.C.ContainerKey map
           -> D.C.MapValue map
           -> GlobalFlag
           -> Config
           -> Config
-insertKey getMap upD k v = modifyKey getMap upD k (InsertVal v)
+insertKey mapLens k v = modifyKey mapLens k (InsertVal v)
 
 deleteKey :: D.C.IsMap map
-          => (Scope -> map)
-          -> (Scope -> map -> Scope)
+          => Lens' Scope map
           -> D.C.ContainerKey map
           -> GlobalFlag
           -> Config
           -> Config
-deleteKey getMap upD k = modifyKey getMap upD k DeleteVal
+deleteKey mapLens k = modifyKey mapLens k DeleteVal
 
 scopedLookup :: (Scope -> Maybe v) -> Config -> Maybe v
 scopedLookup f c@Config{ globalScope, groups } =
@@ -378,7 +391,7 @@ selectFontNr n globalFlag c@Config{ globalScope, groups } =
              , groups = modGroupScope deselectFontInScope <$> groups
              }
         Local ->
-            modLocalScope c selectFontInScope
+            c & localScopeL %~ selectFontInScope
   where
     deselectFontInScope scope = scope{ currentFontNr = Nothing }
     selectFontInScope scope = scope{ currentFontNr = Just n }
@@ -389,8 +402,7 @@ setFamilyMemberFont
     -> GlobalFlag
     -> Config
     -> Config
-setFamilyMemberFont =
-    insertKey familyMemberFonts $ \c _map -> c { familyMemberFonts = _map }
+setFamilyMemberFont = insertKey (G.P.field @"familyMemberFonts")
 
 lookupFontFamilyMember
     :: ( MonadReader Config m
@@ -398,8 +410,9 @@ lookupFontFamilyMember
        )
     => (FontRange, TeXInt)
     -> m TeXInt
-lookupFontFamilyMember k = asks (scopedMapLookup familyMemberFonts k)
-    >>= note (throw $ ConfigError $ "Family member undefined: " <> show k)
+lookupFontFamilyMember k =
+    asks (scopedMapLookup familyMemberFonts k)
+        >>= note (throw $ ConfigError $ "Family member undefined: " <> show k)
 
 -- Control sequences.
 lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
@@ -414,7 +427,7 @@ setControlSequence
     -> GlobalFlag
     -> Config
     -> Config
-setControlSequence = insertKey csMap $ \c _map -> c { csMap = _map }
+setControlSequence = insertKey (G.P.field @"csMap")
 
 -- Codes.
 lookupCatCode :: Code.CharCode -> Config -> Code.CatCode
@@ -422,11 +435,11 @@ lookupCatCode t conf = fromMaybe Code.Invalid $ scopedMapLookup catCodes t conf
 
 lookupChangeCaseCode :: VDirection -> Code.CharCode -> Config -> Code.CaseChangeCode
 lookupChangeCaseCode d t conf =
-    let field = case d of
+    let codes = case d of
             Upward   -> uppercaseCodes
             Downward -> lowercaseCodes
     in
-        fromMaybe Code.NoCaseChange $ scopedMapLookup field t conf
+        fromMaybe Code.NoCaseChange $ scopedMapLookup codes t conf
 
 updateCharCodeMap
     :: ( MonadErrorAnyOf e m '[ConfigError]
@@ -440,29 +453,20 @@ updateCharCodeMap
 updateCharCodeMap t c n globalFlag = do
     insert <- case t of
         CategoryCodeType       ->
-            noteConfigError (Code.fromTeXInt n) <&>
-                insertKey catCodes (\cnf m -> cnf { catCodes = m }) c
-        MathCodeType           -> do
-            v <- noteConfigError $ Code.fromTeXInt n
-            pure $ insertKey mathCodes (\cnf m -> cnf { mathCodes = m }) c v
+            noteConfigError (Code.fromTeXInt n) <&> insertKey (G.P.field @"catCodes") c
+        MathCodeType           ->
+            noteConfigError (Code.fromTeXInt n) <&> insertKey (G.P.field @"mathCodes") c
         ChangeCaseCodeType dir -> do
             v <- noteConfigError $ Code.fromTeXInt n
             pure $ case dir of
                 Upward ->
-                    insertKey uppercaseCodes (\cnf m -> cnf { uppercaseCodes = m }) c v
+                    insertKey (G.P.field @"uppercaseCodes") c v
                 Downward ->
-                    insertKey lowercaseCodes (\cnf m -> cnf { lowercaseCodes = m }) c v
-        SpaceFactorCodeType    -> do
-            v <- noteConfigError $ Code.fromTeXInt n
-            pure $
-                insertKey spaceFactors (\cnf m -> cnf { spaceFactors = m }) c v
-        DelimiterCodeType      -> do
-            v <- noteConfigError $ Code.fromTeXInt n
-            pure $
-                insertKey delimiterCodes
-                          (\cnf m -> cnf { delimiterCodes = m })
-                          c
-                          v
+                    insertKey (G.P.field @"lowercaseCodes") c v
+        SpaceFactorCodeType    ->
+            noteConfigError $ Code.fromTeXInt n <&> insertKey (G.P.field @"spaceFactors") c
+        DelimiterCodeType      ->
+            noteConfigError $ Code.fromTeXInt n <&> insertKey (G.P.field @"delimiterCodes") c
     modify $ insert globalFlag
   where
     noteConfigError :: MonadErrorAnyOf e m '[ConfigError] => Maybe a -> m a
@@ -497,8 +501,7 @@ setTeXIntParameter
     -> GlobalFlag
     -> Config
     -> Config
-setTeXIntParameter =
-    insertKey texIntParameters $ \c _map -> c { texIntParameters = _map }
+setTeXIntParameter = insertKey (G.P.field @"texIntParameters")
 
 setLengthParameter
     :: LengthParameter
@@ -506,12 +509,10 @@ setLengthParameter
     -> GlobalFlag
     -> Config
     -> Config
-setLengthParameter =
-    insertKey lengthParameters $ \c _map -> c { lengthParameters = _map }
+setLengthParameter = insertKey (G.P.field @"lengthParameters")
 
 setGlueParameter :: GlueParameter -> BL.Glue Length -> GlobalFlag -> Config -> Config
-setGlueParameter =
-    insertKey glueParameters $ \c _map -> c { glueParameters = _map }
+setGlueParameter = insertKey (G.P.field @"glueParameters")
 
 setMathGlueParameter
     :: MathGlueParameter
@@ -519,8 +520,7 @@ setMathGlueParameter
     -> GlobalFlag
     -> Config
     -> Config
-setMathGlueParameter =
-    insertKey mathGlueParameters $ \c _map -> c { mathGlueParameters = _map }
+setMathGlueParameter = insertKey (G.P.field @"mathGlueParameters")
 
 setTokenListParameter
     :: TokenListParameter
@@ -528,8 +528,7 @@ setTokenListParameter
     -> GlobalFlag
     -> Config
     -> Config
-setTokenListParameter =
-    insertKey tokenListParameters $ \c _map -> c { tokenListParameters = _map }
+setTokenListParameter = insertKey (G.P.field @"tokenListParameters")
 
 parIndentBox :: Config -> BL.HListElem
 parIndentBox conf = BL.HVListElem $
@@ -567,14 +566,14 @@ lookupBoxRegister = scopedMapLookup boxRegister
 
 setTeXIntRegister :: EightBitInt -> TeXInt -> GlobalFlag -> Config -> Config
 setTeXIntRegister =
-    insertKey texIntRegister $ \c _map -> c { texIntRegister = _map }
+    insertKey (G.P.field @"texIntRegister")
 
 setLengthRegister :: EightBitInt -> Length -> GlobalFlag -> Config -> Config
 setLengthRegister =
-    insertKey lengthRegister $ \c _map -> c { lengthRegister = _map }
+    insertKey (G.P.field @"lengthRegister")
 
 setGlueRegister :: EightBitInt -> BL.Glue Length -> GlobalFlag -> Config -> Config
-setGlueRegister = insertKey glueRegister $ \c _map -> c { glueRegister = _map }
+setGlueRegister = insertKey (G.P.field @"glueRegister")
 
 setMathGlueRegister
     :: EightBitInt
@@ -582,8 +581,7 @@ setMathGlueRegister
     -> GlobalFlag
     -> Config
     -> Config
-setMathGlueRegister =
-    insertKey mathGlueRegister $ \c _map -> c { mathGlueRegister = _map }
+setMathGlueRegister = insertKey (G.P.field @"mathGlueRegister")
 
 setTokenListRegister
     :: EightBitInt
@@ -592,13 +590,13 @@ setTokenListRegister
     -> Config
     -> Config
 setTokenListRegister =
-    insertKey tokenListRegister $ \c _map -> c { tokenListRegister = _map }
+    insertKey (G.P.field @"tokenListRegister")
 
 setBoxRegister :: EightBitInt -> B.Box B.BoxContents -> GlobalFlag -> Config -> Config
-setBoxRegister = insertKey boxRegister $ \c _map -> c { boxRegister = _map }
+setBoxRegister = insertKey (G.P.field @"boxRegister")
 
 delBoxRegister :: EightBitInt -> GlobalFlag -> Config -> Config
-delBoxRegister = deleteKey boxRegister $ \c _map -> c { boxRegister = _map }
+delBoxRegister = deleteKey (G.P.field @"boxRegister")
 
 setBoxRegisterNullable :: EightBitInt
                             -> GlobalFlag -> Maybe (B.Box B.BoxContents) -> Config -> Config
