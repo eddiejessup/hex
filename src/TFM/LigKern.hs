@@ -26,7 +26,7 @@ data LigKernInstr = LigKernInstr
     , operation :: Either LigatureOp KernOp
     } deriving (Show)
 
-readLigKern :: [Rational] -> LigKernCommand -> Either Text LigKernInstr
+readLigKern :: MonadError Text m => [Rational] -> LigKernCommand -> m LigKernInstr
 readLigKern kerns (LigKernCommand _skipByte _nextChar _opByte _remainder) =
     do
     op <- if _opByte >= kernOp

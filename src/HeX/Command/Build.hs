@@ -35,6 +35,7 @@ handleCommandInParaMode
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => HList
     -> HP.Command
@@ -90,6 +91,7 @@ handleCommandInHBoxMode
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => HList
     -> HP.Command
@@ -147,6 +149,7 @@ handleCommandInVBoxMode
            '[ TFMError
             , BuildError
             ]
+       , MonadIO m
        )
     => VList
     -> HP.Command
@@ -239,6 +242,7 @@ handleCommandInMainVMode
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => VList
     -> HP.Command
@@ -298,6 +302,7 @@ extractPara
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => HP.IndentFlag
     -> m ParaResult
@@ -315,6 +320,7 @@ extractParaFromVMode
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => HP.IndentFlag
     -> s
@@ -333,6 +339,7 @@ extractHBox
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => m HBoxResult
 extractHBox = runCommandLoop handleCommandInHBoxMode mempty
@@ -344,6 +351,7 @@ extractVBox
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => m VBoxResult
 extractVBox = runCommandLoop handleCommandInVBoxMode mempty
@@ -355,6 +363,7 @@ extractVSubBox
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => B.DesiredLength
     -> BoxModeIntent
@@ -386,6 +395,7 @@ extractHSubBox
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => B.DesiredLength
     -> BoxModeIntent
@@ -403,6 +413,7 @@ extractMainVList
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => m MainVModeResult
 extractMainVList = runCommandLoop handleCommandInMainVMode mempty
@@ -414,6 +425,7 @@ extractBreakAndSetVList
             ]
        , HP.TeXParseable s e m
        , MonadState s m
+       , MonadIO m
        )
     => m (Seq B.Page, IntParamVal 'HP.Mag)
 extractBreakAndSetVList =
@@ -421,12 +433,10 @@ extractBreakAndSetVList =
     MainVModeResult finalMainVList <- extractMainVList
     gets HP.getConditionBodyState >>= \case
         Nothing -> pure ()
-        Just _condState -> throwM $ BuildError $ "Cannot end: in condition block: " <> showT _condState
+        Just _condState -> throwM $ BuildError $ "Cannot end: in condition block: " <> show _condState
     readOnConfState (asks finaliseConfig) >>= liftIO
     desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
     -- putText $ describe finalMainVList
     let pages = BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
     mag <- HP.runConfState $ gets $ IntParamVal . lookupTeXIntParameter HP.Mag
-    lenParams <- HP.runConfState $ gets $ lengthParameters . globalScope
-    putText $ describe lenParams
     pure (pages, mag)

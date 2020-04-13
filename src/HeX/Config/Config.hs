@@ -40,12 +40,12 @@ import           HeX.Quantity
 data Group
     = ScopeGroup Scope ScopeGroup
     | NonScopeGroup
-    deriving ( Show )
+    deriving (Show)
 
 data ScopeGroup
     = LocalStructureGroup AST.CommandTrigger
     | ExplicitBoxGroup
-    deriving ( Show )
+    deriving (Show)
 
 type RegisterMap v = Map EightBitInt v
 

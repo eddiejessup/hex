@@ -3,35 +3,26 @@ module Main where
 import Control.Monad (when)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BS.L
+import HeX.Command.Run
 import HeX.Parse.Stream.Instance (newExpandStream)
 import HeXlude
 import qualified Path
-import qualified HeX.Command.Run as Run
 import qualified Path.IO
 import qualified System.Console.GetOpt as Opt
 
 data Flag
   = Help
-  | Amble
-  | Output !FilePath
   | Mode !Mode
   deriving (Show, Eq)
 
 options :: [Opt.OptDescr Flag]
 options =
   [ Opt.Option ['h'] ["help"] (Opt.NoArg Help) "show usage information"
-  , Opt.Option ['a'] ["amble"] (Opt.NoArg Amble) "prepend pre- and post-amble to input"
-  , Opt.Option ['o'] ["output"] (Opt.OptArg output "FILE") "output to FILE"
   , Opt.Option ['m'] ["mode"] (Opt.OptArg mode "MODE") "output in mode MODE"
   ]
   where
-    output = Output . toS . fromMaybe "out.dvi"
-
-    mode = \case
-      Nothing -> DVIWriteMode
-      Just modeStr -> case readMode modeStr of
-        Just m -> m
-        Nothing -> panic $ "Unknown mode: " <> modeStr
+    mode m =
+      Mode $
 
 usage :: Text
 usage = toS $ Opt.usageInfo header options
@@ -70,11 +61,18 @@ main = do
         else inputRaw
       makeStream = newExpandStream maybePath input
       mode = lastDef DVIWriteMode [m | Mode m <- flags]
-  case lastMay [f | Output f <- flags] of
-    Nothing -> printWithMode mode
-    Just destPathStr ->
-      case mode of
-        DVIBytesMode ->
-          makeStream >>= streamToDVIBytes >>= BS.writeFile destPathStr
-    _ ->
-      printWithMode mode input
+  case mode of
+    CatMode -> runCat input
+    LexMode -> runLex input
+    ResolveMode -> runResolved input
+    ExpandMode -> makeStream >>= runExpand
+    CommandMode -> makeStream >>= runCommand
+    ParaListMode -> makeStream >>= runPara
+    ParaSetMode -> makeStream >>= runSetPara
+    PageListMode -> makeStream >>= runPageList
+    PageMode -> makeStream >>= runPages
+    DVIMode -> makeStream >>= runDVI
+    RawDVIMode -> makeStream >>= runDVIRaw
+    DVIWriteMode -> do
+      let destPathStr = lastDef "out.dvi" [f | Output f <- flags]
+      makeStream >>= codesToDVIBytes >>= BS.writeFile destPathStr

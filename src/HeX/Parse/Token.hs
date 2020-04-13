@@ -559,6 +559,7 @@ data SyntaxCommandHeadToken
 instance Readable SyntaxCommandHeadToken where
     describe = show
 
+-- TODO: I think we can make this independent of parsing, and move it out.
 data ResolvedToken
     = SyntaxCommandHeadToken SyntaxCommandHeadToken
     | PrimitiveToken PrimitiveToken

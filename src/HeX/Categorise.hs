@@ -42,3 +42,12 @@ extractCharCat charToCat xs =
                     normal
         _ ->
             normal
+
+codesToCharCats :: (Code.CharCode -> Code.CatCode) -> BS.L.ByteString -> [CharCat]
+codesToCharCats charToCat = go
+  where
+    go xs = case extractCharCat charToCat xs of
+      Just (cc, xs1) ->
+        cc : go xs1
+      Nothing ->
+        []

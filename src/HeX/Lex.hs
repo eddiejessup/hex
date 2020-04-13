@@ -173,3 +173,12 @@ extractToken charToCat = go
                 pure r
             _ ->
                 Nothing
+
+codesToLexTokens :: (Code.CharCode -> Code.CatCode) -> BS.L.ByteString -> [HeX.Lex.Token]
+codesToLexTokens charToCat = go LineBegin
+  where
+    go lexState xs = case extractToken charToCat lexState xs of
+      Just (tok, lexState1, xs1) ->
+        tok : go lexState1 xs1
+      Nothing ->
+        []

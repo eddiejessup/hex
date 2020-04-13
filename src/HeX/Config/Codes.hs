@@ -154,7 +154,7 @@ initialiseCharCodeVector val = V.fromList $ Just . val <$> [minBound..maxBound]
 -- If the small or large variant is given as "000, however (position 0 of
 -- family 0), that variant is ignored.
 data DelimiterCode = NotADelimiter TeXInt | DelimiterSpecCode DelimiterSpec
-    deriving ( Show )
+    deriving (Show)
 
 instance TeXCode DelimiterCode where
     toTeXInt (NotADelimiter n) = n
@@ -171,10 +171,10 @@ instance TeXCode DelimiterCode where
             Just $ DelimiterSpecCode $ DelimiterSpec smallVar largeVar
 
 data DelimiterSpec = DelimiterSpec { smallVar, largeVar :: DelimiterVar }
-    deriving ( Show )
+    deriving (Show)
 
 data DelimiterVar = PresentDelimiterVar FamilyCharRef | NullDelimiterVar
-    deriving ( Show )
+    deriving (Show)
 
 instance TeXCode DelimiterVar where
     toTeXInt NullDelimiterVar        = 0
@@ -185,7 +185,7 @@ instance TeXCode DelimiterVar where
         | otherwise = PresentDelimiterVar <$> fromTeXInt n
 
 data FamilyCharRef = FamilyCharRef { family :: TeXInt, position :: CharCode }
-    deriving ( Show )
+    deriving (Show)
 
 instance TeXCode FamilyCharRef where
     toTeXInt (FamilyCharRef fam pos) = (fam `shiftL` 8) + fromIntegral pos
@@ -208,7 +208,7 @@ newDelimiterCodes = initialiseCharCodeMap $ const $ NotADelimiter (-1)
 -- A mathcode can also have the special value "8000, which causes the character
 -- to behave as if it has catcode 13 (active).
 data MathCode = NormalMathCode MathClass FamilyCharRef | ActiveMathCode
-    deriving ( Show )
+    deriving (Show)
 
 instance TeXCode MathCode where
     toTeXInt ActiveMathCode =
@@ -259,7 +259,7 @@ newMathCodes = initialiseCharCodeMap f
 -- value, unless the \uccode value is zero, when no change is made. Conversion
 -- to lowercase is similar, using the \lccode.
 data CaseChangeCode = NoCaseChange | ChangeToCode CharCode
-    deriving ( Show )
+    deriving (Show)
 
 instance TeXCode CaseChangeCode where
     toTeXInt NoCaseChange     = 0
@@ -291,7 +291,7 @@ newUppercaseCodes = initialiseCharCodeMap f
 
 -- Space factor code.
 newtype SpaceFactorCode = SpaceFactorCode TeXInt
-    deriving ( Show )
+    deriving (Show)
 
 instance TeXCode SpaceFactorCode where
     toTeXInt (SpaceFactorCode n) = n

@@ -4,7 +4,9 @@
 module HeX.Parse.Stream.Instance where
 
 import           HeXlude                   hiding (show)
+import qualified HeXlude
 
+import qualified Control.Lens as L
 import           Control.Monad.Reader      (runReaderT)
 import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.List.NonEmpty        as L.NE
@@ -16,7 +18,7 @@ import qualified Path
 import qualified Path.IO
 import qualified Text.Megaparsec           as P
 import           Text.Show
-
+import qualified Data.Generics.Product.Typed as G.P
 import qualified HeX.Config.Codes          as Code
 import qualified HeX.Config                as Conf
 import           HeX.Evaluate
@@ -38,13 +40,7 @@ data ExpandedStream = ExpandedStream
     , config             :: Conf.Config
     , skipState          :: [ConditionBodyState]
     }
-
-data TokenSource = TokenSource
-    { sourcePath      :: Maybe (Path Abs File)
-    , sourceCharCodes :: BS.L.ByteString
-    , sourceLexTokens :: Seq Lex.Token
-    }
-    deriving ( Show )
+    deriving Generic
 
 instance Show ExpandedStream where
     show _ = "ExpandedStream {..}"
@@ -131,9 +127,9 @@ instance ( MonadErrorAnyOf e m TeXStreamE
 instance TeXStream ExpandedStream where
     setExpansion mode s = s{ expansionMode = mode }
 
-    getConfig = config
-
-    setConfig c s = s{config = c}
+    configLens = G.P.typed @Conf.Config
+    tokenSourceLens = G.P.typed @(L.NE.NonEmpty TokenSource)
+    lexStateLens = G.P.typed @Lex.LexState
 
     insertLexToken s t =
         let
@@ -299,7 +295,7 @@ expandConditionToken strm = \case
     ConditionBodyTok delim -> case (delim, skipState strm) of
         -- Shouldn't see any condition token outside a condition block.
         (_, []) ->
-            throwM $ ExpansionError $ "Not in a condition body, but saw condition-body token: " <> showT delim
+            throwM $ ExpansionError $ "Not in a condition body, but saw condition-body token: " <> HeXlude.show delim
         -- Shouldn't see an 'or' while in an if-condition.
         (Or, IfBodyState _ : _) ->
             throwM $ ExpansionError "In an if-condition, not case-condition, but saw 'or'"
@@ -335,7 +331,7 @@ expandConditionToken strm = \case
             pure $ Just skippedStream{skipState = condRest}
 
 expandSyntaxCommand
-    :: TeXParseable ExpandedStream e m
+    :: (TeXParseable ExpandedStream e m, MonadIO m)
     => ExpandedStream
     -> SyntaxCommandHeadToken
     -> m (Maybe (ExpandedStream, Seq Lex.Token))
@@ -403,53 +399,18 @@ expandSyntaxCommand strm = \case
         v <- f a
         pure $ Just (stream, v)
 
--- Get the next lex token, and update our stream.
--- fetchLexToken :: ExpandedStream -> Maybe (Lex.Token, ExpandedStream)
--- fetchLexToken (!stream) =
---     let
---         lkpCatCode t = Conf.lookupCatCode t (config stream)
---     in
---         case Lex.extractToken lkpCatCode (lexState stream) sourceCharCodes of
---             Just (fetchedLexToken, newLexState, newCodes) ->
---                 let
---                     newCurTokSource = curTokSource{ sourceCharCodes = newCodes }
---                 in
---                     Just ( fetchedLexToken,
---                          stream{ streamTokenSources = seq outerStreams (newCurTokSource :| outerStreams), lexState = newLexState })
---             Nothing ->
---                 do
---                 nonEmptyOuterStreams <- L.NE.nonEmpty outerStreams
---                 fetchLexToken stream{ streamTokenSources = nonEmptyOuterStreams }
---   where
---     curTokSource@TokenSource{ sourceCharCodes, sourceLexTokens } :| outerStreams = streamTokenSources stream
--- fetchLexToken :: ExpandedStream -> Maybe (Lex.Token, ExpandedStream)
--- fetchLexToken (!stream) =
---     let
---         lkpCatCode t = Conf.lookupCatCode t (config stream)
---     in
---         case Lex.extractToken lkpCatCode (lexState stream) sourceCharCodes of
---             Just (fetchedLexToken, newLexState, newCodes) ->
---                 let
---                     newCurTokSource = curTokSource{ sourceCharCodes = newCodes }
---                 in
---                     Just ( fetchedLexToken,
---                          stream{ streamTokenSources = newCurTokSource :| outerStreams, lexState = newLexState })
---             Nothing ->
---                 Nothing
---                 -- do
---                 -- nonEmptyOuterStreams <- L.NE.nonEmpty outerStreams
---                 -- fetchLexToken stream{ streamTokenSources = nonEmptyOuterStreams }
---   where
---     curTokSource@TokenSource{ sourceCharCodes, sourceLexTokens } :| outerStreams = streamTokenSources stream
-fetchLexToken :: ExpandedStream -> Maybe (Lex.Token, ExpandedStream)
+fetchLexToken :: TeXStream s => s -> Maybe (Lex.Token, s)
 fetchLexToken stream =
     do
-    (lt, newLexState, newStreamTokenSources) <- fetchFromSources (streamTokenSources stream)
-    pure (lt, stream { streamTokenSources = newStreamTokenSources, lexState = newLexState })
+    (lt, newLexState, newStreamTokenSources) <- fetchFromSources (L.view tokenSourceLens stream)
+    pure
+        (lt, stream
+            & L.set tokenSourceLens newStreamTokenSources
+            & L.set lexStateLens newLexState)
   where
-    lkpCatCode t = Conf.lookupCatCode t (config stream)
+    lkpCatCode t = Conf.lookupCatCode t (L.view configLens stream)
 
-    curLexState = lexState stream
+    curLexState = L.view lexStateLens stream
 
     -- TODO:
     -- [a] -> (a -> Maybe b) -> Maybe (b, [a])
@@ -483,11 +444,11 @@ fetchResolvedToken stream =
         Just (lt, newStream) ->
             do
             let lkp cs = Conf.lookupCS cs $ config newStream
-            rt <- note (throw $ ExpansionError $ "Could not resolve token:" <> showT lt) $ resolveToken lkp (expansionMode newStream) lt
+            rt <- note (throw $ ExpansionError $ "Could not resolve token:" <> HeXlude.show lt) $ resolveToken lkp (expansionMode newStream) lt
             pure $ Just (lt, rt, newStream)
 
 fetchAndExpandToken
-    :: TeXParseable ExpandedStream e m
+    :: (TeXParseable ExpandedStream e m, MonadIO m)
     => ExpandedStream
     -> m (Maybe (Seq Lex.Token, ResolvedToken, ExpandedStream))
 fetchAndExpandToken stream =

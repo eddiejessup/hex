@@ -63,10 +63,10 @@ type MonadErrorAnyOf e m es = (MonadErrorVariant e m, e `CouldBeAnyOf` es)
 liftThrow :: (MonadIO m, MonadError e m) => e -> MaybeT IO a -> m a
 liftThrow e v = liftIO (runMaybeT v) >>= note e
 
-atEith :: Show a => Text -> [a] -> Int -> Either Text a
-atEith str xs i = maybeToRight
-    ("No " <> str <> " at index " <> showT i <> ", values are: "
-     <> showT xs)
+atEith :: (MonadError Text m, Show a) => Text -> [a] -> Int -> m a
+atEith str xs i = note
+    ("No " <> str <> " at index " <> show i <> ", values are: "
+     <> show xs)
     (atMay xs i)
 
 traceText :: Text -> a -> a
@@ -85,10 +85,10 @@ flap ff x = (\f -> f x) <$> ff
 
 -- Sequence.
 
-seqLookupEith :: Show a => Text -> Seq a -> Int -> Either Text a
-seqLookupEith str xs i = maybeToRight
-    ("No " <> str <> " at index " <> showT i <> ", values are: "
-     <> showT xs)
+seqLookupEith :: (MonadError Text m, Show a) => Text -> Seq a -> Int -> m a
+seqLookupEith str xs i = note
+    ("No " <> str <> " at index " <> show i <> ", values are: "
+     <> show xs)
     (Seq.lookup i xs)
 
 seqLastMay :: Seq a -> Maybe a

@@ -1,11 +1,10 @@
 module HeX.BreakList.Judge where
 
-import           HeXlude
-
-import qualified HeX.Box                 as Box
-import           HeX.BreakList.Elem      (BreakableList (..))
-import           HeX.BreakList.Glue      (Glue (..), GlueFlex (..))
-import           HeX.Quantity
+import qualified HeX.Box as Box
+import HeX.BreakList.Elem (BreakableList (..))
+import HeX.BreakList.Glue (Glue (..), GlueFlex (..))
+import HeX.Quantity
+import HeXlude
 
 -- Here’s the way TeX goes about setting the glue when an hbox is being wrapped
 -- up: The natural width, x, of the box contents is determined by adding up the
@@ -32,79 +31,78 @@ import           HeX.Quantity
 -- width u−rz if k = i; it keeps its natural width u if k ̸= i. Notice that
 -- stretching or shrinking occurs only when the glue has the highest order of
 -- infinity that doesn’t cancel out.
-
-data FixParams = FixParams { ratio :: Rational, setOrder :: Int }
-    deriving ( Show )
+data FixParams = FixParams {ratio :: Rational, setOrder :: Int}
+  deriving Show
 
 instance Readable FixParams where
-    describe (FixParams r n) = case n of
-        0 -> "Finite ratio: " <> showFrac r
-        1 -> "Fil ratio: " <> showSP r
-        _ -> "Fil order: " <> show n <> ", ratio: " <> showSP r
+
+  describe (FixParams r n) = case n of
+    0 -> "Finite ratio: " <> showFrac r
+    1 -> "Fil ratio: " <> showSP r
+    _ -> "Fil order: " <> show n <> ", ratio: " <> showSP r
 
 data LengthJudgment = Bare | Full | Overfull
-    deriving ( Show )
+  deriving Show
 
-data GlueStatus =
-    NaturallyGood | UnfixablyBare | FixablyBad LengthJudgment FixParams
-    deriving ( Show )
+data GlueStatus
+  = NaturallyGood
+  | UnfixablyBare
+  | FixablyBad LengthJudgment FixParams
+  deriving Show
 
 glueStatus :: Length -> Glue a -> GlueStatus
-glueStatus excessLength (Glue _ _stretch _shrink) =
-    case compare excessLength 0 of
-        -- The glue ratio is r = [excess length]/[flex]i.
-        -- The natural width x is compared to the desired width w.
-        -- If x = w, all glue gets its natural width.
-        EQ -> NaturallyGood
-        -- Otherwise the glue will be modified, by computing a “glue set ratio” r
-        -- and a “glue set order” i
-        -- LT -> stretchStatus _stretch
-        LT -> stretchStatus _stretch
-        GT -> shrinkStatus _shrink
+glueStatus excessLength (Glue _ _stretch _shrink) = case compare excessLength 0 of
+  -- The glue ratio is r = [excess length]/[flex]i.
+  -- The natural width x is compared to the desired width w.
+  -- If x = w, all glue gets its natural width.
+  EQ -> NaturallyGood
+  -- Otherwise the glue will be modified, by computing a “glue set ratio” r
+  -- and a “glue set order” i
+  -- LT -> stretchStatus _stretch
+  LT -> stretchStatus _stretch
+  GT -> shrinkStatus _shrink
   where
     toRatio f = abs $ fromIntegral excessLength / f
-
     -- No stretchability. Not much we can do in this case.
-    stretchStatus GlueFlex{factor = f, order = o}
-        | f == 0 =
-            UnfixablyBare
-        | otherwise =
-            FixablyBad Bare FixParams { ratio = toRatio f, setOrder = o }
-
+    stretchStatus GlueFlex {factor = f, order = o}
+      | f == 0 =
+        UnfixablyBare
+      | otherwise =
+        FixablyBad Bare FixParams {ratio = toRatio f, setOrder = o}
     -- r is set to 1 if i = 0 and x − w > z0, because the maximum
     -- shrinkability must not be exceeded.
-    shrinkStatus GlueFlex{factor = f, order = o}
-        | o == 0 && (fromIntegral excessLength > f) =
-            FixablyBad Overfull FixParams { ratio = 1, setOrder = o }
-        | otherwise =
-            FixablyBad Full FixParams { ratio = toRatio f, setOrder = o }
+    shrinkStatus GlueFlex {factor = f, order = o}
+      | o == 0 && (fromIntegral excessLength > f) =
+        FixablyBad Overfull FixParams {ratio = 1, setOrder = o}
+      | otherwise =
+        FixablyBad Full FixParams {ratio = toRatio f, setOrder = o}
 
 data TargetLength = TargetLength GlueStatus Length
-    deriving (Show)
+  deriving Show
 
 data LazyTargetLength
-    = UncomputedTargetLength Box.DesiredLength
-    | ComputedTargetLength TargetLength
-    deriving (Show)
+  = UncomputedTargetLength Box.DesiredLength
+  | ComputedTargetLength TargetLength
+  deriving Show
 
 listGlueStatusConcreteTarget :: BreakableList a => Length -> a -> TargetLength
 listGlueStatusConcreteTarget toLen bList =
-    TargetLength (glueStatus (naturalSpan bList - toLen) ( totalGlue bList)) toLen
+  TargetLength (glueStatus (naturalSpan bList - toLen) (totalGlue bList)) toLen
 
 listGlueStatusAbstractTarget :: BreakableList a => Box.DesiredLength -> a -> TargetLength
 listGlueStatusAbstractTarget desiredLength bList =
-    let natSpan = naturalSpan bList
-    in case desiredLength of
-            Box.Natural ->
-                TargetLength NaturallyGood natSpan
-            Box.Spread spreadLen ->
-                TargetLength (glueStatus (-spreadLen) (totalGlue bList)) (natSpan + spreadLen)
-            Box.To toLen ->
-                listGlueStatusConcreteTarget toLen bList
+  let natSpan = naturalSpan bList
+  in case desiredLength of
+       Box.Natural ->
+         TargetLength NaturallyGood natSpan
+       Box.Spread spreadLen ->
+         TargetLength (glueStatus (-spreadLen) (totalGlue bList)) (natSpan + spreadLen)
+       Box.To toLen ->
+         listGlueStatusConcreteTarget toLen bList
 
 -- TODO: Use types to ensure number is within bounds, such as <= tenK.
 data Badness = FiniteBadness TeXInt | InfiniteBadness
-    deriving ( Show )
+  deriving Show
 
 -- The badness of a line is approximately 100 times the cube
 -- of the glue set ratio. But if the badness obtained by this method turns out to be
@@ -114,35 +112,33 @@ data Badness = FiniteBadness TeXInt | InfiniteBadness
 -- be infinitely bad; they are avoided whenever possible.
 badness :: GlueStatus -> Badness
 badness gs = case gs of
-    NaturallyGood -> FiniteBadness 0
-    UnfixablyBare -> FiniteBadness tenK
-    FixablyBad Overfull _ -> InfiniteBadness
-    -- if i == 0, the badness is approximately min(100r^3, 10000).
-    -- Otherwise, there is infinite stretchability or shrinkability, so the
-    -- badness is zero.
-    FixablyBad _ FixParams{ratio, setOrder}
-        | setOrder == 0 ->
-            FiniteBadness $ min tenK $ round $ (ratio ^ (3 :: Int)) * 100
-        | otherwise -> FiniteBadness 0
-
+  NaturallyGood -> FiniteBadness 0
+  UnfixablyBare -> FiniteBadness tenK
+  FixablyBad Overfull _ -> InfiniteBadness
+  -- if i == 0, the badness is approximately min(100r^3, 10000).
+  -- Otherwise, there is infinite stretchability or shrinkability, so the
+  -- badness is zero.
+  FixablyBad _ FixParams {ratio, setOrder}
+    | setOrder == 0 ->
+      FiniteBadness $ min tenK $ round $ (ratio ^ (3 :: Int)) * 100
+    | otherwise -> FiniteBadness 0
 
 -- Suppose the line order is i, and the glue has natural width u, and
 -- flexibility f_j, corresponding to its amount and order of stretch or shrink
 -- as appropriate.
 -- The glue's width is u, plus: r * f_j if j = i; otherwise 0.
 setGlue :: Integral a => GlueStatus -> Glue a -> Box.SetGlue a
-setGlue st g@Glue{dimen = d} = Box.SetGlue $ d + glueDiff st g
+setGlue st g@Glue {dimen = d} = Box.SetGlue $ d + glueDiff st g
   where
-    glueDiff s Glue{stretch, shrink} = case s of
-        NaturallyGood     -> 0
-        -- Note: I made this logic up. Take a 'do your best' approach. This
-        -- shouldn't matter anyway, because unfixably bare implies there's no
-        -- stretchable glue anyway.
-        UnfixablyBare     -> round $ factor stretch
-        FixablyBad Bare p -> scaleFactor stretch p
-        -- Full or overfull
-        FixablyBad _ p    -> -(scaleFactor shrink p)
-
-    scaleFactor GlueFlex{factor = f, order = gO} FixParams{ratio, setOrder}
-        | setOrder == gO = round (ratio * f)
-        | otherwise = 0
+    glueDiff s Glue {stretch, shrink} = case s of
+      NaturallyGood -> 0
+      -- Note: I made this logic up. Take a 'do your best' approach. This
+      -- shouldn't matter anyway, because unfixably bare implies there's no
+      -- stretchable glue anyway.
+      UnfixablyBare -> round $ factor stretch
+      FixablyBad Bare p -> scaleFactor stretch p
+      -- Full or overfull
+      FixablyBad _ p -> -(scaleFactor shrink p)
+    scaleFactor GlueFlex {factor = f, order = gO} FixParams {ratio, setOrder}
+      | setOrder == gO = round (ratio * f)
+      | otherwise = 0

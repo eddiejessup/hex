@@ -38,6 +38,7 @@ dependencies:
 - witherable
 - pretty-simple
 - vector
+- hspec
 
 library:
   source-dirs: src

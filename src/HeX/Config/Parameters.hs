@@ -19,15 +19,15 @@ newtype LenParamVal (a :: LengthParameter) =
 
 newtype GlueParamVal (a :: GlueParameter) =
     GlueParamVal { unGlueParam :: BL.G.Glue Length }
-    deriving ( Show )
+    deriving (Show)
 
 newtype MathGlueParamVal (a :: MathGlueParameter) =
     MathGlueParamVal { unMathGlueunMathGlueParam :: BL.G.Glue MathLength }
-    deriving ( Show )
+    deriving (Show)
 
 newtype TokenListParamVal (a :: TokenListParameter) =
     TokenListParamVal { unTokenListParam :: BalancedText }
-    deriving ( Show )
+    deriving (Show)
 
 newTeXIntParameters :: Map TeXIntParameter TeXInt
 newTeXIntParameters =

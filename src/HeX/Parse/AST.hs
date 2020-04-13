@@ -14,21 +14,21 @@ import qualified HeX.Config.Codes as Code
 type TeXInt = T.Signed UnsignedTeXInt
 
 newtype EightBitTeXInt = EightBitTeXInt TeXInt
-    deriving ( Show )
+    deriving (Show)
 
 constTeXInt :: Q.TeXInt -> TeXInt
 constTeXInt n = T.Signed T.Positive $ constUTeXInt n
 
 data UnsignedTeXInt =
     NormalTeXIntAsUTeXInt NormalTeXInt | CoercedTeXInt CoercedTeXInt
-    deriving ( Show )
+    deriving (Show)
 
 constUTeXInt :: Q.TeXInt -> UnsignedTeXInt
 constUTeXInt n = NormalTeXIntAsUTeXInt $ TeXIntConstant n
 
 -- Think: 'un-coerced integer'.
 data NormalTeXInt = TeXIntConstant Q.TeXInt | InternalTeXInt InternalTeXInt
-    deriving ( Show )
+    deriving (Show)
 
 zeroTeXInt :: NormalTeXInt
 zeroTeXInt = TeXIntConstant 0
@@ -38,7 +38,7 @@ oneTeXInt = TeXIntConstant 1
 
 data CoercedTeXInt =
     InternalLengthAsInt InternalLength | InternalGlueAsInt InternalGlue
-    deriving ( Show )
+    deriving (Show)
 
 -- Length.
 type Length = T.Signed UnsignedLength
@@ -50,7 +50,7 @@ zeroLength = T.Signed T.Positive $
 
 data UnsignedLength =
     NormalLengthAsULength NormalLength | CoercedLength CoercedLength
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable UnsignedLength where
     describe = \case
@@ -62,7 +62,7 @@ data NormalLength =
       -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
       LengthSemiConstant Factor Unit
     | InternalLength InternalLength
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable NormalLength where
     describe = \case
@@ -75,7 +75,7 @@ data Factor =
       -- with decimal digits, but its main feature is that it can represent
       -- non-integers.
     | RationalConstant Rational
-    deriving ( Show )
+    deriving (Show)
 
 zeroFactor, oneFactor :: Factor
 zeroFactor = NormalTeXIntFactor zeroTeXInt
@@ -84,7 +84,7 @@ oneFactor = NormalTeXIntFactor oneTeXInt
 
 data Unit =
     PhysicalUnit PhysicalUnitFrame Q.PhysicalUnit | InternalUnit InternalUnit
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable Unit where
     describe = \case
@@ -101,7 +101,7 @@ data InternalUnit =
     | InternalTeXIntUnit InternalTeXInt
     | InternalLengthUnit InternalLength
     | InternalGlueUnit InternalGlue
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable InternalUnit where
     describe = \case
@@ -110,10 +110,10 @@ instance Readable InternalUnit where
         v -> show v
 
 data PhysicalUnitFrame = MagnifiedFrame | TrueFrame
-    deriving ( Show )
+    deriving (Show)
 
 newtype CoercedLength = InternalGlueAsLength InternalGlue
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable CoercedLength where
     describe (InternalGlueAsLength ig) = "fromGlue(" <> show ig <> ")"
@@ -123,24 +123,24 @@ type MathLength = T.Signed UnsignedMathLength
 
 data UnsignedMathLength = NormalMathLengthAsUMathLength NormalMathLength
                         | CoercedMathLength CoercedMathLength
-    deriving ( Show )
+    deriving (Show)
 
 -- Think: 'un-coerced length'.
 data NormalMathLength =
     -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
     MathLengthSemiConstant Factor MathUnit
-    deriving ( Show )
+    deriving (Show)
 
 data MathUnit = Mu | InternalMathGlueAsUnit InternalMathGlue
-    deriving ( Show )
+    deriving (Show)
 
 newtype CoercedMathLength = InternalMathGlueAsMathLength InternalMathGlue
-    deriving ( Show )
+    deriving (Show)
 
 -- Glue.
 data Glue = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
           | InternalGlue (T.Signed InternalGlue)
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable Glue where
     describe = \case
@@ -156,7 +156,7 @@ instance Readable Glue where
             show ig
 
 data Flex = FiniteFlex Length | FilFlex FilLength
-    deriving ( Show )
+    deriving (Show)
 
 oneFilFlex, minusOneFilFlex, oneFillFlex :: Flex
 oneFilFlex = FilFlex oneFil
@@ -166,7 +166,7 @@ minusOneFilFlex = FilFlex minusOneFil
 oneFillFlex = FilFlex oneFill
 
 data FilLength = FilLength (T.Signed Factor) Int
-    deriving ( Show )
+    deriving (Show)
 
 oneFil, minusOneFil, oneFill :: FilLength
 oneFil = FilLength (T.Signed T.Positive oneFactor) 1
@@ -178,14 +178,14 @@ oneFill = FilLength (T.Signed T.Positive oneFactor) 2
 -- Math glue.
 data MathGlue = ExplicitMathGlue MathLength (Maybe MathFlex) (Maybe MathFlex)
               | InternalMathGlue T.Sign InternalMathGlue
-    deriving ( Show )
+    deriving (Show)
 
 data MathFlex = FiniteMathFlex MathLength | FilMathFlex FilLength
-    deriving ( Show )
+    deriving (Show)
 
 -- Internal quantities.
 data QuantVariable a = ParamVar a | RegisterVar EightBitTeXInt
-    deriving ( Show )
+    deriving (Show)
 
 type TeXIntVariable = QuantVariable T.TeXIntParameter
 
@@ -208,26 +208,26 @@ data InternalTeXInt =
     | ParShape
     | InputLineNr
     | Badness
-    deriving ( Show )
+    deriving (Show)
 
 data CodeTableRef = CodeTableRef T.CodeType TeXInt
-    deriving ( Show )
+    deriving (Show)
 
 data FontCharRef = FontCharRef T.FontChar FontRef
-    deriving ( Show )
+    deriving (Show)
 
 data FontRef =
     FontTokenRef Q.TeXInt | CurrentFontRef | FamilyMemberFontRef FamilyMember
-    deriving ( Show )
+    deriving (Show)
 
 data FamilyMember = FamilyMember T.FontRange TeXInt
-    deriving ( Show )
+    deriving (Show)
 
 data BoxDimensionRef = BoxDimensionRef EightBitTeXInt BoxDim
-    deriving ( Show )
+    deriving (Show)
 
 data FontDimensionRef = FontDimensionRef TeXInt FontRef
-    deriving ( Show )
+    deriving (Show)
 
 data InternalLength =
       InternalLengthVariable LengthVariable
@@ -235,21 +235,21 @@ data InternalLength =
     | InternalFontDimensionRef FontDimensionRef
     | InternalBoxDimensionRef BoxDimensionRef
     | LastKern
-    deriving ( Show )
+    deriving (Show)
 
 data InternalGlue = InternalGlueVariable GlueVariable | LastGlue
-    deriving ( Show )
+    deriving (Show)
 
 data InternalMathGlue =
     InternalMathGlueVariable MathGlueVariable | LastMathGlue
-    deriving ( Show )
+    deriving (Show)
 
 -- Assignments.
 data Assignment = Assignment { body :: AssignmentBody, global :: T.GlobalFlag }
-    deriving ( Show )
+    deriving (Show)
 
 newtype TeXFilePath = TeXFilePath (Path.Path Path.Rel Path.File)
-    deriving ( Show )
+    deriving (Show)
 
 data ControlSequenceTarget =
       MacroTarget T.MacroContents
@@ -258,7 +258,7 @@ data ControlSequenceTarget =
     | ShortDefineTarget T.QuantityType TeXInt
     | ReadTarget TeXInt
     | FontTarget FontSpecification TeXFilePath
-    deriving ( Show )
+    deriving (Show)
 
 data AssignmentBody =
       DefineControlSequence Lex.ControlSequenceLike ControlSequenceTarget
@@ -276,11 +276,11 @@ data AssignmentBody =
     | SetHyphenationPatterns T.BalancedText
     | SetBoxDimension BoxDimensionRef Length
     | SetInteractionMode T.InteractionMode
-    deriving ( Show )
+    deriving (Show)
 
 data TokenListAssignmentTarget = TokenListAssignmentVar TokenListVariable
                                | TokenListAssignmentText T.BalancedText
-    deriving ( Show )
+    deriving (Show)
 
 data VariableAssignment =
       TeXIntVariableAssignment TeXIntVariable TeXInt
@@ -290,7 +290,7 @@ data VariableAssignment =
     | TokenListVariableAssignment TokenListVariable TokenListAssignmentTarget
     | SpecialTeXIntVariableAssignment T.SpecialTeXInt TeXInt
     | SpecialLengthVariableAssignment T.SpecialLength Length
-    deriving ( Show )
+    deriving (Show)
 
 data VariableModification =
       AdvanceTeXIntVariable TeXIntVariable TeXInt
@@ -298,32 +298,32 @@ data VariableModification =
     | AdvanceGlueVariable GlueVariable Glue
     | AdvanceMathGlueVariable MathGlueVariable MathGlue
     | ScaleVariable VDirection NumericVariable TeXInt
-    deriving ( Show )
+    deriving (Show)
 
 data NumericVariable = TeXIntNumericVariable TeXIntVariable
                      | LengthNumericVariable LengthVariable
                      | GlueNumericVariable GlueVariable
                      | MathGlueNumericVariable MathGlueVariable
-    deriving ( Show )
+    deriving (Show)
 
 data CodeAssignment = CodeAssignment CodeTableRef TeXInt
-    deriving ( Show )
+    deriving (Show)
 
 data FontSpecification = NaturalFont | FontAt Length | FontScaled TeXInt
-    deriving ( Show )
+    deriving (Show)
 
 -- Box specification.
 data Box = FetchedRegisterBox T.BoxFetchMode EightBitTeXInt
          | LastBox
          | VSplitBox TeXInt Length
          | ExplicitBox BoxSpecification T.ExplicitBox
-    deriving ( Show )
+    deriving (Show)
 
 data BoxSpecification = Natural | To Length | Spread Length
-    deriving ( Show )
+    deriving (Show)
 
 data BoxOrRule = BoxOrRuleBox Box | BoxOrRuleRule Axis Rule
-    deriving ( Show )
+    deriving (Show)
 
 -- Commands.
 
@@ -343,7 +343,7 @@ data ModeIndependentCommand
     | DoSpecial T.ExpandedBalancedText
     | AddBox BoxPlacement Box
     | ChangeScope T.Sign CommandTrigger
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable ModeIndependentCommand where
     describe = show
@@ -366,7 +366,7 @@ data Command
     | HModeCommand HModeCommand
     | VModeCommand VModeCommand
     | ModeIndependentCommand ModeIndependentCommand
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable Command where
     describe = \case
@@ -384,7 +384,7 @@ data VModeCommand
     | AddVLeaders LeadersSpec
     | AddVRule Rule
     | AddUnwrappedFetchedVBox FetchedBoxRef -- \unv{box,copy}
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable VModeCommand where
     describe = show
@@ -401,7 +401,7 @@ data HModeCommand =
     | AddHLeaders LeadersSpec
     | AddHRule Rule
     | AddUnwrappedFetchedHBox FetchedBoxRef -- \unh{box,copy}
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable HModeCommand where
     describe = \case
@@ -410,10 +410,10 @@ instance Readable HModeCommand where
         c -> show c
 
 data FetchedBoxRef = FetchedBoxRef TeXInt T.BoxFetchMode
-    deriving ( Show )
+    deriving (Show)
 
 data LeadersSpec = LeadersSpec T.LeadersType BoxOrRule Glue
-    deriving ( Show )
+    deriving (Show)
 
 data CommandTrigger = CharCommandTrigger | CSCommandTrigger
     deriving ( Show, Eq )
@@ -425,30 +425,30 @@ data InternalQuantity =
     | InternalMathGlueQuantity InternalMathGlue
     | FontQuantity FontRef
     | TokenListVariableQuantity TokenListVariable
-    deriving ( Show )
+    deriving (Show)
 
 data WriteText = ImmediateWriteText T.ExpandedBalancedText
                | DeferredWriteText T.BalancedText
-    deriving ( Show )
+    deriving (Show)
 
 data WritePolicy = Immediate | Deferred
-    deriving ( Show )
+    deriving (Show)
 
 data Rule = Rule { width, height, depth :: Maybe Length }
-    deriving ( Show )
+    deriving (Show)
 
 data FileStreamAction = Open TeXFilePath | Close
-    deriving ( Show )
+    deriving (Show)
 
 data FileStreamType = FileInput | FileOutput WritePolicy
-    deriving ( Show )
+    deriving (Show)
 
 data BoxPlacement = NaturalPlacement | ShiftedPlacement Axis Direction Length
-    deriving ( Show )
+    deriving (Show)
 
 data CharCodeRef =
     CharRef Code.CharCode | CharTokenRef Q.TeXInt | CharCodeNrRef TeXInt
-    deriving ( Show )
+    deriving (Show)
 
 instance Readable CharCodeRef where
     describe = \case
@@ -466,7 +466,7 @@ data IfConditionHead =
     | IfBoxRegisterIs T.BoxRegisterAttribute TeXInt -- \ifvoid, \ifhbox, \ifvbox
     | IfInputEnded TeXInt -- \ifeof
     | IfConst Bool -- \iftrue, \iffalse
-    deriving ( Show )
+    deriving (Show)
 
 data ConditionHead = IfConditionHead IfConditionHead | CaseConditionHead TeXInt
-    deriving ( Show )
+    deriving (Show)

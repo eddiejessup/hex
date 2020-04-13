@@ -48,13 +48,15 @@ data CharacterSpecial
     deriving (Show)
 
 character
-    :: [ExtensibleRecipe]
+    :: forall m
+     . MonadError Text m
+    => [ExtensibleRecipe]
     -> [Rational]
     -> [Rational]
     -> [Rational]
     -> [Rational]
     -> CharInfo
-    -> Either Text Character
+    -> m Character
 character recipes widths heights depths italicCorrs charInfo =
     do
     width  <- dimAtEith "width" widths $ widthIdx charInfo
@@ -80,17 +82,18 @@ character recipes widths heights depths italicCorrs charInfo =
         }
   where
     -- Get a dimension from some dimension table, at some index
-    dimAtEith :: Text -> [Rational] -> Int -> Either Text Rational
+    dimAtEith :: Text -> [Rational] -> Int -> m Rational
     dimAtEith str xs i
-        | i == 0 = Right 0
+        | i == 0 = pure 0
         | otherwise = atEith str xs i
 
 readCharacters
-    :: Int
+    :: MonadError Text m
+    => Int
     -> [CharInfo]
     -> [ExtensibleRecipe]
     -> [Rational] -> [Rational] -> [Rational] -> [Rational]
-    -> Either Text (IntMap Character)
+    -> m (IntMap Character)
 readCharacters _minCode charInfos recipes widths heights depths italicCorrs =
     do
     charList <- mapM (character recipes widths heights depths italicCorrs) charInfos

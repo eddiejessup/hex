@@ -4,12 +4,17 @@ module HeX.Parse.Stream.Class where
 
 import           HeXlude                   hiding (many)
 
+import qualified Control.Lens              as L
+import           Control.Lens              (Lens')
 import           Control.Monad             (foldM, guard)
 import qualified Control.Monad.Combinators as PC
 import qualified Data.Map.Strict           as Map
+import qualified Data.ByteString.Lazy      as BS.L
+import qualified Data.List.NonEmpty        as L.NE
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Path                 as D.Path
 import qualified Data.Sequence             as Seq
+import           Path                      (Abs, File, Path)
 import qualified Text.Megaparsec           as P
 
 import qualified HeX.Config.Codes          as Code
@@ -24,13 +29,21 @@ class TeXStream s where
 
     setExpansion :: ExpansionMode -> s -> s
 
-    getConfig :: s -> Config
-
-    setConfig :: Config -> s -> s
+    configLens :: Lens' s Config
+    tokenSourceLens :: Lens' s (L.NE.NonEmpty TokenSource)
+    lexStateLens :: Lens' s Lex.LexState
 
     insertLexToken :: s -> Lex.Token -> s
 
     getConditionBodyState :: s -> Maybe ConditionBodyState
+
+data TokenSource = TokenSource
+    { sourcePath      :: Maybe (Path Abs File)
+    , sourceCharCodes :: BS.L.ByteString
+    , sourceLexTokens :: Seq Lex.Token
+    }
+    deriving (Show)
+
 
 newtype ExpansionError = ExpansionError Text
     deriving (Show)
@@ -45,7 +58,7 @@ type TeXStreamE =
 type SimpleParsecT s m a = P.ParsecT Void s m a
 
 type TeXParseable s e m = ( MonadErrorAnyOf e m TeXStreamE
-                          , MonadIO m
+                          -- , MonadIO m
                           , P.Stream s m
                           , P.Token s ~ PrimitiveToken
                           , TeXStream s
@@ -153,9 +166,9 @@ parseInhibited p =
 
 runConfState :: (TeXStream s, MonadState s m) => StateT Config m a -> m a
 runConfState f = do
-    conf <- gets getConfig
+    conf <- gets $ L.view configLens
     (v, conf') <- runStateT f conf
-    modify $ setConfig conf'
+    modify $ \s -> s & L.set configLens conf'
     pure v
 
 -- Cases where expansion is inhibited:

@@ -36,18 +36,18 @@ data TexFont = TexFont
     , characters            :: IntMap Character
     }
 
-runGetEith :: Text -> B.G.Get b -> BS.ByteString -> Either Text b
+runGetEith :: MonadError Text m => Text -> B.G.Get b -> BS.ByteString -> m b
 runGetEith ctx f s = case B.G.runGetOrFail f (BS.L.fromStrict s) of
-    Left (_, _, err) -> Left $ "In " <> showT ctx <> ": " <> toS err
-    Right (_, _, v)  -> Right v
+    Left (_, _, err) -> throwError $ "In " <> show ctx <> ": " <> toS err
+    Right (_, _, v)  -> pure v
 
-newTFM :: BS.ByteString -> Either Text TexFont
+newTFM :: forall m. MonadError Text m => BS.ByteString -> m TexFont
 newTFM contents =
     do
     tableParams <- runGetEith "tableParams" T.getTableParams contents
 
     let
-        runGetEithTable :: Text -> B.G.Get b -> T.Table -> Either Text b
+        runGetEithTable :: Text -> B.G.Get b -> T.Table -> m b
         runGetEithTable s f tbl = runGetEith s f (T.tableToString tableParams tbl)
 
     header <- runGetEithTable "header" H.getHeader T.Header

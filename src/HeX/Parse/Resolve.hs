@@ -3,6 +3,7 @@ module HeX.Parse.Resolve where
 import           HeXlude
 
 import qualified Data.HashMap.Strict as HMap
+import qualified Data.ByteString.Lazy as BS.L
 
 import qualified HeX.BreakList.Elem  as BL.E
 import qualified HeX.Config.Codes    as Code
@@ -23,6 +24,22 @@ resolveToken csLookup Expanding t = case t of
     Lex.ControlSequenceToken cs -> csLookup $ Lex.ControlSequenceProper cs
     Lex.CharCatToken (Lex.CharCat c Code.Active) -> csLookup $ Lex.ActiveCharacter c
     _ -> pure $ primTok $ UnexpandedTok t
+
+-- Helper to resolve a whole string at once.
+codesToResolvedTokens
+  :: (Code.CharCode -> Code.CatCode)
+  -> (HMap.HashMap Lex.ControlSequenceLike ResolvedToken)
+  -> BS.L.ByteString
+  -> [(Lex.Token, Maybe ResolvedToken)]
+codesToResolvedTokens charToCat csMap = go Lex.LineBegin
+  where
+    go lexState xs = case Lex.extractToken charToCat lexState xs of
+      Just (tok, lexState1, xs1) ->
+        (tok, resolveToken lookupCS Expanding tok) : go lexState1 xs1
+      Nothing ->
+        []
+
+    lookupCS cs = HMap.lookup cs csMap
 
 _cs :: [Char] -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper . Lex.mkControlSequence . toS

@@ -16,7 +16,7 @@ import           HeX.Parse.Token (LengthParameter(..))
 
 data PageBreakJudgment =
     DoNotBreak | BreakPageAtBest | BreakPageHere | TrackCost !TeXInt
-    deriving ( Show )
+    deriving (Show)
 
 pageBreakJudgment
     :: VList

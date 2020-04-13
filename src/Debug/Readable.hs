@@ -1,30 +1,23 @@
 {-# LANGUAGE UndecidableInstances #-}
-
 module Debug.Readable where
 
-import           Protolude
-
 import qualified Data.Text as Txt
+import Protolude
 
 monoidIntercalate :: (Foldable t, Monoid a) => a -> t a -> a
 monoidIntercalate d = go
   where
     go xs = fromMaybe mempty (foldl' f Nothing xs)
-
-    f Nothing x    = Just x
+    f Nothing x = Just x
     f (Just acc) x = Just (acc <> d <> x)
 
 class Readable a where
-    describe :: a -> Text
 
-instance {-# OVERLAPPABLE #-} (Readable a, Foldable t, Functor t) => Readable (t a) where
-    describe = describeLined
+  describe :: a -> Text
 
 instance Readable Int where
-    describe = show
 
-showT :: Show a => a -> Text
-showT v = toS (show v :: [Char])
+  describe = show
 
 describeIntercalated :: (Readable a, Foldable t, Functor t) => Text -> t a -> Text
 describeIntercalated d = monoidIntercalate d . (describe <$>)
@@ -37,9 +30,10 @@ describeDoubleLined = describeIntercalated "\n\n"
 
 describeListHeaded :: (Readable a, Foldable t, Functor t) => Int -> Text -> t a -> Text
 describeListHeaded nrTabs title xs =
-    title <> " {{{" <> delim
-    <> describeIntercalated delim xs
-    <> "\n}}} " <> title
+  title <> " {{{" <> delim <>
+    describeIntercalated delim xs <>
+    "\n}}} " <>
+    title
   where
     tabs = Txt.replicate nrTabs "\t"
     delim = "\n" <> tabs
