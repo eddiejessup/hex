@@ -1,17 +1,16 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module HeX.Parse.Stream.Instance where
+module Hex.Parse.Stream.Expanding where
 
-import           HeXlude                   hiding (show)
-import qualified HeXlude
+import           Hexlude                   hiding (show)
+import qualified Hexlude
 
-import qualified Control.Lens as L
-import           Control.Monad.Reader      (runReaderT)
 import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.List.NonEmpty        as L.NE
 import           Data.Map.Strict           ((!?))
 import qualified Data.Map.Strict           as Map
+import qualified Data.Path
 import qualified Data.Sequence             as Seq
 import           Path                      (Abs, File, Path)
 import qualified Path
@@ -19,52 +18,51 @@ import qualified Path.IO
 import qualified Text.Megaparsec           as P
 import           Text.Show
 import qualified Data.Generics.Product.Typed as G.P
-import qualified HeX.Config.Codes          as Code
-import qualified HeX.Config                as Conf
-import           HeX.Evaluate
-import qualified HeX.Lex                   as Lex
-import qualified HeX.Quantity              as Q
-import           HeX.Parse.Assignment
-import           HeX.Parse.AST
-import           HeX.Parse.Command
-import           HeX.Parse.Condition
-import           HeX.Parse.Resolve
-import           HeX.Parse.Stream.Class
-import           HeX.Parse.SyntaxCommand
-import           HeX.Parse.Token
+import qualified Hex.Config.Codes          as Code
+import qualified Hex.Config                as Conf
+import           Hex.Evaluate
+import qualified Hex.Lex                   as Lex
+import qualified Hex.Quantity              as Q
+import           Hex.Parse.Assignment
+import           Hex.Parse.AST
+import           Hex.Parse.Command
+import           Hex.Parse.Condition
+import           Hex.Resolve.Resolve
+import           Hex.Parse.Stream.Class
+import           Hex.Parse.SyntaxCommand
+import           Hex.Resolve.Token
 
-data ExpandedStream = ExpandedStream
+data ExpandingStream = ExpandingStream
     { streamTokenSources :: L.NE.NonEmpty TokenSource
     , lexState           :: Lex.LexState
-    , expansionMode      :: ExpansionMode
+    , resolutionMode     :: ResolutionMode
     , config             :: Conf.Config
     , skipState          :: [ConditionBodyState]
     }
     deriving Generic
 
-instance Show ExpandedStream where
-    show _ = "ExpandedStream {..}"
+instance Show ExpandingStream where
+    show _ = "ExpandingStream {..}"
 
-newTokenSource :: Maybe (Path Abs File) -> BS.L.ByteString -> TokenSource
-newTokenSource maybePath cs = TokenSource maybePath cs mempty
-
-newExpandStream :: Maybe (Path Abs File) -> BS.L.ByteString -> IO ExpandedStream
+newExpandStream :: Maybe (Path Abs File) -> BS.L.ByteString -> IO ExpandingStream
 newExpandStream maybePath cs =
     do
     conf <- Conf.newConfig
-    pure ExpandedStream { streamTokenSources = pure (newTokenSource maybePath cs)
+    pure ExpandingStream { streamTokenSources = pure (newTokenSource maybePath cs)
                         , lexState      = Lex.LineBegin
-                        , expansionMode = Expanding
+                        , resolutionMode = Resolving
                         , config        = conf
                         , skipState     = []
                         }
 
 instance ( MonadErrorAnyOf e m TeXStreamE
+         , e `CouldBe` ExpansionError
+         , e `CouldBe` Data.Path.PathError
          , MonadIO m
-         ) => P.Stream ExpandedStream m where
-    type Token ExpandedStream = PrimitiveToken
+         ) => P.Stream ExpandingStream m where
+    type Token ExpandingStream = PrimitiveToken
 
-    type Tokens ExpandedStream = Seq PrimitiveToken
+    type Tokens ExpandingStream = Seq PrimitiveToken
 
     -- take1_ :: s -> m (Maybe (Token s, s))
     take1_ stream =
@@ -124,19 +122,14 @@ instance ( MonadErrorAnyOf e m TeXStreamE
     --   -> (SourcePos, String, PosState s) -- ^ (See below)
     reachOffset _ _ _ = undefined
 
-instance TeXStream ExpandedStream where
-    setExpansion mode s = s{ expansionMode = mode }
+instance TeXStream ExpandingStream where
+    resolutionModeLens = G.P.typed @ResolutionMode
 
     configLens = G.P.typed @Conf.Config
-    tokenSourceLens = G.P.typed @(L.NE.NonEmpty TokenSource)
-    lexStateLens = G.P.typed @Lex.LexState
 
-    insertLexToken s t =
-        let
-            curTokSource@TokenSource{ sourceLexTokens } :| outerStreams = streamTokenSources s
-            updatedCurTokSource = curTokSource{ sourceLexTokens = t :<| sourceLexTokens }
-        in
-            s{ streamTokenSources = updatedCurTokSource :| outerStreams }
+    tokenSourceLens = G.P.typed @(L.NE.NonEmpty TokenSource)
+
+    lexStateLens = G.P.typed @Lex.LexState
 
     getConditionBodyState = headMay . skipState
 
@@ -203,16 +196,13 @@ expandChangeCase lookupChangeCaseCode (BalancedText caseToks) =
             Conf.NoCaseChange       -> char
             Conf.ChangeToCode char' -> char'
 
-withJust :: Monad m => m (Maybe a) -> (a -> m (Maybe b)) -> m (Maybe b)
-withJust a k =
-    a >>= \case
-        Nothing -> pure Nothing
-        Just x -> k x
-
-skipToIfDelim :: forall e m. TeXParseable ExpandedStream e m => IfBodyState -> ExpandedStream -> m (Maybe ExpandedStream)
+skipToIfDelim
+    :: forall e m
+     . TeXParseable ExpandingStream e m
+    => IfBodyState -> ExpandingStream -> m (Maybe ExpandingStream)
 skipToIfDelim blk stream = go stream 1
   where
-    go :: ExpandedStream -> Int -> m (Maybe ExpandedStream)
+    go :: ExpandingStream -> Int -> m (Maybe ExpandingStream)
     go goStream n =
         withJust (fetchResolvedToken goStream) $ \(_, rt, nextGoStream) ->
             do
@@ -244,13 +234,13 @@ skipToIfDelim blk stream = go stream 1
 
 skipUpToCaseBlock
     :: forall e m
-    .  TeXParseable ExpandedStream e m
+    .  TeXParseable ExpandingStream e m
     => Q.TeXInt
-    -> ExpandedStream
-    -> m (Maybe ExpandedStream)
+    -> ExpandingStream
+    -> m (Maybe ExpandingStream)
 skipUpToCaseBlock tgt stream = go stream 0 1
   where
-    go :: ExpandedStream -> Q.TeXInt -> Int -> m (Maybe ExpandedStream)
+    go :: ExpandingStream -> Q.TeXInt -> Int -> m (Maybe ExpandingStream)
     go _stream cur n
             | n == 1, cur == tgt =
                 -- If we are at top condition depth,
@@ -277,10 +267,12 @@ skipUpToCaseBlock tgt stream = go stream 0 1
                             cont cur n
 
 expandConditionToken
-    :: TeXParseable ExpandedStream e m
-    => ExpandedStream
+    :: (TeXParseable ExpandingStream e m
+       , e `CouldBe` ExpansionError
+       )
+    => ExpandingStream
     -> ConditionTok
-    -> m (Maybe ExpandedStream)
+    -> m (Maybe ExpandingStream)
 expandConditionToken strm = \case
     ConditionHeadTok ifTok ->
         do
@@ -295,7 +287,7 @@ expandConditionToken strm = \case
     ConditionBodyTok delim -> case (delim, skipState strm) of
         -- Shouldn't see any condition token outside a condition block.
         (_, []) ->
-            throwM $ ExpansionError $ "Not in a condition body, but saw condition-body token: " <> HeXlude.show delim
+            throwM $ ExpansionError $ "Not in a condition body, but saw condition-body token: " <> Hexlude.show delim
         -- Shouldn't see an 'or' while in an if-condition.
         (Or, IfBodyState _ : _) ->
             throwM $ ExpansionError "In an if-condition, not case-condition, but saw 'or'"
@@ -331,10 +323,14 @@ expandConditionToken strm = \case
             pure $ Just skippedStream{skipState = condRest}
 
 expandSyntaxCommand
-    :: (TeXParseable ExpandedStream e m, MonadIO m)
-    => ExpandedStream
+    :: ( TeXParseable ExpandingStream e m
+       , MonadIO m
+       , e `CouldBe` ExpansionError
+       , e `CouldBe` Data.Path.PathError
+       )
+    => ExpandingStream
     -> SyntaxCommandHeadToken
-    -> m (Maybe (ExpandedStream, Seq Lex.Token))
+    -> m (Maybe (ExpandingStream, Seq Lex.Token))
 expandSyntaxCommand strm = \case
     MacroTok m ->
         runExpandCommand strm (parseMacroArgs m) (expandMacro m)
@@ -362,9 +358,9 @@ expandSyntaxCommand strm = \case
         case fetchLexToken strm of
             Nothing -> pure Nothing
             Just (argLT, postArgStream) ->
-                withJust (fetchAndExpandToken postArgStream) $ \(postArgLTs, _, expandedStream) ->
+                withJust (fetchAndExpandToken postArgStream) $ \(postArgLTs, _, postExpandStream) ->
                     -- Prepend the unexpanded token.
-                    pure $ Just (expandedStream, argLT :<| postArgLTs)
+                    pure $ Just (postExpandStream, argLT :<| postArgLTs)
     NoExpandTok ->
         panic "Not implemented: syntax command NoExpandTok"
     MarkRegisterTok _ ->
@@ -375,7 +371,7 @@ expandSyntaxCommand strm = \case
     --   tokens from the current source.
     InputTok ->
         do
-        (resultStream@ExpandedStream{ streamTokenSources }, TeXFilePath texPath) <- runSimpleRunParserT' parseFileName strm
+        (resultStream@ExpandingStream{ streamTokenSources }, TeXFilePath texPath) <- runSimpleRunParserT' parseFileName strm
         let extraDirs = case streamTokenSources & (L.NE.head >>> sourcePath) of
                 Just p  -> [Path.parent p]
                 Nothing -> []
@@ -399,58 +395,14 @@ expandSyntaxCommand strm = \case
         v <- f a
         pure $ Just (stream, v)
 
-fetchLexToken :: TeXStream s => s -> Maybe (Lex.Token, s)
-fetchLexToken stream =
-    do
-    (lt, newLexState, newStreamTokenSources) <- fetchFromSources (L.view tokenSourceLens stream)
-    pure
-        (lt, stream
-            & L.set tokenSourceLens newStreamTokenSources
-            & L.set lexStateLens newLexState)
-  where
-    lkpCatCode t = Conf.lookupCatCode t (L.view configLens stream)
-
-    curLexState = L.view lexStateLens stream
-
-    -- TODO:
-    -- [a] -> (a -> Maybe b) -> Maybe (b, [a])
-    fetchFromSources (curTokSource :| outerTokSources) =
-        case fetchFromSource curTokSource of
-            Nothing ->
-                nonEmpty outerTokSources >>= fetchFromSources
-            Just (lt, lexState, newCurTokSource) ->
-                Just $ seq outerTokSources (lt, lexState, newCurTokSource :| outerTokSources)
-
-    fetchFromSource tokSource@TokenSource { sourceCharCodes, sourceLexTokens } =
-        case sourceLexTokens of
-            -- If there is a lex token in the buffer, use that.
-            fstLexToken :<| laterLexTokens ->
-                let newCurTokSource = tokSource { sourceLexTokens = laterLexTokens }
-                in  Just (fstLexToken, curLexState, newCurTokSource)
-            -- If the lex token buffer is empty, extract a token and use it.
-            Empty ->
-                Lex.extractToken lkpCatCode curLexState sourceCharCodes
-                <&> \(fetchedLexToken, newLexState, newCodes) ->
-                        (fetchedLexToken, newLexState, tokSource { sourceCharCodes = newCodes })
-
-fetchResolvedToken
-    :: ( MonadErrorAnyOf e m '[ExpansionError]
-       )
-    => ExpandedStream
-    -> m (Maybe (Lex.Token, ResolvedToken, ExpandedStream))
-fetchResolvedToken stream =
-    case fetchLexToken stream of
-        Nothing -> pure Nothing
-        Just (lt, newStream) ->
-            do
-            let lkp cs = Conf.lookupCS cs $ config newStream
-            rt <- note (throw $ ExpansionError $ "Could not resolve token:" <> HeXlude.show lt) $ resolveToken lkp (expansionMode newStream) lt
-            pure $ Just (lt, rt, newStream)
-
 fetchAndExpandToken
-    :: (TeXParseable ExpandedStream e m, MonadIO m)
-    => ExpandedStream
-    -> m (Maybe (Seq Lex.Token, ResolvedToken, ExpandedStream))
+    :: ( TeXParseable ExpandingStream e m
+       , MonadIO m
+       , e `CouldBe` ExpansionError
+       , e `CouldBe` Data.Path.PathError
+       )
+    => ExpandingStream
+    -> m (Maybe (Seq Lex.Token, ResolvedToken, ExpandingStream))
 fetchAndExpandToken stream =
     withJust (fetchResolvedToken stream) $ \(lt, rt, newStream) ->
         case rt of

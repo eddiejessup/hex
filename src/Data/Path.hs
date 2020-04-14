@@ -3,7 +3,7 @@ module Data.Path where
 import qualified Data.ByteString as BS
 import qualified Data.Sequence as Seq
 import qualified Data.Word as Word
-import HeXlude
+import Hexlude
 import Path (File, Path)
 import qualified Path
 

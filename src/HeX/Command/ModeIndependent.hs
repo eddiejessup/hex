@@ -1,22 +1,21 @@
-module HeX.Command.ModeIndependent where
+module Hex.Command.ModeIndependent where
 
-import           HeXlude
+import           Hexlude
 
-import           Control.Monad        (when)
 import qualified Data.Path            as D.Path
 
 import           TFM                  (TFMError)
 
-import qualified HeX.Box              as B
-import qualified HeX.BreakList        as BL
-import qualified HeX.Command.Commands as Com
-import qualified HeX.Config.Codes     as Code
-import           HeX.Command.Common
-import           HeX.Config
-import           HeX.Evaluate
-import qualified HeX.Lex              as Lex
-import qualified HeX.Parse            as HP
-import qualified HeX.Variable         as Var
+import qualified Hex.Box              as B
+import qualified Hex.BreakList        as BL
+import qualified Hex.Command.Commands as Com
+import qualified Hex.Config.Codes     as Code
+import           Hex.Command.Common
+import           Hex.Config
+import           Hex.Evaluate
+import qualified Hex.Lex              as Lex
+import qualified Hex.Parse            as HP
+import qualified Hex.Variable         as Var
 
 data ModeIndependentResult
     = AddElem BL.VListElem
@@ -63,7 +62,7 @@ handleModeIndependentCommand = \case
         let _handle = case stdOutStream of
                 HP.StdOut -> stdout
                 HP.StdErr -> stderr
-        liftIO $ hPutStrLn _handle (Code.codesToS (Com.showExpandedBalancedText eTxt) :: Text)
+        liftIO $ hPutStrLn _handle (toS (Code.unsafeCodesAsChars (Com.showExpandedBalancedText eTxt)) :: Text)
         pure DoNothing
     HP.Relax ->
         pure DoNothing
@@ -216,7 +215,7 @@ handleModeIndependentCommand = \case
             do
             en <- texEvaluate n
             fStreams <- asks outFileStreams
-            let txtTxt = Code.codesToS (Com.showExpandedBalancedText eTxt)
+            let txtTxt = toS $ Code.unsafeCodesAsChars (Com.showExpandedBalancedText eTxt)
             -- Write to:
             -- if stream number corresponds to existing, open file:
             --     file

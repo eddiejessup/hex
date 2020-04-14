@@ -1,10 +1,10 @@
-module HeX.Config
-    ( module HeX.Config.Config
-    , module HeX.Config.Parameters
-    , module HeX.Config.Codes
+module Hex.Config
+    ( module Hex.Config.Config
+    , module Hex.Config.Parameters
+    , module Hex.Config.Codes
     )
 where
 
-import           HeX.Config.Codes
-import           HeX.Config.Config
-import           HeX.Config.Parameters
+import           Hex.Config.Codes
+import           Hex.Config.Config
+import           Hex.Config.Parameters

@@ -4,7 +4,7 @@ import DVI.Encode
 import qualified Data.Binary as B
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Word as W
-import HeXlude
+import Hexlude
 
 data ByteLength = OneByte | TwoByte | ThreeByte | FourByte
   deriving Show

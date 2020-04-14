@@ -1,7 +1,7 @@
 module DVI.Encode where
 
 import qualified Data.ByteString as BS
-import HeXlude
+import Hexlude
 
 class Encodable a where
 

@@ -10,8 +10,8 @@ module TFM
 where
 
 import qualified Data.ByteString as BS
-import HeX.Quantity
-import HeXlude
+import Hex.Quantity
+import Hexlude
 import Path
 import TFM.Character (Character (..))
 import TFM.Parse

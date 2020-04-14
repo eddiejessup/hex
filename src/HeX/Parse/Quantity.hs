@@ -1,24 +1,21 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module HeX.Parse.Quantity where
+module Hex.Parse.Quantity where
 
-import           HeXlude
+import           Hexlude
 
 import qualified Control.Monad.Combinators as PC
 import qualified Data.Ascii                as Ascii
-import           Data.Foldable             (foldl')
-import           Data.Functor              (($>))
-import           Data.Ratio                ((%))
 import qualified Text.Megaparsec           as P
 
-import           HeX.Config.Codes          (codesFromStr)
-import qualified HeX.Config.Codes          as Code
-import qualified HeX.Lex                   as Lex
-import           HeX.Parse.AST
-import           HeX.Parse.Stream.Class
-import qualified HeX.Parse.Token           as T
-import qualified HeX.Quantity              as Q
+import           Hex.Config.Codes          (unsafeCodesFromChars)
+import qualified Hex.Config.Codes          as Code
+import qualified Hex.Lex                   as Lex
+import           Hex.Parse.AST
+import           Hex.Parse.Stream.Class
+import qualified Hex.Resolve.Token           as T
+import qualified Hex.Quantity              as Q
 
 parseSigned :: TeXParseable s e m => SimpleParsecT s m a -> SimpleParsecT s m (T.Signed a)
 parseSigned parseQuantity = T.Signed <$> parseSigns <*> parseQuantity
@@ -70,7 +67,7 @@ parseNormalTeXInt =
 decCharToInt :: T.PrimitiveToken -> Maybe Int
 decCharToInt = \case
     T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
-        Ascii.fromDigit $ Code.codeWord c
+        Ascii.fromDecDigit $ Code.codeWord c
     _ ->
         Nothing
 
@@ -79,7 +76,7 @@ hexCharToInt = \case
     T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
         Ascii.fromUpHexDigit $ Code.codeWord c
     T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
-        Code.safeFromUpAF $ Code.codeWord c
+        Ascii.fromUpHexAF $ Code.codeWord c
     _ -> Nothing
 
 octCharToInt :: T.PrimitiveToken -> Maybe Int
@@ -153,12 +150,12 @@ parseUnit =
 
     parseInternalUnitLit =
         tryChoice
-            [ skipKeyword (codesFromStr "em") $> Em
-            , skipKeyword (codesFromStr "ex") $> Ex
+            [ skipKeyword (unsafeCodesFromChars "em") $> Em
+            , skipKeyword (unsafeCodesFromChars "ex") $> Ex
             ]
 
     parseFrame = do
-        isTrue <- parseOptionalKeyword (codesFromStr "true")
+        isTrue <- parseOptionalKeyword (unsafeCodesFromChars "true")
         pure $
             if isTrue
             then TrueFrame
@@ -171,15 +168,15 @@ parseUnit =
     -- NOTE: Can't trim number of 'try's naïvely, because they all suck up
     -- initial space, which would also need backtracking.
     parsePhysicalUnitLit = tryChoice
-        [ skipKeyword (codesFromStr "bp") $> Q.BigPoint
-        , skipKeyword (codesFromStr "cc") $> Q.Cicero
-        , skipKeyword (codesFromStr "cm") $> Q.Centimetre
-        , skipKeyword (codesFromStr "dd") $> Q.Didot
-        , skipKeyword (codesFromStr "in") $> Q.Inch
-        , skipKeyword (codesFromStr "mm") $> Q.Millimetre
-        , skipKeyword (codesFromStr "pc") $> Q.Pica
-        , skipKeyword (codesFromStr "pt") $> Q.Point
-        , skipKeyword (codesFromStr "sp") $> Q.ScaledPoint
+        [ skipKeyword (unsafeCodesFromChars "bp") $> Q.BigPoint
+        , skipKeyword (unsafeCodesFromChars "cc") $> Q.Cicero
+        , skipKeyword (unsafeCodesFromChars "cm") $> Q.Centimetre
+        , skipKeyword (unsafeCodesFromChars "dd") $> Q.Didot
+        , skipKeyword (unsafeCodesFromChars "in") $> Q.Inch
+        , skipKeyword (unsafeCodesFromChars "mm") $> Q.Millimetre
+        , skipKeyword (unsafeCodesFromChars "pc") $> Q.Pica
+        , skipKeyword (unsafeCodesFromChars "pt") $> Q.Point
+        , skipKeyword (unsafeCodesFromChars "sp") $> Q.ScaledPoint
         ]
 
 -- Math length.
@@ -198,13 +195,13 @@ parseNormalMathLength =
 
 parseMathUnit :: TeXParser s e m MathUnit
 parseMathUnit =
-    tryChoice [ skipKeyword (codesFromStr "mu") >> skipOneOptionalSpace $> Mu
+    tryChoice [ skipKeyword (unsafeCodesFromChars "mu") >> skipOneOptionalSpace $> Mu
               , skipOptionalSpaces *> (InternalMathGlueAsUnit <$> parseHeaded headToParseInternalMathGlue)
               ]
 
 -- Glue.
 parseGlue :: TeXParser s e m Glue
-parseGlue = tryChoice [ ExplicitGlue <$> parseLength <*> parseFlex (codesFromStr "plus") <*> parseFlex (codesFromStr "minus")
+parseGlue = tryChoice [ ExplicitGlue <$> parseLength <*> parseFlex (unsafeCodesFromChars "plus") <*> parseFlex (unsafeCodesFromChars "minus")
                       , InternalGlue <$> parseSigned (parseHeaded headToParseInternalGlue)
                       ]
 
@@ -227,14 +224,14 @@ parseFilLength :: TeXParser s e m FilLength
 parseFilLength =
     (FilLength <$> parseSigned parseFactor <*> parseOrder) <* skipOptionalSpaces
   where
-    parseSomeLs = PC.some $ skipSatisfied $ matchNonActiveCharacterUncased (Code.codeFromChar 'l')
+    parseSomeLs = PC.some $ skipSatisfied $ matchNonActiveCharacterUncased (Code.unsafeCodeFromChar 'l')
 
-    parseOrder = skipKeyword (codesFromStr "fi") *> (length <$> parseSomeLs)
+    parseOrder = skipKeyword (unsafeCodesFromChars "fi") *> (length <$> parseSomeLs)
 
 -- Math glue.
 parseMathGlue :: TeXParser s e m MathGlue
 parseMathGlue =
-    tryChoice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFlex (codesFromStr "plus") <*> parseMathFlex (codesFromStr "minus")
+    tryChoice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFlex (unsafeCodesFromChars "plus") <*> parseMathFlex (unsafeCodesFromChars "minus")
               , InternalMathGlue <$> parseSigns <*> parseHeaded headToParseInternalMathGlue
               ]
 
@@ -441,7 +438,7 @@ headToParseBox = \case
     T.SplitVBoxTok ->
         do
         nr <- parseTeXInt
-        skipKeyword (codesFromStr "to")
+        skipKeyword (unsafeCodesFromChars "to")
         VSplitBox nr <$> parseLength
     T.ExplicitBoxTok boxType ->
         do
@@ -453,7 +450,7 @@ headToParseBox = \case
   where
     parseBoxSpecification =
         tryChoice
-            [ skipKeyword (codesFromStr "to") *> (To <$> parseLength)
-            , skipKeyword (codesFromStr "spread") *> (Spread <$> parseLength)
+            [ skipKeyword (unsafeCodesFromChars "to") *> (To <$> parseLength)
+            , skipKeyword (unsafeCodesFromChars "spread") *> (Spread <$> parseLength)
             , pure Natural
             ] <* skipFiller

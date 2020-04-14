@@ -1,7 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
-module HeX.Command.Run where
+module Hex.Command.Run where
 
-import Control.Monad.Except (runExceptT)
 import DVI.Document (Instruction, parseInstructions)
 import DVI.Encode (encode)
 import DVI.Instruction (DVIError, EncodableInstruction)
@@ -9,39 +8,43 @@ import Data.Byte (ByteError)
 import qualified Data.ByteString.Lazy as BS.L
 import Data.Path (PathError)
 import qualified Data.Text as Tx
-import HeX.Box
-import HeX.BreakList
-import HeX.Categorise
-import HeX.Command.Build
-import HeX.Command.Common
-import qualified HeX.Config as Conf
-import qualified HeX.Config.Codes as Code
-import HeX.Evaluate (EvaluationError)
-import qualified HeX.Lex
-import qualified HeX.Parse as HP
-import qualified HeX.Quantity as Quantity
-import HeXlude
+import Hex.Box
+import Hex.BreakList
+import Hex.Categorise
+import Hex.Command.Build
+import Hex.Command.Common
+import qualified Hex.Config as Conf
+import qualified Hex.Config.Codes as Code
+import Hex.Evaluate (EvaluationError)
+import qualified Hex.Lex
+import qualified Hex.Parse as HP
+import qualified Hex.Quantity as Quantity
+import Hexlude
 import TFM (TFMError)
 import qualified Text.Megaparsec as P
 import Control.Monad.Trans.Writer.CPS as Wr
 
+type AppErrorE =
+  '[ BuildError
+   , Conf.ConfigError
+   , EvaluationError
+   , PathError
+   , HP.ExpansionError
+   , HP.ResolutionError
+   , TFMError
+   , HP.ParseError
+   ]
+
 type AppError
-  = Variant
-      '[ BuildError
-       , Conf.ConfigError
-       , EvaluationError
-       , PathError
-       , HP.ExpansionError
-       , TFMError
-       ]
+  = Variant AppErrorE
 
 newtype App a
-  = App {unApp :: ExceptT AppError (StateT HP.ExpandedStream IO) a}
+  = App {unApp :: ExceptT AppError (StateT HP.ExpandingStream IO) a}
   deriving
     ( Functor
     , Applicative
     , Monad
-    , MonadState HP.ExpandedStream
+    , MonadState HP.ExpandingStream
     , MonadIO
     , MonadError AppError
     )
@@ -83,10 +86,10 @@ readMode = \case
 renderWithMode :: Mode -> BS.L.ByteString -> IO Text
 renderWithMode mode input = case mode of
     CatMode -> pure $ show $ codesToCharCats usableCatLookup input -- TODO: Render nicely.
-    LexMode -> pure $ show $ HeX.Lex.codesToLexTokens usableCatLookup input
+    LexMode -> pure $ show $ Hex.Lex.codesToLexTokens usableCatLookup input
     ResolveMode -> pure $ show $ HP.codesToResolvedTokens usableCatLookup HP.defaultCSMap input
-    ExpandMode -> makeStream >>= streamAsExpandedTokens <&> renderLoopParserResult
-    CommandMode -> makeStream >>= streamAsCommands <&> renderLoopParserResult
+    ExpandMode -> makeStream >>= expandingStreamAsPrimTokens <&> renderLoopParserResult
+    CommandMode -> makeStream >>= expandingStreamAsCommands <&> renderLoopParserResult
     ParaListMode -> makeStream >>= renderStreamUnsetPara
     ParaSetMode -> makeStream >>= renderStreamSetPara
     PageListMode -> makeStream >>= renderStreamPageList
@@ -111,14 +114,17 @@ benchCatBS xs = case extractCharCat (Code.catLookup Code.usableCatCodes) xs of
 
 -- Expand.
 loopParser
-  :: forall m a
-   . Monad m
-  => HP.SimpleParsecT HP.ExpandedStream (ExceptT (Variant HP.TeXStreamE) m) a
-  -> HP.ExpandedStream
+  :: forall m e a
+   . ( Monad m
+     , e `CouldBe` HP.ParseError
+     , Show (Variant e)
+     )
+  => HP.SimpleParsecT HP.ExpandingStream (ExceptT (Variant e) m) a
+  -> HP.ExpandingStream
   -> m (Text, [a])
 loopParser parser s = Wr.runWriterT (go s)
   where
-    go :: HP.ExpandedStream -> Wr.WriterT [a] m Text
+    go :: HP.ExpandingStream -> Wr.WriterT [a] m Text
     go stream = do
       errOrA <- lift (runExceptT (HP.runSimpleRunParserT' parser stream))
       case errOrA of
@@ -132,15 +138,15 @@ renderLoopParserResult :: Show a => (Text, [a]) -> Text
 renderLoopParserResult (errMsg, xs) =
     "Ended with message:\n\t \"" <> errMsg <> "\n\n" <> "Got results: " <> Tx.concat (intersperse "\n" (show <$> xs))
 
-streamAsExpandedTokens :: HP.ExpandedStream -> IO (Text, [HP.PrimitiveToken])
-streamAsExpandedTokens = loopParser P.anySingle
+expandingStreamAsPrimTokens :: HP.ExpandingStream -> IO (Text, [HP.PrimitiveToken])
+expandingStreamAsPrimTokens = loopParser @IO @AppErrorE P.anySingle
 
 -- Command.
-streamAsCommands :: HP.ExpandedStream -> IO (Text, [HP.Command])
-streamAsCommands = loopParser HP.parseCommand
+expandingStreamAsCommands :: HP.ExpandingStream -> IO (Text, [HP.Command])
+expandingStreamAsCommands = loopParser @IO @AppErrorE HP.parseCommand
 
 runApp
-  :: HP.ExpandedStream
+  :: HP.ExpandingStream
   -> App a
   -> IO a
 runApp s f = evalStateT (runExceptT $ unApp f) s >>= strEitherToIO
@@ -154,43 +160,43 @@ extractUnsetParaApp :: App HList
 extractUnsetParaApp =
   (\(ParaResult _ hList) -> hList) <$> extractPara HP.Indent
 
-renderStreamUnsetPara :: HP.ExpandedStream -> IO Text
+renderStreamUnsetPara :: HP.ExpandingStream -> IO Text
 renderStreamUnsetPara s = do
   HList elemSeq <- runApp s extractUnsetParaApp
   pure $ describeLined elemSeq
 
 -- Paragraph boxes.
-streamToParaBoxes :: HP.ExpandedStream -> IO (Seq (Box HBox))
+streamToParaBoxes :: HP.ExpandingStream -> IO (Seq (Box HBox))
 streamToParaBoxes s =
   runApp s $ extractUnsetParaApp <&> hListToParaLineBoxes >>= readOnConfState
 
-renderStreamSetPara :: HP.ExpandedStream -> IO Text
+renderStreamSetPara :: HP.ExpandingStream -> IO Text
 renderStreamSetPara s = streamToParaBoxes s <&> describeDoubleLined
 
 -- Pages list.
-renderStreamPageList :: HP.ExpandedStream -> IO Text
+renderStreamPageList :: HP.ExpandingStream -> IO Text
 renderStreamPageList s = do
   MainVModeResult (VList vList) <- runApp s extractMainVList
   pure $ describeLined vList
 
 -- Pages boxes.
-streamToPages :: HP.ExpandedStream -> IO (Seq Page, Conf.IntParamVal 'HP.Mag)
+streamToPages :: HP.ExpandingStream -> IO (Seq Page, Conf.IntParamVal 'HP.Mag)
 streamToPages s = runApp s extractBreakAndSetVList
 
-renderStreamPages :: HP.ExpandedStream -> IO Text
+renderStreamPages :: HP.ExpandingStream -> IO Text
 renderStreamPages s = streamToPages s <&> fst <&> describeLined
 
 -- DVI instructions.
-streamToSemanticDVI :: HP.ExpandedStream -> IO (Seq Instruction, Conf.IntParamVal 'HP.Mag)
+streamToSemanticDVI :: HP.ExpandingStream -> IO (Seq Instruction, Conf.IntParamVal 'HP.Mag)
 streamToSemanticDVI s = do
   (pages, mag) <- streamToPages s
   pure (pagesToDVI pages, mag)
 
-renderStreamSemanticDVI :: HP.ExpandedStream -> IO Text
+renderStreamSemanticDVI :: HP.ExpandingStream -> IO Text
 renderStreamSemanticDVI s = streamToSemanticDVI s <&> fst <&> describeLined
 
 -- Raw DVI instructions.
-streamToRawDVI :: HP.ExpandedStream -> IO (Seq EncodableInstruction)
+streamToRawDVI :: HP.ExpandingStream -> IO (Seq EncodableInstruction)
 streamToRawDVI s = do
   (instrs, mag) <- streamToSemanticDVI s
   strEitherToIO $ parseInstructions instrs $ Quantity.unInt $ Conf.unIntParam mag
@@ -200,9 +206,9 @@ streamToRawDVI s = do
       Left err -> panic $ show err
       Right v -> pure v
 
-renderStreamRawDVI :: HP.ExpandedStream -> IO Text
+renderStreamRawDVI :: HP.ExpandingStream -> IO Text
 renderStreamRawDVI s = streamToRawDVI s <&> describeLined
 
 -- DVI byte strings.
-streamToDVIBytes :: HP.ExpandedStream -> IO ByteString
+streamToDVIBytes :: HP.ExpandingStream -> IO ByteString
 streamToDVIBytes s = streamToRawDVI s <&> encode

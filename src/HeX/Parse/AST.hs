@@ -1,13 +1,13 @@
-module HeX.Parse.AST where
+module Hex.Parse.AST where
 
-import           HeXlude
+import           Hexlude
 
 import qualified Path
 
-import qualified HeX.Lex          as Lex
-import qualified HeX.Parse.Token  as T
-import qualified HeX.Quantity     as Q
-import qualified HeX.Config.Codes as Code
+import qualified Hex.Lex          as Lex
+import qualified Hex.Resolve.Token  as T
+import qualified Hex.Quantity     as Q
+import qualified Hex.Config.Codes as Code
 
 -- TeXInt.
 

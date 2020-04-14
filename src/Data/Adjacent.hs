@@ -1,7 +1,7 @@
 module Data.Adjacent where
 
 import qualified Data.Sequence as Seq
-import HeXlude
+import Hexlude
 
 data Adj a = Adj {adjPre :: Maybe a, adjVal :: a, adjPost :: Maybe a}
   deriving Show

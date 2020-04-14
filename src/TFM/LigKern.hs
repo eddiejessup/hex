@@ -1,9 +1,8 @@
 module TFM.LigKern where
 
-import           HeXlude
+import           Hexlude
 
 import qualified Data.Binary.Get as B.G
-import           Data.Bits       (shift, (.&.))
 
 import           TFM.Common
 

@@ -1,18 +1,18 @@
-module HeX.BreakList.Page where
+module Hex.BreakList.Page where
 
-import           HeXlude
+import           Hexlude
 
 import           Data.Adjacent           (Adj (..))
 import qualified Data.Sequence           as Seq
 
-import qualified HeX.Box                 as B
-import           HeX.BreakList.BreakList
-import           HeX.BreakList.Elem
-import           HeX.BreakList.Judge
-import           HeX.BreakList.Set
-import           HeX.Config.Parameters
-import           HeX.Quantity
-import           HeX.Parse.Token (LengthParameter(..))
+import qualified Hex.Box                 as B
+import           Hex.BreakList.BreakList
+import           Hex.BreakList.Elem
+import           Hex.BreakList.Judge
+import           Hex.BreakList.Set
+import           Hex.Config.Parameters
+import           Hex.Quantity
+import           Hex.Resolve.Token (LengthParameter(..))
 
 data PageBreakJudgment =
     DoNotBreak | BreakPageAtBest | BreakPageHere | TrackCost !TeXInt

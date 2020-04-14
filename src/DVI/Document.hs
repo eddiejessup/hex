@@ -5,9 +5,10 @@ import DVI.Instruction
 import DVI.Operation (Operation (DefineFontNr))
 import Data.Byte (ByteError)
 import Data.Path (PathError)
-import HeX.Config.Codes
-import HeX.Quantity
-import HeXlude
+import qualified Data.Sequence as Seq
+import Hex.Config.Codes
+import Hex.Quantity
+import Hexlude
 import Path (Path)
 import qualified Path
 
@@ -192,7 +193,7 @@ parseInstructions _instrs magnification = do
           maxStackDepth
       postamblePointer = encLength mundaneInstrs
       postPostambleInstr = getPostPostambleInstr postamblePointer
-      fontDefinitions = filter isDefineFontInstr mundaneInstrs
+      fontDefinitions = Seq.filter isDefineFontInstr mundaneInstrs
   pure $ (mundaneInstrs :|> postambleInstr) <> fontDefinitions :|> postPostambleInstr
   where
     isDefineFontInstr i = case i of

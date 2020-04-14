@@ -1,6 +1,6 @@
 module Data.Byte where
 
-import HeXlude
+import Hexlude
 
 newtype ByteError = ByteError Text
   deriving Show

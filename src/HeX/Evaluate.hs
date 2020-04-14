@@ -1,20 +1,20 @@
-module HeX.Evaluate where
+module Hex.Evaluate where
 
-import           HeXlude
+import           Hexlude
 
-import           Control.Monad.Reader (MonadReader, ask, asks)
 import qualified Data.HashMap.Strict  as HashMap
+import qualified Data.Sequence as Seq
 
 import qualified TFM
 
-import qualified HeX.Box              as B
-import qualified HeX.BreakList        as BL
-import qualified HeX.Config.Codes     as Code
-import           HeX.Config
-import qualified HeX.Lex              as Lex
-import qualified HeX.Parse.AST        as AST
-import qualified HeX.Parse.Token      as T
-import           HeX.Quantity
+import qualified Hex.Box              as B
+import qualified Hex.BreakList        as BL
+import qualified Hex.Config.Codes     as Code
+import           Hex.Config
+import qualified Hex.Lex              as Lex
+import qualified Hex.Parse.AST        as AST
+import qualified Hex.Resolve.Token      as T
+import           Hex.Quantity
 
 
 class TeXEvaluable a where
@@ -430,7 +430,7 @@ instance TeXEvaluable AST.InternalQuantity where
         AST.InternalTeXIntQuantity n ->
             do
             en <- texEvaluate n
-            pure (show en :: Seq CharCode)
+            pure $ Seq.fromList $ unsafeCodeFromChar <$> show (unInt en)
         AST.InternalLengthQuantity d ->
             do
             _ <- texEvaluate d

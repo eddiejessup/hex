@@ -1,8 +1,8 @@
-module HeX.Box
-    ( module HeX.Box.Elem
-    , module HeX.Box.Draw
+module Hex.Box
+    ( module Hex.Box.Elem
+    , module Hex.Box.Draw
     )
 where
 
-import           HeX.Box.Draw
-import           HeX.Box.Elem
+import           Hex.Box.Draw
+import           Hex.Box.Elem

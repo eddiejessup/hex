@@ -1,23 +1,23 @@
 {-# LANGUAGE RankNTypes #-}
 
-module HeX.Command.Build where
+module Hex.Command.Build where
 
-import           HeXlude
+import           Hexlude
 
-import           Control.Monad               (foldM)
 import qualified Data.Sequence               as Seq
+import qualified Data.Path
 
 import           TFM                         (TFMError)
 
-import qualified HeX.Box                     as B
-import           HeX.BreakList               (HList, VList)
-import qualified HeX.BreakList               as BL
-import           HeX.Command.Commands
-import           HeX.Command.Common
-import           HeX.Command.ModeIndependent
-import           HeX.Config
-import qualified HeX.Lex                     as Lex
-import qualified HeX.Parse                   as HP
+import qualified Hex.Box                     as B
+import           Hex.BreakList               (HList, VList)
+import qualified Hex.BreakList               as BL
+import           Hex.Command.Commands
+import           Hex.Command.Common
+import           Hex.Command.ModeIndependent
+import           Hex.Config
+import qualified Hex.Lex                     as Lex
+import qualified Hex.Parse                   as HP
 
 newtype BuildError = BuildError Text
     deriving (Show)
@@ -32,6 +32,7 @@ handleCommandInParaMode
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -88,6 +89,7 @@ handleCommandInHBoxMode
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -148,6 +150,7 @@ handleCommandInVBoxMode
        , MonadErrorAnyOf e m
            '[ TFMError
             , BuildError
+            , Data.Path.PathError
             ]
        , MonadIO m
        )
@@ -239,6 +242,7 @@ handleCommandInMainVMode
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -299,6 +303,7 @@ extractPara
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -317,6 +322,7 @@ extractParaFromVMode
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -336,6 +342,7 @@ extractHBox
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -348,6 +355,7 @@ extractVBox
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -360,6 +368,7 @@ extractVSubBox
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -392,6 +401,7 @@ extractHSubBox
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -410,6 +420,7 @@ extractMainVList
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m
@@ -422,6 +433,7 @@ extractBreakAndSetVList
     :: ( MonadErrorAnyOf e m
            '[ BuildError
             , TFMError
+            , Data.Path.PathError
             ]
        , HP.TeXParseable s e m
        , MonadState s m

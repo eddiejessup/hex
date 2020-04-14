@@ -1,13 +1,13 @@
 {-# LANGUAGE RankNTypes #-}
 
-module HeX.Parse.Condition where
+module Hex.Parse.Condition where
 
-import           HeXlude
+import           Hexlude
 
-import           HeX.Parse.AST
-import           HeX.Parse.Quantity
-import           HeX.Parse.Stream.Class
-import qualified HeX.Parse.Token        as T
+import           Hex.Parse.AST
+import           Hex.Parse.Quantity
+import           Hex.Parse.Stream.Class
+import qualified Hex.Resolve.Token        as T
 import qualified Text.Megaparsec        as P
 
 parseRelation :: TeXParser s e m Ordering

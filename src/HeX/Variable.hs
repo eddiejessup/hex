@@ -1,13 +1,13 @@
-module HeX.Variable where
+module Hex.Variable where
 
-import           HeXlude
+import           Hexlude
 
-import qualified HeX.BreakList            as BL
-import           HeX.Command.Common
-import           HeX.Config
-import           HeX.Evaluate
-import qualified HeX.Parse                as HP
-import           HeX.Quantity
+import qualified Hex.BreakList            as BL
+import           Hex.Command.Common
+import           Hex.Config
+import           Hex.Evaluate
+import qualified Hex.Parse                as HP
+import           Hex.Quantity
 
 class TeXVariable a where
 

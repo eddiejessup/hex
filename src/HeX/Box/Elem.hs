@@ -1,17 +1,17 @@
-module HeX.Box.Elem
+module Hex.Box.Elem
   ( DVI.D.FontDefinition (..)
   , DVI.D.FontSelection (..)
   , DVI.D.Rule (..)
   , DVI.D.Character (..)
-  , module HeX.Box.Elem
+  , module Hex.Box.Elem
   )
 where
 
 import qualified DVI.Document as DVI.D
 import qualified Data.Text as Text
-import HeX.Config.Codes
-import HeX.Quantity
-import HeXlude
+import Hex.Config.Codes
+import Hex.Quantity
+import Hexlude
 
 data DesiredLength = Natural | Spread Length | To Length
   deriving Show
@@ -36,7 +36,7 @@ instance Readable HBox where
     where
       toMaybeChar = \case
         HBoxHBaseElem (ElemCharacter DVI.D.Character {DVI.D.char}) ->
-          Just $ codeAsChar char
+          Just $ unsafeCodeAsChar char
         _ ->
           Nothing
 

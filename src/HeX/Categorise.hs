@@ -1,10 +1,10 @@
 {-# LANGUAGE StrictData #-}
 
-module HeX.Categorise where
+module Hex.Categorise where
 
-import           HeXlude
+import           Hexlude
 
-import qualified HeX.Config.Codes     as Code
+import qualified Hex.Config.Codes     as Code
 import qualified Data.ByteString.Lazy as BS.L
 
 data CharCat = CharCat

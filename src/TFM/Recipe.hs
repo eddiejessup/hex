@@ -1,6 +1,6 @@
 module TFM.Recipe where
 
-import           HeXlude
+import           Hexlude
 
 import qualified Data.Binary.Get as B.G
 

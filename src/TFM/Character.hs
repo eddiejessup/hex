@@ -1,6 +1,6 @@
 module TFM.Character where
 
-import           HeXlude
+import           Hexlude
 
 -- The character info array contains, for each character, six fields packed
 -- into four bytes:
@@ -28,7 +28,6 @@ import           HeXlude
 --   is, a character that is built from smaller pieces so that it can be made
 --   arbitrarily large. The pieces are specified in 'exten[remainder]'.
 import qualified Data.Binary.Get    as B.G
-import           Data.Bits          (shiftR, (.&.))
 import           Data.IntMap.Strict
 import           Data.List.Index    (indexed)
 

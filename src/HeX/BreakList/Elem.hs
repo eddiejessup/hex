@@ -1,15 +1,15 @@
-module HeX.BreakList.Elem where
+module Hex.BreakList.Elem where
 
 import Data.Adjacent
-import HeX.Box
-import HeX.BreakList.BreakList
+import Hex.Box
+import Hex.BreakList.BreakList
   ( BreakItem (..)
   , BreakableListElem (..)
   , Penalty
   )
-import HeX.BreakList.Glue
-import HeX.Quantity
-import HeXlude
+import Hex.BreakList.Glue
+import Hex.Quantity
+import Hexlude
 
 class BreakableList a where
 
@@ -43,7 +43,7 @@ instance BreakableList HList where
 
   naturalSpan = naturalWidth
 
-  totalGlue (HList elemSeq) = mconcat $ mapMaybe toGlue elemSeq
+  totalGlue (HList elemSeq) = fold $ mapMaybe toGlue $ toList elemSeq
 
 newtype VList = VList (Seq VListElem)
   deriving (Show, Semigroup, Monoid)
@@ -52,7 +52,7 @@ instance BreakableList VList where
 
   naturalSpan = naturalHeight
 
-  totalGlue (VList elemSeq) = mconcat $ mapMaybe toGlue elemSeq
+  totalGlue (VList elemSeq) = fold $ mapMaybe toGlue $ toList elemSeq
 
 instance Dimensioned VList where
 

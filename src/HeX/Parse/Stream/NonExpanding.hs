@@ -1,28 +1,31 @@
-{-# LANGUAGE StrictData #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module HeX.Parse.Stream.NonExpanding where
+module Hex.Parse.Stream.NonExpanding where
 
-import           HeXlude                   hiding (show)
+import           Hexlude                   hiding (show)
 
 import qualified Data.ByteString.Lazy      as BS.L
+import qualified Data.Generics.Product.Typed as G.P
 import qualified Data.List.NonEmpty        as L.NE
 import qualified Data.Sequence             as Seq
 import           Path                      (Abs, File, Path)
 import qualified Text.Megaparsec           as P
 import           Text.Show
 
-import qualified HeX.Config                as Conf
-import qualified HeX.Lex                   as Lex
-import           HeX.Parse.Stream.Class
-import           HeX.Parse.Stream.Instance
-import           HeX.Parse.Token
+import qualified Hex.Config                as Conf
+import qualified Hex.Lex                   as Lex
+import           Hex.Resolve.Resolve
+import           Hex.Parse.Stream.Class
+-- import           Hex.Parse.Stream.Expanding
+import           Hex.Resolve.Token
 
 data NonExpandingStream = NonExpandingStream
     { nesTokenSources :: L.NE.NonEmpty TokenSource
-    , nesLexState           :: Lex.LexState
-    , nesConfig             :: Conf.Config
+    , nesResolutionMode  :: ResolutionMode
+    , nesLexState     :: Lex.LexState
+    , nesConfig       :: Conf.Config
     }
+    deriving (Generic)
 
 instance Show NonExpandingStream where
     show _ = "NonExpandingStream {..}"
@@ -35,9 +38,11 @@ newNonExpandingStream maybePath cs =
         { nesTokenSources = pure (newTokenSource maybePath cs)
         , nesLexState      = Lex.LineBegin
         , nesConfig        = conf
+        , nesResolutionMode = Resolving
         }
 
 instance ( MonadErrorAnyOf e m TeXStreamE
+         , e `CouldBe` NonExpandingStreamError
          ) => P.Stream NonExpandingStream m where
     type Token NonExpandingStream = PrimitiveToken
 
@@ -95,23 +100,23 @@ instance ( MonadErrorAnyOf e m TeXStreamE
     reachOffset _ _ _ = undefined
 
 instance TeXStream NonExpandingStream where
-    setExpansion _ = identity
+    resolutionModeLens = G.P.typed @ResolutionMode
 
-    getConfig = nesConfig
+    configLens = G.P.typed @Conf.Config
 
-    setConfig c s = s{nesConfig = c}
+    tokenSourceLens = G.P.typed @(L.NE.NonEmpty TokenSource)
 
-    insertLexToken s t =
-        let
-            curTokSource@TokenSource{ sourceLexTokens } :| outerStreams = nesTokenSources s
-            updatedCurTokSource = curTokSource{ sourceLexTokens = t :<| sourceLexTokens }
-        in
-            s{ nesTokenSources = updatedCurTokSource :| outerStreams }
+    lexStateLens = G.P.typed @Lex.LexState
 
     getConditionBodyState = const Nothing
 
+data NonExpandingStreamError
+    = SawSyntaxCommandHeadToken SyntaxCommandHeadToken
+    deriving (Show)
+
 nesFetchAndExpandToken
-    :: MonadErrorAnyOf e m TeXStreamE
+    :: (MonadErrorAnyOf e m TeXStreamE, e `CouldBe` NonExpandingStreamError)
+
     => NonExpandingStream
     -> m (Maybe (Seq Lex.Token, PrimitiveToken, NonExpandingStream))
 nesFetchAndExpandToken stream =
@@ -120,4 +125,4 @@ nesFetchAndExpandToken stream =
             PrimitiveToken pt ->
                 pure $ Just (singleton lt, pt, newStream)
             SyntaxCommandHeadToken c ->
-                throwM $ SawSyntaxCommandHeadInNonExpandingStream c
+                throwM $ SawSyntaxCommandHeadToken c

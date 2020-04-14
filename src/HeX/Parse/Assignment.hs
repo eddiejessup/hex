@@ -1,22 +1,19 @@
 {-# LANGUAGE RankNTypes #-}
-module HeX.Parse.Assignment where
+module Hex.Parse.Assignment where
 
-import Control.Monad (when)
 import qualified Control.Lens as L
 import qualified Control.Monad.Combinators as PC
-import Control.Monad.Reader (runReaderT)
-import Data.Functor (($>))
 import qualified Data.Set as Set
-import HeX.Config.Codes (codesFromStr)
-import qualified HeX.Config.Codes as Code
-import HeX.Evaluate
-import qualified HeX.Lex as Lex
-import HeX.Parse.AST
-import HeX.Parse.Quantity
-import HeX.Parse.Stream.Class
-import qualified HeX.Parse.Token as T
-import qualified HeX.Quantity as Q
-import HeXlude
+import Hex.Config.Codes (unsafeCodesFromChars)
+import qualified Hex.Config.Codes as Code
+import Hex.Evaluate
+import qualified Hex.Lex as Lex
+import Hex.Parse.AST
+import Hex.Parse.Quantity
+import Hex.Parse.Stream.Class
+import qualified Hex.Resolve.Token as T
+import qualified Hex.Quantity as Q
+import Hexlude
 import qualified Path
 import qualified Text.Megaparsec as P
 
@@ -82,12 +79,12 @@ headToParseNonMacroAssignmentBody = \case
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
     nrPairs <- parseTeXInt
-    (Q.TeXInt eNrPairsInt) <- P.getInput <&> (L.view configLens) >>= runReaderT (texEvaluate nrPairs)
+    Q.TeXInt eNrPairsInt <- P.getInput <&> L.view configLens >>= runReaderT (texEvaluate nrPairs)
     let parseLengthPair = (,) <$> parseLength <*> parseLength
     SetParShape <$> PC.count eNrPairsInt parseLengthPair
   T.ReadTok -> do
     nr <- parseTeXInt
-    skipKeyword (codesFromStr "to")
+    skipKeyword (unsafeCodesFromChars "to")
     skipOptionalSpaces
     cs <- parseCSName
     pure $ DefineControlSequence cs (ReadTarget nr)
@@ -103,8 +100,8 @@ headToParseNonMacroAssignmentBody = \case
     fname <- parseFileName
     fontSpec <-
       tryChoice
-        [ skipKeyword (codesFromStr "at") >> (FontAt <$> parseLength)
-        , skipKeyword (codesFromStr "scaled") >> (FontScaled <$> parseTeXInt)
+        [ skipKeyword (unsafeCodesFromChars "at") >> (FontAt <$> parseLength)
+        , skipKeyword (unsafeCodesFromChars "scaled") >> (FontScaled <$> parseTeXInt)
         , skipOptionalSpaces $> NaturalFont
         ]
     pure $ DefineControlSequence cs (FontTarget fontSpec fname)
@@ -160,7 +157,7 @@ headToParseNonMacroAssignmentBody = \case
         ]
     skipOptionalBy =
       tryChoice
-        [ void $ parseOptionalKeyword $ codesFromStr "by"
+        [ void $ parseOptionalKeyword $ unsafeCodesFromChars "by"
         , skipOptionalSpaces
         ]
     headToParseVariableAssignment t =
@@ -230,7 +227,7 @@ parseFileName = do
           Just c
       _ -> Nothing
   skipSatisfied isSpace
-  case Path.parseRelFile (Code.codeAsChar <$> fileNameChars) of
+  case Path.parseRelFile (Code.unsafeCodeAsChar <$> fileNameChars) of
     Just p -> pure $ TeXFilePath p
     Nothing -> panic $ show fileNameChars
   where
@@ -240,4 +237,4 @@ parseFileName = do
       Code.CharCode_ '.' -> True
       Code.CharCode_ '_' -> True
       -- 'Other' Characters for decimal digits are OK.
-      cc -> Code.isDigitChar cc
+      cc -> Code.isDecDigitChar cc

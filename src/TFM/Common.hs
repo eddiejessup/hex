@@ -1,15 +1,12 @@
 module TFM.Common where
 
-import           HeXlude
+import           Hexlude
 
-import           Control.Monad      (when)
 import           Control.Monad.Fail (fail)
 
-import           Data.Ascii         (Ascii)
-import qualified Data.Ascii         as Asc
+import qualified Data.Ascii         as Ascii
 import           Data.Binary.Get    (Get)
 import qualified Data.Binary.Get    as B.G
-import           Data.Ratio         ((%))
 
 -- The increment by which real numbers can be specified.
 fixWordScale :: Rational
@@ -44,13 +41,13 @@ getChunks f =
 
 -- Read a string that's encoded as an integer, followed by that number of
 -- characters.
-getBCPL :: Int -> Get Ascii
+getBCPL :: Int -> Get Ascii.AsciiString
 getBCPL maxLen =
     do
     n <- getWord8Int
     when (n > (maxLen - 1)) $ fail $ "BCPL string length too large: " <> show n
     s <- B.G.getByteString n
-    asc <- case Asc.fromByteString s of
+    asc <- case Ascii.fromByteString s of
         Just v  -> pure v
         Nothing -> fail "Could not decode ASCII from bytes"
     B.G.skip $ maxLen - 1 - n

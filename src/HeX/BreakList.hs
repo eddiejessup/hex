@@ -1,18 +1,18 @@
-module HeX.BreakList
-    ( module HeX.BreakList.BreakList
-    , module HeX.BreakList.Judge
-    , module HeX.BreakList.Elem
-    , module HeX.BreakList.Set
-    , module HeX.BreakList.Glue
-    , module HeX.BreakList.Line
-    , module HeX.BreakList.Page
+module Hex.BreakList
+    ( module Hex.BreakList.BreakList
+    , module Hex.BreakList.Judge
+    , module Hex.BreakList.Elem
+    , module Hex.BreakList.Set
+    , module Hex.BreakList.Glue
+    , module Hex.BreakList.Line
+    , module Hex.BreakList.Page
     )
 where
 
-import           HeX.BreakList.BreakList
-import           HeX.BreakList.Elem
-import           HeX.BreakList.Glue
-import           HeX.BreakList.Judge
-import           HeX.BreakList.Line
-import           HeX.BreakList.Page
-import           HeX.BreakList.Set
+import           Hex.BreakList.BreakList
+import           Hex.BreakList.Elem
+import           Hex.BreakList.Glue
+import           Hex.BreakList.Judge
+import           Hex.BreakList.Line
+import           Hex.BreakList.Page
+import           Hex.BreakList.Set

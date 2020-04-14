@@ -1,7 +1,7 @@
-module HeX.BreakList.Glue where
+module Hex.BreakList.Glue where
 
-import HeX.Quantity
-import HeXlude
+import Hex.Quantity
+import Hexlude
 
 -- Flex.
 data GlueFlex = GlueFlex {factor :: Rational, order :: Int}

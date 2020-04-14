@@ -1,10 +1,10 @@
-resolver: lts-14.7
+resolver: lts-15.8
 
 packages:
 - .
 
 extra-deps:
-- ascii-0.0.5.2@sha256:287657d24abe70eaa1ca37e709256f92f565743f08a16bbc896f3da85ee50434
+# - ascii-0.0.5.2@sha256:287657d24abe70eaa1ca37e709256f92f565743f08a16bbc896f3da85ee50434
 - ../../src/megaparsec
 
 extra-package-dbs: []

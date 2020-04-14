@@ -1,13 +1,12 @@
-module HeX.Config.Parameters where
+module Hex.Config.Parameters where
 
-import           HeXlude
+import           Hexlude
 
-import           Data.Map.Strict     (Map)
 import qualified Data.Map.Strict     as Map
 
-import qualified HeX.BreakList.Glue  as BL.G
-import           HeX.Parse.Token
-import           HeX.Quantity
+import qualified Hex.BreakList.Glue  as BL.G
+import           Hex.Resolve.Token
+import           Hex.Quantity
 
 newtype IntParamVal (a :: TeXIntParameter) =
     IntParamVal { unIntParam :: TeXInt }

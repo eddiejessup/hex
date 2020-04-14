@@ -1,11 +1,11 @@
-module HeX.BreakList.Set where
+module Hex.BreakList.Set where
 
-import           HeXlude
+import           Hexlude
 
-import           HeX.Box
-import           HeX.BreakList.Elem
-import           HeX.BreakList.Judge
-import           HeX.Quantity
+import           Hex.Box
+import           Hex.BreakList.Elem
+import           Hex.BreakList.Judge
+import           Hex.Quantity
 
 setVListElem :: GlueStatus -> VListElem -> Maybe VBoxElem
 setVListElem st = \case
@@ -19,7 +19,7 @@ setHListElem st = \case
     HListHBaseElem be -> Just $ HBoxHBaseElem be
 
 rawSetHList :: GlueStatus -> HList -> HBox
-rawSetHList status (HList elemList) = HBox (mapMaybe (setHListElem status) elemList)
+rawSetHList status (HList elemList) = HBox (seqMapMaybe (setHListElem status) elemList)
 
 setHList :: HList -> LazyTargetLength -> Box HBox
 setHList hList lazyStatus =
@@ -37,7 +37,7 @@ setHList hList lazyStatus =
         }
 
 rawSetVList :: GlueStatus -> VList -> VBox
-rawSetVList status (VList elemList) = VBox (mapMaybe (setVListElem status) elemList)
+rawSetVList status (VList elemList) = VBox (seqMapMaybe (setVListElem status) elemList)
 
 setVList :: VList -> DesiredLength -> VBoxAlignType -> Box VBox
 setVList vList desiredLength alignType =

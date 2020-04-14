@@ -1,17 +1,16 @@
 {-# LANGUAGE DeriveAnyClass #-}
 
-module HeX.Parse.Token where
+module Hex.Resolve.Token where
 
-import           HeXlude
+import           Hexlude
 
-import           Data.Ascii
-import           Data.Hashable      (Hashable)
+import qualified Data.Ascii         as Ascii
 import qualified Data.Map.Strict    as Map
 
-import qualified HeX.BreakList.Elem as BL.E
-import           HeX.Config.Codes
-import qualified HeX.Lex            as Lex
-import           HeX.Quantity
+import qualified Hex.BreakList.Elem as BL.E
+import           Hex.Config.Codes
+import qualified Hex.Lex            as Lex
+import           Hex.Quantity
 
 -- mconcat on this newtype wrapper should get the final sign of a list of
 -- signs. Bit pretentious, sorry.
@@ -314,19 +313,19 @@ data Digit
     deriving (Eq, Ord, Bounded, Enum, Show)
 
 digitToChar :: Digit -> CharCode
-digitToChar d = CharCode $ ascii $ case d of
-    One   -> '1'
-    Two   -> '2'
-    Three -> '3'
-    Four  -> '4'
-    Five  -> '5'
-    Six   -> '6'
-    Seven -> '7'
-    Eight -> '8'
-    Nine  -> '9'
+digitToChar d = CharCode $ case d of
+    One   -> Ascii._1
+    Two   -> Ascii._2
+    Three -> Ascii._3
+    Four  -> Ascii._4
+    Five  -> Ascii._5
+    Six   -> Ascii._6
+    Seven -> Ascii._7
+    Eight -> Ascii._8
+    Nine  -> Ascii._9
 
 charCodeToDigit :: CharCode -> Maybe Digit
-charCodeToDigit cc = case codeAsChar cc of
+charCodeToDigit cc = case unsafeCodeAsChar cc of
     '1' -> Just One
     '2' -> Just Two
     '3' -> Just Three

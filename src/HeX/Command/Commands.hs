@@ -1,6 +1,6 @@
-module HeX.Command.Commands where
+module Hex.Command.Commands where
 
-import           HeXlude
+import           Hexlude
 
 import qualified Data.Map.Strict     as Map
 import qualified Data.IntMap.Strict  as IntMap
@@ -10,16 +10,16 @@ import qualified Data.Sequence       as Seq
 import           TFM                 (TexFont (..))
 import qualified TFM
 
-import qualified HeX.Box             as B
-import           HeX.BreakList       (HListElem, VListElem)
-import qualified HeX.BreakList       as BL
-import qualified HeX.Config.Codes    as Code
-import           HeX.Command.Common
-import           HeX.Config
-import           HeX.Evaluate
-import qualified HeX.Lex             as Lex
-import qualified HeX.Parse           as HP
-import           HeX.Quantity
+import qualified Hex.Box             as B
+import           Hex.BreakList       (HListElem, VListElem)
+import qualified Hex.BreakList       as BL
+import qualified Hex.Config.Codes    as Code
+import           Hex.Command.Common
+import           Hex.Config
+import           Hex.Evaluate
+import qualified Hex.Lex             as Lex
+import qualified Hex.Parse           as HP
+import           Hex.Quantity
 
 glueToElem
     :: ( HP.TeXStream s
@@ -265,12 +265,12 @@ showLexTok = \case
 showPrimTok :: HP.PrimitiveToken -> Seq CharCode
 showPrimTok = \case
     HP.UnexpandedTok t -> showLexTok t
-    pt                 -> Seq.fromList $ codesFromStr (show pt)
+    pt                 -> Seq.fromList $ unsafeCodesFromChars (show pt)
 
 showBalancedText :: HP.BalancedText -> Seq CharCode
 showBalancedText (HP.BalancedText lexToks) =
-    mconcat $ showLexTok <$> lexToks
+    Seq.fromList $ concat $ toList . showLexTok <$> lexToks
 
-showExpandedBalancedText :: HP.ExpandedBalancedText -> Seq CharCode
+showExpandedBalancedText :: HP.ExpandedBalancedText -> [CharCode]
 showExpandedBalancedText (HP.ExpandedBalancedText primToks) =
-    mconcat $ showPrimTok <$> primToks
+    concat $ toList . showPrimTok <$> primToks

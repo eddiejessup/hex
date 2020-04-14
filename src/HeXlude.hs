@@ -1,7 +1,7 @@
 {-# LANGUAGE PatternSynonyms      #-}
 {-# LANGUAGE RankNTypes           #-}
 
-module HeXlude
+module Hexlude
     ( module Protolude
     , module Readable
     , module Data.Sequence
@@ -15,14 +15,13 @@ module HeXlude
     , seqLookupEith
     , seqLastMay
     , seqHeadMay
-    , module Data.Witherable
+    , seqMapMaybe
+
     , id
     , liftThrow
     , (>>>)
     , atEith
     , traceText
-    , mconcat
-    , mconcatMap
     , flap
 
     , HDirection(..)
@@ -35,23 +34,14 @@ module HeXlude
 where
 
 import           Prelude                   (id)
-import           Protolude                 hiding (catMaybes, filter, group,
-                                            mapMaybe, mconcat, catch)
+import           Protolude                 hiding (group, catch)
 
-import           Control.Applicative       (Alternative, empty)
 import           Control.Arrow             ((>>>))
-import           Control.Monad.Except      (MonadError, liftIO, throwError)
-import           Control.Monad.IO.Class    (MonadIO)
 import           Control.Monad.Trans.Maybe (MaybeT, runMaybeT)
 import           Data.Generics.Product     (field)
-import           Data.Function             ((&))
-import           Data.Functor              ((<&>))
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)
 import qualified Data.Sequence             as Seq
-import           Data.Witherable           (Filterable (..))
 import           Debug.Readable            as Readable
-import           GHC.Generics              (Generic)
-import           HeX.Orphans               ()
 
 import           Data.Variant              hiding (fold)
 
@@ -71,12 +61,6 @@ atEith str xs i = note
 
 traceText :: Text -> a -> a
 traceText = trace
-
-mconcat :: (Monoid a, Foldable t) => t a -> a
-mconcat = foldl' (<>) mempty
-
-mconcatMap :: (Monoid c, Foldable t, Functor t) => (a -> c) -> t a -> c
-mconcatMap f = mconcat . (f <$>)
 
 -- Stolen from relude.
 flap :: Functor f => f (a -> b) -> a -> f b
@@ -101,6 +85,8 @@ seqHeadMay = \case
     x :<| _ -> Just x
     _ -> Nothing
 
+seqMapMaybe :: (a -> Maybe b) -> Seq a -> Seq b
+seqMapMaybe f = Seq.fromList . mapMaybe f . toList
 
 -- Concepts.
 

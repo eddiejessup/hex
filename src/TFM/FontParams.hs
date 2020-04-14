@@ -1,8 +1,8 @@
 module TFM.FontParams where
 
-import           HeXlude
+import           Hexlude
 
-import           Data.Ascii      (Ascii)
+import           Data.Ascii      (AsciiString)
 import qualified Data.Binary.Get as B.G
 
 import           TFM.Common
@@ -77,7 +77,7 @@ readMathExtensionParams = MathExtensionParams
     <*> getFixWord
     <*> getFixWord
 
-getFontParams :: Maybe Ascii -> B.G.Get FontParams
+getFontParams :: Maybe AsciiString -> B.G.Get FontParams
 getFontParams scheme =
     FontParams
         <$> getFixWord

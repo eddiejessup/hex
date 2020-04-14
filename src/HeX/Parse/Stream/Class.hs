@@ -1,39 +1,38 @@
 {-# LANGUAGE RankNTypes           #-}
 
-module HeX.Parse.Stream.Class where
+module Hex.Parse.Stream.Class where
 
-import           HeXlude                   hiding (many)
+import           Hexlude                   hiding (many)
 
 import qualified Control.Lens              as L
+import qualified Control.Lens.Lens  as L.C
 import           Control.Lens              (Lens')
-import           Control.Monad             (foldM, guard)
 import qualified Control.Monad.Combinators as PC
 import qualified Data.Map.Strict           as Map
 import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.List.NonEmpty        as L.NE
-import           Data.Maybe                (fromMaybe)
-import qualified Data.Path                 as D.Path
+import qualified Data.Generics.Product.Typed as G.P
 import qualified Data.Sequence             as Seq
 import           Path                      (Abs, File, Path)
 import qualified Text.Megaparsec           as P
 
-import qualified HeX.Config.Codes          as Code
-import           HeX.Config                (Config, ConfigError)
-import           HeX.Evaluate
-import           HeX.Lex                   (CharCat (..))
-import qualified HeX.Lex                   as Lex
-import           HeX.Parse.Resolve
-import           HeX.Parse.Token
+import qualified Hex.Config.Codes          as Code
+import           Hex.Config                (Config, ConfigError, lookupCS, lookupCatCode)
+import           Hex.Evaluate
+import           Hex.Lex                   (CharCat (..))
+import qualified Hex.Lex                   as Lex
+import           Hex.Resolve.Resolve
+import           Hex.Resolve.Token
 
 class TeXStream s where
 
-    setExpansion :: ExpansionMode -> s -> s
+    resolutionModeLens :: Lens' s ResolutionMode
 
     configLens :: Lens' s Config
-    tokenSourceLens :: Lens' s (L.NE.NonEmpty TokenSource)
-    lexStateLens :: Lens' s Lex.LexState
 
-    insertLexToken :: s -> Lex.Token -> s
+    tokenSourceLens :: Lens' s (L.NE.NonEmpty TokenSource)
+
+    lexStateLens :: Lens' s Lex.LexState
 
     getConditionBodyState :: s -> Maybe ConditionBodyState
 
@@ -42,23 +41,40 @@ data TokenSource = TokenSource
     , sourceCharCodes :: BS.L.ByteString
     , sourceLexTokens :: Seq Lex.Token
     }
-    deriving (Show)
+    deriving (Show, Generic)
 
+newTokenSource :: Maybe (Path Abs File) -> BS.L.ByteString -> TokenSource
+newTokenSource maybePath cs = TokenSource maybePath cs mempty
 
 newtype ExpansionError = ExpansionError Text
     deriving (Show)
 
+newtype ResolutionError = ResolutionError Text
+    deriving (Show)
+
+newtype ParseError = ParseError Text
+    deriving (Show)
+
+insertLexToken :: TeXStream b => b -> Lex.Token -> b
+insertLexToken s t =
+    s & L.over
+        (tokenSourceLens . L.C.head1 . G.P.typed @(Seq Lex.Token))
+        (L.cons t)
+
+
+-- Error types we will assume all TeX streams might throw.
 type TeXStreamE =
    '[ EvaluationError
     , ConfigError
-    , D.Path.PathError
-    , ExpansionError
+    , ParseError
+    , ResolutionError
     ]
 
 type SimpleParsecT s m a = P.ParsecT Void s m a
 
-type TeXParseable s e m = ( MonadErrorAnyOf e m TeXStreamE
-                          -- , MonadIO m
+type TeXParseable s e m = ( Monad m
+                          , MonadErrorVariant e m
+                          , e `CouldBeAnyOf` TeXStreamE
                           , P.Stream s m
                           , P.Token s ~ PrimitiveToken
                           , TeXStream s
@@ -92,7 +108,8 @@ simpleRunParserT' parser stream =
         }
 
 runSimpleRunParserT'
-    :: ( MonadErrorAnyOf e m TeXStreamE
+    :: ( MonadErrorVariant e m
+       , e `CouldBe` ParseError
        , Show s
        , Show (P.Token s)
        )
@@ -104,7 +121,7 @@ runSimpleRunParserT' parser stream =
         (resultStream, Right a) ->
             pure (resultStream, a)
         (_, Left err) ->
-            throwM $ ExpansionError $ show err
+            throwM $ ParseError $ show err
 
 type TeXParser s e m a = TeXParseable s e m => SimpleParsecT s m a
 
@@ -152,16 +169,16 @@ parseHeaded = (P.anySingle >>=)
 
 -- Inhibition.
 
-inhibitExpansion, enableExpansion :: TeXStream s => s -> s
-inhibitExpansion = setExpansion NotExpanding
-enableExpansion = setExpansion Expanding
+inhibitResolution, enableResolution :: TeXStream s => s -> s
+inhibitResolution = L.set resolutionModeLens NotResolving
+enableResolution = L.set resolutionModeLens Resolving
 
 parseInhibited :: TeXParser s e m a -> TeXParser s e m a
 parseInhibited p =
     do
-    P.updateParserState (\st@P.State { P.stateInput } -> st { P.stateInput = inhibitExpansion stateInput })
+    P.updateParserState (\st@P.State { P.stateInput } -> st { P.stateInput = inhibitResolution stateInput })
     v <- p
-    P.updateParserState (\st@P.State { P.stateInput } -> st { P.stateInput = enableExpansion stateInput })
+    P.updateParserState (\st@P.State { P.stateInput } -> st { P.stateInput = enableResolution stateInput })
     pure v
 
 runConfState :: (TeXStream s, MonadState s m) => StateT Config m a -> m a
@@ -590,3 +607,60 @@ parseOptionalKeyword s = isJust <$> optional (skipKeyword s)
 
 parseManyChars :: TeXParser s e m [Code.CharCode]
 parseManyChars = PC.many $ satisfyThen tokToChar
+
+
+
+withJust :: Monad m => m (Maybe a) -> (a -> m (Maybe b)) -> m (Maybe b)
+withJust a k =
+    a >>= \case
+        Nothing -> pure Nothing
+        Just x -> k x
+
+fetchResolvedToken
+    :: ( MonadErrorAnyOf e m '[ResolutionError]
+       , TeXStream s
+       )
+    => s
+    -> m (Maybe (Lex.Token, ResolvedToken, s))
+fetchResolvedToken stream =
+    case fetchLexToken stream of
+        Nothing -> pure Nothing
+        Just (lt, newStream) ->
+            do
+            let lkp cs = lookupCS cs $ L.view configLens newStream
+            rt <- note (throw $ ResolutionError $ "Could not resolve token:" <> Hexlude.show lt) $ resolveToken lkp (L.view resolutionModeLens newStream) lt
+            pure $ Just (lt, rt, newStream)
+
+fetchLexToken :: TeXStream s => s -> Maybe (Lex.Token, s)
+fetchLexToken stream =
+    do
+    (lt, newLexState, newStreamTokenSources) <- fetchFromSources (L.view tokenSourceLens stream)
+    pure
+        (lt, stream
+            & L.set tokenSourceLens newStreamTokenSources
+            & L.set lexStateLens newLexState)
+  where
+    lkpCatCode t = lookupCatCode t (L.view configLens stream)
+
+    curLexState = L.view lexStateLens stream
+
+    -- TODO:
+    -- [a] -> (a -> Maybe b) -> Maybe (b, [a])
+    fetchFromSources (curTokSource :| outerTokSources) =
+        case fetchFromSource curTokSource of
+            Nothing ->
+                nonEmpty outerTokSources >>= fetchFromSources
+            Just (lt, lexState, newCurTokSource) ->
+                Just $ seq outerTokSources (lt, lexState, newCurTokSource :| outerTokSources)
+
+    fetchFromSource tokSource@TokenSource { sourceCharCodes, sourceLexTokens } =
+        case sourceLexTokens of
+            -- If there is a lex token in the buffer, use that.
+            fstLexToken :<| laterLexTokens ->
+                let newCurTokSource = tokSource { sourceLexTokens = laterLexTokens }
+                in  Just (fstLexToken, curLexState, newCurTokSource)
+            -- If the lex token buffer is empty, extract a token and use it.
+            Empty ->
+                Lex.extractToken lkpCatCode curLexState sourceCharCodes
+                <&> \(fetchedLexToken, newLexState, newCodes) ->
+                        (fetchedLexToken, newLexState, tokSource { sourceCharCodes = newCodes })

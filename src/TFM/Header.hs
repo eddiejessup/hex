@@ -1,8 +1,8 @@
 module TFM.Header where
 
-import           HeXlude
+import           Hexlude
 
-import           Data.Ascii      (Ascii)
+import           Data.Ascii      (AsciiString)
 import qualified Data.Binary     as B
 import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as B.G
@@ -18,8 +18,8 @@ familyLength                = 20
 data Header = Header
     { checksum              :: Int
     , designFontSize        :: Rational
-    , characterCodingScheme :: Maybe Ascii
-    , family                :: Maybe Ascii
+    , characterCodingScheme :: Maybe AsciiString
+    , family                :: Maybe AsciiString
     , sevenBitSafeFlag      :: Maybe B.Word8
     , face                  :: Maybe Face
     } deriving (Show)

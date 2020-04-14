@@ -1,4 +1,4 @@
-# HeX
+# Hex
 
 A reimplementation of the interpreter for the TeX programming language.
 
@@ -8,7 +8,7 @@ Run `hex --help` for usage information.
 
 ### Prerequisites
 
-HeX outputs DVI format files, as per the specification of TeX in the TeXbook. Unless you have a DVI viewer available, you might want to convert these files to PDF.
+Hex outputs DVI format files, as per the specification of TeX in the TeXbook. Unless you have a DVI viewer available, you might want to convert these files to PDF.
 
 The program `gs` (Ghostscript) can perform this conversion, with the command `dvipdf`. It should be available from your package manager.
 

@@ -1,21 +1,20 @@
 {-# LANGUAGE RankNTypes #-}
 
-module HeX.Parse.Command where
+module Hex.Parse.Command where
 
-import           HeXlude
+import           Hexlude
 
 import qualified Control.Monad.Combinators as PC
-import           Data.List.NonEmpty        (NonEmpty(..))
 import qualified Text.Megaparsec           as P
 
-import           HeX.Config.Codes          (codesFromStr)
-import qualified HeX.Config.Codes          as Code
-import qualified HeX.Lex                   as Lex
-import           HeX.Parse.Assignment
-import           HeX.Parse.AST
-import           HeX.Parse.Quantity
-import           HeX.Parse.Stream.Class
-import qualified HeX.Parse.Token           as T
+import           Hex.Config.Codes          (unsafeCodesFromChars)
+import qualified Hex.Config.Codes          as Code
+import qualified Hex.Lex                   as Lex
+import           Hex.Parse.Assignment
+import           Hex.Parse.AST
+import           Hex.Parse.Quantity
+import           Hex.Parse.Stream.Class
+import qualified Hex.Resolve.Token           as T
 
 parseInternalQuantity :: TeXParser s e m InternalQuantity
 parseInternalQuantity = tryChoice
@@ -47,17 +46,17 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
             Nothing      -> pure rule
 
     parseRuleWidth rule = do
-        skipKeyword (codesFromStr "width")
+        skipKeyword (unsafeCodesFromChars "width")
         ln <- parseLength
         pure rule { width = Just ln }
 
     parseRuleHeight rule = do
-        skipKeyword (codesFromStr "height")
+        skipKeyword (unsafeCodesFromChars "height")
         ln <- parseLength
         pure rule { height = Just ln }
 
     parseRuleDepth rule = do
-        skipKeyword (codesFromStr "depth")
+        skipKeyword (unsafeCodesFromChars "depth")
         ln <- parseLength
         pure rule { depth = Just ln }
 

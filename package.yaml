@@ -12,11 +12,10 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/eddiejessup/hex#readme>
 
 dependencies:
-- ascii
+# - ascii
 - base
 - binary
 - bytestring
-- conduit
 - containers
 - directory
 - generic-lens
@@ -35,7 +34,7 @@ dependencies:
 - text
 - transformers
 - unordered-containers
-- witherable
+# - witherable
 - pretty-simple
 - vector
 - hspec
@@ -59,7 +58,7 @@ ghc-options:
 
 executables:
   hex:
-    main:                HeX.hs
+    main:                Hex.hs
     source-dirs:         hex
     ghc-options:
     - -threaded

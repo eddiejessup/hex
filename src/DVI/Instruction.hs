@@ -2,8 +2,7 @@ module DVI.Instruction where
 
 import DVI.Encode
 import DVI.Operation
-import Data.Ascii (Ascii)
-import qualified Data.Ascii as Asc
+import qualified Data.Ascii as Ascii
 import qualified Data.Binary as B
 import Data.Byte
 import qualified Data.ByteString as BS
@@ -11,23 +10,23 @@ import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Int as I
 import qualified Data.Path as D.Path
 import qualified Data.Word as W
-import HeX.Config.Codes
-import HeX.Quantity
-import HeXlude hiding (U1)
+import Hex.Config.Codes
+import Hex.Quantity
+import Hexlude hiding (U1)
 import Path (Path)
 import qualified Path
 
 newtype DVIError = DVIError Text
   deriving Show
 
-data ArgVal = UIntArgVal UIntArgVal | SIntArgVal SIntArgVal | StringArgVal Ascii
+data ArgVal = UIntArgVal UIntArgVal | SIntArgVal SIntArgVal | StringArgVal Ascii.AsciiString
   deriving Show
 
 instance Encodable ArgVal where
 
   encode (UIntArgVal v) = encode v
   encode (SIntArgVal v) = encode v
-  encode (StringArgVal v) = Asc.toByteString v
+  encode (StringArgVal v) = Ascii.toByteString v
 
 data IntArgSize
   = B1
@@ -217,12 +216,12 @@ getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
   pure $ EncodableInstruction _op args
   where
     noteAscii v = note (throw $ D.Path.PathError $ "Could not represent as ASCII: " <> show v) v
-    pathToAscii p = Asc.fromChars (Path.toFilePath p) & noteAscii
-    textToAscii t = Asc.fromText t & noteAscii
-    asciiLength = BS.length . Asc.toByteString
+    pathToAscii p = Ascii.fromChars (Path.toFilePath p) & noteAscii
+    textToAscii t = Ascii.fromText t & noteAscii
+    asciiLength = BS.length . Ascii.toByteString
     stripLeadingDot x =
-      if Asc.toText x == "./"
-      then Asc.unsafeFromText ""
+      if Ascii.toText x == "./"
+      then Ascii.unsafeFromText ""
       else x
 
 getCharacterInstruction

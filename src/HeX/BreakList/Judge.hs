@@ -1,10 +1,10 @@
-module HeX.BreakList.Judge where
+module Hex.BreakList.Judge where
 
-import qualified HeX.Box as Box
-import HeX.BreakList.Elem (BreakableList (..))
-import HeX.BreakList.Glue (Glue (..), GlueFlex (..))
-import HeX.Quantity
-import HeXlude
+import qualified Hex.Box as Box
+import Hex.BreakList.Elem (BreakableList (..))
+import Hex.BreakList.Glue (Glue (..), GlueFlex (..))
+import Hex.Quantity
+import Hexlude
 
 -- Here’s the way TeX goes about setting the glue when an hbox is being wrapped
 -- up: The natural width, x, of the box contents is determined by adding up the

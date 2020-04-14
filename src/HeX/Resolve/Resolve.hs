@@ -1,26 +1,27 @@
-module HeX.Parse.Resolve where
+module Hex.Resolve.Resolve where
 
-import           HeXlude
+import           Hexlude
 
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.ByteString.Lazy as BS.L
+import qualified Data.Sequence as Seq
 
-import qualified HeX.BreakList.Elem  as BL.E
-import qualified HeX.Config.Codes    as Code
-import qualified HeX.Lex             as Lex
-import           HeX.Parse.Token
+import qualified Hex.BreakList.Elem  as BL.E
+import qualified Hex.Config.Codes    as Code
+import qualified Hex.Lex             as Lex
+import           Hex.Resolve.Token
 
-data ExpansionMode = Expanding | NotExpanding
+data ResolutionMode = Resolving | NotResolving
     deriving ( Show, Eq )
 
 type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
 
 resolveToken :: (Lex.ControlSequenceLike -> Maybe ResolvedToken)
-             -> ExpansionMode
+             -> ResolutionMode
              -> Lex.Token
              -> Maybe ResolvedToken
-resolveToken _ NotExpanding t = pure $ primTok $ UnexpandedTok t
-resolveToken csLookup Expanding t = case t of
+resolveToken _ NotResolving t = pure $ primTok $ UnexpandedTok t
+resolveToken csLookup Resolving t = case t of
     Lex.ControlSequenceToken cs -> csLookup $ Lex.ControlSequenceProper cs
     Lex.CharCatToken (Lex.CharCat c Code.Active) -> csLookup $ Lex.ActiveCharacter c
     _ -> pure $ primTok $ UnexpandedTok t
@@ -28,21 +29,24 @@ resolveToken csLookup Expanding t = case t of
 -- Helper to resolve a whole string at once.
 codesToResolvedTokens
   :: (Code.CharCode -> Code.CatCode)
-  -> (HMap.HashMap Lex.ControlSequenceLike ResolvedToken)
+  -> HMap.HashMap Lex.ControlSequenceLike ResolvedToken
   -> BS.L.ByteString
   -> [(Lex.Token, Maybe ResolvedToken)]
 codesToResolvedTokens charToCat csMap = go Lex.LineBegin
   where
     go lexState xs = case Lex.extractToken charToCat lexState xs of
       Just (tok, lexState1, xs1) ->
-        (tok, resolveToken lookupCS Expanding tok) : go lexState1 xs1
+        (tok, resolveToken lookupCS Resolving tok) : go lexState1 xs1
       Nothing ->
         []
 
     lookupCS cs = HMap.lookup cs csMap
 
 _cs :: [Char] -> Lex.ControlSequenceLike
-_cs = Lex.ControlSequenceProper . Lex.mkControlSequence . toS
+_cs = Lex.ControlSequenceProper
+      . Lex.mkControlSequence
+      . Seq.fromList
+      . fmap Code.unsafeCodeFromChar
 
 syntaxTok :: SyntaxCommandHeadToken -> ResolvedToken
 syntaxTok = SyntaxCommandHeadToken

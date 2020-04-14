@@ -1,13 +1,13 @@
 {-# LANGUAGE RankNTypes #-}
 
-module HeX.Command.Common where
+module Hex.Command.Common where
 
-import           HeXlude
+import           Hexlude
 
-import           HeX.Config
-import           HeX.Evaluate
-import           HeX.Quantity
-import qualified HeX.Parse                 as HP
+import           Hex.Config
+import           Hex.Evaluate
+import           Hex.Quantity
+import qualified Hex.Parse                 as HP
 
 readOnState
     :: ( MonadState r m

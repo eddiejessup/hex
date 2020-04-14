@@ -1,10 +1,10 @@
-module HeX.Box.Draw where
+module Hex.Box.Draw where
 
 import qualified DVI.Document as D
 import qualified Data.Sequence as Seq
-import HeX.Box.Elem
-import HeX.Quantity
-import HeXlude
+import Hex.Box.Elem
+import Hex.Quantity
+import Hexlude
 
 ruleToDVI :: Axis -> Rule -> Seq D.Instruction
 ruleToDVI ax b =
@@ -21,8 +21,8 @@ boxToDVI ax b =
   where
     contentDVI :: Box BoxContents -> Seq D.Instruction
     contentDVI Box {contents} = case contents of
-      HBoxContents (HBox elems) -> mconcatMap hBoxElemToDVI elems
-      VBoxContents (VBox elems) -> mconcatMap vBoxElemToDVI elems
+      HBoxContents (HBox elems) -> fold (hBoxElemToDVI <$> elems)
+      VBoxContents (VBox elems) -> fold (vBoxElemToDVI <$> elems)
 
 axisVBoxElemToDVI :: Axis -> VBoxElem -> Seq D.Instruction
 axisVBoxElemToDVI ax el = case el of
@@ -42,7 +42,7 @@ hBoxElemToDVI (HVBoxElem e) = axisVBoxElemToDVI Horizontal e
 
 pageToDVI :: Page -> Seq D.Instruction
 pageToDVI (Page Box {contents = VBox es}) =
-  Seq.fromList [D.BeginNewPage] <> mconcatMap vBoxElemToDVI es
+  Seq.fromList [D.BeginNewPage] <> fold (vBoxElemToDVI <$> es)
 
 pagesToDVI :: Seq Page -> Seq D.Instruction
-pagesToDVI = mconcatMap pageToDVI
+pagesToDVI pages = fold (pageToDVI <$> pages)

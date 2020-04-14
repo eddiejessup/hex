@@ -1,41 +1,37 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE RankNTypes #-}
 
-module HeX.Config.Config where
+module Hex.Config.Config where
 
-import           HeXlude
+import           Hexlude
 
 import           Control.Lens
-import           Control.Monad.IO.Class   (MonadIO)
-import           Control.Monad.Reader     (MonadReader, asks)
 import qualified Data.Containers          as D.C
 import qualified Data.Sequences           as D.S
 import qualified Data.MonoTraversable     as D.MT
 import qualified Data.Generics.Product    as G.P
 
-import           Data.Map.Strict          (Map, (!?))
+import           Data.Map.Strict          ((!?))
 import qualified Data.Map.Strict          as Map
-import           Data.Maybe               (fromMaybe)
 import qualified Data.Path                as D.Path
 import           Path                     (Abs, Dir, File, Path, Rel,
                                            parseAbsDir)
 import qualified Path.IO
 import           System.Directory
-import           System.IO                (Handle, IOMode (..), hClose,
-                                           openFile)
+import           System.IO                (hClose)
 
 import           TFM                      (TexFont)
 import qualified TFM
 
-import qualified HeX.Box                  as B
-import qualified HeX.BreakList            as BL
-import qualified HeX.Config.Codes         as Code
-import           HeX.Config.Parameters
-import qualified HeX.Lex                  as Lex
-import qualified HeX.Parse.AST            as AST
-import           HeX.Parse.Resolve
-import           HeX.Parse.Token
-import           HeX.Quantity
+import qualified Hex.Box                  as B
+import qualified Hex.BreakList            as BL
+import qualified Hex.Config.Codes         as Code
+import           Hex.Config.Parameters
+import qualified Hex.Lex                  as Lex
+import qualified Hex.Parse.AST            as AST
+import           Hex.Resolve.Resolve
+import           Hex.Resolve.Token
+import           Hex.Quantity
 
 data Group
     = ScopeGroup Scope ScopeGroup

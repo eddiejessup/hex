@@ -1,10 +1,10 @@
-module HeX.BreakList.BreakList where
+module Hex.BreakList.BreakList where
 
 import qualified Data.Adjacent as A
-import qualified HeX.Box as B
-import HeX.BreakList.Glue
-import HeX.Quantity
-import HeXlude
+import qualified Hex.Box as B
+import Hex.BreakList.Glue
+import Hex.Quantity
+import Hexlude
 
 data BreakItem
   = GlueBreak (Glue Length)

@@ -1,13 +1,13 @@
 {-# LANGUAGE StrictData #-}
 
-module HeX.Lex where
+module Hex.Lex where
 
-import           HeXlude
+import           Hexlude
 
 import qualified Data.ByteString.Lazy as BS.L
-import           Data.Hashable        (Hashable)
-import qualified HeX.Categorise       as Cat
-import qualified HeX.Config.Codes     as Code
+import qualified Data.Sequence        as Seq
+import qualified Hex.Categorise       as Cat
+import qualified Hex.Config.Codes     as Code
 
 data ControlSequence
     = ControlSequence
@@ -28,7 +28,7 @@ instance Hashable ControlSequence where
         = csHash
 
 instance Readable ControlSequence where
-    describe ControlSequence { csChars } = "\\" <> toS csChars
+    describe ControlSequence { csChars } = "\\" <> toS (toList (Code.unsafeCodeAsChar <$> csChars))
 
 data ControlSequenceLike
     = ActiveCharacter Code.CharCode
@@ -55,7 +55,7 @@ data CharCat = CharCat
     } deriving (Show, Eq)
 
 instance Readable CharCat where
-    describe CharCat { char, cat } = toS [char] <> "[" <> describe cat <> "]"
+    describe CharCat { char, cat } = describe char <> "[" <> describe cat <> "]"
 
 data Token
     = CharCatToken CharCat
@@ -102,7 +102,7 @@ chopBreak getNext = go Empty
             go (acc :|> c) csRest
 
 parToken :: Token
-parToken = ControlSequenceToken (mkControlSequence (toS ("par" :: [Char])))
+parToken = ControlSequenceToken $ mkControlSequence $ Seq.fromList $ Code.unsafeCodeFromChar <$> ("par" :: [Char])
 
 extractToken
     :: (Code.CharCode -> Code.CatCode)
@@ -174,7 +174,7 @@ extractToken charToCat = go
             _ ->
                 Nothing
 
-codesToLexTokens :: (Code.CharCode -> Code.CatCode) -> BS.L.ByteString -> [HeX.Lex.Token]
+codesToLexTokens :: (Code.CharCode -> Code.CatCode) -> BS.L.ByteString -> [Hex.Lex.Token]
 codesToLexTokens charToCat = go LineBegin
   where
     go lexState xs = case extractToken charToCat lexState xs of

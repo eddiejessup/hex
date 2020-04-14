@@ -1,9 +1,6 @@
-module HeX.Quantity where
+module Hex.Quantity where
 
-import           HeXlude
-
-import           Data.Ratio ((%))
-import           Data.Text  (Text)
+import           Hexlude
 
 tenK :: TeXInt
 tenK = 10000

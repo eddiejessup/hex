@@ -4,9 +4,9 @@ module TFM.Parse
   )
 where
 
-import           HeXlude
+import           Hexlude
 
-import           Data.Ascii           (Ascii)
+import           Data.Ascii           (AsciiString)
 import qualified Data.Binary.Get      as B.G
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BS.L
@@ -23,7 +23,7 @@ data TexFont = TexFont
     { checksum              :: Int
     , designFontSize        :: Rational
     , characterCodingScheme
-    , family                :: Maybe Ascii
+    , family                :: Maybe AsciiString
     , slant
     , spacing
     , spaceStretch

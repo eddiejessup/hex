@@ -1,17 +1,18 @@
-module HeX.BreakList.Line where
+module Hex.BreakList.Line where
 
 import Data.Adjacent (Adj (..))
+import qualified Data.Sequence as Seq
 import qualified Data.Adjacent as Adj
-import qualified HeX.Box as B
-import HeX.BreakList.BreakList
-import HeX.BreakList.Elem
-import HeX.BreakList.Glue
-import HeX.BreakList.Judge
-import HeX.BreakList.Set
-import HeX.Config.Parameters
-import qualified HeX.Parse.Token as HP
-import HeX.Quantity
-import HeXlude
+import qualified Hex.Box as B
+import Hex.BreakList.BreakList
+import Hex.BreakList.Elem
+import Hex.BreakList.Glue
+import Hex.BreakList.Judge
+import Hex.BreakList.Set
+import Hex.Config.Parameters
+import qualified Hex.Resolve.Token as HP
+import Hex.Quantity
+import Hexlude
 import qualified Safe.Foldable as Safe.F
 
 newtype BadnessSize = BadnessSize {unBadnessSize :: TeXInt}
@@ -65,7 +66,7 @@ type SetHListArgs = (TargetLength, HList)
 
 data Route
   = Route
-      { routeSolution :: (Seq SetHListArgs)
+      { routeSolution :: Seq SetHListArgs
       , routeDemerit :: Demerit
       }
   deriving Show
@@ -88,13 +89,12 @@ lineDemerit (IntParamVal lp) b br =
   in Demerit $ breakDemerit + listDemerit
 
 toOnlyAcceptables
-  :: Filterable f
-  => IntParamVal 'HP.Tolerance
+  :: IntParamVal 'HP.Tolerance
   -> IntParamVal 'HP.LinePenalty
   -> BreakItem
-  -> f (InEdge, TargetLength)
-  -> f (InEdge, TargetLength, Demerit)
-toOnlyAcceptables (IntParamVal tol) lp br = mapMaybe toMaybeAcceptable
+  -> Seq (InEdge, TargetLength)
+  -> Seq (InEdge, TargetLength, Demerit)
+toOnlyAcceptables (IntParamVal tol) lp br = seqMapMaybe toMaybeAcceptable
   where
     toMaybeAcceptable (edge, tgt@(TargetLength st _)) = case badness st of
       InfiniteBadness ->
@@ -120,9 +120,9 @@ finaliseInEdge hElem e@InEdge {elems = HList elemSeq} = case hElem of
 
 data BreakingState
   = BreakingState
-      { accEdges :: (Seq InEdge)
-      , nodeToBestRoute :: (Seq Route)
-      , chunk :: (Seq ElemAdj)
+      { accEdges :: Seq InEdge
+      , nodeToBestRoute :: Seq Route
+      , chunk :: Seq ElemAdj
       }
 
 initialBreakingState :: BreakingState
@@ -162,7 +162,7 @@ appendEntry dw tol lp st@BreakingState {accEdges, nodeToBestRoute, chunk} x = ca
         -- edge's lines stripped to the form used in an actual break. This is
         -- because the edges may be passed on to later calls, in such form, to
         -- build up longer lines.
-        promisingInEdges = filter (isPromising dw) inEdges
+        promisingInEdges = Seq.filter (isPromising dw) inEdges
         -- 'finalise' the promising edges to get 'candidate' edges to actually
         -- break.
         candidateBrokenDInEdges = withTarget dw . finaliseInEdge (adjVal x) <$> promisingInEdges
@@ -231,9 +231,9 @@ breakAndSetParagraph dw tol lp (HList (xs :|> x)) = do
       -- Append \penalty10k \hfil \penalty-10k.
       finishedElemSeq =
         trimmedElemSeq :|>
-          (HVListElem $ ListPenalty $ Penalty tenK) :|>
-          (HVListElem $ ListGlue filGlue) :|>
-          (HVListElem $ ListPenalty $ Penalty $ -tenK)
+          HVListElem (ListPenalty $ Penalty tenK) :|>
+          HVListElem (ListGlue filGlue) :|>
+          HVListElem (ListPenalty $ Penalty $ -tenK)
   BreakingState {accEdges, nodeToBestRoute, chunk} <-
     foldM (appendEntry dw tol lp) initialBreakingState $ Adj.toAdjacents finishedElemSeq
   let inEdges = inEdgeConcat chunk <$> accEdges

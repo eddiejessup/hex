@@ -1,14 +1,14 @@
 {-# LANGUAGE RankNTypes #-}
 
-module HeX.Parse.SyntaxCommand where
+module Hex.Parse.SyntaxCommand where
 
-import           HeXlude
+import           Hexlude
 
 import qualified Data.Sequence          as Seq
 
-import qualified HeX.Config.Codes       as Code
-import           HeX.Parse.Stream.Class
-import           HeX.Parse.Token
+import qualified Hex.Config.Codes       as Code
+import           Hex.Parse.Stream.Class
+import           Hex.Resolve.Token
 
 parseCSNameArgs :: TeXParser s e m (Seq Code.CharCode)
 parseCSNameArgs =

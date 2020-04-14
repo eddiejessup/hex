@@ -1,31 +1,25 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns    #-}
 
-module HeX.Config.Codes where
+module Hex.Config.Codes where
 
-import           HeXlude
+import           Hexlude
 
-import           Data.Ascii.Word8
-import           Data.Bits            (shiftL, shiftR, (.&.))
+import qualified Data.Ascii           as Ascii
 import qualified Data.ByteString.Lazy as BS.L
-import           Data.Hashable        (Hashable)
 import qualified Data.Vector          as V
 import qualified Data.Map.Strict      as Map
 import qualified Data.HashMap.Strict  as HashMap
-import qualified Data.Sequence        as Seq
 import qualified Data.Text            as Text
 import           Path                 (File, Path)
 import qualified Path
 
-import           HeX.Quantity
+import           Hex.Quantity
 
 class TeXCode a where
     toTeXInt :: a -> TeXInt
 
     fromTeXInt :: TeXInt -> Maybe a
-
-
-
 
 newtype CharCode = CharCode { codeWord :: Word8 }
     deriving newtype (Show, Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits, Hashable)
@@ -34,7 +28,7 @@ codeInt :: CharCode -> Int
 codeInt = fromIntegral . codeWord
 
 instance Readable CharCode where
-  describe c = "'" <> Text.singleton (codeAsChar c) <> "'"
+  describe c = "'" <> Text.singleton (unsafeCodeAsChar c) <> "'"
 
 instance TeXCode CharCode where
     toTeXInt = TeXInt . fromIntegral
@@ -44,21 +38,22 @@ instance TeXCode CharCode where
         | n < 0 = Nothing
         | otherwise = Just $ fromIntegral n
 
-instance StringConv [CharCode] Text where
-    strConv leniency ccList =
-        let charList = codeAsChar <$> ccList
-        in strConv leniency charList
+-- instance StringConv [CharCode] Text where
+--     strConv leniency ccList =
+--         let charList = unsafeCodeAsChar <$> ccList
+--         in strConv leniency charList
 
-instance StringConv (Seq CharCode) Text where
-    strConv leniency ccSeq =
-        let ccList = toList ccSeq
-        in strConv leniency ccList
+-- instance StringConv (Seq CharCode) Text where
+--     strConv leniency ccSeq =
+--         let ccList = toList ccSeq
+--         in strConv leniency ccList
 
-instance StringConv [Char] (Seq CharCode) where
-    strConv _ chars = Seq.fromList $ CharCode . ascii <$> chars
 
-instance StringConv [Char] [CharCode] where
-    strConv _ chars = CharCode . ascii <$> chars
+-- instance StringConv [Char] (Seq CharCode) where
+--     strConv _ chars = Seq.fromList $ CharCode . c2w <$> chars
+
+-- instance StringConv [Char] [CharCode] where
+--     strConv _ chars = CharCode . c2w <$> chars
 
 -- Helper.
 data SPInt = SP !Int !Int
@@ -72,50 +67,52 @@ instance Hashable (Seq CharCode) where
 -- instance Hashable (Seq CharCode) where
 --     hashWithSalt s x = hashWithSalt s (toList x)
 
-codesToS :: (StringConv [Char] a, Functor f, Foldable f) => f CharCode -> a
-codesToS cs = toS $ toList $ codeAsChar <$> cs
+-- codesToS :: (StringConv [Char] a, Functor f, Foldable f) => f CharCode -> a
+-- codesToS cs = toS $ toList $ unsafeCodeAsChar <$> cs
 
 readCharCodes :: MonadIO m => Path a File -> m BS.L.ByteString
 readCharCodes path = liftIO (BS.L.readFile (Path.toFilePath path))
 
 pattern CharCode_ :: Char -> CharCode
-pattern CharCode_ c <- (codeAsChar -> c)
+pattern CharCode_ c <- (unsafeCodeAsChar -> c)
   where
-    CharCode_ c = CharCode (ascii c)
+    CharCode_ c = unsafeCodeFromChar c
 
-codeAsChar :: CharCode -> Char
-codeAsChar = toChar . codeWord
+unsafeCodeFromChar :: Char -> CharCode
+unsafeCodeFromChar c = CharCode (Ascii.unsafeCharToWord8 c)
 
-codeFromChar :: Char -> CharCode
-codeFromChar = CharCode . ascii
+unsafeCodeAsChar :: CharCode -> Char
+unsafeCodeAsChar = Ascii.unsafeWord8ToChar . codeWord
 
-codesFromStr :: [Char] -> [CharCode]
-codesFromStr = toS
+unsafeCodesFromChars :: [Char] -> [CharCode]
+unsafeCodesFromChars = fmap unsafeCodeFromChar
+
+unsafeCodesAsChars :: [CharCode] -> [Char]
+unsafeCodesAsChars = fmap unsafeCodeAsChar
+
+-- unsafeCodeFromChar :: Char -> CharCode
+-- unsafeCodeFromChar = CharCode . c2w
+
+-- codesFromStr :: [Char] -> [CharCode]
+-- codesFromStr = toS
 
 isAlphaChar :: CharCode -> Bool
-isAlphaChar = isAlpha . codeWord
+isAlphaChar = Ascii.isAsciiAlpha . codeWord
 
 isLowerChar :: CharCode -> Bool
-isLowerChar = isLower . codeWord
+isLowerChar = Ascii.isAsciiLower . codeWord
 
 isUpperChar :: CharCode -> Bool
-isUpperChar = isUpper . codeWord
+isUpperChar = Ascii.isAsciiUpper . codeWord
 
-isDigitChar :: CharCode -> Bool
-isDigitChar = isDigit . codeWord
+isDecDigitChar :: CharCode -> Bool
+isDecDigitChar = Ascii.isDecDigit . codeWord
 
 toUpperChar :: CharCode -> CharCode
-toUpperChar = CharCode . toUpper . codeWord
+toUpperChar = CharCode . Ascii.toAsciiUpper . codeWord
 
 toLowerChar :: CharCode -> CharCode
-toLowerChar = CharCode . toLower . codeWord
-
-safeFromUpAF :: Num a => Word8 -> Maybe a
-safeFromUpAF w
-    | isUpAF w = Just $ fromUpAF w
-    | otherwise = Nothing
-
-
+toLowerChar = CharCode . Ascii.toAsciiLower . codeWord
 
 type CharCodeMap v = Map CharCode v
 type CharCodeHashMap v = HashMap.HashMap CharCode v
@@ -130,11 +127,6 @@ initialiseCharCodeHashMap val = HashMap.fromList $
 
 initialiseCharCodeVector :: (CharCode -> v) -> V.Vector (Maybe v)
 initialiseCharCodeVector val = V.fromList $ Just . val <$> [minBound..maxBound]
-
-
-
-
-
 
 -- The ⟨number⟩ at the end of a ⟨code assignment⟩ must not be negative, except
 -- in the case that a \delcode is being assigned.
@@ -247,7 +239,7 @@ newMathCodes :: CharCodeMap MathCode
 newMathCodes = initialiseCharCodeMap f
   where
     f c
-        | isDigitChar c =
+        | isDecDigitChar c =
             NormalMathCode VariableFamily (FamilyCharRef (TeXInt 0) c)
         | isAlphaChar c =
             NormalMathCode VariableFamily (FamilyCharRef (TeXInt 1) c)

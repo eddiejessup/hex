@@ -1,10 +1,9 @@
 module TFM.Table where
 
-import           HeXlude
+import           Hexlude
 
 import           Control.Monad.Fail (fail)
 import           Data.Binary.Get    (Get, getByteString)
-import           Data.ByteString    (ByteString)
 
 import           TFM.Common
 

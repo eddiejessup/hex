@@ -7,7 +7,7 @@
 -- import qualified Data.Text        as Text
 -- import           System.Directory (listDirectory)
 
--- import           HeX.Command.Run  (codesToDVIBytes)
+-- import           Hex.Command.Run  (codesToDVIBytes)
 
 -- cmpFile :: Text -> IO ()
 -- cmpFile fname =

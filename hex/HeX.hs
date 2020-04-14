@@ -3,10 +3,10 @@ module Main where
 import Control.Monad (when)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BS.L
-import HeX.Parse.Stream.Instance (newExpandStream)
-import HeXlude
+import Hex.Parse.Stream.Expanding (newExpandStream)
+import Hexlude
 import qualified Path
-import qualified HeX.Command.Run as Run
+import qualified Hex.Command.Run as Run
 import qualified Path.IO
 import qualified System.Console.GetOpt as Opt
 
