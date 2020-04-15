@@ -17,7 +17,7 @@ import TFM.Character (Character (..))
 import TFM.Parse
 
 newtype TFMError = TFMError Text
-  deriving Show
+  deriving stock Show
 
 designSizeRational :: TexFont -> Rational
 designSizeRational f = toScaledPoint (designFontSize f) Point
@@ -28,11 +28,11 @@ designSizeSP f = round $ designSizeRational f
 designScaleSP :: TexFont -> Rational -> Length
 designScaleSP f x = round $ designSizeRational f * x
 
-readTFM :: (MonadIO m, MonadErrorAnyOf e m '[TFMError]) => FilePath -> m TexFont
+readTFM :: (MonadIO m, MonadError e m, AsType TFMError e) => FilePath -> m TexFont
 readTFM path =
   liftIO (BS.readFile path) <&> newTFM >>= \case
-    Left err -> throwM $ TFMError err
+    Left err -> throwError $ injectTyped $ TFMError err
     Right v -> pure v
 
-readTFMFancy :: (MonadIO m, MonadErrorAnyOf e m '[TFMError]) => Path Abs File -> m TexFont
+readTFMFancy :: (MonadIO m, MonadError e m, AsType TFMError e) => Path Abs File -> m TexFont
 readTFMFancy = readTFM . toFilePath

@@ -5,10 +5,8 @@ module Hexlude
     ( module Protolude
     , module Readable
     , module Data.Sequence
-    , module Data.Variant
 
-    , MonadErrorVariant
-    , MonadErrorAnyOf
+    , module Data.Generics.Sum.Typed
 
     , field
 
@@ -18,7 +16,6 @@ module Hexlude
     , seqMapMaybe
 
     , id
-    , liftThrow
     , (>>>)
     , atEith
     , traceText
@@ -37,21 +34,11 @@ import           Prelude                   (id)
 import           Protolude                 hiding (group, catch)
 
 import           Control.Arrow             ((>>>))
-import           Control.Monad.Trans.Maybe (MaybeT, runMaybeT)
 import           Data.Generics.Product     (field)
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)
 import qualified Data.Sequence             as Seq
 import           Debug.Readable            as Readable
-
-import           Data.Variant              hiding (fold)
-
-
-type MonadErrorVariant e m = MonadError (Variant e) m
-
-type MonadErrorAnyOf e m es = (MonadErrorVariant e m, e `CouldBeAnyOf` es)
-
-liftThrow :: (MonadIO m, MonadError e m) => e -> MaybeT IO a -> m a
-liftThrow e v = liftIO (runMaybeT v) >>= note e
+import           Data.Generics.Sum.Typed
 
 atEith :: (MonadError Text m, Show a) => Text -> [a] -> Int -> m a
 atEith str xs i = note

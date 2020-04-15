@@ -63,9 +63,10 @@ newExpandStream maybePath cs = do
       }
 
 instance
-  ( MonadErrorAnyOf e m TeXStreamE
-  , e `CouldBe` ExpansionError
-  , e `CouldBe` Data.Path.PathError
+  ( MonadError e m
+  , AsTeXParseErrors e
+  , AsType ExpansionError e
+  , AsType Data.Path.PathError e
   , MonadIO m
   )
   => P.Stream ExpandingStream m where
@@ -171,7 +172,7 @@ expandString (Conf.IntParamVal escapeCharCodeInt) tok = case tok of
         else (escapeCharCode :<|)
 
 expandMacro
-  :: MonadErrorAnyOf e m '[ExpansionError]
+  :: (MonadError e m, AsType ExpansionError e)
   => MacroContents
   -> Map.Map Digit MacroArgument
   -> m (Seq Lex.Token)
@@ -179,12 +180,13 @@ expandMacro MacroContents {replacementTokens = (MacroText replaceToks)} args =
   mconcatMapM renderToken replaceToks
   where
     mconcatMapM f = fmap fold . mapM f
+
     renderToken = \case
       MacroTextLexToken x ->
         pure (singleton x)
       MacroTextParamToken dig -> case args !? dig of
         Nothing ->
-          throwM $ ExpansionError "No such parameter"
+          throwError $ injectTyped $ ExpansionError "No such parameter"
         Just (MacroArgument arg) ->
           pure arg
 
@@ -280,7 +282,7 @@ skipUpToCaseBlock tgt stream = go stream 0 1
 
 expandConditionToken
   :: ( TeXParseable ExpandingStream e m
-     , e `CouldBe` ExpansionError
+     , AsType ExpansionError e
      )
   => ExpandingStream
   -> ConditionTok
@@ -298,10 +300,10 @@ expandConditionToken strm = \case
   ConditionBodyTok delim -> case (delim, skipState strm) of
     -- Shouldn't see any condition token outside a condition block.
     (_, []) ->
-      throwM $ ExpansionError $ "Not in a condition body, but saw condition-body token: " <> Hexlude.show delim
+      throwError $ injectTyped $ ExpansionError $ "Not in a condition body, but saw condition-body token: " <> Hexlude.show delim
     -- Shouldn't see an 'or' while in an if-condition.
     (Or, IfBodyState _ : _) ->
-      throwM $ ExpansionError "In an if-condition, not case-condition, but saw 'or'"
+      throwError $ injectTyped $ ExpansionError "In an if-condition, not case-condition, but saw 'or'"
     -- If we see an 'end-if' while in any condition, then pop the
     -- condition.
     (EndIf, _ : condRest) ->
@@ -310,11 +312,11 @@ expandConditionToken strm = \case
     -- processing a block started by 'else'. The same goes for seeing an
     -- 'else' while in an if-condition, having already seen an 'else'.
     (Else, IfBodyState IfPostElse : _) ->
-      throwM $ ExpansionError "Already saw 'else' in this condition-block, but saw later 'else'"
+      throwError $ injectTyped $ ExpansionError "Already saw 'else' in this condition-block, but saw later 'else'"
     (Or, CaseBodyState CasePostElse : _) ->
-      throwM $ ExpansionError "Already saw 'else' in this case-condition, but saw later 'or'"
+      throwError $ injectTyped $ ExpansionError "Already saw 'else' in this case-condition, but saw later 'or'"
     (Else, CaseBodyState CasePostElse : _) ->
-      throwM $ ExpansionError "Already saw else in this condition-block, but saw later 'else'"
+      throwError $ injectTyped $ ExpansionError "Already saw else in this condition-block, but saw later 'else'"
     -- If we see a block delimiter while not-skipping, then we must have
     -- been not-skipping the previous block, so we should skip all
     -- remaining blocks.
@@ -336,8 +338,8 @@ expandConditionToken strm = \case
 expandSyntaxCommand
   :: ( TeXParseable ExpandingStream e m
      , MonadIO m
-     , e `CouldBe` ExpansionError
-     , e `CouldBe` Data.Path.PathError
+     , AsType ExpansionError e
+     , AsType Data.Path.PathError e
      )
   => ExpandingStream
   -> SyntaxCommandHeadToken
@@ -405,8 +407,8 @@ expandSyntaxCommand strm = \case
 fetchAndExpandToken
   :: ( TeXParseable ExpandingStream e m
      , MonadIO m
-     , e `CouldBe` ExpansionError
-     , e `CouldBe` Data.Path.PathError
+     , AsType ExpansionError e
+     , AsType Data.Path.PathError e
      )
   => ExpandingStream
   -> m (Maybe (Seq Lex.Token, ResolvedToken, ExpandingStream))

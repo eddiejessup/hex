@@ -29,11 +29,11 @@ data EndParaReason
     | EndParaSawLeaveBox
 
 handleCommandInParaMode
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -86,11 +86,11 @@ handleCommandInParaMode hList@(BL.HList hElemSeq) command oldStream =
 newtype HBoxResult = HBoxResult HList
 
 handleCommandInHBoxMode
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -102,7 +102,7 @@ handleCommandInHBoxMode
 handleCommandInHBoxMode hList@(BL.HList hElemSeq) command _ =
     case command of
         HP.VModeCommand vModeCommand ->
-            throwM $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
+            throwError $ injectTyped $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
         HP.HModeCommand (HP.AddCharacter c) ->
             addElem <$> hModeAddCharacter c
         HP.HModeCommand (HP.AddHGlue g) ->
@@ -147,11 +147,9 @@ addVListElemAndLoop vl e = LoopAgain <$> HP.runConfState (addVListElem vl e)
 handleCommandInVBoxMode
     :: ( MonadState s m
        , HP.TeXParseable s e m
-       , MonadErrorAnyOf e m
-           '[ TFMError
-            , BuildError
-            , Data.Path.PathError
-            ]
+       , AsType TFMError e
+       , AsType BuildError e
+       , AsType Data.Path.PathError e
        , MonadIO m
        )
     => VList
@@ -161,7 +159,7 @@ handleCommandInVBoxMode
 handleCommandInVBoxMode vList command oldStream =
     case command of
         HP.VModeCommand HP.End ->
-            throwM $ BuildError "End not allowed in internal vertical mode"
+            throwError $ injectTyped $ BuildError "End not allowed in internal vertical mode"
         HP.VModeCommand (HP.AddVGlue g) ->
             vModeAddVGlue g >>= addElem
         HP.VModeCommand (HP.AddVRule rule) ->
@@ -209,7 +207,8 @@ appendParagraph
     :: ( HP.TeXStream s
        , MonadIO m
        , MonadState s m
-       , MonadErrorAnyOf e m '[BuildError]
+       , MonadError e m
+       , AsType BuildError e
        )
     => HList
     -> VList
@@ -223,7 +222,8 @@ appendParagraph paraHList vList =
 
 hListToParaLineBoxes
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[BuildError]
+       , MonadError e m
+       , AsType BuildError e
        )
     => HList
     -> m (Seq (B.Box B.HBox))
@@ -233,17 +233,17 @@ hListToParaLineBoxes hList =
     lineTol <- asks $ IntParamVal . lookupTeXIntParameter HP.Tolerance
     linePen <- asks $ IntParamVal . lookupTeXIntParameter HP.LinePenalty
     case BL.breakAndSetParagraph hSize lineTol linePen hList of
-        Left err -> throwM $ BuildError err
+        Left err -> throwError $ injectTyped $ BuildError err
         Right v -> pure v
 
 newtype MainVModeResult = MainVModeResult VList
 
 handleCommandInMainVMode
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -280,7 +280,7 @@ handleCommandInMainVMode vList command oldStream =
                         Nothing -> pure doNothing
                         Just box -> addElem box
                 FinishBoxMode ->
-                    throwM $ BuildError "No box to end: in main V mode"
+                    throwError $ injectTyped $ BuildError "No box to end: in main V mode"
                 DoNothing ->
                     pure doNothing
         oth ->
@@ -297,14 +297,14 @@ handleCommandInMainVMode vList command oldStream =
             EndParaSawEndParaCommand ->
                 LoopAgain <$> appendParagraph finalParaHList vList
             EndParaSawLeaveBox ->
-                throwM $ BuildError "No box to end: in paragraph within main V mode"
+                throwError $ injectTyped $ BuildError "No box to end: in paragraph within main V mode"
 
 extractPara
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -319,11 +319,11 @@ extractPara indentFlag =
             pure mempty
 
 extractParaFromVMode
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -339,11 +339,11 @@ extractParaFromVMode indentFlag oldStream =
     put oldStream >> extractPara indentFlag
 
 extractHBox
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -352,11 +352,11 @@ extractHBox
 extractHBox = runCommandLoop handleCommandInHBoxMode mempty
 
 extractVBox
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -365,11 +365,11 @@ extractVBox
 extractVBox = runCommandLoop handleCommandInVBoxMode mempty
 
 extractVSubBox
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -398,11 +398,11 @@ extractVSubBox desiredLength boxIntent boxType =
             pure Nothing
 
 extractHSubBox
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -417,11 +417,11 @@ extractHSubBox desiredLength boxIntent boxType =
     pure $ BL.HVListElem <$> maybeElem
 
 extractMainVList
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -430,11 +430,11 @@ extractMainVList
 extractMainVList = runCommandLoop handleCommandInMainVMode mempty
 
 extractBreakAndSetVList
-    :: ( MonadErrorAnyOf e m
-           '[ BuildError
-            , TFMError
-            , Data.Path.PathError
-            ]
+    :: ( MonadError e m
+       , AsType BuildError e
+       , AsType TFMError e
+       , AsType Data.Path.PathError e
+
        , HP.TeXParseable s e m
        , MonadState s m
        , MonadIO m
@@ -445,7 +445,7 @@ extractBreakAndSetVList =
     MainVModeResult finalMainVList <- extractMainVList
     gets HP.getConditionBodyState >>= \case
         Nothing -> pure ()
-        Just _condState -> throwM $ BuildError $ "Cannot end: in condition block: " <> show _condState
+        Just _condState -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show _condState
     readOnConfState (asks finaliseConfig) >>= liftIO
     desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
     -- putText $ describe finalMainVList

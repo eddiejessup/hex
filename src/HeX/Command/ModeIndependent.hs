@@ -27,10 +27,9 @@ data ModeIndependentResult
 fetchBox
     :: ( HP.TeXStream s
        , MonadState s m
-       , MonadErrorAnyOf e m
-            '[ ConfigError
-             , EvaluationError
-             ]
+       , MonadError e m
+       , AsType ConfigError e
+       , AsType EvaluationError e
        )
     => HP.BoxFetchMode
     -> HP.EightBitTeXInt
@@ -48,12 +47,11 @@ handleModeIndependentCommand
     :: ( HP.TeXStream s
        , MonadState s m
        , MonadIO m
-       , MonadErrorAnyOf e m
-           '[ ConfigError
-            , EvaluationError
-            , D.Path.PathError
-            , TFMError
-            ]
+       , MonadError e m
+       , AsType ConfigError e
+       , AsType EvaluationError e
+       , AsType D.Path.PathError e
+       , AsType TFMError e
        )
     => HP.ModeIndependentCommand
     -> m ModeIndependentResult
@@ -160,7 +158,7 @@ handleModeIndependentCommand = \case
                 eVal <- evalOnConfState val
                 -- liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
                 -- liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
-                idxChar <- note (throw $ ConfigError $ "Invalid character code index: " <> show eIdx) (fromTeXInt eIdx)
+                idxChar <- note (injectTyped $ ConfigError $ "Invalid character code index: " <> show eIdx) (fromTeXInt eIdx)
                 -- liftIO $ putText $ "Setting " <> show codeType <> "@" <> show eIdx <> " (" <> show idxChar <> ") to " <> show eVal
                 HP.runConfState $ updateCharCodeMap codeType idxChar eVal global
                 pure DoNothing
@@ -245,7 +243,7 @@ handleModeIndependentCommand = \case
     HP.ChangeScope HP.Negative trig ->
         HP.runConfState $ gets popGroup >>= \case
             Nothing ->
-                throwM $ ConfigError "No group to leave"
+                throwError $ injectTyped $ ConfigError "No group to leave"
             Just (group, poppedConfig) ->
                 do
                 put poppedConfig
@@ -255,7 +253,7 @@ handleModeIndependentCommand = \case
                     -- current mode.
                     ScopeGroup _ (LocalStructureGroup trigConf) ->
                         do
-                        when (trigConf /= trig) $ throwM $ ConfigError $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
+                        when (trigConf /= trig) $ throwError $ injectTyped $ ConfigError $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
                         pure DoNothing
                     -- - Undo the effects of non-global assignments
                     -- - package the [box] using the size that was saved on the

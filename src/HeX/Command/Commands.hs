@@ -23,7 +23,7 @@ import           Hex.Quantity
 
 glueToElem
     :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        , MonadState s m
        )
     => HP.Glue
@@ -33,7 +33,7 @@ glueToElem g =
 
 ruleToElem
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        )
     => HP.Rule
     -> m Length
@@ -89,7 +89,7 @@ addVListElem (BL.VList accSeq) = \case
 
 hModeAddHGlue
     :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        , MonadState s m
        )
     => HP.Glue
@@ -99,7 +99,7 @@ hModeAddHGlue g =
 
 hModeAddCharacter
     :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        , MonadState s m
        )
     => HP.CharCodeRef
@@ -113,7 +113,8 @@ hModeAddCharacter c =
 
 hModeAddSpace
     :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m '[ConfigError]
+       , MonadError e m
+       , AsType ConfigError e
        , MonadState s m
        )
     => m HListElem
@@ -122,7 +123,7 @@ hModeAddSpace =
 
 hModeAddRule
     :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        , MonadState s m
        )
     => HP.Rule
@@ -136,7 +137,7 @@ hModeAddRule rule =
 
 hModeStartParagraph
     :: ( HP.TeXStream s
-       , MonadErrorVariant e m
+       , MonadError e m
        , MonadState s m
        )
     => HP.IndentFlag
@@ -152,7 +153,7 @@ hModeStartParagraph = \case
 
 vModeAddVGlue
     :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        , MonadState s m
        )
     => HP.Glue
@@ -161,7 +162,7 @@ vModeAddVGlue = glueToElem
 
 vModeAddRule
     :: ( HP.TeXStream s
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        , MonadState s m
        )
     => HP.Rule
@@ -177,7 +178,8 @@ vModeAddRule rule =
 
 characterBox
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[ConfigError]
+       , MonadError e m
+       , AsType ConfigError e
        )
     => CharCode
     -> m B.Character
@@ -185,7 +187,7 @@ characterBox char = do
     fontMetrics <- currentFontMetrics
     let toSP = TFM.designScaleSP fontMetrics
     TFM.Character { TFM.width, TFM.height, TFM.depth } <-
-        note (throw $ ConfigError "No such character")
+        note (injectTyped $ ConfigError "No such character")
         $ IntMap.lookup (fromIntegral $ Code.codeWord char) (characters fontMetrics)
     pure B.Character { B.char       = char
                      , B.charWidth  = toSP width
@@ -195,7 +197,8 @@ characterBox char = do
 
 spaceGlue
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[ConfigError]
+       , MonadError e m
+       , AsType ConfigError e
        )
     => m (BL.Glue Length)
 spaceGlue = do
@@ -212,12 +215,11 @@ spaceGlue = do
 loadFont
     :: ( MonadState Config m
        , MonadIO m
-       , MonadErrorAnyOf e m
-           '[ D.Path.PathError
-            , ConfigError
-            , TFM.TFMError
-            , EvaluationError
-            ]
+       , MonadError e m
+       , AsType D.Path.PathError e
+       , AsType ConfigError e
+       , AsType TFM.TFMError e
+       , AsType EvaluationError e
        )
     => HP.TeXFilePath
     -> HP.FontSpecification

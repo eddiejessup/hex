@@ -3,13 +3,14 @@ module Data.Byte where
 import Hexlude
 
 newtype ByteError = ByteError Text
-  deriving stock Show
+  deriving stock (Show, Generic)
 
 data Signedness = Signed | Unsigned
 
 data SignableInt a = SignableInt Signedness a
 
 newtype UnsignedVal a = UnsignedVal a
+  deriving stock (Generic)
 
 isSignedNrExpressibleInNBits :: Integral a => Int -> a -> Bool
 isSignedNrExpressibleInNBits nrBits n =
@@ -17,11 +18,11 @@ isSignedNrExpressibleInNBits nrBits n =
   in (-x <= n) && (n <= x - 1)
 
 toUnsigned
-  :: (Num a, Ord a, Show a, MonadErrorAnyOf e m '[ByteError])
+  :: (Num a, Ord a, Show a, MonadError e m, AsType ByteError e)
   => a
   -> m (UnsignedVal a)
 toUnsigned n
-  | n < 0 = throwM $ ByteError $ "Number argument for unsigned is negative: " <> show n
+  | n < 0 = throwError $ injectTyped $ ByteError $ "Number argument for unsigned is negative: " <> show n
   | otherwise = pure (UnsignedVal n)
 
 bytesNeededUnsigned :: (FiniteBits a, Integral a) => a -> Int

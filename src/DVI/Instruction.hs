@@ -17,7 +17,7 @@ import Path (Path)
 import qualified Path
 
 newtype DVIError = DVIError Text
-  deriving stock Show
+  deriving stock (Show, Generic)
 
 data ArgVal = UIntArgVal UIntArgVal | SIntArgVal SIntArgVal | StringArgVal Ascii.AsciiString
   deriving stock Show
@@ -47,7 +47,9 @@ data SIntArgVal
   deriving stock Show
 
 uintArgValFromInt
-  :: ( MonadErrorAnyOf e m '[DVIError]
+  :: ( MonadError e m
+     , AsType DVIError e
+
      , FiniteBits a
      , Integral a
      , Show a
@@ -59,10 +61,12 @@ uintArgValFromInt (UnsignedVal n) = case bytesNeededUnsigned n of
   2 -> pure $ U2 $ fromIntegral n
   3 -> pure $ U4 $ fromIntegral n
   4 -> pure $ U4 $ fromIntegral n
-  b -> throwM $ DVIError $ "Cannot represent " <> show n <> " as unsigned int: needs " <> show b <> " bytes"
+  b -> throwError $ injectTyped $ DVIError $ "Cannot represent " <> show n <> " as unsigned int: needs " <> show b <> " bytes"
 
 sintArgValFromInt
-  :: ( MonadErrorAnyOf e m '[DVIError]
+  :: ( MonadError e m
+     , AsType DVIError e
+
      , FiniteBits a
      , Integral a
      , Show a
@@ -74,7 +78,7 @@ sintArgValFromInt n = case bytesNeededSigned n of
   2 -> pure $ S2 $ fromIntegral n
   3 -> pure $ S4 $ fromIntegral n
   4 -> pure $ S4 $ fromIntegral n
-  b -> throwM $ DVIError $ "Cannot represent " <> show n <> " as signed int: needs " <> show b <> " bytes"
+  b -> throwError $ injectTyped $ DVIError $ "Cannot represent " <> show n <> " as signed int: needs " <> show b <> " bytes"
 
 instance Encodable UIntArgVal where
 
@@ -116,7 +120,9 @@ sIntOpByteLength = \case
   S4 _ -> FourByte
 
 getVariByteUIntOpAndArg
-  :: ( MonadErrorAnyOf e m '[DVIError]
+  :: ( MonadError e m
+     , AsType DVIError e
+
      , FiniteBits a
      , Integral a
      , Show a
@@ -129,7 +135,9 @@ getVariByteUIntOpAndArg f n = do
   pure (f $ uIntOpByteLength argVal, argVal)
 
 getVariByteSIntOpAndArg
-  :: ( MonadErrorAnyOf e m '[DVIError]
+  :: ( MonadError e m
+     , AsType DVIError e
+
      , FiniteBits a
      , Integral a
      , Show a
@@ -142,7 +150,10 @@ getVariByteSIntOpAndArg f n = do
   pure (f $ sIntOpByteLength argVal, argVal)
 
 getVariByteInstruction
-  :: ( MonadErrorAnyOf e m '[DVIError, ByteError]
+  :: ( MonadError e m
+     , AsType DVIError e
+     , AsType ByteError e
+
      , FiniteBits a
      , Integral a
      , Show a
@@ -157,7 +168,8 @@ getVariByteInstruction f (SignableInt signed n) = do
         (op, sArg) <- getVariByteSIntOpAndArg f n
         pure (op, SIntArgVal sArg)
       Unsigned -> do
-        (op, uArg) <- toUnsigned n >>= getVariByteUIntOpAndArg f
+        uns <- toUnsigned n
+        (op, uArg) <- getVariByteUIntOpAndArg f uns
         pure (op, UIntArgVal uArg)
   pure $ EncodableInstruction op [arg]
 
@@ -165,7 +177,7 @@ getSimpleEncInstruction :: Operation -> EncodableInstruction
 getSimpleEncInstruction _op = EncodableInstruction _op []
 
 getSelectFontNrInstruction
-  :: MonadErrorAnyOf e m '[DVIError, ByteError]
+  :: (MonadError e m, AsType DVIError e, AsType ByteError e)
   => TeXInt
   -> m EncodableInstruction
 getSelectFontNrInstruction fNr
@@ -193,7 +205,7 @@ getBeginPageInstruction lastBeginPoint =
   in EncodableInstruction BeginPage args
 
 getDefineFontInstruction
-  :: MonadErrorAnyOf e m '[D.Path.PathError, ByteError, DVIError]
+  :: (MonadError e m, AsType D.Path.PathError e, AsType ByteError e, AsType DVIError e)
   => TeXInt
   -> Path b Path.File
   -> Length
@@ -215,7 +227,8 @@ getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
         ]
   pure $ EncodableInstruction _op args
   where
-    noteAscii v = note (throw $ D.Path.PathError $ "Could not represent as ASCII: " <> show v) v
+    noteAscii v = note (injectTyped $ D.Path.PathError $ "Could not represent as ASCII: " <> show v) v
+
     pathToAscii p = Ascii.fromChars (Path.toFilePath p) & noteAscii
     textToAscii t = Ascii.fromText t & noteAscii
     asciiLength = BS.length . Ascii.toByteString
@@ -225,7 +238,7 @@ getDefineFontInstruction fNr path scaleFactor designSize fontChecksum = do
       else x
 
 getCharacterInstruction
-  :: MonadErrorAnyOf e m '[DVIError, ByteError]
+  :: (MonadError e m, AsType DVIError e, AsType ByteError e)
   => CharCode
   -> MoveMode
   -> m EncodableInstruction
@@ -245,7 +258,7 @@ getRuleInstruction mode h w =
   EncodableInstruction (AddRule mode) (UIntArgVal . U4 . fromIntegral <$> [h, w])
 
 getMoveInstruction
-  :: MonadErrorAnyOf e m '[DVIError, ByteError]
+  :: (MonadError e m, AsType DVIError e, AsType ByteError e)
   => Axis
   -> Length
   -> m EncodableInstruction

@@ -13,7 +13,7 @@ class TeXVariable a where
 
     setValue
         :: ( MonadState Config m
-           , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+           , MonadError e m, AsType EvaluationError e, AsType ConfigError e
            )
         => a
         -> HP.GlobalFlag
@@ -22,7 +22,7 @@ class TeXVariable a where
 
 setValueFromAST
     :: ( MonadState Config m
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        , TeXVariable a
        , TeXEvaluable b
        , EvalTarget a ~ EvalTarget b
@@ -86,7 +86,7 @@ class TeXVariable a => TeXNumericVariable a where
 
     advanceValueFromAST
         :: ( MonadState Config m
-           , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+           , MonadError e m, AsType EvaluationError e, AsType ConfigError e
            , TeXEvaluable a
            , TeXEvaluable b
            , EvalTarget b ~ EvalTarget a
@@ -101,7 +101,7 @@ class TeXVariable a => TeXNumericVariable a where
 
     scaleValueFromAST
         :: ( MonadState Config m
-           , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+           , MonadError e m, AsType EvaluationError e, AsType ConfigError e
            , TeXEvaluable a
            )
         => a

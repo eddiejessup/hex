@@ -173,7 +173,9 @@ data FindFilePolicy
 findFilePath
     :: ( MonadReader Config m
        , MonadIO m
-       , MonadErrorAnyOf e m '[ConfigError, D.Path.PathError]
+       , MonadError e m
+       , AsType ConfigError e
+       , AsType D.Path.PathError e
        )
     => FindFilePolicy
     -> [Path Abs Dir]
@@ -184,7 +186,7 @@ findFilePath findPolicy extraPaths p =
     dirs <- asks searchDirectories <&> (<> extraPaths)
     getTgtPath
         >>= Path.IO.findFile dirs
-        >>= note (throw $ ConfigError $ "Could not find file: " <> show p)
+        >>= note (injectTyped $ ConfigError $ "Could not find file: " <> show p)
   where
     getTgtPath = case findPolicy of
         NoImplicitExtension ->
@@ -200,7 +202,8 @@ data FontInfo =
 readFontInfo
     :: ( MonadReader Config m
        , MonadIO m
-       , MonadErrorAnyOf e m '[TFM.TFMError]
+       , MonadError e m
+       , AsType TFM.TFMError e
        )
     => Path Abs File
     -> m FontInfo
@@ -212,12 +215,13 @@ readFontInfo fontPath = do
 
 lookupFontInfo
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[ConfigError]
+       , MonadError e m
+       , AsType ConfigError e
        )
     => TeXInt
     -> m FontInfo
 lookupFontInfo fNr = (!? fNr) <$> asks fontInfos
-    >>= note (throw (ConfigError "No such font number"))
+    >>= note (injectTyped (ConfigError "No such font number"))
 
 addFont :: MonadState Config m => FontInfo -> m TeXInt
 addFont newInfo = do
@@ -372,11 +376,12 @@ lookupCurrentFontNr = scopedLookup currentFontNr
 
 mLookupCurrentFontNr
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[ConfigError]
+       , MonadError e m
+       , AsType ConfigError e
        )
     => m TeXInt
 mLookupCurrentFontNr =
-    asks lookupCurrentFontNr >>= note (throw $ ConfigError "Font number isn't set")
+    asks lookupCurrentFontNr >>= note (injectTyped $ ConfigError "Font number isn't set")
 
 selectFontNr :: TeXInt -> GlobalFlag -> Config -> Config
 selectFontNr n globalFlag c@Config{ globalScope, groups } =
@@ -401,13 +406,14 @@ setFamilyMemberFont = insertKey (G.P.field @"familyMemberFonts")
 
 lookupFontFamilyMember
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[ConfigError]
+       , MonadError e m
+       , AsType ConfigError e
        )
     => (FontRange, TeXInt)
     -> m TeXInt
 lookupFontFamilyMember k =
     asks (scopedMapLookup familyMemberFonts k)
-        >>= note (throw $ ConfigError $ "Family member undefined: " <> show k)
+        >>= note (injectTyped $ ConfigError $ "Family member undefined: " <> show k)
 
 -- Control sequences.
 lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
@@ -437,7 +443,9 @@ lookupChangeCaseCode d t conf =
         fromMaybe Code.NoCaseChange $ scopedMapLookup codes t conf
 
 updateCharCodeMap
-    :: ( MonadErrorAnyOf e m '[ConfigError]
+    :: ( MonadError e m
+       , AsType ConfigError e
+
        , MonadState Config m
        )
     => CodeType
@@ -464,9 +472,9 @@ updateCharCodeMap t c n globalFlag = do
             noteConfigError $ Code.fromTeXInt n <&> insertKey (G.P.field @"delimiterCodes") c
     modify $ insert globalFlag
   where
-    noteConfigError :: MonadErrorAnyOf e m '[ConfigError] => Maybe a -> m a
+    noteConfigError :: (MonadError e m, AsType ConfigError e) => Maybe a -> m a
     noteConfigError =
-        note (throw $ ConfigError $ "Invalid target value for code type "
+        note (injectTyped $ ConfigError $ "Invalid target value for code type "
               <> show t <> ": " <> show n)
 
 -- Parameters and special quantities.
@@ -606,14 +614,16 @@ setBoxRegisterNullable idx global = \case
 
 currentFontInfo
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[ConfigError]
+       , MonadError e m
+       , AsType ConfigError e
        )
     => m FontInfo
 currentFontInfo = mLookupCurrentFontNr >>= lookupFontInfo
 
 currentFontMetrics
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[ConfigError]
+       , MonadError e m
+       , AsType ConfigError e
        )
     => m TexFont
 currentFontMetrics = fontMetrics <$> currentFontInfo

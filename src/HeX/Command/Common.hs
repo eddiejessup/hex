@@ -31,7 +31,7 @@ modConfState x = HP.runConfState $ modify x
 evalOnConfState
     :: ( HP.TeXStream s
        , TeXEvaluable v
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        , MonadState s m
        )
     => v -> m (EvalTarget v)

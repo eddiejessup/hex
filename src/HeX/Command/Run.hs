@@ -23,57 +23,18 @@ import TFM (TFMError)
 import qualified Text.Megaparsec as P
 import Control.Monad.Trans.Writer.CPS as Wr
 
-type AppErrorE =
-  '[ BuildError
-   , Conf.ConfigError
-   , EvaluationError
-   , PathError
-   , HP.ExpansionError
-   , HP.ResolutionError
-   , TFMError
-   , HP.ParseError
-   , ByteError
-   , DVIError
-   ]
-
-type AppError
-  = Variant AppErrorE
-
-data FlatAppError
-  = FlatBuildError BuildError
-  | FlatConfigError Conf.ConfigError
-  | FlatEvaluationError EvaluationError
-  | FlatPathError PathError
-  | FlatExpansionError HP.ExpansionError
-  | FlatResolutionError HP.ResolutionError
-  | FlatTFMError TFMError
-  | FlatParseError HP.ParseError
-  | FlatByteError ByteError
-  | FlatDVIError DVIError
-  deriving stock Show
-
-flattenAppError :: AppError -> FlatAppError
-flattenAppError appError =
-  case errOrVoid of
-    Left err -> err
-  where
-    errOrVoid :: Either FlatAppError Void
-    errOrVoid = do
-      emptyV <- catchey FlatBuildError appError
-        >>= catchey FlatConfigError
-        >>= catchey FlatEvaluationError
-        >>= catchey FlatPathError
-        >>= catchey FlatExpansionError
-        >>= catchey FlatResolutionError
-        >>= catchey FlatTFMError
-        >>= catchey FlatParseError
-        >>= catchey FlatByteError
-        >>= catchey FlatDVIError
-      pure $ preposterous emptyV
-
-    catchey f v = case catch v of
-      Left other -> pure other
-      Right e -> throwError $ f e
+data AppError
+  = BuildError BuildError
+  | ConfigError Conf.ConfigError
+  | EvaluationError EvaluationError
+  | PathError PathError
+  | ExpansionError HP.ExpansionError
+  | ResolutionError HP.ResolutionError
+  | TFMError TFMError
+  | ParseError HP.ParseError
+  | ByteError ByteError
+  | DVIError DVIError
+  deriving stock (Show, Generic)
 
 newtype App a
   = App {unApp :: ExceptT AppError (StateT HP.ExpandingStream IO) a}
@@ -148,18 +109,17 @@ benchCatBS xs = case extractCharCat (Code.catLookup Code.usableCatCodes) xs of
 
 -- Expand.
 loopParser
-  :: forall m e a
+  :: forall m a
    . ( Monad m
-     , e `CouldBe` HP.ParseError
      )
-  => HP.SimpleParsecT HP.ExpandingStream (ExceptT (Variant e) m) a
+  => HP.SimpleParsecT HP.ExpandingStream (ExceptT AppError m) a
   -> HP.ExpandingStream
-  -> m (HP.ExpandingStream, Maybe (Variant e), [a])
+  -> m (HP.ExpandingStream, Maybe AppError, [a])
 loopParser parser s = do
   ((postLoopStream, mayErr), xs) <- Wr.runWriterT (go s)
   pure (postLoopStream, mayErr, xs)
   where
-    go :: HP.ExpandingStream -> Wr.WriterT [a] m (HP.ExpandingStream, Maybe (Variant e))
+    go :: HP.ExpandingStream -> Wr.WriterT [a] m (HP.ExpandingStream, Maybe AppError)
     go stream = do
       errOrA <- lift (runExceptT (HP.runSimpleRunParserT' parser stream))
       case errOrA of
@@ -173,16 +133,7 @@ loopParser parser s = do
             Nothing -> pure (stream, Nothing)
             Just _ -> go postParseStream
 
-flattenedLoopParser
-  :: Monad m
-  => HP.SimpleParsecT HP.ExpandingStream (ExceptT AppError m) a
-  -> HP.ExpandingStream
-  -> m (HP.ExpandingStream, Maybe FlatAppError, [a])
-flattenedLoopParser parser s = do
-  (postS, mayAppError, xs) <- loopParser parser s
-  pure (postS, flattenAppError <$> mayAppError, xs)
-
-renderLoopParserResult :: Show a => (FlatAppError, [a]) -> Either FlatAppError Text
+renderLoopParserResult :: Show a => (AppError, [a]) -> Either AppError Text
 renderLoopParserResult (errMsg, xs) =
     Left errMsg
     -- "Ended with message:\n\t \"" <> errMsg <> "\n\n" <> "Got results: " <> Tx.concat (intersperse "\n" (show <$> xs))
@@ -190,24 +141,23 @@ renderLoopParserResult (errMsg, xs) =
 expandingStreamAsPrimTokens
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Maybe FlatAppError, [HP.PrimitiveToken])
-expandingStreamAsPrimTokens = flattenedLoopParser P.anySingle
+  -> m (HP.ExpandingStream, Maybe AppError, [HP.PrimitiveToken])
+expandingStreamAsPrimTokens = loopParser P.anySingle
 
 -- Command.
 expandingStreamAsCommands
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Maybe FlatAppError, [HP.Command])
-expandingStreamAsCommands = flattenedLoopParser HP.parseCommand
+  -> m (HP.ExpandingStream, Maybe AppError, [HP.Command])
+expandingStreamAsCommands = loopParser HP.parseCommand
 
 runApp
   :: MonadIO m
   => HP.ExpandingStream
   -> App a
-  -> m (Either FlatAppError a)
+  -> m (Either AppError a)
 runApp s f = do
   liftIO (evalStateT (runExceptT $ unApp f) s)
-    <&> first flattenAppError
 
 -- Paragraph list.
 extractUnsetParaApp :: App HList
@@ -217,7 +167,7 @@ extractUnsetParaApp =
 renderStreamUnsetPara
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError Text)
+  -> m (Either AppError Text)
 renderStreamUnsetPara s =
   runApp s extractUnsetParaApp <&> \case
     Left err ->
@@ -229,7 +179,7 @@ renderStreamUnsetPara s =
 streamToParaBoxes
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError (Seq (Box HBox)))
+  -> m (Either AppError (Seq (Box HBox)))
 streamToParaBoxes s =
   do
   errOrBoxes <- runApp s $ do
@@ -244,7 +194,7 @@ streamToParaBoxes s =
 renderStreamSetPara
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError Text)
+  -> m (Either AppError Text)
 renderStreamSetPara s =
   streamToParaBoxes s <&> \case
     Left err ->
@@ -256,7 +206,7 @@ renderStreamSetPara s =
 renderStreamPageList
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError Text)
+  -> m (Either AppError Text)
 renderStreamPageList s =
   runApp s extractMainVList <&> \case
     Left err ->
@@ -268,13 +218,13 @@ renderStreamPageList s =
 streamToPages
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError (Seq Page, Conf.IntParamVal 'HP.Mag))
+  -> m (Either AppError (Seq Page, Conf.IntParamVal 'HP.Mag))
 streamToPages s = runApp s extractBreakAndSetVList
 
 renderStreamPages
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError Text)
+  -> m (Either AppError Text)
 renderStreamPages s =
   streamToPages s <&> \case
     Left err ->
@@ -286,7 +236,7 @@ renderStreamPages s =
 streamToSemanticDVI
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError (Seq Instruction, Conf.IntParamVal 'HP.Mag))
+  -> m (Either AppError (Seq Instruction, Conf.IntParamVal 'HP.Mag))
 streamToSemanticDVI s =
   streamToPages s <&> \case
     Left err ->
@@ -297,7 +247,7 @@ streamToSemanticDVI s =
 renderStreamSemanticDVI
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError Text)
+  -> m (Either AppError Text)
 renderStreamSemanticDVI s =
   streamToSemanticDVI s <&> \case
     Left err ->
@@ -309,7 +259,7 @@ renderStreamSemanticDVI s =
 streamToRawDVI
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError (Seq EncodableInstruction))
+  -> m (Either AppError (Seq EncodableInstruction))
 streamToRawDVI s =
   streamToSemanticDVI s >>= \case
     Left err ->
@@ -318,14 +268,14 @@ streamToRawDVI s =
       let magInt = Quantity.unInt $ Conf.unIntParam mag
       in case runExcept @AppError (parseInstructions semDVI magInt) of
         Left err ->
-          pure $ Left $ flattenAppError err
+          pure $ Left $ err
         Right rawDVI ->
           pure $ Right rawDVI
 
 renderStreamRawDVI
   :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError Text)
+  -> m (Either AppError Text)
 renderStreamRawDVI s =
   streamToRawDVI s <&> \case
     Left err -> Left err
@@ -334,7 +284,7 @@ renderStreamRawDVI s =
 -- DVI byte strings.
 streamToDVIBytes :: MonadIO m
   => HP.ExpandingStream
-  -> m (Either FlatAppError ByteString)
+  -> m (Either AppError ByteString)
 streamToDVIBytes s =
   streamToRawDVI s <&> \case
     Left err -> Left err

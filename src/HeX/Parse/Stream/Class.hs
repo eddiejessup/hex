@@ -70,25 +70,26 @@ insertLexToken s t =
         (tokenSourceLens . L.C.head1 . G.P.typed @(Seq Lex.Token))
         (L.cons t)
 
-
--- Error types we will assume all TeX streams might throw.
-type TeXStreamE =
-   '[ EvaluationError
-    , ConfigError
-    , ParseError
-    , ResolutionError
-    ]
+type AsTeXParseErrors e =
+  ( AsType EvaluationError e
+  , AsType ConfigError e
+  , AsType ParseError e
+  , AsType ResolutionError e
+  )
 
 type SimpleParsecT s m a = P.ParsecT Void s m a
 
-type TeXParseable s e m = ( Monad m
-                          , MonadErrorVariant e m
-                          , e `CouldBeAnyOf` TeXStreamE
-                          , P.Stream s m
-                          , P.Token s ~ PrimitiveToken
-                          , TeXStream s
-                          , Readable s
-                          )
+type TeXParseable s e m =
+    ( Monad m
+
+    , MonadError e m
+    , AsTeXParseErrors e
+
+    , P.Stream s m
+    , P.Token s ~ PrimitiveToken
+    , TeXStream s
+    , Readable s
+    )
 
 simpleRunParserT'
     :: Monad m
@@ -117,8 +118,8 @@ simpleRunParserT' parser stream =
         }
 
 runSimpleRunParserT'
-    :: ( MonadErrorVariant e m
-       , e `CouldBe` ParseError
+    :: ( MonadError e m
+       , AsType ParseError e
        , Readable (P.Token s)
        )
     => P.ParsecT Void s m a
@@ -129,7 +130,7 @@ runSimpleRunParserT' parser stream =
         (resultStream, Right a) ->
             pure (resultStream, a)
         (_, Left err) ->
-            throwM $ ParseError $ describe err
+            throwError $ injectTyped $ ParseError $ describe err
 
 type TeXParser s e m a = TeXParseable s e m => SimpleParsecT s m a
 
@@ -625,7 +626,8 @@ withJust a k =
         Just x -> k x
 
 fetchResolvedToken
-    :: ( MonadErrorAnyOf e m '[ResolutionError]
+    :: ( MonadError e m
+       , AsType ResolutionError e
        , TeXStream s
        )
     => s
@@ -637,7 +639,7 @@ fetchResolvedToken stream =
             do
             let lkp cs = lookupCS cs $ L.view configLens newStream
             rt <- note
-                (throw $ ResolutionError $ "Could not resolve lex token: " <> describe lt)
+                (injectTyped $ ResolutionError $ "Could not resolve lex token: " <> describe lt)
                 $ resolveToken lkp (L.view resolutionModeLens newStream) lt
             pure $ Just (lt, rt, newStream)
 

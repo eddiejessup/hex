@@ -105,7 +105,7 @@ addInstruction :: ParseState -> EncodableInstruction -> ParseState
 addInstruction s@ParseState {instrs} i = s {instrs = instrs :|> i}
 
 parseMundaneInstruction
-  :: MonadErrorAnyOf e m '[ByteError, DVIError, PathError]
+  :: (MonadError e m, AsType ByteError e, AsType DVIError e, AsType PathError e)
   => ParseState
   -> Instruction
   -> m ParseState
@@ -167,7 +167,7 @@ parseMundaneInstruction st = \case
     in pure st' {stackDepth = pred $ stackDepth st'}
 
 parseMundaneInstructions
-  :: MonadErrorAnyOf e m '[ByteError, DVIError, PathError]
+  :: (MonadError e m, AsType ByteError e, AsType DVIError e, AsType PathError e)
   => Int
   -> Seq Instruction
   -> m ParseState
@@ -176,7 +176,7 @@ parseMundaneInstructions mag _instrs = do
   pure $ addInstruction st endPageInstruction
 
 parseInstructions
-  :: MonadErrorAnyOf e m '[ByteError, DVIError, PathError]
+  :: (MonadError e m, AsType ByteError e, AsType DVIError e, AsType PathError e)
   => Seq Instruction
   -> Int
   -> m (Seq EncodableInstruction)

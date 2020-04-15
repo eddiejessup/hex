@@ -39,8 +39,9 @@ newNonExpandingStream maybePath cs =
         , nesResolutionMode = Resolving
         }
 
-instance ( MonadErrorAnyOf e m TeXStreamE
-         , e `CouldBe` NonExpandingStreamError
+instance ( MonadError e m
+         , AsTeXParseErrors e
+         , AsType NonExpandingStreamError e
          ) => P.Stream NonExpandingStream m where
     type Token NonExpandingStream = PrimitiveToken
 
@@ -113,7 +114,7 @@ data NonExpandingStreamError
     deriving stock (Show)
 
 nesFetchAndExpandToken
-    :: (MonadErrorAnyOf e m TeXStreamE, e `CouldBe` NonExpandingStreamError)
+    :: (MonadError e m, AsTeXParseErrors e, AsType NonExpandingStreamError e)
 
     => NonExpandingStream
     -> m (Maybe (Seq Lex.Token, PrimitiveToken, NonExpandingStream))
@@ -123,4 +124,4 @@ nesFetchAndExpandToken stream =
             PrimitiveToken pt ->
                 pure $ Just (singleton lt, pt, newStream)
             SyntaxCommandHeadToken c ->
-                throwM $ SawSyntaxCommandHeadToken c
+                throwError $ injectTyped $ SawSyntaxCommandHeadToken c

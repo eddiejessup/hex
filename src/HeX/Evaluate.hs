@@ -22,7 +22,9 @@ class TeXEvaluable a where
 
     texEvaluate
         :: ( MonadReader Config m
-           , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+           , MonadError e m
+           , AsType EvaluationError e
+           , AsType ConfigError e
            )
         => a
         -> m (EvalTarget a)
@@ -46,7 +48,9 @@ instance TeXEvaluable AST.TokenListAssignmentTarget where
 signedTeXEval
     :: (TeXEvaluable a
        , MonadReader Config m
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
        , Num (EvalTarget a)
        )
     => T.Signed a
@@ -97,12 +101,14 @@ instance TeXEvaluable AST.EightBitTeXInt where
         texEvaluate n >>= toEightBit
       where
         toEightBit tn@(TeXInt i) =
-            note (throw (EvaluationError ("TeXInt not in range: " <> show tn)))
+            note (injectTyped (EvaluationError ("TeXInt not in range: " <> show tn)))
             (newEightBitInt i)
 
 getRegisterIdx
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
        )
     => AST.EightBitTeXInt
     -> (EightBitInt -> Config -> a)
@@ -130,7 +136,7 @@ instance TeXEvaluable AST.CodeTableRef where
     texEvaluate (AST.CodeTableRef q n) =
         do
         idxInt <- texEvaluate n
-        idxChar <- note (throw (EvaluationError ("Outside range: " <> show idxInt)))
+        idxChar <- note (injectTyped (EvaluationError ("Outside range: " <> show idxInt)))
             (fromTeXInt idxInt)
         conf <- ask
         let
@@ -139,7 +145,7 @@ instance TeXEvaluable AST.CodeTableRef where
 
             lookupFromHashMap :: forall v. TeXCode v => (Scope -> HashMap.HashMap CharCode v) -> Maybe TeXInt
             lookupFromHashMap getMap = toTeXInt <$> scopedMapLookup getMap idxChar conf
-        note (throw (EvaluationError "err")) $ case q of
+        note (injectTyped (EvaluationError "err")) $ case q of
             T.CategoryCodeType            -> lookupFromHashMap catCodes
             T.MathCodeType                -> lookupFrom mathCodes
             T.ChangeCaseCodeType Upward   -> lookupFrom uppercaseCodes
@@ -581,7 +587,7 @@ instance TeXEvaluable AST.CharCodeRef where
         AST.CharCodeNrRef n -> texEvaluate n >>= noteRange
       where
         noteRange x =
-            note (throw (EvaluationError ("TeXInt not in range: " <> show x)))
+            note (injectTyped (EvaluationError ("TeXInt not in range: " <> show x)))
             (fromTeXInt x)
 instance TeXEvaluable AST.BoxSpecification where
     type EvalTarget AST.BoxSpecification = B.DesiredLength
@@ -593,7 +599,9 @@ instance TeXEvaluable AST.BoxSpecification where
 
 evaluateFontSpecification
     :: ( MonadReader Config m
-       , MonadErrorAnyOf e m '[EvaluationError, ConfigError]
+       , MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
        )
     => Length
     -> AST.FontSpecification
