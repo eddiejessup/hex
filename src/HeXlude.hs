@@ -7,6 +7,9 @@ module Hexlude
     , module Data.Sequence
 
     , module Data.Generics.Sum.Typed
+    , module Data.Generics.Product.Typed
+
+    , module Control.Lens
 
     , field
 
@@ -31,13 +34,15 @@ module Hexlude
 where
 
 import           Prelude                   (id)
-import           Protolude                 hiding (group, catch)
+import           Protolude                 hiding (group, catch, to)
 
 import           Control.Arrow             ((>>>))
+import           Control.Lens              ((^.), (%~), view, to)
 import           Data.Generics.Product     (field)
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)
 import qualified Data.Sequence             as Seq
 import           Debug.Readable            as Readable
+import           Data.Generics.Product.Typed
 import           Data.Generics.Sum.Typed
 
 atEith :: (MonadError Text m, Show a) => Text -> [a] -> Int -> m a

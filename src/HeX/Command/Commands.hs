@@ -32,7 +32,7 @@ glueToElem g =
     BL.ListGlue <$> evalOnConfState g
 
 ruleToElem
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadError e m, AsType EvaluationError e, AsType ConfigError e
        )
     => HP.Rule
@@ -59,18 +59,18 @@ ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD 
 --    \lineskip
 -- Then set \prevdepth to the depth of the new box.
 addVListElem
-    :: MonadState Config m
+    :: (MonadState st m, HasType Config st)
     => BL.VList
     -> BL.VListElem
     -> m BL.VList
 addVListElem (BL.VList accSeq) = \case
     e@(BL.VListBaseElem (B.ElemBox b)) ->
         do
-        _prevDepth <- gets $ lookupSpecialLength HP.PrevDepth
-        BL.Glue blineLength blineStretch blineShrink <- gets $ lookupGlueParameter HP.BaselineSkip
-        skipLimit <- gets $ lookupLengthParameter HP.LineSkipLimit
-        skip <- gets $ lookupGlueParameter HP.LineSkip
-        modify $ setSpecialLength HP.PrevDepth $ naturalDepth e
+        _prevDepth <- gets $ lookupSpecialLength HP.PrevDepth . getTyped @Config
+        BL.Glue blineLength blineStretch blineShrink <- gets $ lookupGlueParameter HP.BaselineSkip . getTyped @Config
+        skipLimit <- gets $ lookupLengthParameter HP.LineSkipLimit . getTyped @Config
+        skip <- gets $ lookupGlueParameter HP.LineSkip . getTyped @Config
+        modify $ typed @Config %~ setSpecialLength HP.PrevDepth (naturalDepth e)
         pure $ BL.VList $ if _prevDepth <= -oneKPt
             then
                 accSeq :|> e
@@ -177,7 +177,7 @@ vModeAddRule rule =
 -- Horizontal mode commands.
 
 characterBox
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadError e m
        , AsType ConfigError e
        )
@@ -196,7 +196,7 @@ characterBox char = do
                      }
 
 spaceGlue
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadError e m
        , AsType ConfigError e
        )
@@ -213,7 +213,8 @@ spaceGlue = do
 -- Mode independent.
 
 loadFont
-    :: ( MonadState Config m
+    :: ( MonadState st m
+       , HasType Config st
        , MonadIO m
        , MonadError e m
        , AsType D.Path.PathError e
@@ -247,8 +248,8 @@ loadFont (HP.TeXFilePath path) fontSpec = do
                           , B.fontName           = fontName
                           }
 
-selectFont :: MonadState Config m => TeXInt -> HP.GlobalFlag -> m ()
-selectFont n globalFlag = modify $ selectFontNr n globalFlag
+selectFont :: (MonadState st m, HasType Config st) => TeXInt -> HP.GlobalFlag -> m ()
+selectFont n globalFlag = modify $ typed @Config %~ selectFontNr n globalFlag
 
 getFileStream :: Map.Map FourBitInt Handle -> TeXInt -> Maybe Handle
 getFileStream strms (TeXInt n) = do

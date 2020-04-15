@@ -171,7 +171,7 @@ data FindFilePolicy
     | WithImplicitExtension Text
 
 findFilePath
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadIO m
        , MonadError e m
        , AsType ConfigError e
@@ -183,7 +183,7 @@ findFilePath
     -> m (Path Abs File)
 findFilePath findPolicy extraPaths p =
     do
-    dirs <- asks searchDirectories <&> (<> extraPaths)
+    dirs <- asks $ view $ typed @Config . field @"searchDirectories" . to (<> extraPaths)
     getTgtPath
         >>= Path.IO.findFile dirs
         >>= note (injectTyped $ ConfigError $ "Could not find file: " <> show p)
@@ -200,7 +200,7 @@ data FontInfo =
     FontInfo { fontMetrics :: TexFont, hyphenChar, skewChar :: TeXInt }
 
 readFontInfo
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadIO m
        , MonadError e m
        , AsType TFM.TFMError e
@@ -209,33 +209,34 @@ readFontInfo
     -> m FontInfo
 readFontInfo fontPath = do
     fontMetrics <- TFM.readTFMFancy fontPath
-    hyphenChar <- asks $ lookupTeXIntParameter DefaultHyphenChar
-    skewChar <- asks $ lookupTeXIntParameter DefaultSkewChar
+    hyphenChar <- asks $ lookupTeXIntParameter DefaultHyphenChar . getTyped @Config
+    skewChar <- asks $ lookupTeXIntParameter DefaultSkewChar . getTyped @Config
     pure FontInfo { fontMetrics, hyphenChar, skewChar }
 
 lookupFontInfo
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadError e m
        , AsType ConfigError e
        )
     => TeXInt
     -> m FontInfo
-lookupFontInfo fNr = (!? fNr) <$> asks fontInfos
-    >>= note (injectTyped (ConfigError "No such font number"))
+lookupFontInfo fNr = do
+    mayInfo <- asks $ view $ typed @Config . field @"fontInfos" . to (!? fNr)
+    note (injectTyped (ConfigError "No such font number")) mayInfo
 
-addFont :: MonadState Config m => FontInfo -> m TeXInt
+addFont :: (MonadState st m, HasType Config st) => FontInfo -> m TeXInt
 addFont newInfo = do
-    infos <- gets fontInfos
+    infos <- gets $ fontInfos . getTyped @Config
     let newKey = case Map.lookupMax infos of
             Nothing     -> 0
             Just (i, _) -> succ i
         newInfos = Map.insert newKey newInfo infos
-    modify (\conf -> conf { fontInfos = newInfos })
+    modify $ typed @Config . field @"fontInfos" .~ newInfos
     pure newKey
 
-modifyFont :: MonadState Config m => TeXInt -> (FontInfo -> FontInfo) -> m ()
-modifyFont fNr f = modify (\c@Config{fontInfos} ->
-                           c { fontInfos = Map.adjust f fNr fontInfos })
+modifyFont :: (MonadState st m, HasType Config st) => TeXInt -> (FontInfo -> FontInfo) -> m ()
+modifyFont fNr f =
+    modify $ typed @Config . field @"fontInfos" %~ Map.adjust f fNr
 
 -- Special quantities.
 
@@ -375,13 +376,14 @@ lookupCurrentFontNr :: Config -> Maybe TeXInt
 lookupCurrentFontNr = scopedLookup currentFontNr
 
 mLookupCurrentFontNr
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadError e m
        , AsType ConfigError e
        )
     => m TeXInt
-mLookupCurrentFontNr =
-    asks lookupCurrentFontNr >>= note (injectTyped $ ConfigError "Font number isn't set")
+mLookupCurrentFontNr = do
+    mayFNr <- asks $ lookupCurrentFontNr . getTyped @Config
+    note (injectTyped $ ConfigError "Font number isn't set") mayFNr
 
 selectFontNr :: TeXInt -> GlobalFlag -> Config -> Config
 selectFontNr n globalFlag c@Config{ globalScope, groups } =
@@ -405,15 +407,15 @@ setFamilyMemberFont
 setFamilyMemberFont = insertKey (G.P.field @"familyMemberFonts")
 
 lookupFontFamilyMember
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadError e m
        , AsType ConfigError e
        )
     => (FontRange, TeXInt)
     -> m TeXInt
-lookupFontFamilyMember k =
-    asks (scopedMapLookup familyMemberFonts k)
-        >>= note (injectTyped $ ConfigError $ "Family member undefined: " <> show k)
+lookupFontFamilyMember k = do
+    mayMember <- asks $ view $ typed @Config . to (scopedMapLookup familyMemberFonts k)
+    note (injectTyped $ ConfigError $ "Family member undefined: " <> show k) mayMember
 
 -- Control sequences.
 lookupCS :: Lex.ControlSequenceLike -> Config -> Maybe ResolvedToken
@@ -446,7 +448,8 @@ updateCharCodeMap
     :: ( MonadError e m
        , AsType ConfigError e
 
-       , MonadState Config m
+       , MonadState st m
+       , HasType Config st
        )
     => CodeType
     -> Code.CharCode
@@ -470,7 +473,7 @@ updateCharCodeMap t c n globalFlag = do
             noteConfigError $ Code.fromTeXInt n <&> insertKey (G.P.field @"spaceFactors") c
         DelimiterCodeType      ->
             noteConfigError $ Code.fromTeXInt n <&> insertKey (G.P.field @"delimiterCodes") c
-    modify $ insert globalFlag
+    modify $ typed @Config %~ insert globalFlag
   where
     noteConfigError :: (MonadError e m, AsType ConfigError e) => Maybe a -> m a
     noteConfigError =
@@ -613,7 +616,7 @@ setBoxRegisterNullable idx global = \case
 -- Scoped, but with unscoped references.
 
 currentFontInfo
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadError e m
        , AsType ConfigError e
        )
@@ -621,7 +624,7 @@ currentFontInfo
 currentFontInfo = mLookupCurrentFontNr >>= lookupFontInfo
 
 currentFontMetrics
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadError e m
        , AsType ConfigError e
        )

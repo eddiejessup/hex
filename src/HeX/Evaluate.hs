@@ -21,7 +21,8 @@ class TeXEvaluable a where
     type EvalTarget a
 
     texEvaluate
-        :: ( MonadReader Config m
+        :: ( MonadReader st m
+           , HasType Config st
            , MonadError e m
            , AsType EvaluationError e
            , AsType ConfigError e
@@ -47,7 +48,8 @@ instance TeXEvaluable AST.TokenListAssignmentTarget where
 
 signedTeXEval
     :: (TeXEvaluable a
-       , MonadReader Config m
+       , MonadReader st m
+      , HasType Config st
        , MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
@@ -105,7 +107,8 @@ instance TeXEvaluable AST.EightBitTeXInt where
             (newEightBitInt i)
 
 getRegisterIdx
-    :: ( MonadReader Config m
+    :: ( MonadReader st m
+       , HasType Config st
        , MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
@@ -116,19 +119,19 @@ getRegisterIdx
 getRegisterIdx n f =
     do
     en <- texEvaluate n
-    asks $ f en
+    asks $ view $ typed @Config . to (f en)
 
 instance TeXEvaluable AST.TeXIntVariable where
     type EvalTarget AST.TeXIntVariable = TeXInt
 
     texEvaluate = \case
-        AST.ParamVar p -> asks $ lookupTeXIntParameter p
+        AST.ParamVar p -> asks $ lookupTeXIntParameter p . getTyped @Config
         AST.RegisterVar n -> getRegisterIdx n lookupTeXIntRegister
 
 instance TeXEvaluable T.SpecialTeXInt where
     type EvalTarget T.SpecialTeXInt = TeXInt
 
-    texEvaluate p = asks $ lookupSpecialTeXInt p
+    texEvaluate p = asks $ lookupSpecialTeXInt p . getTyped @Config
 
 instance TeXEvaluable AST.CodeTableRef where
     type EvalTarget AST.CodeTableRef = TeXInt
@@ -138,7 +141,7 @@ instance TeXEvaluable AST.CodeTableRef where
         idxInt <- texEvaluate n
         idxChar <- note (injectTyped (EvaluationError ("Outside range: " <> show idxInt)))
             (fromTeXInt idxInt)
-        conf <- ask
+        conf <- asks $ getTyped @Config
         let
             lookupFrom :: TeXCode v => (Scope -> CharCodeMap v) -> Maybe TeXInt
             lookupFrom getMap = toTeXInt <$> scopedMapLookup getMap idxChar conf
@@ -158,7 +161,8 @@ instance TeXEvaluable AST.FontCharRef where
 
     texEvaluate (AST.FontCharRef fChar fontRef) =
         do
-        fontInfo <- texEvaluate fontRef >>= lookupFontInfo
+        eFontRef <- texEvaluate fontRef
+        fontInfo <- lookupFontInfo eFontRef
         pure $ case fChar of
             T.HyphenChar -> hyphenChar fontInfo
             T.SkewChar   -> skewChar fontInfo
@@ -223,7 +227,7 @@ instance TeXEvaluable AST.Unit where
         AST.PhysicalUnit AST.TrueFrame u -> pure $ inScaledPoint u
         AST.PhysicalUnit AST.MagnifiedFrame u ->
             do
-            _mag <- asks $ lookupTeXIntParameter T.Mag
+            _mag <- asks $ lookupTeXIntParameter T.Mag . getTyped @Config
             eU <- texEvaluate $ AST.PhysicalUnit AST.TrueFrame u
             pure $ eU * 1000 / fromIntegral _mag
 
@@ -251,13 +255,13 @@ instance TeXEvaluable AST.LengthVariable where
     type EvalTarget AST.LengthVariable = Length
 
     texEvaluate = \case
-        AST.ParamVar p -> asks $ lookupLengthParameter p
+        AST.ParamVar p -> asks $ lookupLengthParameter p . getTyped @Config
         AST.RegisterVar n -> getRegisterIdx n lookupLengthRegister
 
 instance TeXEvaluable T.SpecialLength where
     type EvalTarget T.SpecialLength = Length
 
-    texEvaluate p = asks $ lookupSpecialLength p
+    texEvaluate p = asks $ lookupSpecialLength p . getTyped @Config
 
 instance TeXEvaluable AST.FontDimensionRef where
     type EvalTarget AST.FontDimensionRef = Length
@@ -273,8 +277,8 @@ instance TeXEvaluable AST.BoxDimensionRef where
     texEvaluate (AST.BoxDimensionRef idx boxDim) =
         do
         eIdx <- texEvaluate idx
-        asks (lookupBoxRegister eIdx)
-        <&> maybe 0 (naturalLength boxDim)
+        mayBoxReg <- asks $ lookupBoxRegister eIdx . getTyped @Config
+        pure $ maybe 0 (naturalLength boxDim) mayBoxReg
 
 instance TeXEvaluable AST.CoercedLength where
     type EvalTarget AST.CoercedLength = Length
@@ -364,7 +368,7 @@ instance TeXEvaluable AST.GlueVariable where
     type EvalTarget AST.GlueVariable = BL.Glue Length
 
     texEvaluate = \case
-        AST.ParamVar p    -> asks $ lookupGlueParameter p
+        AST.ParamVar p    -> asks $ lookupGlueParameter p . getTyped @Config
         AST.RegisterVar n -> getRegisterIdx n lookupGlueRegister
 
 -- Math glue.
@@ -407,7 +411,7 @@ instance TeXEvaluable AST.MathGlueVariable where
     type EvalTarget AST.MathGlueVariable = BL.Glue MathLength
 
     texEvaluate = \case
-        AST.ParamVar p    -> asks $ lookupMathGlueParameter p
+        AST.ParamVar p    -> asks $ lookupMathGlueParameter p . getTyped @Config
         AST.RegisterVar n -> getRegisterIdx n lookupMathGlueRegister
 
 -- Token list.
@@ -416,7 +420,7 @@ instance TeXEvaluable AST.TokenListVariable where
     type EvalTarget AST.TokenListVariable = T.BalancedText
 
     texEvaluate = \case
-        AST.ParamVar p    -> asks $ lookupTokenListParameter p
+        AST.ParamVar p    -> asks $ lookupTokenListParameter p . getTyped @Config
         AST.RegisterVar n -> getRegisterIdx n lookupTokenListRegister
 
 -- Showing internal quantities.
@@ -537,7 +541,7 @@ instance TeXEvaluable AST.IfConditionHead where
             pure $ cc1 == cc2
         AST.IfTokensEqual (Lex.ControlSequenceToken cs1) (Lex.ControlSequenceToken cs2) ->
             do
-            conf <- ask
+            conf <- asks $ getTyped @Config
             let lkp cs = lookupCSProper cs conf
             -- Surprisingly, two undefined control sequences are considered equal,
             -- so we may compare the Maybe types.
@@ -598,7 +602,8 @@ instance TeXEvaluable AST.BoxSpecification where
         AST.Spread ln -> B.Spread <$> texEvaluate ln
 
 evaluateFontSpecification
-    :: ( MonadReader Config m
+    :: ( MonadReader st m
+       , HasType Config st
        , MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e

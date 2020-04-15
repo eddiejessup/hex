@@ -221,7 +221,7 @@ appendParagraph paraHList vList =
     HP.runConfState $ foldM addVListElem vList boxElems
 
 hListToParaLineBoxes
-    :: ( MonadReader Config m
+    :: ( MonadReader st m, HasType Config st
        , MonadError e m
        , AsType BuildError e
        )
@@ -229,9 +229,9 @@ hListToParaLineBoxes
     -> m (Seq (B.Box B.HBox))
 hListToParaLineBoxes hList =
     do
-    hSize <- asks $ LenParamVal . lookupLengthParameter HP.HSize
-    lineTol <- asks $ IntParamVal . lookupTeXIntParameter HP.Tolerance
-    linePen <- asks $ IntParamVal . lookupTeXIntParameter HP.LinePenalty
+    hSize <- asks $ LenParamVal . lookupLengthParameter HP.HSize . getTyped @Config
+    lineTol <- asks $ IntParamVal . lookupTeXIntParameter HP.Tolerance . getTyped @Config
+    linePen <- asks $ IntParamVal . lookupTeXIntParameter HP.LinePenalty . getTyped @Config
     case BL.breakAndSetParagraph hSize lineTol linePen hList of
         Left err -> throwError $ injectTyped $ BuildError err
         Right v -> pure v
