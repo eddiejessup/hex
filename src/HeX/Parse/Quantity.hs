@@ -66,22 +66,22 @@ parseNormalTeXInt =
 
 decCharToInt :: T.PrimitiveToken -> Maybe Int
 decCharToInt = \case
-    T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
+    T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
         Ascii.fromDecDigit $ Code.codeWord c
     _ ->
         Nothing
 
 hexCharToInt :: T.PrimitiveToken -> Maybe Int
 hexCharToInt = \case
-    T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
+    T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
         Ascii.fromUpHexDigit $ Code.codeWord c
-    T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
+    T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
         Ascii.fromUpHexAF $ Code.codeWord c
     _ -> Nothing
 
 octCharToInt :: T.PrimitiveToken -> Maybe Int
 octCharToInt = \case
-    T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
+    T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
         Ascii.fromOctDigit $ Code.codeWord c
     _ ->
         Nothing

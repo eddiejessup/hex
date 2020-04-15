@@ -11,7 +11,7 @@ data ExtensibleRecipe = ExtensibleRecipe
     , middle
     , bottom
     , repeater :: Int
-    } deriving (Show)
+    } deriving stock (Show)
 
 getExtensibleRecipe :: B.G.Get ExtensibleRecipe
 getExtensibleRecipe =

@@ -1,15 +1,15 @@
 module Main where
 
-import Control.Monad (when)
-import qualified Data.ByteString.Lazy as BS.L
-import qualified Data.Sequence as Seq
-import Hex.Command.Run
-import qualified Hex.Config.Codes as Code
-import Hex.Parse (newExpandStream)
-import Hexlude
-import qualified Path
-import qualified Path.IO
-import qualified System.Console.GetOpt as Opt
+-- import Control.Monad (when)
+-- import qualified Data.ByteString.Lazy as BS.L
+-- import qualified Data.Sequence as Seq
+-- import Hex.Command.Run
+-- import qualified Hex.Config.Codes as Code
+-- import Hex.Parse (newExpandStream)
+-- import Hexlude
+-- import qualified Path
+-- import qualified Path.IO
+-- import qualified System.Console.GetOpt as Opt
 
 -- data Mode
 --   = CatMode

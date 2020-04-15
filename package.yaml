@@ -12,7 +12,6 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/eddiejessup/hex#readme>
 
 dependencies:
-# - ascii
 - base
 - binary
 - bytestring
@@ -34,7 +33,6 @@ dependencies:
 - text
 - transformers
 - unordered-containers
-# - witherable
 - pretty-simple
 - vector
 - hspec
@@ -52,14 +50,15 @@ ghc-options:
 - -Wno-warnings-deprecations
 - -Wno-incomplete-patterns
 - -Wno-incomplete-uni-patterns
+- -Wmissing-deriving-strategies
 - -O0
 - +RTS -A128m -n2m -RTS
 - -j
 
 executables:
-  hex:
-    main:                Hex.hs
-    source-dirs:         hex
+  app:
+    main:                App.hs
+    source-dirs:         app
     ghc-options:
     - -threaded
     - -rtsopts
@@ -67,9 +66,9 @@ executables:
     dependencies:
     - hex
 
-  bench:
-    main:                Bench.hs
-    source-dirs:         bench
+  repl:
+    main:                Repl.hs
+    source-dirs:         repl
     ghc-options:
     - -threaded
     - -rtsopts

@@ -226,9 +226,9 @@ parseCommand =
 
     headToParseCharCodeRef = \case
         -- Add character.
-        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
+        T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
             pure $ CharRef c
-        T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
+        T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c Code.Other)) ->
             pure $ CharRef c
         T.IntRefTok T.CharQuantity i ->
             pure $ CharTokenRef i

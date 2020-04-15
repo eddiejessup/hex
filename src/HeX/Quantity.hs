@@ -60,7 +60,7 @@ data PhysicalUnit
     | Didot -- 'dd'
     | Cicero -- 'cc'
     | ScaledPoint -- 'sp'
-    deriving (Show)
+    deriving stock (Show)
 
 instance Readable PhysicalUnit where
     describe = \case

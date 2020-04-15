@@ -13,7 +13,7 @@ import Path (Path)
 import qualified Path
 
 data Rule = Rule {ruleWidth, ruleHeight, ruleDepth :: Length}
-  deriving Show
+  deriving stock Show
 
 instance Dimensioned Rule where
 
@@ -24,7 +24,7 @@ instance Dimensioned Rule where
 
 data Character
   = Character {char :: CharCode, charWidth, charHeight, charDepth :: Length}
-  deriving Show
+  deriving stock Show
 
 instance Dimensioned Character where
 
@@ -46,14 +46,14 @@ data FontDefinition
       , fontName :: Text
       , fontNr :: TeXInt
       }
-  deriving Show
+  deriving stock Show
 
 instance Readable FontDefinition where
 
   describe v = "Font at " <> show (fontPath v)
 
 newtype FontSelection = FontSelection TeXInt
-  deriving Show
+  deriving stock Show
 
 instance Readable FontSelection where
 
@@ -69,7 +69,7 @@ data Instruction
   | PushStack
   | PopStack
   -- \| DoSpecial !Text
-  deriving Show
+  deriving stock Show
 
 instance Readable Instruction where
 

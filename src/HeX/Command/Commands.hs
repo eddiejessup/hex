@@ -264,7 +264,7 @@ showLexTok = \case
 
 showPrimTok :: HP.PrimitiveToken -> Seq CharCode
 showPrimTok = \case
-    HP.UnexpandedTok t -> showLexTok t
+    HP.UnresolvedTok t -> showLexTok t
     pt                 -> Seq.fromList $ unsafeCodesFromChars (show pt)
 
 showBalancedText :: HP.BalancedText -> Seq CharCode

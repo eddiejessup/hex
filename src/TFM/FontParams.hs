@@ -16,12 +16,12 @@ data FontParams = FontParams
     , quad
     , extraSpace :: Rational
     , extraParams :: Maybe ExtraFontParams
-    } deriving (Show)
+    } deriving stock (Show)
 
 data ExtraFontParams
     = MathSymbolFontParams MathSymbolParams
     | MathExtensionFontParams MathExtensionParams
-     deriving (Show)
+     deriving stock (Show)
 
 data MathSymbolParams = MathSymbolParams
     { num1
@@ -39,7 +39,7 @@ data MathSymbolParams = MathSymbolParams
     , delim1
     , delim2
     , axisHeight :: Rational
-    } deriving (Show)
+    } deriving stock (Show)
 
 data MathExtensionParams = MathExtensionParams
     { defaultRuleThickness
@@ -48,7 +48,7 @@ data MathExtensionParams = MathExtensionParams
     , bigOpSpacing3
     , bigOpSpacing4
     , bigOpSpacing5 :: Rational
-    } deriving (Show)
+    } deriving stock (Show)
 
 readMathSymbolParams :: B.G.Get MathSymbolParams
 readMathSymbolParams = MathSymbolParams

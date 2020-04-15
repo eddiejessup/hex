@@ -93,30 +93,30 @@ seqMapMaybe f = Seq.fromList . mapMaybe f . toList
 data HDirection
     = Leftward
     | Rightward
-    deriving (Show, Eq)
+    deriving stock (Show, Eq)
 
 data VDirection
     = Upward
     | Downward
-    deriving (Show, Eq)
+    deriving stock (Show, Eq)
 
 data Direction
     = Forward
     | Backward
-    deriving (Show, Eq)
+    deriving stock (Show, Eq)
 
 data Axis
     = Horizontal
     | Vertical
-    deriving (Show, Eq)
+    deriving stock (Show, Eq)
 
 data MoveMode
     = Put
     | Set
-    deriving (Show)
+    deriving stock (Show)
 
 data BoxDim
      = BoxWidth
      | BoxHeight
      | BoxDepth
-     deriving (Show, Eq)
+     deriving stock (Show, Eq)

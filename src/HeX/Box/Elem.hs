@@ -14,20 +14,21 @@ import Hex.Quantity
 import Hexlude
 
 data DesiredLength = Natural | Spread Length | To Length
-  deriving Show
+  deriving stock Show
 
 newtype Kern = Kern {kernDimen :: Length}
-  deriving Show
+  deriving stock Show
 
 newtype SetGlue a = SetGlue {glueDimen :: a}
-  deriving Show
+  deriving stock Show
 
 instance Readable (SetGlue Length) where
 
   describe SetGlue {glueDimen} = "Glue<" <> showSP glueDimen <> ">"
 
 newtype HBox = HBox (Seq HBoxElem)
-  deriving (Show, Semigroup, Monoid)
+  deriving stock Show
+  deriving newtype (Semigroup, Monoid)
 
 instance Readable HBox where
 
@@ -42,7 +43,7 @@ instance Readable HBox where
 
 -- Just used to show an HList more compactly.
 data Sentential a = Sentence Text | NonSentence a
-  deriving (Show, Functor, Foldable)
+  deriving stock (Show, Functor, Foldable)
 
 instance Readable a => Readable (Sentential a) where
 
@@ -65,7 +66,8 @@ condenseChary elems toMaybeChar = foldl' append mempty elems
         r :|> NonSentence e
 
 newtype VBox = VBox (Seq VBoxElem)
-  deriving (Show, Semigroup, Monoid)
+  deriving stock (Show)
+  deriving newtype (Semigroup, Monoid)
 
 instance Readable VBox where
 
@@ -75,10 +77,10 @@ instance Readable VBox where
 data BoxContents
   = HBoxContents HBox
   | VBoxContents VBox
-  deriving Show
+  deriving stock Show
 
 data Box a = Box {contents :: a, boxWidth, boxHeight, boxDepth :: Length}
-  deriving (Show, Functor, Foldable)
+  deriving stock (Show, Functor, Foldable)
 
 instance Dimensioned (Box BoxContents) where
 
@@ -93,7 +95,7 @@ data BaseElem
   | ElemFontDefinition DVI.D.FontDefinition
   | ElemFontSelection DVI.D.FontSelection
   | ElemKern Kern
-  deriving Show
+  deriving stock Show
 
 spacerNaturalLength :: Axis -> BoxDim -> Length -> Length
 spacerNaturalLength ax dim d = case (ax, dim) of
@@ -110,7 +112,7 @@ axisBaseElemNaturalLength ax dim e = case e of
   ElemKern k -> spacerNaturalLength ax dim $ kernDimen k
 
 data VBoxElem = VBoxBaseElem BaseElem | BoxGlue (SetGlue Length)
-  deriving Show
+  deriving stock Show
 
 axisVBoxElemNaturalLength :: Axis -> BoxDim -> VBoxElem -> Length
 axisVBoxElemNaturalLength ax dim e = case e of
@@ -123,14 +125,14 @@ instance Dimensioned VBoxElem where
 
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 newtype HBaseElem = ElemCharacter DVI.D.Character
-  deriving Show
+  deriving stock Show
 
 instance Dimensioned HBaseElem where
 
   naturalLength dim (ElemCharacter c) = naturalLength dim c
 
 data HBoxElem = HVBoxElem VBoxElem | HBoxHBaseElem HBaseElem
-  deriving Show
+  deriving stock Show
 
 instance Dimensioned HBoxElem where
 
@@ -139,7 +141,7 @@ instance Dimensioned HBoxElem where
   naturalLength dim (HBoxHBaseElem e) = naturalLength dim e
 
 newtype Page = Page (Box VBox)
-  deriving Show
+  deriving stock Show
 
 -- Display
 instance Readable BaseElem where

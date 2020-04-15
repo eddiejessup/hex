@@ -5,7 +5,7 @@ import Hexlude
 
 -- Flex.
 data GlueFlex = GlueFlex {factor :: Rational, order :: Int}
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
 instance Readable GlueFlex where
 
@@ -43,9 +43,9 @@ filFlex = GlueFlex 1 1
 data Glue a
   = Glue {dimen :: a, stretch :: GlueFlex, shrink :: GlueFlex}
 
-deriving instance Show a => Show (Glue a)
+deriving stock instance Show a => Show (Glue a)
 
-deriving instance Eq a => Eq (Glue a)
+deriving stock instance Eq a => Eq (Glue a)
 
 negateGlue :: Num a => Glue a -> Glue a
 negateGlue (Glue d str shr) = Glue (-d) str shr

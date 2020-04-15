@@ -1,39 +1,32 @@
 module Main where
 
-import Control.Monad (when)
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BS.L
+import Hex.Categorise
 import Hex.Command.Run
-import Hex.Parse.Stream.Expanding (newExpandStream)
+import Hex.Lex
+import Hex.Resolve
+import Hex.Parse
 import Hexlude
-import qualified Path
-import qualified Path.IO
 import qualified System.Console.GetOpt as Opt
+import qualified Data.Text as Tx
+import System.IO (hSetBuffering, BufferMode(..))
+import qualified Data.Generics.Product as G.P
+import Control.Lens
+import qualified Data.List.NonEmpty as L.NE
 
 data Flag
   = Help
-  | Mode !Mode
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
 options :: [Opt.OptDescr Flag]
 options =
   [ Opt.Option ['h'] ["help"] (Opt.NoArg Help) "show usage information"
-  , Opt.Option ['m'] ["mode"] (Opt.OptArg mode "MODE") "output in mode MODE"
   ]
-  where
-    mode m =
-      Mode $
 
 usage :: Text
 usage = toS $ Opt.usageInfo header options
   where
-    header = "Usage: hex [OPTION...] [file]"
-
-preamble :: BS.L.ByteString
-preamble = "\\font\\thefont=cmr10 \\thefont\n\n"
-
-postamble :: BS.L.ByteString
-postamble = "\n\n\\end\n"
+    header = "Usage: hexrepl [OPTION...] [file]"
 
 parseArgs :: [Text] -> IO ([Flag], [Text])
 parseArgs argStr = case Opt.getOpt Opt.Permute options (toS <$> argStr) of
@@ -44,35 +37,81 @@ main :: IO ()
 main = do
   (flags, args) <- ((toS <$>) <$> getArgs) >>= parseArgs
   when (Help `elem` flags) $ panic usage
-  (inputRaw, maybePath) <-
-    case args of
-      ["-"] -> do
-        cs <- liftIO BS.L.getContents
-        pure (cs, Nothing)
-      [pathStr] -> do
-        path <- Path.IO.resolveFile' (toS pathStr)
-        cs <- BS.L.readFile (Path.toFilePath path)
-        pure (cs, Just path)
-      _ ->
-        panic "Please specify a file to execute, or '-' to read from the standard-input stream"
-  let input =
-        if Amble `elem` flags
-        then preamble <> inputRaw <> postamble
-        else inputRaw
-      makeStream = newExpandStream maybePath input
-      mode = lastDef DVIWriteMode [m | Mode m <- flags]
-  case mode of
-    CatMode -> runCat input
-    LexMode -> runLex input
-    ResolveMode -> runResolved input
-    ExpandMode -> makeStream >>= runExpand
-    CommandMode -> makeStream >>= runCommand
-    ParaListMode -> makeStream >>= runPara
-    ParaSetMode -> makeStream >>= runSetPara
-    PageListMode -> makeStream >>= runPageList
-    PageMode -> makeStream >>= runPages
-    DVIMode -> makeStream >>= runDVI
-    RawDVIMode -> makeStream >>= runDVIRaw
-    DVIWriteMode -> do
-      let destPathStr = lastDef "out.dvi" [f | Output f <- flags]
-      makeStream >>= codesToDVIBytes >>= BS.writeFile destPathStr
+  hSetBuffering stdout NoBuffering
+  putText "Welcome to Hex repl"
+  s <- newExpandStream Nothing mempty
+  evalStateT repl s
+
+putResult r = do
+  putText $ "Got result:\n\n" <> r
+
+prompt msg = do
+  liftIO $ putStr @Text (msg <> " $> ")
+  liftIO $ getLine
+
+promptLazyByteString msg = do
+  liftIO $ putStr @Text (msg <> " $> ")
+  liftIO $ (BS.L.fromStrict . encodeUtf8) <$> getLine
+
+repl :: (MonadState ExpandingStream m, MonadIO m) => m ()
+repl = do
+  cmd <- prompt "Enter command, one of: [cat, lex, resolve, expand, command]"
+  case cmd of
+    "cat" -> do
+      inpBSL <- promptLazyByteString "cat"
+      let charCats = usableCodesToCharCats inpBSL
+      putResult $ describeLined charCats
+    "lex" -> do
+      inpBSL <- promptLazyByteString "lex"
+      let lexTokens = usableCodesToLexTokens inpBSL
+      putResult $ describeLined lexTokens
+    "resolve" -> do
+      inpBSL <- promptLazyByteString "resolve"
+      let lexWithResolvedTokens = usableCodesToResolvedTokens inpBSL
+      let lns = lexWithResolvedTokens <&> \(lt, mayRt) ->
+            describe lt <> " <-> " <> maybe "[Nothing]" describe mayRt
+      putResult $ Tx.intercalate "\n" lns
+    "expand" -> do
+      inpBSL <- promptLazyByteString "expand"
+
+      s <- get
+
+      let sWithInput = s & G.P.field @"streamTokenSources" %~
+              (L.NE.cons (newTokenSource Nothing inpBSL))
+
+      -- TODO: Put back into state? What about version with input but before consuming?
+      (newS, mayErr, primToks) <- expandingStreamAsPrimTokens sWithInput
+
+      case primToks of
+        [] -> putText "Returned no results"
+        _ -> putResult $ describeLined primToks
+
+      flip traverse_ mayErr $ \err -> do
+        putText "Ended with error:"
+        putText $ show err
+        putText "Stream ended in state:"
+        putText $ describe newS
+
+    "command" -> do
+      inpBSL <- promptLazyByteString "command"
+
+      s <- get
+
+      let sWithInput = s & G.P.field @"streamTokenSources" %~
+              (L.NE.cons (newTokenSource Nothing inpBSL))
+
+      (newS, mayErr, commandToks) <- expandingStreamAsCommands sWithInput
+
+      case commandToks of
+        [] -> putText "Returned no results"
+        _ -> putResult $ describeLined commandToks
+
+      flip traverse_ mayErr $ \err -> do
+        putText "Ended with error:"
+        putText $ show err
+        putText "Stream ended in state:"
+        putText $ describe newS
+    _ ->
+      putText $ "Unrecognised command: " <> cmd
+  repl
+

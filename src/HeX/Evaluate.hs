@@ -29,7 +29,7 @@ class TeXEvaluable a where
 
 newtype EvaluationError
     = EvaluationError Text
-    deriving (Show)
+    deriving stock (Show)
 
 
 instance TeXEvaluable AST.TokenListAssignmentTarget where
@@ -457,22 +457,22 @@ instance TeXEvaluable AST.InternalQuantity where
 data IfBodyState
     = IfPreElse
     | IfPostElse
-    deriving (Show, Eq)
+    deriving stock (Show, Eq)
 
 data ConditionBlockTarget
     = IfBlockTarget IfBodyState
     | CaseBlockTarget TeXInt
-    deriving (Show)
+    deriving stock (Show)
 
 data CaseBodyState
     = CasePostOr
     | CasePostElse
-    deriving (Show)
+    deriving stock (Show)
 
 data ConditionBodyState
     = IfBodyState IfBodyState
     | CaseBodyState CaseBodyState
-    deriving (Show)
+    deriving stock (Show)
 
 instance TeXEvaluable AST.ConditionHead where
     type EvalTarget AST.ConditionHead = ConditionBlockTarget
@@ -561,13 +561,13 @@ instance TeXEvaluable AST.IfConditionHead where
         ordToComp EQ = (==)
 
         eqChars
-            (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c1 _)))
-            (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c2 _))) = c1 == c2
+            (T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c1 _)))
+            (T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c2 _))) = c1 == c2
         eqChars _ _ = True
 
         eqCats
-            (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat _ c1)))
-            (T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat _ c2))) = c1 == c2
+            (T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat _ c1)))
+            (T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat _ c2))) = c1 == c2
         eqCats _ _ = True
 
 -- Other.

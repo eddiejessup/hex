@@ -7,7 +7,6 @@ import DVI.Instruction (DVIError, EncodableInstruction)
 import Data.Byte (ByteError)
 import qualified Data.ByteString.Lazy as BS.L
 import Data.Path (PathError)
-import qualified Data.Text as Tx
 import Hex.Box
 import Hex.BreakList
 import Hex.Categorise
@@ -33,14 +32,52 @@ type AppErrorE =
    , HP.ResolutionError
    , TFMError
    , HP.ParseError
+   , ByteError
+   , DVIError
    ]
 
 type AppError
   = Variant AppErrorE
 
+data FlatAppError
+  = FlatBuildError BuildError
+  | FlatConfigError Conf.ConfigError
+  | FlatEvaluationError EvaluationError
+  | FlatPathError PathError
+  | FlatExpansionError HP.ExpansionError
+  | FlatResolutionError HP.ResolutionError
+  | FlatTFMError TFMError
+  | FlatParseError HP.ParseError
+  | FlatByteError ByteError
+  | FlatDVIError DVIError
+  deriving stock Show
+
+flattenAppError :: AppError -> FlatAppError
+flattenAppError appError =
+  case errOrVoid of
+    Left err -> err
+  where
+    errOrVoid :: Either FlatAppError Void
+    errOrVoid = do
+      emptyV <- catchey FlatBuildError appError
+        >>= catchey FlatConfigError
+        >>= catchey FlatEvaluationError
+        >>= catchey FlatPathError
+        >>= catchey FlatExpansionError
+        >>= catchey FlatResolutionError
+        >>= catchey FlatTFMError
+        >>= catchey FlatParseError
+        >>= catchey FlatByteError
+        >>= catchey FlatDVIError
+      pure $ preposterous emptyV
+
+    catchey f v = case catch v of
+      Left other -> pure other
+      Right e -> throwError $ f e
+
 newtype App a
   = App {unApp :: ExceptT AppError (StateT HP.ExpandingStream IO) a}
-  deriving
+  deriving newtype
     ( Functor
     , Applicative
     , Monad
@@ -48,9 +85,6 @@ newtype App a
     , MonadIO
     , MonadError AppError
     )
-
-usableCatLookup :: Code.CharCode -> Code.CatCode
-usableCatLookup = Code.catLookup Code.usableCatCodes
 
 data Mode
   = CatMode
@@ -65,7 +99,7 @@ data Mode
   | SemanticDVIMode
   | RawDVIMode
   | DVIBytesMode
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
 readMode :: (IsString s, Eq s) => s -> Maybe Mode
 readMode = \case
@@ -83,22 +117,22 @@ readMode = \case
     "bytes" -> Just DVIBytesMode
     _ -> Nothing
 
-renderWithMode :: Mode -> BS.L.ByteString -> IO Text
-renderWithMode mode input = case mode of
-    CatMode -> pure $ show $ codesToCharCats usableCatLookup input -- TODO: Render nicely.
-    LexMode -> pure $ show $ Hex.Lex.codesToLexTokens usableCatLookup input
-    ResolveMode -> pure $ show $ HP.codesToResolvedTokens usableCatLookup HP.defaultCSMap input
-    ExpandMode -> makeStream >>= expandingStreamAsPrimTokens <&> renderLoopParserResult
-    CommandMode -> makeStream >>= expandingStreamAsCommands <&> renderLoopParserResult
-    ParaListMode -> makeStream >>= renderStreamUnsetPara
-    ParaSetMode -> makeStream >>= renderStreamSetPara
-    PageListMode -> makeStream >>= renderStreamPageList
-    PageMode -> makeStream >>= renderStreamPages
-    SemanticDVIMode -> makeStream >>= renderStreamSemanticDVI
-    RawDVIMode -> makeStream >>= renderStreamRawDVI
-    DVIBytesMode -> panic "You probably don't want to render the DVI bytes as text"
-  where
-    makeStream = HP.newExpandStream Nothing input
+-- renderWithMode :: Mode -> BS.L.ByteString -> IO (Either AppError Text)
+-- renderWithMode mode input = case mode of
+--     CatMode -> pure $ Right $ show $ usableCodesToCharCats input -- TODO: Render nicely.
+--     LexMode -> pure $ Right $ show $ usableCodesToLexTokens input
+--     ResolveMode -> pure $ Right $ show $ HP.usableCodesToResolvedTokens input
+--     ExpandMode -> makeStream >>= expandingStreamAsPrimTokens <&> renderLoopParserResult
+--     CommandMode -> makeStream >>= expandingStreamAsCommands <&> renderLoopParserResult
+--     ParaListMode -> makeStream >>= renderStreamUnsetPara
+--     ParaSetMode -> makeStream >>= renderStreamSetPara
+--     PageListMode -> makeStream >>= renderStreamPageList
+--     PageMode -> makeStream >>= renderStreamPages
+--     SemanticDVIMode -> makeStream >>= renderStreamSemanticDVI
+--     RawDVIMode -> makeStream >>= renderStreamRawDVI
+--     DVIBytesMode -> panic "You probably don't want to render the DVI bytes as text"
+--   where
+--     makeStream = HP.newExpandStream Nothing input
 
 -- Cat
 benchCatBS
@@ -117,98 +151,191 @@ loopParser
   :: forall m e a
    . ( Monad m
      , e `CouldBe` HP.ParseError
-     , Show (Variant e)
      )
   => HP.SimpleParsecT HP.ExpandingStream (ExceptT (Variant e) m) a
   -> HP.ExpandingStream
-  -> m (Text, [a])
-loopParser parser s = Wr.runWriterT (go s)
+  -> m (HP.ExpandingStream, Maybe (Variant e), [a])
+loopParser parser s = do
+  ((postLoopStream, mayErr), xs) <- Wr.runWriterT (go s)
+  pure (postLoopStream, mayErr, xs)
   where
-    go :: HP.ExpandingStream -> Wr.WriterT [a] m Text
+    go :: HP.ExpandingStream -> Wr.WriterT [a] m (HP.ExpandingStream, Maybe (Variant e))
     go stream = do
       errOrA <- lift (runExceptT (HP.runSimpleRunParserT' parser stream))
       case errOrA of
         Left err ->
-          pure $ show err
-        Right (s1, c) -> do
-          Wr.tell [c]
-          go s1
+          pure (stream, Just err)
+        Right (postParseStream, a) -> do
+          Wr.tell [a]
+          -- Try to fetch a lex token. If we can, we have more input, so try to
+          -- parse some more. This won't always work, but it's a decent heuristic.
+          case HP.fetchLexToken postParseStream of
+            Nothing -> pure (stream, Nothing)
+            Just _ -> go postParseStream
 
-renderLoopParserResult :: Show a => (Text, [a]) -> Text
+flattenedLoopParser
+  :: Monad m
+  => HP.SimpleParsecT HP.ExpandingStream (ExceptT AppError m) a
+  -> HP.ExpandingStream
+  -> m (HP.ExpandingStream, Maybe FlatAppError, [a])
+flattenedLoopParser parser s = do
+  (postS, mayAppError, xs) <- loopParser parser s
+  pure (postS, flattenAppError <$> mayAppError, xs)
+
+renderLoopParserResult :: Show a => (FlatAppError, [a]) -> Either FlatAppError Text
 renderLoopParserResult (errMsg, xs) =
-    "Ended with message:\n\t \"" <> errMsg <> "\n\n" <> "Got results: " <> Tx.concat (intersperse "\n" (show <$> xs))
+    Left errMsg
+    -- "Ended with message:\n\t \"" <> errMsg <> "\n\n" <> "Got results: " <> Tx.concat (intersperse "\n" (show <$> xs))
 
-expandingStreamAsPrimTokens :: HP.ExpandingStream -> IO (Text, [HP.PrimitiveToken])
-expandingStreamAsPrimTokens = loopParser @IO @AppErrorE P.anySingle
+expandingStreamAsPrimTokens
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (HP.ExpandingStream, Maybe FlatAppError, [HP.PrimitiveToken])
+expandingStreamAsPrimTokens = flattenedLoopParser P.anySingle
 
 -- Command.
-expandingStreamAsCommands :: HP.ExpandingStream -> IO (Text, [HP.Command])
-expandingStreamAsCommands = loopParser @IO @AppErrorE HP.parseCommand
+expandingStreamAsCommands
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (HP.ExpandingStream, Maybe FlatAppError, [HP.Command])
+expandingStreamAsCommands = flattenedLoopParser HP.parseCommand
 
 runApp
-  :: HP.ExpandingStream
+  :: MonadIO m
+  => HP.ExpandingStream
   -> App a
-  -> IO a
-runApp s f = evalStateT (runExceptT $ unApp f) s >>= strEitherToIO
-  where
-    strEitherToIO = \case
-      Left err -> panic $ show err
-      Right v -> pure v
+  -> m (Either FlatAppError a)
+runApp s f = do
+  liftIO (evalStateT (runExceptT $ unApp f) s)
+    <&> first flattenAppError
 
 -- Paragraph list.
 extractUnsetParaApp :: App HList
 extractUnsetParaApp =
   (\(ParaResult _ hList) -> hList) <$> extractPara HP.Indent
 
-renderStreamUnsetPara :: HP.ExpandingStream -> IO Text
-renderStreamUnsetPara s = do
-  HList elemSeq <- runApp s extractUnsetParaApp
-  pure $ describeLined elemSeq
+renderStreamUnsetPara
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError Text)
+renderStreamUnsetPara s =
+  runApp s extractUnsetParaApp <&> \case
+    Left err ->
+      Left err
+    Right (HList elemSeq) ->
+      Right $ describeLined elemSeq
 
 -- Paragraph boxes.
-streamToParaBoxes :: HP.ExpandingStream -> IO (Seq (Box HBox))
+streamToParaBoxes
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError (Seq (Box HBox)))
 streamToParaBoxes s =
-  runApp s $ extractUnsetParaApp <&> hListToParaLineBoxes >>= readOnConfState
+  do
+  errOrBoxes <- runApp s $ do
+    hList <- extractUnsetParaApp
+    readOnConfState (hListToParaLineBoxes hList)
+  pure $ case errOrBoxes of
+    Left err ->
+      Left err
+    Right boxes ->
+      Right boxes
 
-renderStreamSetPara :: HP.ExpandingStream -> IO Text
-renderStreamSetPara s = streamToParaBoxes s <&> describeDoubleLined
+renderStreamSetPara
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError Text)
+renderStreamSetPara s =
+  streamToParaBoxes s <&> \case
+    Left err ->
+      Left err
+    Right boxes ->
+      Right $ describeDoubleLined boxes
 
 -- Pages list.
-renderStreamPageList :: HP.ExpandingStream -> IO Text
-renderStreamPageList s = do
-  MainVModeResult (VList vList) <- runApp s extractMainVList
-  pure $ describeLined vList
+renderStreamPageList
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError Text)
+renderStreamPageList s =
+  runApp s extractMainVList <&> \case
+    Left err ->
+      Left err
+    Right (MainVModeResult (VList vList)) ->
+      Right $ describeLined vList
 
 -- Pages boxes.
-streamToPages :: HP.ExpandingStream -> IO (Seq Page, Conf.IntParamVal 'HP.Mag)
+streamToPages
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError (Seq Page, Conf.IntParamVal 'HP.Mag))
 streamToPages s = runApp s extractBreakAndSetVList
 
-renderStreamPages :: HP.ExpandingStream -> IO Text
-renderStreamPages s = streamToPages s <&> fst <&> describeLined
+renderStreamPages
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError Text)
+renderStreamPages s =
+  streamToPages s <&> \case
+    Left err ->
+      Left err
+    Right (pages, _mag) ->
+      Right $ describeLined pages
 
 -- DVI instructions.
-streamToSemanticDVI :: HP.ExpandingStream -> IO (Seq Instruction, Conf.IntParamVal 'HP.Mag)
-streamToSemanticDVI s = do
-  (pages, mag) <- streamToPages s
-  pure (pagesToDVI pages, mag)
+streamToSemanticDVI
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError (Seq Instruction, Conf.IntParamVal 'HP.Mag))
+streamToSemanticDVI s =
+  streamToPages s <&> \case
+    Left err ->
+      Left err
+    Right (pages, mag) ->
+      Right (pagesToDVI pages, mag)
 
-renderStreamSemanticDVI :: HP.ExpandingStream -> IO Text
-renderStreamSemanticDVI s = streamToSemanticDVI s <&> fst <&> describeLined
+renderStreamSemanticDVI
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError Text)
+renderStreamSemanticDVI s =
+  streamToSemanticDVI s <&> \case
+    Left err ->
+      Left err
+    Right (semDVI, _mag) ->
+      Right $ describeLined semDVI
 
 -- Raw DVI instructions.
-streamToRawDVI :: HP.ExpandingStream -> IO (Seq EncodableInstruction)
-streamToRawDVI s = do
-  (instrs, mag) <- streamToSemanticDVI s
-  strEitherToIO $ parseInstructions instrs $ Quantity.unInt $ Conf.unIntParam mag
-  where
-    strEitherToIO :: Either (Variant '[ByteError, DVIError, PathError]) v -> IO v
-    strEitherToIO = \case
-      Left err -> panic $ show err
-      Right v -> pure v
+streamToRawDVI
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError (Seq EncodableInstruction))
+streamToRawDVI s =
+  streamToSemanticDVI s >>= \case
+    Left err ->
+      pure $ Left err
+    Right (semDVI, mag) ->
+      let magInt = Quantity.unInt $ Conf.unIntParam mag
+      in case runExcept @AppError (parseInstructions semDVI magInt) of
+        Left err ->
+          pure $ Left $ flattenAppError err
+        Right rawDVI ->
+          pure $ Right rawDVI
 
-renderStreamRawDVI :: HP.ExpandingStream -> IO Text
-renderStreamRawDVI s = streamToRawDVI s <&> describeLined
+renderStreamRawDVI
+  :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError Text)
+renderStreamRawDVI s =
+  streamToRawDVI s <&> \case
+    Left err -> Left err
+    Right rawDVI -> Right $ describeLined rawDVI
 
 -- DVI byte strings.
-streamToDVIBytes :: HP.ExpandingStream -> IO ByteString
-streamToDVIBytes s = streamToRawDVI s <&> encode
+streamToDVIBytes :: MonadIO m
+  => HP.ExpandingStream
+  -> m (Either FlatAppError ByteString)
+streamToDVIBytes s =
+  streamToRawDVI s <&> \case
+    Left err -> Left err
+    Right rawDVI -> Right $ encode rawDVI

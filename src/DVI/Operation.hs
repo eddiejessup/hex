@@ -7,7 +7,7 @@ import qualified Data.Word as W
 import Hexlude
 
 data ByteLength = OneByte | TwoByte | ThreeByte | FourByte
-  deriving Show
+  deriving stock Show
 
 toWord :: ByteLength -> W.Word8
 toWord = \case
@@ -17,19 +17,19 @@ toWord = \case
   FourByte -> 3
 
 data CharOp = FastCharOp W.Word8 | ArgCharOp MoveMode ByteLength
-  deriving Show
+  deriving stock Show
 
 data VarOp = KeepVar | ChangeVar ByteLength
-  deriving Show
+  deriving stock Show
 
 data MoveOp = ArgMoveOp ByteLength | VarMoveOp MoveVar VarOp
-  deriving Show
+  deriving stock Show
 
 data MoveVar = WOrY | XOrZ
-  deriving Show
+  deriving stock Show
 
 data SelectFontOp = FastSelectFontOp W.Word8 | ArgSelectFontOp ByteLength
-  deriving Show
+  deriving stock Show
 
 data Operation
   = AddChar CharOp
@@ -46,7 +46,7 @@ data Operation
   | Preamble
   | Postamble
   | PostPostamble
-  deriving Show
+  deriving stock Show
 
 instance Encodable Operation where
 

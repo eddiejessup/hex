@@ -14,16 +14,16 @@ data LigatureOp = LigatureOp
     , charsToPassOver :: Int
     , deleteCurrentChar
     , deleteNextChar :: Bool
-    } deriving (Show)
+    } deriving stock (Show)
 
 newtype KernOp = KernOp Rational
-    deriving (Show)
+    deriving stock (Show)
 
 data LigKernInstr = LigKernInstr
     { stop      :: Bool
     , nextChar  :: Int
     , operation :: Either LigatureOp KernOp
-    } deriving (Show)
+    } deriving stock (Show)
 
 readLigKern :: MonadError Text m => [Rational] -> LigKernCommand -> m LigKernInstr
 readLigKern kerns (LigKernCommand _skipByte _nextChar _opByte _remainder) =
@@ -58,7 +58,7 @@ data LigKernCommand = LigKernCommand
     , commandNextChar
     , opByte
     , remainder :: Int
-    } deriving (Show)
+    } deriving stock (Show)
 
 getLigKernCommand :: B.G.Get LigKernCommand
 getLigKernCommand =

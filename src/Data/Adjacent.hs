@@ -4,7 +4,7 @@ import qualified Data.Sequence as Seq
 import Hexlude
 
 data Adj a = Adj {adjPre :: Maybe a, adjVal :: a, adjPost :: Maybe a}
-  deriving Show
+  deriving stock Show
 
 data ToAdjState a
   = VeryStart

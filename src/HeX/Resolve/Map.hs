@@ -1,4 +1,4 @@
-module Hex.Resolve.Resolve where
+module Hex.Resolve.Map where
 
 import           Hexlude
 
@@ -12,7 +12,7 @@ import qualified Hex.Lex             as Lex
 import           Hex.Resolve.Token
 
 data ResolutionMode = Resolving | NotResolving
-    deriving ( Show, Eq )
+    deriving stock ( Show, Eq )
 
 type CSMap = HMap.HashMap Lex.ControlSequenceLike ResolvedToken
 
@@ -20,11 +20,11 @@ resolveToken :: (Lex.ControlSequenceLike -> Maybe ResolvedToken)
              -> ResolutionMode
              -> Lex.Token
              -> Maybe ResolvedToken
-resolveToken _ NotResolving t = pure $ primTok $ UnexpandedTok t
+resolveToken _ NotResolving t = pure $ primTok $ UnresolvedTok t
 resolveToken csLookup Resolving t = case t of
     Lex.ControlSequenceToken cs -> csLookup $ Lex.ControlSequenceProper cs
     Lex.CharCatToken (Lex.CharCat c Code.Active) -> csLookup $ Lex.ActiveCharacter c
-    _ -> pure $ primTok $ UnexpandedTok t
+    _ -> pure $ primTok $ UnresolvedTok t
 
 -- Helper to resolve a whole string at once.
 codesToResolvedTokens
@@ -41,6 +41,10 @@ codesToResolvedTokens charToCat csMap = go Lex.LineBegin
         []
 
     lookupCS cs = HMap.lookup cs csMap
+
+-- Even more helpery, with default catcode and CS maps.
+usableCodesToResolvedTokens :: BS.L.ByteString -> [(Lex.Token, Maybe ResolvedToken)]
+usableCodesToResolvedTokens = codesToResolvedTokens Code.usableCatLookup defaultCSMap
 
 _cs :: [Char] -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper

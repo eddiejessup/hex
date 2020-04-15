@@ -22,19 +22,19 @@ data Header = Header
     , family                :: Maybe AsciiString
     , sevenBitSafeFlag      :: Maybe B.Word8
     , face                  :: Maybe Face
-    } deriving (Show)
+    } deriving stock (Show)
 
 data Face = Face Weight Slope Expansion
-    deriving (Show)
+    deriving stock (Show)
 
 data Weight = Medium | Bold | Light
-    deriving (Show)
+    deriving stock (Show)
 
 data Slope = Roman | Italic
-    deriving (Show)
+    deriving stock (Show)
 
 data Expansion = Regular | Condensed | Extended
-    deriving (Show)
+    deriving stock (Show)
 
 parseFace :: B.Word8 -> Maybe Face
 parseFace n

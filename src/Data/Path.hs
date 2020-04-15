@@ -8,7 +8,7 @@ import Path (File, Path)
 import qualified Path
 
 newtype PathError = PathError Text
-  deriving Show
+  deriving stock Show
 
 readPathText :: Path a File -> IO Text
 readPathText = Path.toFilePath >>> readFile

@@ -38,13 +38,13 @@ data Character = Character
     { width, height, depth
     , italicCorrection :: Rational
     , special          :: Maybe CharacterSpecial
-    } deriving (Show)
+    } deriving stock (Show)
 
 data CharacterSpecial
     = ExtensibleRecipeSpecial ExtensibleRecipe
     | LigKernIndex Int
     | NextLargerChar Int
-    deriving (Show)
+    deriving stock (Show)
 
 character
     :: forall m
@@ -105,14 +105,14 @@ data CharInfo = CharInfo
     , italicIdx :: Int
     , tag :: Tag
     , remainder :: Int
-    } deriving Show
+    } deriving stock Show
 
 data Tag
     = Plain
     | LigKern
     | Chain
     | Extensible
-    deriving (Enum, Ord, Eq, Show)
+    deriving stock (Enum, Ord, Eq, Show)
 
 getCharInfo :: B.G.Get CharInfo
 getCharInfo =

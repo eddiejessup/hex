@@ -11,7 +11,7 @@ data BreakItem
   | KernBreak B.Kern
   | PenaltyBreak Penalty
   | NoBreak
-  deriving Show
+  deriving stock Show
 
 breakPenalty :: BreakItem -> TeXInt
 breakPenalty (PenaltyBreak (Penalty p)) = p
@@ -20,7 +20,7 @@ breakPenalty (KernBreak _) = 0
 breakPenalty NoBreak = 0
 
 newtype Penalty = Penalty TeXInt
-  deriving Show
+  deriving stock Show
 
 instance Readable Penalty where
 

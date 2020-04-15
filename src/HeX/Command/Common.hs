@@ -40,7 +40,7 @@ evalOnConfState v = readOnConfState $ texEvaluate v
 data BoxModeIntent
     = IntentToAddBox
     | IntentToSetBoxRegister EightBitInt HP.GlobalFlag
-    deriving (Show)
+    deriving stock (Show)
 
 
 data RecursionResult a b

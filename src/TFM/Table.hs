@@ -26,7 +26,7 @@ data Table
     | Kern
     | ExtensibleRecipe
     | FontParameter
-    deriving (Show, Eq, Enum, Ord, Bounded)
+    deriving stock (Show, Eq, Enum, Ord, Bounded)
 
 data TableParams = TableParams
     { tableToString                     :: Table -> ByteString

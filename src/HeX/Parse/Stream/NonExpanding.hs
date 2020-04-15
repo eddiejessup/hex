@@ -14,10 +14,8 @@ import           Text.Show
 
 import qualified Hex.Config                as Conf
 import qualified Hex.Lex                   as Lex
-import           Hex.Resolve.Resolve
+import           Hex.Resolve
 import           Hex.Parse.Stream.Class
--- import           Hex.Parse.Stream.Expanding
-import           Hex.Resolve.Token
 
 data NonExpandingStream = NonExpandingStream
     { nesTokenSources :: L.NE.NonEmpty TokenSource
@@ -25,7 +23,7 @@ data NonExpandingStream = NonExpandingStream
     , nesLexState     :: Lex.LexState
     , nesConfig       :: Conf.Config
     }
-    deriving (Generic)
+    deriving stock (Generic)
 
 instance Show NonExpandingStream where
     show _ = "NonExpandingStream {..}"
@@ -112,7 +110,7 @@ instance TeXStream NonExpandingStream where
 
 data NonExpandingStreamError
     = SawSyntaxCommandHeadToken SyntaxCommandHeadToken
-    deriving (Show)
+    deriving stock (Show)
 
 nesFetchAndExpandToken
     :: (MonadErrorAnyOf e m TeXStreamE, e `CouldBe` NonExpandingStreamError)

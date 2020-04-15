@@ -32,7 +32,7 @@ import Hexlude
 -- stretching or shrinking occurs only when the glue has the highest order of
 -- infinity that doesn’t cancel out.
 data FixParams = FixParams {ratio :: Rational, setOrder :: Int}
-  deriving Show
+  deriving stock Show
 
 instance Readable FixParams where
 
@@ -42,13 +42,13 @@ instance Readable FixParams where
     _ -> "Fil order: " <> show n <> ", ratio: " <> showSP r
 
 data LengthJudgment = Bare | Full | Overfull
-  deriving Show
+  deriving stock Show
 
 data GlueStatus
   = NaturallyGood
   | UnfixablyBare
   | FixablyBad LengthJudgment FixParams
-  deriving Show
+  deriving stock Show
 
 glueStatus :: Length -> Glue a -> GlueStatus
 glueStatus excessLength (Glue _ _stretch _shrink) = case compare excessLength 0 of
@@ -78,12 +78,12 @@ glueStatus excessLength (Glue _ _stretch _shrink) = case compare excessLength 0 
         FixablyBad Full FixParams {ratio = toRatio f, setOrder = o}
 
 data TargetLength = TargetLength GlueStatus Length
-  deriving Show
+  deriving stock Show
 
 data LazyTargetLength
   = UncomputedTargetLength Box.DesiredLength
   | ComputedTargetLength TargetLength
-  deriving Show
+  deriving stock Show
 
 listGlueStatusConcreteTarget :: BreakableList a => Length -> a -> TargetLength
 listGlueStatusConcreteTarget toLen bList =
@@ -102,7 +102,7 @@ listGlueStatusAbstractTarget desiredLength bList =
 
 -- TODO: Use types to ensure number is within bounds, such as <= tenK.
 data Badness = FiniteBadness TeXInt | InfiniteBadness
-  deriving Show
+  deriving stock Show
 
 -- The badness of a line is approximately 100 times the cube
 -- of the glue set ratio. But if the badness obtained by this method turns out to be

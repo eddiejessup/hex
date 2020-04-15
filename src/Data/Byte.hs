@@ -3,7 +3,7 @@ module Data.Byte where
 import Hexlude
 
 newtype ByteError = ByteError Text
-  deriving Show
+  deriving stock Show
 
 data Signedness = Signed | Unsigned
 

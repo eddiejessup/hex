@@ -18,7 +18,8 @@ class BreakableList a where
   totalGlue :: a -> Glue Length
 
 newtype HList = HList (Seq HListElem)
-  deriving (Show, Semigroup, Monoid)
+  deriving stock (Show)
+  deriving newtype (Semigroup, Monoid)
 
 instance Dimensioned HList where
 
@@ -46,7 +47,8 @@ instance BreakableList HList where
   totalGlue (HList elemSeq) = fold $ mapMaybe toGlue $ toList elemSeq
 
 newtype VList = VList (Seq VListElem)
-  deriving (Show, Semigroup, Monoid)
+  deriving stock (Show)
+  deriving newtype (Semigroup, Monoid)
 
 instance BreakableList VList where
 
@@ -99,14 +101,14 @@ instance Readable VList where
 data VBoxAlignType
   = DefaultAlign -- \vbox
   | TopAlign -- \vtop
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
 -- Vertical list.
 data VListElem
   = VListBaseElem BaseElem
   | ListGlue (Glue Length)
   | ListPenalty Penalty
-  deriving Show
+  deriving stock Show
 
 instance BreakableListElem VListElem where
 
@@ -148,7 +150,7 @@ instance Dimensioned VListElem where
 data HListElem
   = HVListElem VListElem
   | HListHBaseElem HBaseElem
-  deriving Show
+  deriving stock Show
 
 instance BreakableListElem HListElem where
 

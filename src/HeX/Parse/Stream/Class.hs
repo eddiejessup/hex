@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Hex.Parse.Stream.Class where
 
@@ -13,6 +14,7 @@ import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.List.NonEmpty        as L.NE
 import qualified Data.Generics.Product.Typed as G.P
 import qualified Data.Sequence             as Seq
+import qualified Data.Text.Lazy.Encoding   as Tx.L.Enc
 import           Path                      (Abs, File, Path)
 import qualified Text.Megaparsec           as P
 
@@ -21,8 +23,7 @@ import           Hex.Config                (Config, ConfigError, lookupCS, looku
 import           Hex.Evaluate
 import           Hex.Lex                   (CharCat (..))
 import qualified Hex.Lex                   as Lex
-import           Hex.Resolve.Resolve
-import           Hex.Resolve.Token
+import           Hex.Resolve
 
 class TeXStream s where
 
@@ -41,19 +42,27 @@ data TokenSource = TokenSource
     , sourceCharCodes :: BS.L.ByteString
     , sourceLexTokens :: Seq Lex.Token
     }
-    deriving (Show, Generic)
+    deriving stock (Show, Generic)
+
+instance Readable TokenSource where
+    describe TokenSource{sourcePath, sourceCharCodes, sourceLexTokens} =
+        "TokenSource["
+                    <> "path=" <> show sourcePath
+            <> ", " <> "codes=" <> toStrict (Tx.L.Enc.decodeUtf8 (BS.L.take 50 sourceCharCodes))
+            <> ", " <> "lexTokens=" <> describeFoldable (Seq.take 10 sourceLexTokens)
+        <> "]"
 
 newTokenSource :: Maybe (Path Abs File) -> BS.L.ByteString -> TokenSource
 newTokenSource maybePath cs = TokenSource maybePath cs mempty
 
 newtype ExpansionError = ExpansionError Text
-    deriving (Show)
+    deriving stock (Show)
 
 newtype ResolutionError = ResolutionError Text
-    deriving (Show)
+    deriving stock (Show)
 
 newtype ParseError = ParseError Text
-    deriving (Show)
+    deriving stock (Show)
 
 insertLexToken :: TeXStream b => b -> Lex.Token -> b
 insertLexToken s t =
@@ -78,7 +87,7 @@ type TeXParseable s e m = ( Monad m
                           , P.Stream s m
                           , P.Token s ~ PrimitiveToken
                           , TeXStream s
-                          , Show s
+                          , Readable s
                           )
 
 simpleRunParserT'
@@ -110,8 +119,7 @@ simpleRunParserT' parser stream =
 runSimpleRunParserT'
     :: ( MonadErrorVariant e m
        , e `CouldBe` ParseError
-       , Show s
-       , Show (P.Token s)
+       , Readable (P.Token s)
        )
     => P.ParsecT Void s m a
     -> s
@@ -121,7 +129,7 @@ runSimpleRunParserT' parser stream =
         (resultStream, Right a) ->
             pure (resultStream, a)
         (_, Left err) ->
-            throwM $ ParseError $ show err
+            throwM $ ParseError $ describe err
 
 type TeXParser s e m a = TeXParseable s e m => SimpleParsecT s m a
 
@@ -209,7 +217,7 @@ runConfState f = do
 -- 10.  Just after a <‘,12> token that begins an alphabetic constant
 -- Case 3, macro arguments.
 newtype MacroArgument = MacroArgument (Seq Lex.Token)
-    deriving ( Show, Eq )
+    deriving stock ( Show, Eq )
 
 nrExpressions :: Foldable t => (a -> Ordering) -> t a -> Maybe (Int, Int)
 nrExpressions f = foldM next (0, 0)
@@ -322,12 +330,12 @@ parseParamDelims :: TeXParser s e m BalancedText
 parseParamDelims = BalancedText . Seq.fromList <$> manySatisfiedThen tokToDelimTok
   where
     tokToDelimTok = \case
-        UnexpandedTok lt@(Lex.CharCatToken CharCat { cat }) -> case cat of
+        UnresolvedTok lt@(Lex.CharCatToken CharCat { cat }) -> case cat of
             Code.Parameter -> Nothing
             Code.BeginGroup -> Nothing
             Code.EndGroup -> Nothing
             _ -> Just lt
-        UnexpandedTok lt ->
+        UnresolvedTok lt ->
             Just lt
         _ -> Nothing
 
@@ -348,7 +356,7 @@ headToMaybeParseParametersFrom dig _t =
         | primTokHasCategory Code.Parameter t =
             do
             skipSatisfied $ \case
-                UnexpandedTok (Lex.CharCatToken CharCat { char, cat }) -> case cat of
+                UnresolvedTok (Lex.CharCatToken CharCat { char, cat }) -> case cat of
                     Code.Letter ->
                         char == digitToChar dig
                     Code.Other ->
@@ -379,7 +387,7 @@ unsafeParseParamText = do
 -- Case 7, general lists of token.
 -- How to handle a terminal item.
 data TerminusPolicy = Include | Discard
-    deriving ( Show, Eq )
+    deriving stock ( Show, Eq )
 
 -- Nested expression with valid grouping.
 parseNestedExpr :: TeXParser s e m (a, Ordering) -> TerminusPolicy -> TeXParser s e m (Seq a)
@@ -494,7 +502,7 @@ parseExpandedBalancedText policy =
     parseNext = satisfyThen $ \pt -> Just (pt, primTokToChange pt)
 
     primTokToChange = \case
-        UnexpandedTok lt -> tokToChange lt
+        UnresolvedTok lt -> tokToChange lt
         _ -> EQ
 
 _parseDelimitedText
@@ -524,7 +532,7 @@ lexTokHasCategory a (Lex.CharCatToken cc) = ccHasCategory a cc
 lexTokHasCategory _ _                     = False
 
 primTokHasCategory :: Code.CoreCatCode -> PrimitiveToken -> Bool
-primTokHasCategory a (UnexpandedTok lt) = lexTokHasCategory a lt
+primTokHasCategory a (UnresolvedTok lt) = lexTokHasCategory a lt
 primTokHasCategory _ _                  = False
 
 -- <space token> = character token of category [space], or a control sequence
@@ -540,21 +548,21 @@ isFillerItem = \case
 
 matchOtherToken :: Char -> PrimitiveToken -> Bool
 matchOtherToken c2 = \case
-    UnexpandedTok (Lex.CharCatToken CharCat{ cat = Code.Other, char = c1 }) ->
+    UnresolvedTok (Lex.CharCatToken CharCat{ cat = Code.Other, char = c1 }) ->
         c1 == Code.CharCode_ c2
     _ ->
         False
 
 matchNonActiveCharacterUncased :: Code.CharCode -> PrimitiveToken -> Bool
 matchNonActiveCharacterUncased a = \case
-    UnexpandedTok (Lex.CharCatToken CharCat{ char , cat }) ->
+    UnresolvedTok (Lex.CharCatToken CharCat{ char , cat }) ->
         (cat /= Code.Active) && (char == Code.toUpperChar a || char == Code.toLowerChar a)
     _ ->
         False
 
 tokToChar :: PrimitiveToken -> Maybe Code.CharCode
 tokToChar = \case
-    UnexpandedTok (Lex.CharCatToken CharCat{ char }) ->
+    UnresolvedTok (Lex.CharCatToken CharCat{ char }) ->
         Just char
     _ ->
         Nothing
@@ -562,17 +570,17 @@ tokToChar = \case
 -- Lexed.
 tokToLex :: PrimitiveToken -> Maybe Lex.Token
 tokToLex = \case
-    UnexpandedTok t -> Just t
+    UnresolvedTok t -> Just t
     _ -> Nothing
 
 handleLex :: (Lex.Token -> Maybe a) -> TeXParser s e m a
 handleLex f = satisfyThen $ tokToLex >=> f
 
 satisfyEqualsLex :: Lex.Token -> TeXParser s e m ()
-satisfyEqualsLex lt = void $ satisfyEquals (UnexpandedTok lt)
+satisfyEqualsLex lt = void $ satisfyEquals (UnresolvedTok lt)
 
 skipSatisfiedLexChunk :: Seq Lex.Token -> TeXParser s e m ()
-skipSatisfiedLexChunk ts = skipSatisfiedChunk (UnexpandedTok <$> ts)
+skipSatisfiedLexChunk ts = skipSatisfiedChunk (UnresolvedTok <$> ts)
 
 skipBalancedText :: BalancedText -> TeXParser s e m ()
 skipBalancedText (BalancedText toks) = skipSatisfiedLexChunk toks
@@ -628,7 +636,9 @@ fetchResolvedToken stream =
         Just (lt, newStream) ->
             do
             let lkp cs = lookupCS cs $ L.view configLens newStream
-            rt <- note (throw $ ResolutionError $ "Could not resolve token:" <> Hexlude.show lt) $ resolveToken lkp (L.view resolutionModeLens newStream) lt
+            rt <- note
+                (throw $ ResolutionError $ "Could not resolve lex token: " <> describe lt)
+                $ resolveToken lkp (L.view resolutionModeLens newStream) lt
             pure $ Just (lt, rt, newStream)
 
 fetchLexToken :: TeXStream s => s -> Maybe (Lex.Token, s)

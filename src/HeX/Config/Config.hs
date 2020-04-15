@@ -29,19 +29,18 @@ import qualified Hex.Config.Codes         as Code
 import           Hex.Config.Parameters
 import qualified Hex.Lex                  as Lex
 import qualified Hex.Parse.AST            as AST
-import           Hex.Resolve.Resolve
-import           Hex.Resolve.Token
+import           Hex.Resolve
 import           Hex.Quantity
 
 data Group
     = ScopeGroup Scope ScopeGroup
     | NonScopeGroup
-    deriving (Show)
+    deriving stock (Show)
 
 data ScopeGroup
     = LocalStructureGroup AST.CommandTrigger
     | ExplicitBoxGroup
-    deriving (Show)
+    deriving stock (Show)
 
 type RegisterMap v = Map EightBitInt v
 
@@ -72,7 +71,7 @@ data Scope =
           , tokenListRegister :: RegisterMap BalancedText
           , boxRegister :: RegisterMap (B.Box B.BoxContents)
           }
-    deriving (Show, Generic)
+    deriving stock (Show, Generic)
 
 newGlobalScope :: Scope
 newGlobalScope =
@@ -134,10 +133,10 @@ data Config =
            , globalScope          :: Scope
            , groups               :: [Group]
            }
-    deriving (Generic)
+    deriving stock (Generic)
 
 newtype ConfigError = ConfigError Text
-    deriving (Show)
+    deriving stock (Show)
 
 newConfig :: IO Config
 newConfig = do

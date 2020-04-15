@@ -15,6 +15,7 @@ import           Hex.Config
 import           Hex.Evaluate
 import qualified Hex.Lex              as Lex
 import qualified Hex.Parse            as HP
+import qualified Hex.Resolve          as HR
 import qualified Hex.Variable         as Var
 
 data ModeIndependentResult
@@ -89,11 +90,11 @@ handleModeIndependentCommand = \case
                 do
                 (maybeElem, newCSTok) <- readOnConfState $ case tgt of
                     HP.MacroTarget macro ->
-                        pure (Nothing, HP.syntaxTok $ HP.MacroTok macro)
+                        pure (Nothing, HR.syntaxTok $ HP.MacroTok macro)
                     -- TODO: If a \let target is an active character, should we
                     -- treat it as a control sequence, or a char-cat pair?
                     HP.LetTarget (Lex.CharCatToken tgtCC) ->
-                        pure (Nothing, HP.primTok $ HP.LetCharCat tgtCC)
+                        pure (Nothing, HR.primTok $ HP.LetCharCat tgtCC)
                     HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                         do
                         resTok <- fromMaybe (HP.PrimitiveToken HP.RelaxTok) <$> asks (lookupCSProper tgtCS)
@@ -101,11 +102,11 @@ handleModeIndependentCommand = \case
                     HP.ShortDefineTarget q n ->
                         do
                         en <- texEvaluate n
-                        pure (Nothing, HP.primTok $ HP.IntRefTok q en)
+                        pure (Nothing, HR.primTok $ HP.IntRefTok q en)
                     HP.FontTarget fontSpec fPath ->
                         do
                         fontDef@B.FontDefinition { B.fontNr } <- Com.loadFont fPath fontSpec
-                        let fontRefTok = HP.primTok $ HP.FontRefToken fontNr
+                        let fontRefTok = HR.primTok $ HP.FontRefToken fontNr
                             boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure (Just boxElem, fontRefTok)
                     oth ->

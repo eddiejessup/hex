@@ -16,20 +16,20 @@ import Hexlude
 import qualified Safe.Foldable as Safe.F
 
 newtype BadnessSize = BadnessSize {unBadnessSize :: TeXInt}
-  deriving (Eq, Show, Num)
+  deriving newtype (Eq, Show, Num)
 
 newtype Demerit = Demerit {unDemerit :: TeXInt}
-  deriving (Show, Eq, Ord, Num)
+  deriving newtype (Show, Eq, Ord, Num)
 
 data DiscardingState
   = Discarding
   | NotDiscarding
-  deriving Show
+  deriving stock Show
 
 type ElemAdj = Adj HListElem
 
 data Node = Root | Branch !Int
-  deriving Show
+  deriving stock Show
 
 data InEdge
   = InEdge
@@ -37,7 +37,7 @@ data InEdge
       , src :: Node
       , discarding :: DiscardingState
       }
-  deriving Show
+  deriving stock Show
 
 -- Set this edge to 'discarding' so that later discardable items won't be
 -- added.
@@ -69,7 +69,7 @@ data Route
       { routeSolution :: Seq SetHListArgs
       , routeDemerit :: Demerit
       }
-  deriving Show
+  deriving stock Show
 
 emptyRoute :: Route
 emptyRoute = Route mempty (Demerit 0)

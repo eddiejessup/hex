@@ -20,7 +20,7 @@ import qualified Hex.Lex                     as Lex
 import qualified Hex.Parse                   as HP
 
 newtype BuildError = BuildError Text
-    deriving (Show)
+    deriving stock (Show)
 
 data ParaResult = ParaResult EndParaReason HList
 

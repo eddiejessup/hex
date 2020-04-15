@@ -1,6 +1,5 @@
 module Main where
 
-import Control.Monad (when)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BS.L
 import Hex.Parse.Stream.Expanding (newExpandStream)
@@ -13,8 +12,8 @@ import qualified System.Console.GetOpt as Opt
 data Flag
   = Help
   | Amble
-  | Output !FilePath
-  | Mode !Mode
+  | Output FilePath
+  | Mode Run.Mode
   deriving (Show, Eq)
 
 options :: [Opt.OptDescr Flag]
@@ -28,10 +27,10 @@ options =
     output = Output . toS . fromMaybe "out.dvi"
 
     mode = \case
-      Nothing -> DVIWriteMode
-      Just modeStr -> case readMode modeStr of
-        Just m -> m
-        Nothing -> panic $ "Unknown mode: " <> modeStr
+      Nothing -> Mode Run.DVIBytesMode
+      Just modeStr -> case Run.readMode modeStr of
+        Just m -> Mode m
+        Nothing -> panic $ "Unknown mode: " <> toS modeStr
 
 usage :: Text
 usage = toS $ Opt.usageInfo header options
@@ -68,13 +67,32 @@ main = do
         if Amble `elem` flags
         then preamble <> inputRaw <> postamble
         else inputRaw
-      makeStream = newExpandStream maybePath input
-      mode = lastDef DVIWriteMode [m | Mode m <- flags]
+      mode = lastDef Run.DVIBytesMode [m | Mode m <- flags]
   case lastMay [f | Output f <- flags] of
-    Nothing -> printWithMode mode
+    Nothing ->
+      do
+      appErrorOrTx <- Run.renderWithMode mode input
+      case appErrorOrTx of
+        Left appError ->
+          putText $ show appError
+        Right tx ->
+          putText tx
     Just destPathStr ->
       case mode of
-        DVIBytesMode ->
-          makeStream >>= streamToDVIBytes >>= BS.writeFile destPathStr
-    _ ->
-      printWithMode mode input
+        Run.DVIBytesMode ->
+          do
+          s <- newExpandStream maybePath input
+          appErrorOrBytes <- Run.streamToDVIBytes s
+          case appErrorOrBytes of
+            Left appError ->
+              putText $ showAppError appError
+            Right bytes ->
+              BS.writeFile destPathStr bytes
+        _ ->
+          do
+          appErrorOrTx <- Run.renderWithMode mode input
+          case appErrorOrTx of
+            Left appError ->
+              putText $ show appError
+            Right tx ->
+              writeFile destPathStr tx

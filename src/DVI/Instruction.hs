@@ -17,10 +17,10 @@ import Path (Path)
 import qualified Path
 
 newtype DVIError = DVIError Text
-  deriving Show
+  deriving stock Show
 
 data ArgVal = UIntArgVal UIntArgVal | SIntArgVal SIntArgVal | StringArgVal Ascii.AsciiString
-  deriving Show
+  deriving stock Show
 
 instance Encodable ArgVal where
 
@@ -32,19 +32,19 @@ data IntArgSize
   = B1
   | B2
   | B4
-  deriving Show
+  deriving stock Show
 
 data UIntArgVal
   = U1 W.Word8
   | U2 W.Word16
   | U4 W.Word32
-  deriving Show
+  deriving stock Show
 
 data SIntArgVal
   = S1 I.Int8
   | S2 I.Int16
   | S4 I.Int32
-  deriving Show
+  deriving stock Show
 
 uintArgValFromInt
   :: ( MonadErrorAnyOf e m '[DVIError]
@@ -93,7 +93,7 @@ instance Encodable SIntArgVal where
       S4 v -> B.encode v
 
 data EncodableInstruction = EncodableInstruction Operation [ArgVal]
-  deriving Show
+  deriving stock Show
 
 instance Encodable EncodableInstruction where
 

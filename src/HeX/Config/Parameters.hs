@@ -10,23 +10,23 @@ import           Hex.Quantity
 
 newtype IntParamVal (a :: TeXIntParameter) =
     IntParamVal { unIntParam :: TeXInt }
-    deriving ( Eq, Enum, Ord, Show, Num, Real, Integral )
+    deriving newtype ( Eq, Enum, Ord, Show, Num, Real, Integral )
 
 newtype LenParamVal (a :: LengthParameter) =
     LenParamVal { unLenParam :: Length }
-    deriving ( Eq, Enum, Ord, Show, Num, Real, Integral )
+    deriving newtype ( Eq, Enum, Ord, Show, Num, Real, Integral )
 
 newtype GlueParamVal (a :: GlueParameter) =
     GlueParamVal { unGlueParam :: BL.G.Glue Length }
-    deriving (Show)
+    deriving newtype (Show)
 
 newtype MathGlueParamVal (a :: MathGlueParameter) =
     MathGlueParamVal { unMathGlueunMathGlueParam :: BL.G.Glue MathLength }
-    deriving (Show)
+    deriving newtype (Show)
 
 newtype TokenListParamVal (a :: TokenListParameter) =
     TokenListParamVal { unTokenListParam :: BalancedText }
-    deriving (Show)
+    deriving newtype (Show)
 
 newTeXIntParameters :: Map TeXIntParameter TeXInt
 newTeXIntParameters =

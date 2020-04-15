@@ -220,9 +220,9 @@ parseFileName = do
   skipOptionalSpaces
   fileNameChars <-
     PC.some $ satisfyThen $ \case
-      T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
+      T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c Code.Letter)) ->
         Just c
-      T.UnexpandedTok (Lex.CharCatToken (Lex.CharCat c Code.Other))
+      T.UnresolvedTok (Lex.CharCatToken (Lex.CharCat c Code.Other))
         | isValidOther c ->
           Just c
       _ -> Nothing
