@@ -11,7 +11,6 @@ import qualified System.Console.GetOpt as Opt
 import qualified Data.Text as Tx
 import System.IO (hSetBuffering, BufferMode(..))
 import qualified Data.Generics.Product as G.P
-import Control.Lens
 import qualified Data.List.NonEmpty as L.NE
 
 data Flag

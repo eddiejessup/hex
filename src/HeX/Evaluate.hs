@@ -49,7 +49,7 @@ instance TeXEvaluable AST.TokenListAssignmentTarget where
 signedTeXEval
     :: (TeXEvaluable a
        , MonadReader st m
-      , HasType Config st
+       , HasType Config st
        , MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e

@@ -40,16 +40,6 @@ data ExpandingStream
       }
   deriving stock (Generic)
 
-instance Readable ExpandingStream where
-    describe (ExpandingStream { lexState, resolutionMode, skipState, streamTokenSources }) =
-        "ExpandingStream["
-                    <> "lexState=" <> show lexState
-            <> ", " <> "skipState=" <> show skipState
-            <> ", " <> "resolutionMode=" <> show resolutionMode
-            <> "\n"
-            <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> (toList streamTokenSources))
-
-
 newExpandStream :: Maybe (Path Abs File) -> BS.L.ByteString -> IO ExpandingStream
 newExpandStream maybePath cs = do
   conf <- Conf.newConfig
@@ -61,6 +51,21 @@ newExpandStream maybePath cs = do
       , config = conf
       , skipState = []
       }
+
+instance HasTgtType ExpandingStream where
+  type Tgt ExpandingStream = ExpandingStream
+
+  tgtLens = identity
+
+instance Readable ExpandingStream where
+    describe (ExpandingStream { lexState, resolutionMode, skipState, streamTokenSources }) =
+        "ExpandingStream["
+                    <> "lexState=" <> show lexState
+            <> ", " <> "skipState=" <> show skipState
+            <> ", " <> "resolutionMode=" <> show resolutionMode
+            <> "\n"
+            <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> (toList streamTokenSources))
+
 
 instance
   ( MonadError e m

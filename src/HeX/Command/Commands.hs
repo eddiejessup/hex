@@ -22,9 +22,12 @@ import qualified Hex.Parse           as HP
 import           Hex.Quantity
 
 glueToElem
-    :: ( HP.TeXStream s
-       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
-       , MonadState s m
+    :: ( MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
+       , MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
     => HP.Glue
     -> m BL.VListElem
@@ -33,7 +36,9 @@ glueToElem g =
 
 ruleToElem
     :: ( MonadReader st m, HasType Config st
-       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
+       , MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
        )
     => HP.Rule
     -> m Length
@@ -88,9 +93,12 @@ addVListElem (BL.VList accSeq) = \case
 
 
 hModeAddHGlue
-    :: ( HP.TeXStream s
-       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
-       , MonadState s m
+    :: ( MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
+       , MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
     => HP.Glue
     -> m HListElem
@@ -98,9 +106,12 @@ hModeAddHGlue g =
     BL.HVListElem <$> glueToElem g
 
 hModeAddCharacter
-    :: ( HP.TeXStream s
-       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
-       , MonadState s m
+    :: ( MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
+       , MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
     => HP.CharCodeRef
     -> m HListElem
@@ -112,19 +123,23 @@ hModeAddCharacter c =
         <&> BL.HListHBaseElem
 
 hModeAddSpace
-    :: ( HP.TeXStream s
-       , MonadError e m
+    :: ( MonadError e m
        , AsType ConfigError e
-       , MonadState s m
+       , MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
     => m HListElem
 hModeAddSpace =
     BL.HVListElem . BL.ListGlue <$> readOnConfState spaceGlue
 
 hModeAddRule
-    :: ( HP.TeXStream s
-       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
-       , MonadState s m
+    :: ( MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
+       , MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
     => HP.Rule
     -> m HListElem
@@ -136,9 +151,10 @@ hModeAddRule rule =
     defaultDepth = pure 0
 
 hModeStartParagraph
-    :: ( HP.TeXStream s
-       , MonadError e m
-       , MonadState s m
+    :: ( MonadError e m
+       , MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
     => HP.IndentFlag
     -> m (Maybe HListElem)
@@ -152,18 +168,24 @@ hModeStartParagraph = \case
         Just <$> readOnConfState (asks parIndentBox)
 
 vModeAddVGlue
-    :: ( HP.TeXStream s
-       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
-       , MonadState s m
+    :: ( MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
+       , MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
     => HP.Glue
     -> m VListElem
 vModeAddVGlue = glueToElem
 
 vModeAddRule
-    :: ( HP.TeXStream s
-       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
-       , MonadState s m
+    :: ( MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
+       , MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
     => HP.Rule
     -> m VListElem

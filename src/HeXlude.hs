@@ -37,7 +37,7 @@ import           Prelude                   (id)
 import           Protolude                 hiding (group, catch, to)
 
 import           Control.Arrow             ((>>>))
-import           Control.Lens              ((^.), (%~), view, to)
+import           Control.Lens              ((^.), (%~), (.~), view, to)
 import           Data.Generics.Product     (field)
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)
 import qualified Data.Sequence             as Seq

@@ -25,8 +25,10 @@ data ModeIndependentResult
     | DoNothing
 
 fetchBox
-    :: ( HP.TeXStream s
-       , MonadState s m
+    :: ( HP.TeXStream (HP.Tgt st)
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadError e m
        , AsType ConfigError e
        , AsType EvaluationError e
@@ -44,8 +46,10 @@ fetchBox fetchMode idx =
     pure fetchedMaybeBox
 
 handleModeIndependentCommand
-    :: ( HP.TeXStream s
-       , MonadState s m
+    :: ( HP.TeXStream (HP.Tgt st)
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        , MonadError e m
        , AsType ConfigError e
@@ -206,7 +210,7 @@ handleModeIndependentCommand = \case
             Nothing -> pure ()
             Just lt ->
                 do
-                modify $ \s -> HP.insertLexToken s lt
+                modify $ HP.tgtLens %~ (\s -> HP.insertLexToken s lt)
                 modConfState $ \c -> c{afterAssignmentToken = Nothing}
         pure assignResult
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->

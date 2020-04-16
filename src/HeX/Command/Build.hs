@@ -34,13 +34,15 @@ handleCommandInParaMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => HList
     -> HP.Command
-    -> s
+    -> HP.Tgt st
     -> m (RecursionResult HList ParaResult)
 handleCommandInParaMode hList@(BL.HList hElemSeq) command oldStream =
     case command of
@@ -50,7 +52,7 @@ handleCommandInParaMode hList@(BL.HList hElemSeq) command oldStream =
             -- primitive.
             -- (Note that we use oldStream.)
             do
-            put $ HP.insertLexToken oldStream Lex.parToken
+            modify $ HP.tgtLens .~ (HP.insertLexToken oldStream Lex.parToken)
             pure doNothing
         HP.HModeCommand (HP.AddHGlue g) ->
             addElem <$> hModeAddHGlue g
@@ -91,13 +93,15 @@ handleCommandInHBoxMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => HList
     -> HP.Command
-    -> s
+    -> HP.Tgt st
     -> m (RecursionResult HList HBoxResult)
 handleCommandInHBoxMode hList@(BL.HList hElemSeq) command _ =
     case command of
@@ -137,16 +141,20 @@ handleCommandInHBoxMode hList@(BL.HList hElemSeq) command _ =
 newtype VBoxResult = VBoxResult VList
 
 addVListElemAndLoop
-    :: ( HP.TeXStream s
-       , MonadState s m)
+    :: ( HP.TeXStream (HP.Tgt st)
+       , MonadState st m
+       , HP.HasTgtType st
+       )
+
     => VList
     -> BL.VListElem
     -> m (RecursionResult VList b)
 addVListElemAndLoop vl e = LoopAgain <$> HP.runConfState (addVListElem vl e)
 
 handleCommandInVBoxMode
-    :: ( MonadState s m
-       , HP.TeXParseable s e m
+    :: ( MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXParseable (HP.Tgt st) e m
        , AsType TFMError e
        , AsType BuildError e
        , AsType Data.Path.PathError e
@@ -154,7 +162,7 @@ handleCommandInVBoxMode
        )
     => VList
     -> HP.Command
-    -> s
+    -> HP.Tgt st
     -> m (RecursionResult VList VBoxResult)
 handleCommandInVBoxMode vList command oldStream =
     case command of
@@ -204,9 +212,11 @@ handleCommandInVBoxMode vList command oldStream =
                 endLoop vListWithPara
 
 appendParagraph
-    :: ( HP.TeXStream s
+    :: ( HP.TeXStream (HP.Tgt st)
        , MonadIO m
-       , MonadState s m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadError e m
        , AsType BuildError e
        )
@@ -244,13 +254,15 @@ handleCommandInMainVMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => VList
     -> HP.Command
-    -> s
+    -> HP.Tgt st
     -> m (RecursionResult VList MainVModeResult)
 handleCommandInMainVMode vList command oldStream =
     -- traceText ("in main v mode, handling command: " <> show command) $ case command of
@@ -305,8 +317,10 @@ extractPara
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => HP.IndentFlag
@@ -324,19 +338,22 @@ extractParaFromVMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => HP.IndentFlag
-    -> s
+    -> HP.Tgt st
     -> m ParaResult
-extractParaFromVMode indentFlag oldStream =
+extractParaFromVMode indentFlag oldStream = do
     -- If the command shifts to horizontal mode, run
     -- '\indent', and re-read the stream as if the
     -- command hadn't been read. (Note that we set
     -- "oldStream", not "newStream".)
-    put oldStream >> extractPara indentFlag
+    modify $ HP.tgtLens .~ oldStream
+    extractPara indentFlag
 
 extractHBox
     :: ( MonadError e m
@@ -344,8 +361,10 @@ extractHBox
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => m HBoxResult
@@ -357,8 +376,10 @@ extractVBox
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => m VBoxResult
@@ -370,8 +391,10 @@ extractVSubBox
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => B.DesiredLength
@@ -403,8 +426,10 @@ extractHSubBox
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => B.DesiredLength
@@ -422,8 +447,10 @@ extractMainVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => m MainVModeResult
@@ -435,15 +462,17 @@ extractBreakAndSetVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s e m
-       , MonadState s m
+       , HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
+
        , MonadIO m
        )
     => m (Seq B.Page, IntParamVal 'HP.Mag)
 extractBreakAndSetVList =
     do
     MainVModeResult finalMainVList <- extractMainVList
-    gets HP.getConditionBodyState >>= \case
+    gets (view (HP.tgtLens . to HP.getConditionBodyState)) >>= \case
         Nothing -> pure ()
         Just _condState -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show _condState
     readOnConfState (asks finaliseConfig) >>= liftIO

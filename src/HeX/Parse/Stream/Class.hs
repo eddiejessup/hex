@@ -37,6 +37,11 @@ class TeXStream s where
 
     getConditionBodyState :: s -> Maybe ConditionBodyState
 
+class HasTgtType s where
+    type Tgt s
+
+    tgtLens :: Lens' s (Tgt s)
+
 data TokenSource = TokenSource
     { sourcePath      :: Maybe (Path Abs File)
     , sourceCharCodes :: BS.L.ByteString
@@ -190,11 +195,11 @@ parseInhibited p =
     P.updateParserState (\st@P.State { P.stateInput } -> st { P.stateInput = enableResolution stateInput })
     pure v
 
-runConfState :: (TeXStream s, MonadState s m) => StateT Config m a -> m a
+runConfState :: (MonadState st m, HasTgtType st, TeXStream (Tgt st)) => StateT Config m a -> m a
 runConfState f = do
-    conf <- gets $ L.view configLens
+    conf <- gets $ view $ tgtLens . configLens
     (v, conf') <- runStateT f conf
-    modify $ \s -> s & L.set configLens conf'
+    modify $ tgtLens . configLens .~ conf'
     pure v
 
 -- Cases where expansion is inhibited:

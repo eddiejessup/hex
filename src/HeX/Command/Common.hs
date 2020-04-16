@@ -17,24 +17,36 @@ readOnState
 readOnState f = get >>= runReaderT f
 
 readOnConfState
-    :: ( HP.TeXStream s
-       , MonadState s m
+    :: ( MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
     => ReaderT Config (StateT Config m) a
     -> m a
 readOnConfState f = HP.runConfState $ readOnState f
 
 modConfState
-    :: (MonadState s m, HP.TeXStream s) => (Config -> Config) -> m ()
+    :: ( MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
+       )
+    => (Config -> Config)
+    -> m ()
 modConfState x = HP.runConfState $ modify x
 
 evalOnConfState
-    :: ( HP.TeXStream s
-       , TeXEvaluable v
-       , MonadError e m, AsType EvaluationError e, AsType ConfigError e
-       , MonadState s m
+    :: ( TeXEvaluable v
+
+       , MonadError e m
+       , AsType EvaluationError e
+       , AsType ConfigError e
+
+       , MonadState st m
+       , HP.HasTgtType st
+       , HP.TeXStream (HP.Tgt st)
        )
-    => v -> m (EvalTarget v)
+    => v
+    -> m (EvalTarget v)
 evalOnConfState v = readOnConfState $ texEvaluate v
 
 data BoxModeIntent
@@ -63,18 +75,19 @@ runLoop f = go
                 pure result
 
 runCommandLoop
-    :: ( HP.TeXParseable s e m
-       , MonadState s m
+    :: ( HP.TeXParseable (HP.Tgt st) e m
+       , MonadState st m
+       , HP.HasTgtType st
        )
-    => (st -> HP.Command -> s -> m (RecursionResult st r))
-    -> st
+    => (a -> HP.Command -> HP.Tgt st -> m (RecursionResult a r))
+    -> a
     -> m r
 runCommandLoop f = runLoop g
   where
     g elemList =
         do
-        oldStream <- get
+        oldStream <- gets $ view HP.tgtLens
         (newStream, command) <- HP.runSimpleRunParserT' HP.parseCommand oldStream
-        put newStream
+        modify $ HP.tgtLens .~ newStream
         -- liftIO $ putText $ describe command
         f elemList command oldStream
