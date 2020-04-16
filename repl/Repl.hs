@@ -34,20 +34,23 @@ parseArgs argStr = case Opt.getOpt Opt.Permute options (toS <$> argStr) of
 
 main :: IO ()
 main = do
-  (flags, args) <- ((toS <$>) <$> getArgs) >>= parseArgs
+  (flags, _) <- ((toS <$>) <$> getArgs) >>= parseArgs
   when (Help `elem` flags) $ panic usage
   hSetBuffering stdout NoBuffering
   putText "Welcome to Hex repl"
   s <- newExpandStream Nothing mempty
   evalStateT repl s
 
+putResult :: MonadIO m => Text -> m ()
 putResult r = do
   putText $ "Got result:\n\n" <> r
 
+prompt :: MonadIO m => Text -> m Text
 prompt msg = do
   liftIO $ putStr @Text (msg <> " $> ")
   liftIO $ getLine
 
+promptLazyByteString :: MonadIO m => Text -> m BS.L.ByteString
 promptLazyByteString msg = do
   liftIO $ putStr @Text (msg <> " $> ")
   liftIO $ (BS.L.fromStrict . encodeUtf8) <$> getLine

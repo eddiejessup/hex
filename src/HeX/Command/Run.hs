@@ -15,7 +15,6 @@ import Hex.Command.Common
 import qualified Hex.Config as Conf
 import qualified Hex.Config.Codes as Code
 import Hex.Evaluate (EvaluationError)
-import qualified Hex.Lex
 import qualified Hex.Parse as HP
 import qualified Hex.Quantity as Quantity
 import Hexlude
@@ -133,8 +132,9 @@ loopParser parser s = do
             Nothing -> pure (stream, Nothing)
             Just _ -> go postParseStream
 
-renderLoopParserResult :: Show a => (AppError, [a]) -> Either AppError Text
-renderLoopParserResult (errMsg, xs) =
+-- renderLoopParserResult :: Show a => (AppError, [a]) -> Either AppError Text
+renderLoopParserResult :: (AppError, [a]) -> Either AppError Text
+renderLoopParserResult (errMsg, _) =
     Left errMsg
     -- "Ended with message:\n\t \"" <> errMsg <> "\n\n" <> "Got results: " <> Tx.concat (intersperse "\n" (show <$> xs))
 
@@ -184,7 +184,7 @@ streamToParaBoxes s =
   do
   errOrBoxes <- runApp s $ do
     hList <- extractUnsetParaApp
-    readOnConfState (hListToParaLineBoxes hList)
+    readOnState (hListToParaLineBoxes hList)
   pure $ case errOrBoxes of
     Left err ->
       Left err

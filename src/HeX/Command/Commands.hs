@@ -25,17 +25,18 @@ glueToElem
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
-       , MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
+
+       , MonadReader st m
+       , HasType Config st
        )
     => HP.Glue
     -> m BL.VListElem
 glueToElem g =
-    BL.ListGlue <$> evalOnConfState g
+    BL.ListGlue <$> texEvaluate g
 
 ruleToElem
-    :: ( MonadReader st m, HasType Config st
+    :: ( MonadReader st m
+       , HasType Config st
        , MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
@@ -96,9 +97,9 @@ hModeAddHGlue
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
-       , MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
+
+       , MonadReader st m
+       , HasType Config st
        )
     => HP.Glue
     -> m HListElem
@@ -109,15 +110,14 @@ hModeAddCharacter
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
-       , MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
+
+       , MonadReader st m
+       , HasType Config st
        )
     => HP.CharCodeRef
     -> m HListElem
 hModeAddCharacter c =
-    readOnConfState $
-        texEvaluate c
+    texEvaluate c
         >>= characterBox
         <&> B.ElemCharacter
         <&> BL.HListHBaseElem
@@ -125,26 +125,26 @@ hModeAddCharacter c =
 hModeAddSpace
     :: ( MonadError e m
        , AsType ConfigError e
-       , MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
+
+       , MonadReader st m
+       , HasType Config st
        )
     => m HListElem
 hModeAddSpace =
-    BL.HVListElem . BL.ListGlue <$> readOnConfState spaceGlue
+    BL.HVListElem . BL.ListGlue <$> spaceGlue
 
 hModeAddRule
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
-       , MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
+
+       , MonadReader st m
+       , HasType Config st
        )
     => HP.Rule
     -> m HListElem
 hModeAddRule rule =
-    BL.HVListElem <$> readOnConfState (ruleToElem rule defaultWidth defaultHeight defaultDepth)
+    BL.HVListElem <$> ruleToElem rule defaultWidth defaultHeight defaultDepth
   where
     defaultWidth = pure (toScaledPointApprox (0.4 :: Rational) Point)
     defaultHeight = pure (toScaledPointApprox (10 :: Int) Point)
@@ -152,9 +152,8 @@ hModeAddRule rule =
 
 hModeStartParagraph
     :: ( MonadError e m
-       , MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
+       , MonadReader st m
+       , HasType Config st
        )
     => HP.IndentFlag
     -> m (Maybe HListElem)
@@ -165,15 +164,14 @@ hModeStartParagraph = \case
     -- list, and the space factor is set to 1000.
     -- TODO: Space factor.
     HP.Indent ->
-        Just <$> readOnConfState (asks parIndentBox)
+        Just <$> (asks $ view $ typed @Config . to parIndentBox)
 
 vModeAddVGlue
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
-       , MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
+       , MonadReader st m
+       , HasType Config st
        )
     => HP.Glue
     -> m VListElem
@@ -183,23 +181,24 @@ vModeAddRule
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
-       , MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
+       , MonadReader st m
+       , HasType Config st
        )
     => HP.Rule
     -> m VListElem
 vModeAddRule rule =
-    readOnConfState $ ruleToElem rule defaultWidth defaultHeight defaultDepth
+    ruleToElem rule defaultWidth defaultHeight defaultDepth
   where
-    defaultWidth = gets $ lookupLengthParameter HP.HSize
+    defaultWidth = asks $ view $ typed @Config . to (lookupLengthParameter HP.HSize)
     defaultHeight = pure $ toScaledPointApprox (0.4 :: Rational) Point
     defaultDepth = pure 0
 
 -- Horizontal mode commands.
 
 characterBox
-    :: ( MonadReader st m, HasType Config st
+    :: ( MonadReader st m
+       , HasType Config st
+
        , MonadError e m
        , AsType ConfigError e
        )
@@ -218,7 +217,9 @@ characterBox char = do
                      }
 
 spaceGlue
-    :: ( MonadReader st m, HasType Config st
+    :: ( MonadReader st m
+       , HasType Config st
+
        , MonadError e m
        , AsType ConfigError e
        )

@@ -4,8 +4,6 @@ module Hex.Command.Common where
 
 import           Hexlude
 
-import           Hex.Config
-import           Hex.Evaluate
 import           Hex.Quantity
 import qualified Hex.Parse                 as HP
 
@@ -15,39 +13,6 @@ readOnState
      => ReaderT r m b
      -> m b
 readOnState f = get >>= runReaderT f
-
-readOnConfState
-    :: ( MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
-       )
-    => ReaderT Config (StateT Config m) a
-    -> m a
-readOnConfState f = HP.runConfState $ readOnState f
-
-modConfState
-    :: ( MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
-       )
-    => (Config -> Config)
-    -> m ()
-modConfState x = HP.runConfState $ modify x
-
-evalOnConfState
-    :: ( TeXEvaluable v
-
-       , MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
-
-       , MonadState st m
-       , HP.HasTgtType st
-       , HP.TeXStream (HP.Tgt st)
-       )
-    => v
-    -> m (EvalTarget v)
-evalOnConfState v = readOnConfState $ texEvaluate v
 
 data BoxModeIntent
     = IntentToAddBox

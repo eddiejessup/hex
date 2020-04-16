@@ -37,6 +37,7 @@ handleCommandInParaMode
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -55,15 +56,15 @@ handleCommandInParaMode hList@(BL.HList hElemSeq) command oldStream =
             modify $ HP.tgtLens .~ (HP.insertLexToken oldStream Lex.parToken)
             pure doNothing
         HP.HModeCommand (HP.AddHGlue g) ->
-            addElem <$> hModeAddHGlue g
+            addElem <$> readOnState (hModeAddHGlue g)
         HP.HModeCommand (HP.AddCharacter c) ->
-            addElem <$> hModeAddCharacter c
+            addElem <$> readOnState (hModeAddCharacter c)
         HP.HModeCommand (HP.AddHRule rule) ->
-            addElem <$> hModeAddRule rule
+            addElem <$> readOnState (hModeAddRule rule)
         HP.AddSpace ->
-            addElem <$> hModeAddSpace
+            addElem <$> readOnState hModeAddSpace
         HP.StartParagraph indentFlag ->
-            addMaybeElem' <$> hModeStartParagraph indentFlag
+            addMaybeElem' <$> readOnState (hModeStartParagraph indentFlag)
         -- \par: Restricted: does nothing. Unrestricted: ends mode.
         HP.EndParagraph ->
             pure $ endLoop EndParaSawEndParaCommand hList
@@ -96,6 +97,7 @@ handleCommandInHBoxMode
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -108,15 +110,15 @@ handleCommandInHBoxMode hList@(BL.HList hElemSeq) command _ =
         HP.VModeCommand vModeCommand ->
             throwError $ injectTyped $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
         HP.HModeCommand (HP.AddCharacter c) ->
-            addElem <$> hModeAddCharacter c
+            addElem <$> readOnState (hModeAddCharacter c)
         HP.HModeCommand (HP.AddHGlue g) ->
-            addElem <$> hModeAddHGlue g
+            addElem <$> readOnState (hModeAddHGlue g)
         HP.HModeCommand (HP.AddHRule rule) ->
-            addElem <$> hModeAddRule rule
+            addElem <$> readOnState (hModeAddRule rule)
         HP.AddSpace ->
-            addElem <$> hModeAddSpace
+            addElem <$> readOnState hModeAddSpace
         HP.StartParagraph indentFlag ->
-            addMaybeElem' <$> hModeStartParagraph indentFlag
+            addMaybeElem' <$> readOnState (hModeStartParagraph indentFlag)
         -- \par: Restricted: does nothing. Unrestricted: ends mode.
         HP.EndParagraph ->
             pure doNothing
@@ -141,20 +143,22 @@ handleCommandInHBoxMode hList@(BL.HList hElemSeq) command _ =
 newtype VBoxResult = VBoxResult VList
 
 addVListElemAndLoop
-    :: ( HP.TeXStream (HP.Tgt st)
-       , MonadState st m
-       , HP.HasTgtType st
+    :: ( MonadState st m
+       , HasType Config st
        )
 
     => VList
     -> BL.VListElem
     -> m (RecursionResult VList b)
-addVListElemAndLoop vl e = LoopAgain <$> HP.runConfState (addVListElem vl e)
+addVListElemAndLoop vl e = LoopAgain <$> addVListElem vl e
 
 handleCommandInVBoxMode
     :: ( MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
+
        , HP.TeXParseable (HP.Tgt st) e m
+
        , AsType TFMError e
        , AsType BuildError e
        , AsType Data.Path.PathError e
@@ -169,9 +173,9 @@ handleCommandInVBoxMode vList command oldStream =
         HP.VModeCommand HP.End ->
             throwError $ injectTyped $ BuildError "End not allowed in internal vertical mode"
         HP.VModeCommand (HP.AddVGlue g) ->
-            vModeAddVGlue g >>= addElem
+            readOnState (vModeAddVGlue g) >>= addElem
         HP.VModeCommand (HP.AddVRule rule) ->
-            vModeAddRule rule >>= addElem
+            readOnState (vModeAddRule rule) >>= addElem
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -212,10 +216,9 @@ handleCommandInVBoxMode vList command oldStream =
                 endLoop vListWithPara
 
 appendParagraph
-    :: ( HP.TeXStream (HP.Tgt st)
-       , MonadIO m
+    :: ( MonadIO m
        , MonadState st m
-       , HP.HasTgtType st
+       , HasType Config st
 
        , MonadError e m
        , AsType BuildError e
@@ -225,10 +228,10 @@ appendParagraph
     -> m VList
 appendParagraph paraHList vList =
     do
-    lineBoxes <- readOnConfState (hListToParaLineBoxes paraHList)
+    lineBoxes <- readOnState (hListToParaLineBoxes paraHList)
     let lineBoxContents = (B.HBoxContents <$>) <$> lineBoxes
     let boxElems = BL.VListBaseElem . B.ElemBox <$> lineBoxContents
-    HP.runConfState $ foldM addVListElem vList boxElems
+    foldM addVListElem vList boxElems
 
 hListToParaLineBoxes
     :: ( MonadReader st m, HasType Config st
@@ -255,8 +258,10 @@ handleCommandInMainVMode
        , AsType Data.Path.PathError e
 
        , HP.TeXParseable (HP.Tgt st) e m
+
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -270,9 +275,9 @@ handleCommandInMainVMode vList command oldStream =
         HP.VModeCommand HP.End ->
             pure $ endLoop vList
         HP.VModeCommand (HP.AddVGlue g) ->
-            vModeAddVGlue g >>= addElem
+            readOnState (vModeAddVGlue g) >>= addElem
         HP.VModeCommand (HP.AddVRule rule) ->
-            vModeAddRule rule >>= addElem
+            readOnState (vModeAddRule rule) >>= addElem
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -320,6 +325,7 @@ extractPara
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -328,7 +334,7 @@ extractPara
 extractPara indentFlag =
     runCommandLoop handleCommandInParaMode =<< BL.HList <$> case indentFlag of
         HP.Indent ->
-            Seq.singleton <$> readOnConfState (asks parIndentBox)
+            Seq.singleton <$> gets (view $ typed @Config . to parIndentBox)
         HP.DoNotIndent ->
             pure mempty
 
@@ -341,6 +347,7 @@ extractParaFromVMode
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -364,6 +371,7 @@ extractHBox
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -379,6 +387,7 @@ extractVBox
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -394,6 +403,7 @@ extractVSubBox
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -417,7 +427,7 @@ extractVSubBox desiredLength boxIntent boxType =
             pure (Just $ BL.VListBaseElem $ B.ElemBox box)
         IntentToSetBoxRegister idx global ->
             do
-            modConfState $ setBoxRegister idx box global
+            modify $ typed @Config %~ setBoxRegister idx box global
             pure Nothing
 
 extractHSubBox
@@ -429,6 +439,7 @@ extractHSubBox
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -450,6 +461,7 @@ extractMainVList
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -465,6 +477,7 @@ extractBreakAndSetVList
        , HP.TeXParseable (HP.Tgt st) e m
        , MonadState st m
        , HP.HasTgtType st
+       , HasType Config st
 
        , MonadIO m
        )
@@ -475,9 +488,9 @@ extractBreakAndSetVList =
     gets (view (HP.tgtLens . to HP.getConditionBodyState)) >>= \case
         Nothing -> pure ()
         Just _condState -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show _condState
-    readOnConfState (asks finaliseConfig) >>= liftIO
-    desiredH <- HP.runConfState $ gets $ LenParamVal . lookupLengthParameter HP.VSize
+    (gets $ view $ typed @Config . to finaliseConfig) >>= liftIO
+    desiredH <- gets $ view $ typed @Config . to (LenParamVal . lookupLengthParameter HP.VSize)
     -- putText $ describe finalMainVList
     let pages = BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
-    mag <- HP.runConfState $ gets $ IntParamVal . lookupTeXIntParameter HP.Mag
+    mag <- gets $ view $ typed @Config . to (IntParamVal . lookupTeXIntParameter HP.Mag)
     pure (pages, mag)
