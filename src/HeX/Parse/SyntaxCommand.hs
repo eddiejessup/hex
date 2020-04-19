@@ -10,7 +10,7 @@ import qualified Hex.Config.Codes       as Code
 import           Hex.Parse.Stream.Class
 import           Hex.Resolve.Token
 
-parseCSNameArgs :: TeXParser s e m (Seq Code.CharCode)
+parseCSNameArgs :: TeXParser s st e m (Seq Code.CharCode)
 parseCSNameArgs =
     do
     cs <- Seq.fromList <$> parseManyChars

@@ -17,6 +17,7 @@ dependencies:
 - bytestring
 - containers
 - directory
+- exceptions
 - generic-lens
 - hashable
 - ilist

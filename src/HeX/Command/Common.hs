@@ -7,13 +7,6 @@ import           Hexlude
 import           Hex.Quantity
 import qualified Hex.Parse                 as HP
 
-readOnState
-    :: ( MonadState r m
-       )
-     => ReaderT r m b
-     -> m b
-readOnState f = get >>= runReaderT f
-
 data BoxModeIntent
     = IntentToAddBox
     | IntentToSetBoxRegister EightBitInt HP.GlobalFlag
@@ -40,9 +33,10 @@ runLoop f = go
                 pure result
 
 runCommandLoop
-    :: ( HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+    :: ( HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
+
+       , MonadState st m
        )
     => (a -> HP.Command -> HP.Tgt st -> m (RecursionResult a r))
     -> a

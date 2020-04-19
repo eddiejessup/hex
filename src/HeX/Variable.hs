@@ -3,7 +3,6 @@ module Hex.Variable where
 import           Hexlude
 
 import qualified Hex.BreakList            as BL
-import           Hex.Command.Common
 import           Hex.Config
 import           Hex.Evaluate
 import qualified Hex.Parse                as HP

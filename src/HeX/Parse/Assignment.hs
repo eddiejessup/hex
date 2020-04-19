@@ -1,7 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 module Hex.Parse.Assignment where
 
-import qualified Control.Lens as L
 import qualified Control.Monad.Combinators as PC
 import qualified Data.Set as Set
 import Hex.Config.Codes (unsafeCodesFromChars)
@@ -17,7 +16,7 @@ import Hexlude
 import qualified Path
 import qualified Text.Megaparsec as P
 
-headToParseAssignment :: T.PrimitiveToken -> TeXParser s e m Assignment
+headToParseAssignment :: T.PrimitiveToken -> TeXParser s st e m Assignment
 headToParseAssignment = go []
   where
     go prefixes = \case
@@ -54,7 +53,11 @@ headToParseAssignment = go []
           else T.Local
           }
 
-headToParseNonMacroAssignmentBody :: forall s e m. TeXParseable s e m => T.PrimitiveToken -> SimpleParsecT s m AssignmentBody
+headToParseNonMacroAssignmentBody
+  :: forall s st e m
+   . TeXParseable s st e m
+  => T.PrimitiveToken
+  -> SimpleParsecT s m AssignmentBody
 headToParseNonMacroAssignmentBody = \case
   T.HyphenationTok -> SetHyphenation <$> parseGeneralText
   T.HyphenationPatternsTok ->
@@ -79,7 +82,7 @@ headToParseNonMacroAssignmentBody = \case
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
     nrPairs <- parseTeXInt
-    Q.TeXInt eNrPairsInt <- P.getInput <&> L.view configLens >>= runReaderT (texEvaluate nrPairs)
+    Q.TeXInt eNrPairsInt <- lift $ texEvaluate nrPairs
     let parseLengthPair = (,) <$> parseLength <*> parseLength
     SetParShape <$> PC.count eNrPairsInt parseLengthPair
   T.ReadTok -> do
@@ -215,7 +218,7 @@ headToParseNonMacroAssignmentBody = \case
       SetBoxDimension var <$> parseLength
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-parseFileName :: TeXParser s e m TeXFilePath
+parseFileName :: TeXParser s st e m TeXFilePath
 parseFileName = do
   skipOptionalSpaces
   fileNameChars <-

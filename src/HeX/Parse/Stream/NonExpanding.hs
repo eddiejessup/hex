@@ -2,15 +2,15 @@
 
 module Hex.Parse.Stream.NonExpanding where
 
-import           Hexlude                   hiding (show)
+import           Hexlude
 
 import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.Generics.Product.Typed as G.P
 import qualified Data.List.NonEmpty        as L.NE
 import qualified Data.Sequence             as Seq
+import qualified Data.Text as Tx
 import           Path                      (Abs, File, Path)
 import qualified Text.Megaparsec           as P
-import           Text.Show
 
 import qualified Hex.Config                as Conf
 import qualified Hex.Lex                   as Lex
@@ -21,27 +21,31 @@ data NonExpandingStream = NonExpandingStream
     { nesTokenSources :: L.NE.NonEmpty TokenSource
     , nesResolutionMode  :: ResolutionMode
     , nesLexState     :: Lex.LexState
-    , nesConfig       :: Conf.Config
     }
     deriving stock (Generic)
 
-instance Show NonExpandingStream where
-    show _ = "NonExpandingStream {..}"
+instance Readable NonExpandingStream where
+    describe (NonExpandingStream { nesLexState, nesResolutionMode, nesTokenSources }) =
+        "NonExpandingStream["
+                    <> "lexState=" <> show nesLexState
+            <> ", " <> "resolutionMode=" <> show nesResolutionMode
+            <> "\n"
+            <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> (toList nesTokenSources))
 
-newNonExpandingStream :: Maybe (Path Abs File) -> BS.L.ByteString -> IO NonExpandingStream
+newNonExpandingStream :: Maybe (Path Abs File) -> BS.L.ByteString -> NonExpandingStream
 newNonExpandingStream maybePath cs =
-    do
-    conf <- Conf.newConfig
-    pure NonExpandingStream
-        { nesTokenSources = pure (newTokenSource maybePath cs)
-        , nesLexState      = Lex.LineBegin
-        , nesConfig        = conf
-        , nesResolutionMode = Resolving
-        }
+  NonExpandingStream
+    { nesTokenSources = pure (newTokenSource maybePath cs)
+    , nesLexState      = Lex.LineBegin
+    , nesResolutionMode = Resolving
+    }
 
 instance ( MonadError e m
          , AsTeXParseErrors e
          , AsType NonExpandingStreamError e
+
+         , MonadReader st m
+         , HasType Conf.Config st
          ) => P.Stream NonExpandingStream m where
     type Token NonExpandingStream = PrimitiveToken
 
@@ -101,8 +105,6 @@ instance ( MonadError e m
 instance TeXStream NonExpandingStream where
     resolutionModeLens = G.P.typed @ResolutionMode
 
-    configLens = G.P.typed @Conf.Config
-
     tokenSourceLens = G.P.typed @(L.NE.NonEmpty TokenSource)
 
     lexStateLens = G.P.typed @Lex.LexState
@@ -114,8 +116,9 @@ data NonExpandingStreamError
     deriving stock (Show)
 
 nesFetchAndExpandToken
-    :: (MonadError e m, AsTeXParseErrors e, AsType NonExpandingStreamError e)
-
+    :: ( TeXParseable NonExpandingStream st e m
+       , AsType NonExpandingStreamError e
+       )
     => NonExpandingStream
     -> m (Maybe (Seq Lex.Token, PrimitiveToken, NonExpandingStream))
 nesFetchAndExpandToken stream =

@@ -34,10 +34,10 @@ handleCommandInParaMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )
@@ -56,15 +56,15 @@ handleCommandInParaMode hList@(BL.HList hElemSeq) command oldStream =
             modify $ HP.tgtLens .~ (HP.insertLexToken oldStream Lex.parToken)
             pure doNothing
         HP.HModeCommand (HP.AddHGlue g) ->
-            addElem <$> readOnState (hModeAddHGlue g)
+            addElem <$> hModeAddHGlue g
         HP.HModeCommand (HP.AddCharacter c) ->
-            addElem <$> readOnState (hModeAddCharacter c)
+            addElem <$> hModeAddCharacter c
         HP.HModeCommand (HP.AddHRule rule) ->
-            addElem <$> readOnState (hModeAddRule rule)
+            addElem <$> hModeAddRule rule
         HP.AddSpace ->
-            addElem <$> readOnState hModeAddSpace
+            addElem <$> hModeAddSpace
         HP.StartParagraph indentFlag ->
-            addMaybeElem' <$> readOnState (hModeStartParagraph indentFlag)
+            addMaybeElem' <$> hModeStartParagraph indentFlag
         -- \par: Restricted: does nothing. Unrestricted: ends mode.
         HP.EndParagraph ->
             pure $ endLoop EndParaSawEndParaCommand hList
@@ -94,10 +94,10 @@ handleCommandInHBoxMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )
@@ -110,15 +110,15 @@ handleCommandInHBoxMode hList@(BL.HList hElemSeq) command _ =
         HP.VModeCommand vModeCommand ->
             throwError $ injectTyped $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
         HP.HModeCommand (HP.AddCharacter c) ->
-            addElem <$> readOnState (hModeAddCharacter c)
+            addElem <$> hModeAddCharacter c
         HP.HModeCommand (HP.AddHGlue g) ->
-            addElem <$> readOnState (hModeAddHGlue g)
+            addElem <$> hModeAddHGlue g
         HP.HModeCommand (HP.AddHRule rule) ->
-            addElem <$> readOnState (hModeAddRule rule)
+            addElem <$> hModeAddRule rule
         HP.AddSpace ->
-            addElem <$> readOnState hModeAddSpace
+            addElem <$> hModeAddSpace
         HP.StartParagraph indentFlag ->
-            addMaybeElem' <$> readOnState (hModeStartParagraph indentFlag)
+            addMaybeElem' <$> hModeStartParagraph indentFlag
         -- \par: Restricted: does nothing. Unrestricted: ends mode.
         HP.EndParagraph ->
             pure doNothing
@@ -155,9 +155,8 @@ addVListElemAndLoop vl e = LoopAgain <$> addVListElem vl e
 handleCommandInVBoxMode
     :: ( MonadState st m
        , HP.HasTgtType st
-       , HasType Config st
 
-       , HP.TeXParseable (HP.Tgt st) e m
+       , HP.TeXParseable (HP.Tgt st) st e m
 
        , AsType TFMError e
        , AsType BuildError e
@@ -173,9 +172,9 @@ handleCommandInVBoxMode vList command oldStream =
         HP.VModeCommand HP.End ->
             throwError $ injectTyped $ BuildError "End not allowed in internal vertical mode"
         HP.VModeCommand (HP.AddVGlue g) ->
-            readOnState (vModeAddVGlue g) >>= addElem
+            vModeAddVGlue g >>= addElem
         HP.VModeCommand (HP.AddVRule rule) ->
-            readOnState (vModeAddRule rule) >>= addElem
+            vModeAddRule rule >>= addElem
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -217,6 +216,7 @@ handleCommandInVBoxMode vList command oldStream =
 
 appendParagraph
     :: ( MonadIO m
+
        , MonadState st m
        , HasType Config st
 
@@ -257,11 +257,11 @@ handleCommandInMainVMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
+       , HP.TeXParseable (HP.Tgt st) st e m
+
+       , HP.HasTgtType st
 
        , MonadState st m
-       , HP.HasTgtType st
-       , HasType Config st
 
        , MonadIO m
        )
@@ -275,9 +275,9 @@ handleCommandInMainVMode vList command oldStream =
         HP.VModeCommand HP.End ->
             pure $ endLoop vList
         HP.VModeCommand (HP.AddVGlue g) ->
-            readOnState (vModeAddVGlue g) >>= addElem
+            vModeAddVGlue g >>= addElem
         HP.VModeCommand (HP.AddVRule rule) ->
-            readOnState (vModeAddRule rule) >>= addElem
+            vModeAddRule rule >>= addElem
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -322,10 +322,10 @@ extractPara
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )
@@ -344,10 +344,10 @@ extractParaFromVMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )
@@ -368,10 +368,10 @@ extractHBox
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )
@@ -384,10 +384,10 @@ extractVBox
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )
@@ -400,10 +400,10 @@ extractVSubBox
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )
@@ -436,10 +436,10 @@ extractHSubBox
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )
@@ -458,10 +458,10 @@ extractMainVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )
@@ -474,10 +474,10 @@ extractBreakAndSetVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable (HP.Tgt st) e m
-       , MonadState st m
+       , HP.TeXParseable (HP.Tgt st) st e m
        , HP.HasTgtType st
-       , HasType Config st
+
+       , MonadState st m
 
        , MonadIO m
        )

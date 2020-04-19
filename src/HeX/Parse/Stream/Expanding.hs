@@ -28,29 +28,24 @@ import Path (Abs, File, Path)
 import qualified Path
 import qualified Path.IO
 import qualified Text.Megaparsec as P
--- import Text.Show
 
 data ExpandingStream
   = ExpandingStream
       { streamTokenSources :: L.NE.NonEmpty TokenSource
       , lexState :: Lex.LexState
       , resolutionMode :: ResolutionMode
-      , config :: Conf.Config
       , skipState :: [ConditionBodyState]
       }
   deriving stock (Generic)
 
-newExpandStream :: Maybe (Path Abs File) -> BS.L.ByteString -> IO ExpandingStream
-newExpandStream maybePath cs = do
-  conf <- Conf.newConfig
-  pure
-    ExpandingStream
-      { streamTokenSources = pure (newTokenSource maybePath cs)
-      , lexState = Lex.LineBegin
-      , resolutionMode = Resolving
-      , config = conf
-      , skipState = []
-      }
+newExpandStream :: Maybe (Path Abs File) -> BS.L.ByteString -> ExpandingStream
+newExpandStream maybePath cs =
+  ExpandingStream
+    { streamTokenSources = pure (newTokenSource maybePath cs)
+    , lexState = Lex.LineBegin
+    , resolutionMode = Resolving
+    , skipState = []
+    }
 
 instance HasTgtType ExpandingStream where
   type Tgt ExpandingStream = ExpandingStream
@@ -66,13 +61,14 @@ instance Readable ExpandingStream where
             <> "\n"
             <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> (toList streamTokenSources))
 
-
 instance
   ( MonadError e m
   , AsTeXParseErrors e
   , AsType ExpansionError e
   , AsType Data.Path.PathError e
   , MonadIO m
+  , MonadReader st m
+  , HasType Conf.Config st
   )
   => P.Stream ExpandingStream m where
 
@@ -144,8 +140,6 @@ instance TeXStream ExpandingStream where
 
   resolutionModeLens = G.P.typed @ResolutionMode
 
-  configLens = G.P.typed @Conf.Config
-
   tokenSourceLens = G.P.typed @(L.NE.NonEmpty TokenSource)
 
   lexStateLens = G.P.typed @Lex.LexState
@@ -216,7 +210,8 @@ expandChangeCase lookupChangeCaseCode (BalancedText caseToks) =
       Conf.ChangeToCode char' -> char'
 
 skipToIfDelim
-  :: forall e m. TeXParseable ExpandingStream e m
+  :: forall st e m
+   . TeXParseable ExpandingStream st e m
   => IfBodyState
   -> ExpandingStream
   -> m (Maybe ExpandingStream)
@@ -253,7 +248,8 @@ skipToIfDelim blk stream = go stream 1
             cont n
 
 skipUpToCaseBlock
-  :: forall e m. TeXParseable ExpandingStream e m
+  :: forall st e m
+   . TeXParseable ExpandingStream st e m
   => Q.TeXInt
   -> ExpandingStream
   -> m (Maybe ExpandingStream)
@@ -286,7 +282,7 @@ skipUpToCaseBlock tgt stream = go stream 0 1
               cont cur n
 
 expandConditionToken
-  :: ( TeXParseable ExpandingStream e m
+  :: ( TeXParseable ExpandingStream st e m
      , AsType ExpansionError e
      )
   => ExpandingStream
@@ -295,7 +291,8 @@ expandConditionToken
 expandConditionToken strm = \case
   ConditionHeadTok ifTok -> do
     (resultStream, condHead) <- runSimpleRunParserT' (conditionHeadParser ifTok) strm
-    runReaderT (texEvaluate condHead) (config resultStream) >>= \case
+    conf <- asks $ getTyped @Conf.Config
+    runReaderT (texEvaluate condHead) conf >>= \case
       IfBlockTarget IfPreElse ->
         pure $ Just resultStream {skipState = IfBodyState IfPreElse : skipState resultStream}
       IfBlockTarget IfPostElse ->
@@ -341,7 +338,7 @@ expandConditionToken strm = \case
         pure $ Just skippedStream {skipState = condRest}
 
 expandSyntaxCommand
-  :: ( TeXParseable ExpandingStream e m
+  :: ( TeXParseable ExpandingStream st e m
      , MonadIO m
      , AsType ExpansionError e
      , AsType Data.Path.PathError e
@@ -360,7 +357,8 @@ expandSyntaxCommand strm = \case
   RomanNumeralTok ->
     panic "Not implemented: syntax command RomanNumeralTok"
   StringTok -> do
-    let escapeChar = (Conf.IntParamVal . Conf.lookupTeXIntParameter EscapeChar . config) strm
+    conf <- asks $ getTyped @Conf.Config
+    let escapeChar = (Conf.IntParamVal . Conf.lookupTeXIntParameter EscapeChar) conf
     (postArgStream, lexTok) <- runSimpleRunParserT' parseLexToken strm
     pure $ Just (postArgStream, expandString escapeChar lexTok)
   JobNameTok ->
@@ -371,7 +369,7 @@ expandSyntaxCommand strm = \case
     panic "Not implemented: syntax command MeaningTok"
   CSNameTok ->
     runExpandCommand strm parseCSNameArgs (expandCSName >>> pure)
-  ExpandAfterTok -> case fetchLexToken strm of
+  ExpandAfterTok -> fetchLexToken strm >>= \case
     Nothing -> pure Nothing
     Just (argLT, postArgStream) ->
       withJust (fetchAndExpandToken postArgStream) $ \(postArgLTs, _, postExpandStream) ->
@@ -391,7 +389,8 @@ expandSyntaxCommand strm = \case
           Just p -> [Path.parent p]
           Nothing -> []
     absPath <- Path.IO.makeAbsolute texPath
-    path <- runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) (config resultStream)
+    conf <- asks $ getTyped @Conf.Config
+    path <- runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) conf
     newSource <- newTokenSource (Just absPath) <$> Code.readCharCodes path
     let newResultStream = resultStream & G.P.typed @(L.NE.NonEmpty TokenSource) %~ (L.NE.cons newSource)
     pure $ Just (newResultStream, mempty)
@@ -399,10 +398,12 @@ expandSyntaxCommand strm = \case
     panic "Not implemented: syntax command EndInputTok"
   TheTok -> do
     (resultStream, intQuant) <- runSimpleRunParserT' parseInternalQuantity strm
-    quantTokens <- (charCodeAsMadeToken <$>) <$> runReaderT (texEvaluate intQuant) (config resultStream)
+    conf <- asks $ getTyped @Conf.Config
+    quantTokens <- (charCodeAsMadeToken <$>) <$> runReaderT (texEvaluate intQuant) conf
     pure $ Just (resultStream, quantTokens)
-  ChangeCaseTok direction ->
-    runExpandCommand strm parseGeneralText $ expandChangeCase (\c -> Conf.lookupChangeCaseCode direction c (config strm)) >>> pure
+  ChangeCaseTok direction -> do
+    conf <- asks $ getTyped @Conf.Config
+    runExpandCommand strm parseGeneralText $ expandChangeCase (\c -> Conf.lookupChangeCaseCode direction c conf) >>> pure
   where
     runExpandCommand inputStream parser f = do
       (stream, a) <- runSimpleRunParserT' parser inputStream
@@ -410,7 +411,7 @@ expandSyntaxCommand strm = \case
       pure $ Just (stream, v)
 
 fetchAndExpandToken
-  :: ( TeXParseable ExpandingStream e m
+  :: ( TeXParseable ExpandingStream st e m
      , MonadIO m
      , AsType ExpansionError e
      , AsType Data.Path.PathError e

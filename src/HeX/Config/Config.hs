@@ -6,6 +6,7 @@ module Hex.Config.Config where
 import           Hexlude
 
 import           Control.Lens
+import           Control.Monad.Catch      (MonadThrow)
 import qualified Data.Containers          as D.C
 import qualified Data.Sequences           as D.S
 import qualified Data.MonoTraversable     as D.MT
@@ -138,9 +139,9 @@ data Config =
 newtype ConfigError = ConfigError Text
     deriving stock (Show)
 
-newConfig :: IO Config
+newConfig :: (MonadIO m, MonadThrow m) => m Config
 newConfig = do
-    cwdRaw <- getCurrentDirectory
+    cwdRaw <- liftIO $ getCurrentDirectory
     _searchDirectories
         <- mapM parseAbsDir
                 [ "/usr/local/texlive/2018basic/texmf-dist/fonts/tfm/public/latex-fonts"
@@ -148,7 +149,7 @@ newConfig = do
                 , "/usr/local/texlive/2018basic/texmf-dist/fonts/tfm/public/knuth-lib"
                 , cwdRaw
                 ]
-    logHandle <- openFile "hex.log" WriteMode
+    logHandle <- liftIO $ openFile "hex.log" WriteMode
     pure Config { fontInfos = Map.empty
                 , searchDirectories = _searchDirectories
                 , specialTeXInts = newSpecialTeXInts

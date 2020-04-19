@@ -22,6 +22,7 @@ module Hexlude
     , (>>>)
     , atEith
     , traceText
+    , readOnState
     , flap
 
     , HDirection(..)
@@ -53,6 +54,13 @@ atEith str xs i = note
 
 traceText :: Text -> a -> a
 traceText = trace
+
+readOnState
+    :: ( MonadState r m
+       )
+     => ReaderT r m b
+     -> m b
+readOnState f = get >>= runReaderT f
 
 -- Stolen from relude.
 flap :: Functor f => f (a -> b) -> a -> f b

@@ -14,7 +14,6 @@ import qualified Hex.Box             as B
 import           Hex.BreakList       (HListElem, VListElem)
 import qualified Hex.BreakList       as BL
 import qualified Hex.Config.Codes    as Code
-import           Hex.Command.Common
 import           Hex.Config
 import           Hex.Evaluate
 import qualified Hex.Lex             as Lex

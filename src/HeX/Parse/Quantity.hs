@@ -17,18 +17,18 @@ import           Hex.Parse.Stream.Class
 import qualified Hex.Resolve.Token           as T
 import qualified Hex.Quantity              as Q
 
-parseSigned :: TeXParseable s e m => SimpleParsecT s m a -> SimpleParsecT s m (T.Signed a)
+parseSigned :: TeXParser s st e m a -> TeXParser s st e m (T.Signed a)
 parseSigned parseQuantity = T.Signed <$> parseSigns <*> parseQuantity
 
 -- TeXInt.
 
-parseTeXInt :: TeXParser s e m TeXInt
+parseTeXInt :: TeXParser s st e m TeXInt
 parseTeXInt = parseSigned parseUnsignedTeXInt
 
-parseEightBitTeXInt :: TeXParser s e m EightBitTeXInt
+parseEightBitTeXInt :: TeXParser s st e m EightBitTeXInt
 parseEightBitTeXInt = EightBitTeXInt <$> parseTeXInt
 
-parseSigns :: TeXParser s e m T.Sign
+parseSigns :: TeXParser s st e m T.Sign
 parseSigns = mconcat <$> parseOptionalSigns
   where
     parseOptionalSigns = skipOptionalSpaces
@@ -39,7 +39,7 @@ parseSigns = mconcat <$> parseOptionalSigns
         | matchOtherToken '-' t = Just T.Negative
         | otherwise = Nothing
 
-parseUnsignedTeXInt :: TeXParser s e m UnsignedTeXInt
+parseUnsignedTeXInt :: TeXParser s st e m UnsignedTeXInt
 parseUnsignedTeXInt =
     tryChoice
         [ NormalTeXIntAsUTeXInt <$> parseNormalTeXInt
@@ -50,7 +50,7 @@ digitsToTeXInt :: Int -> [Int] -> Q.TeXInt
 digitsToTeXInt base digs =
     Q.TeXInt $ foldl' (\a b -> a * base + b) 0 digs
 
-parseNormalTeXInt :: TeXParser s e m NormalTeXInt
+parseNormalTeXInt :: TeXParser s st e m NormalTeXInt
 parseNormalTeXInt =
     tryChoice [ TeXIntConstant <$> parseConstantInt <* skipOneOptionalSpace
               , InternalTeXInt <$> parseHeaded headToParseInternalTeXInt
@@ -86,7 +86,7 @@ octCharToInt = \case
     _ ->
         Nothing
 
-headToParseCoercedTeXInt :: T.PrimitiveToken -> TeXParser s e m CoercedTeXInt
+headToParseCoercedTeXInt :: T.PrimitiveToken -> TeXParser s st e m CoercedTeXInt
 headToParseCoercedTeXInt =
     choiceFlap
         [ fmap InternalLengthAsInt <$> headToParseInternalLength
@@ -94,15 +94,15 @@ headToParseCoercedTeXInt =
         ]
 
 -- Length.
-parseLength :: TeXParser s e m Length
+parseLength :: TeXParser s st e m Length
 parseLength = parseSigned parseUnsignedLength
 
-parseUnsignedLength :: TeXParser s e m UnsignedLength
+parseUnsignedLength :: TeXParser s st e m UnsignedLength
 parseUnsignedLength = tryChoice [ NormalLengthAsULength <$> parseNormalLength
                                 , CoercedLength . InternalGlueAsLength <$> parseHeaded headToParseInternalGlue
                                 ]
 
-parseNormalLength :: TeXParser s e m NormalLength
+parseNormalLength :: TeXParser s st e m NormalLength
 parseNormalLength =
     tryChoice
         [ LengthSemiConstant <$> parseFactor <*> parseUnit
@@ -112,13 +112,13 @@ parseNormalLength =
 -- NOTE: The parser order matters because TeX's grammar is ambiguous: '2.2'
 -- could be parsed as an integer constant, '2', followed by '.2'. We break the
 -- ambiguity by prioritising the rational constant parser.
-parseFactor :: TeXParser s e m Factor
+parseFactor :: TeXParser s st e m Factor
 parseFactor = tryChoice
     [ RationalConstant <$> parseRationalConstant
     , NormalTeXIntFactor <$> parseNormalTeXInt
     ]
 
-parseRationalConstant :: TeXParser s e m Rational
+parseRationalConstant :: TeXParser s st e m Rational
 parseRationalConstant = do
     wholeNr <- decDigitsToTeXInt <$> PC.many (satisfyThen decCharToInt)
     skipSatisfied (\t -> matchOtherToken ',' t || matchOtherToken '.' t)
@@ -133,7 +133,7 @@ parseRationalConstant = do
   where
     decDigitsToTeXInt = digitsToTeXInt 10
 
-parseUnit :: TeXParser s e m Unit
+parseUnit :: TeXParser s st e m Unit
 parseUnit =
     tryChoice
         [ skipOptionalSpaces *> (InternalUnit <$> parseInternalUnit)
@@ -180,32 +180,32 @@ parseUnit =
         ]
 
 -- Math length.
-parseMathLength :: TeXParser s e m MathLength
+parseMathLength :: TeXParser s st e m MathLength
 parseMathLength = parseSigned parseUnsignedMathLength
 
-parseUnsignedMathLength :: TeXParser s e m UnsignedMathLength
+parseUnsignedMathLength :: TeXParser s st e m UnsignedMathLength
 parseUnsignedMathLength =
     tryChoice [ NormalMathLengthAsUMathLength <$> parseNormalMathLength
               , CoercedMathLength . InternalMathGlueAsMathLength <$> parseHeaded headToParseInternalMathGlue
               ]
 
-parseNormalMathLength :: TeXParser s e m NormalMathLength
+parseNormalMathLength :: TeXParser s st e m NormalMathLength
 parseNormalMathLength =
     MathLengthSemiConstant <$> parseFactor <*> parseMathUnit
 
-parseMathUnit :: TeXParser s e m MathUnit
+parseMathUnit :: TeXParser s st e m MathUnit
 parseMathUnit =
     tryChoice [ skipKeyword (unsafeCodesFromChars "mu") >> skipOneOptionalSpace $> Mu
               , skipOptionalSpaces *> (InternalMathGlueAsUnit <$> parseHeaded headToParseInternalMathGlue)
               ]
 
 -- Glue.
-parseGlue :: TeXParser s e m Glue
+parseGlue :: TeXParser s st e m Glue
 parseGlue = tryChoice [ ExplicitGlue <$> parseLength <*> parseFlex (unsafeCodesFromChars "plus") <*> parseFlex (unsafeCodesFromChars "minus")
                       , InternalGlue <$> parseSigned (parseHeaded headToParseInternalGlue)
                       ]
 
-parseFlex :: [Code.CharCode] -> TeXParser s e m (Maybe Flex)
+parseFlex :: [Code.CharCode] -> TeXParser s st e m (Maybe Flex)
 parseFlex s =
     tryChoice
         [ Just <$> parsePresentFlex
@@ -220,7 +220,7 @@ parseFlex s =
             , FilFlex <$> parseFilLength
             ]
 
-parseFilLength :: TeXParser s e m FilLength
+parseFilLength :: TeXParser s st e m FilLength
 parseFilLength =
     (FilLength <$> parseSigned parseFactor <*> parseOrder) <* skipOptionalSpaces
   where
@@ -229,13 +229,13 @@ parseFilLength =
     parseOrder = skipKeyword (unsafeCodesFromChars "fi") *> (length <$> parseSomeLs)
 
 -- Math glue.
-parseMathGlue :: TeXParser s e m MathGlue
+parseMathGlue :: TeXParser s st e m MathGlue
 parseMathGlue =
     tryChoice [ ExplicitMathGlue <$> parseMathLength <*> parseMathFlex (unsafeCodesFromChars "plus") <*> parseMathFlex (unsafeCodesFromChars "minus")
               , InternalMathGlue <$> parseSigns <*> parseHeaded headToParseInternalMathGlue
               ]
 
-parseMathFlex :: [Code.CharCode] -> TeXParser s e m (Maybe MathFlex)
+parseMathFlex :: [Code.CharCode] -> TeXParser s st e m (Maybe MathFlex)
 parseMathFlex s = tryChoice [ Just <$> parsePresentFlex
                             , skipOptionalSpaces $> Nothing
                             ]
@@ -247,7 +247,7 @@ parseMathFlex s = tryChoice [ Just <$> parsePresentFlex
 
 -- Internal quantities.
 
-headToParseTeXIntVariable :: T.PrimitiveToken -> TeXParser s e m TeXIntVariable
+headToParseTeXIntVariable :: T.PrimitiveToken -> TeXParser s st e m TeXIntVariable
 headToParseTeXIntVariable = \case
     T.IntParamVarTok p ->
         pure (ParamVar p)
@@ -258,7 +258,7 @@ headToParseTeXIntVariable = \case
     _ ->
         empty
 
-headToParseLengthVariable :: T.PrimitiveToken -> TeXParser s e m LengthVariable
+headToParseLengthVariable :: T.PrimitiveToken -> TeXParser s st e m LengthVariable
 headToParseLengthVariable = \case
     T.LenParamVarTok p ->
         pure (ParamVar p)
@@ -269,7 +269,7 @@ headToParseLengthVariable = \case
     _ ->
         empty
 
-headToParseGlueVariable :: T.PrimitiveToken -> TeXParser s e m GlueVariable
+headToParseGlueVariable :: T.PrimitiveToken -> TeXParser s st e m GlueVariable
 headToParseGlueVariable = \case
     T.GlueParamVarTok p ->
         pure (ParamVar p)
@@ -280,7 +280,7 @@ headToParseGlueVariable = \case
     _ ->
         empty
 
-headToParseMathGlueVariable :: T.PrimitiveToken -> TeXParser s e m MathGlueVariable
+headToParseMathGlueVariable :: T.PrimitiveToken -> TeXParser s st e m MathGlueVariable
 headToParseMathGlueVariable = \case
     T.MathGlueParamVarTok p ->
         pure (ParamVar p)
@@ -291,7 +291,7 @@ headToParseMathGlueVariable = \case
     _ ->
         empty
 
-headToParseTokenListVariable :: T.PrimitiveToken -> TeXParser s e m TokenListVariable
+headToParseTokenListVariable :: T.PrimitiveToken -> TeXParser s st e m TokenListVariable
 headToParseTokenListVariable = \case
     T.TokenListParamVarTok p ->
         pure (ParamVar p)
@@ -302,42 +302,42 @@ headToParseTokenListVariable = \case
     _ ->
         empty
 
-headToParseSpecialTeXInt :: T.PrimitiveToken -> TeXParser s e m T.SpecialTeXInt
+headToParseSpecialTeXInt :: T.PrimitiveToken -> TeXParser s st e m T.SpecialTeXInt
 headToParseSpecialTeXInt = \case
     T.SpecialTeXIntTok p ->
         pure p
     _ ->
         empty
 
-headToParseCodeTableRef :: T.PrimitiveToken -> TeXParser s e m CodeTableRef
+headToParseCodeTableRef :: T.PrimitiveToken -> TeXParser s st e m CodeTableRef
 headToParseCodeTableRef = \case
     T.CodeTypeTok c ->
         CodeTableRef c <$> parseTeXInt
     _ ->
         P.failure (Just (P.Label ('C' :| "ode table ref"))) mempty
 
-headToParseCharToken :: T.PrimitiveToken -> TeXParser s e m Q.TeXInt
+headToParseCharToken :: T.PrimitiveToken -> TeXParser s st e m Q.TeXInt
 headToParseCharToken = \case
     T.IntRefTok T.CharQuantity c ->
         pure c
     _ ->
         P.failure (Just (P.Label ('C' :| "har token"))) mempty
 
-headToParseMathCharToken :: T.PrimitiveToken -> TeXParser s e m Q.TeXInt
+headToParseMathCharToken :: T.PrimitiveToken -> TeXParser s st e m Q.TeXInt
 headToParseMathCharToken = \case
     T.IntRefTok T.MathCharQuantity c ->
         pure c
     _ ->
         empty
 
-headToParseFontCharRef :: T.PrimitiveToken -> TeXParser s e m FontCharRef
+headToParseFontCharRef :: T.PrimitiveToken -> TeXParser s st e m FontCharRef
 headToParseFontCharRef = \case
     T.FontCharTok c ->
         FontCharRef c <$> parseHeaded headToParseFontRef
     _ ->
         empty
 
-headToParseInternalTeXInt :: T.PrimitiveToken -> TeXParser s e m InternalTeXInt
+headToParseInternalTeXInt :: T.PrimitiveToken -> TeXParser s st e m InternalTeXInt
 headToParseInternalTeXInt =
     choiceFlap
         [ \case
@@ -354,7 +354,7 @@ headToParseInternalTeXInt =
         , fmap InternalFontCharRef <$> headToParseFontCharRef
         ]
 
-headToParseFontRef :: T.PrimitiveToken -> TeXParser s e m FontRef
+headToParseFontRef :: T.PrimitiveToken -> TeXParser s st e m FontRef
 headToParseFontRef =
     choiceFlap
         [ \case
@@ -364,17 +364,17 @@ headToParseFontRef =
         , fmap FamilyMemberFontRef <$> headToParseFamilyMember
         ]
 
-headToParseFontRefToken :: T.PrimitiveToken -> TeXParser s e m Q.TeXInt
+headToParseFontRefToken :: T.PrimitiveToken -> TeXParser s st e m Q.TeXInt
 headToParseFontRefToken = \case
     T.FontRefToken n -> pure n
     _                -> empty
 
-headToParseFamilyMember :: T.PrimitiveToken -> TeXParser s e m FamilyMember
+headToParseFamilyMember :: T.PrimitiveToken -> TeXParser s st e m FamilyMember
 headToParseFamilyMember = \case
     T.FontRangeTok r -> FamilyMember r <$> parseTeXInt
     _                -> empty
 
-headToParseInternalLength :: T.PrimitiveToken -> TeXParser s e m InternalLength
+headToParseInternalLength :: T.PrimitiveToken -> TeXParser s st e m InternalLength
 headToParseInternalLength =
     choiceFlap
         [ \case
@@ -386,21 +386,21 @@ headToParseInternalLength =
         , fmap InternalBoxDimensionRef <$> headToParseBoxDimensionRef
         ]
 
-headToParseSpecialLength :: T.PrimitiveToken -> TeXParser s e m T.SpecialLength
+headToParseSpecialLength :: T.PrimitiveToken -> TeXParser s st e m T.SpecialLength
 headToParseSpecialLength = \case
     T.SpecialLengthTok p ->
         pure p
     _ ->
         empty
 
-headToParseFontDimensionRef :: T.PrimitiveToken -> TeXParser s e m FontDimensionRef
+headToParseFontDimensionRef :: T.PrimitiveToken -> TeXParser s st e m FontDimensionRef
 headToParseFontDimensionRef = \case
     T.FontDimensionTok ->
         FontDimensionRef <$> parseTeXInt <*> parseHeaded headToParseFontRef
     _ ->
         empty
 
-headToParseBoxDimensionRef :: T.PrimitiveToken -> TeXParser s e m BoxDimensionRef
+headToParseBoxDimensionRef :: T.PrimitiveToken -> TeXParser s st e m BoxDimensionRef
 headToParseBoxDimensionRef = \case
     T.BoxDimensionTok dim ->
         do
@@ -409,7 +409,7 @@ headToParseBoxDimensionRef = \case
     _ ->
         empty
 
-headToParseInternalGlue :: T.PrimitiveToken -> TeXParser s e m InternalGlue
+headToParseInternalGlue :: T.PrimitiveToken -> TeXParser s st e m InternalGlue
 headToParseInternalGlue =
     choiceFlap
         [ fmap InternalGlueVariable <$> headToParseGlueVariable
@@ -418,7 +418,7 @@ headToParseInternalGlue =
             _             -> empty
         ]
 
-headToParseInternalMathGlue :: T.PrimitiveToken -> TeXParser s e m InternalMathGlue
+headToParseInternalMathGlue :: T.PrimitiveToken -> TeXParser s st e m InternalMathGlue
 headToParseInternalMathGlue =
     choiceFlap
         [ fmap InternalMathGlueVariable <$> headToParseMathGlueVariable
@@ -429,7 +429,7 @@ headToParseInternalMathGlue =
                 empty
         ]
 
-headToParseBox :: T.PrimitiveToken -> TeXParser s e m Box
+headToParseBox :: T.PrimitiveToken -> TeXParser s st e m Box
 headToParseBox = \case
     T.FetchedBoxTok fetchMode ->
         FetchedRegisterBox fetchMode <$> parseEightBitTeXInt

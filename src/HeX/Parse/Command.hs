@@ -16,7 +16,7 @@ import           Hex.Parse.Quantity
 import           Hex.Parse.Stream.Class
 import qualified Hex.Resolve.Token           as T
 
-parseInternalQuantity :: TeXParser s e m InternalQuantity
+parseInternalQuantity :: TeXParser s st e m InternalQuantity
 parseInternalQuantity = tryChoice
     [ InternalTeXIntQuantity    <$> parseHeaded headToParseInternalTeXInt
     , InternalLengthQuantity    <$> parseHeaded headToParseInternalLength
@@ -27,7 +27,7 @@ parseInternalQuantity = tryChoice
     ]
 
 -- \hrule and such.
-parseRule :: TeXParser s e m Rule
+parseRule :: TeXParser s st e m Rule
 parseRule = parseRuleSpecification Rule{ width  = Nothing
                                        , height = Nothing
                                        , depth  = Nothing
@@ -60,7 +60,7 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
         ln <- parseLength
         pure rule { depth = Just ln }
 
-headToParseModeIndependentCommand :: T.PrimitiveToken -> TeXParser s e m ModeIndependentCommand
+headToParseModeIndependentCommand :: T.PrimitiveToken -> TeXParser s st e m ModeIndependentCommand
 headToParseModeIndependentCommand =
     choiceFlap
         [ \case
@@ -147,7 +147,7 @@ headToParseModeIndependentCommand =
         _ ->
             empty
 
-parseCommand :: TeXParser s e m Command
+parseCommand :: TeXParser s st e m Command
 parseCommand =
     P.anySingle >>= choiceFlap
         [ \case
@@ -245,7 +245,7 @@ parseCommand =
             Assignment (SetBoxRegister _ _) _ -> P.failure (Just (P.Label ('S' :| "etBoxRegister"))) mempty
             a -> pure a
 
-    headToParseModedGlue :: Axis -> T.PrimitiveToken -> TeXParser s e m Glue
+    headToParseModedGlue :: Axis -> T.PrimitiveToken -> TeXParser s st e m Glue
     headToParseModedGlue axis = \case
         T.ModedCommand tokenAxis modedTok | tokenAxis == axis ->
             case modedTok of
@@ -273,28 +273,28 @@ parseCommand =
       where
         noLengthGlue = ExplicitGlue zeroLength
 
-    headToParseLeadersSpec :: Axis -> T.PrimitiveToken -> TeXParser s e m LeadersSpec
+    headToParseLeadersSpec :: Axis -> T.PrimitiveToken -> TeXParser s st e m LeadersSpec
     headToParseLeadersSpec axis = \case
             T.LeadersTok leaders ->
                 LeadersSpec leaders <$> parseBoxOrRule <*> parseHeaded (headToParseModedGlue axis)
             _ ->
                 empty
 
-    parseBoxOrRule :: TeXParser s e m BoxOrRule
+    parseBoxOrRule :: TeXParser s st e m BoxOrRule
     parseBoxOrRule = tryChoice
         [ BoxOrRuleBox <$> parseHeaded headToParseBox
         , BoxOrRuleRule Horizontal <$> parseHeaded (headToParseModedRule Horizontal)
         , BoxOrRuleRule Vertical <$> parseHeaded (headToParseModedRule Vertical)
         ]
 
-    headToParseModedRule :: Axis -> T.PrimitiveToken -> TeXParser s e m Rule
+    headToParseModedRule :: Axis -> T.PrimitiveToken -> TeXParser s st e m Rule
     headToParseModedRule axis = \case
         T.ModedCommand tokenAxis T.RuleTok | axis == tokenAxis ->
             parseRule
         _ ->
             empty
 
-    headToParseFetchedBoxRef :: Axis -> T.PrimitiveToken -> TeXParser s e m FetchedBoxRef
+    headToParseFetchedBoxRef :: Axis -> T.PrimitiveToken -> TeXParser s st e m FetchedBoxRef
     headToParseFetchedBoxRef tgtAxis = \case
         T.ModedCommand tokenAxis (T.UnwrappedFetchedBoxTok fetchMode) | tgtAxis == tokenAxis ->
             do

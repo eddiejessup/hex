@@ -1,5 +1,6 @@
 module Main where
 
+import           Control.Monad.Catch      (MonadThrow)
 import qualified Data.ByteString.Lazy as BS.L
 import Hex.Categorise
 import Hex.Command.Run
@@ -12,6 +13,7 @@ import qualified Data.Text as Tx
 import System.IO (hSetBuffering, BufferMode(..))
 import qualified Data.Generics.Product as G.P
 import qualified Data.List.NonEmpty as L.NE
+import qualified Hex.Config as Conf
 
 data Flag
   = Help
@@ -38,7 +40,7 @@ main = do
   when (Help `elem` flags) $ panic usage
   hSetBuffering stdout NoBuffering
   putText "Welcome to Hex repl"
-  s <- newExpandStream Nothing mempty
+  let s = newExpandStream Nothing mempty
   evalStateT repl s
 
 putResult :: MonadIO m => Text -> m ()
@@ -55,9 +57,10 @@ promptLazyByteString msg = do
   liftIO $ putStr @Text (msg <> " $> ")
   liftIO $ (BS.L.fromStrict . encodeUtf8) <$> getLine
 
-repl :: (MonadState ExpandingStream m, MonadIO m) => m ()
+repl :: (MonadState ExpandingStream m, MonadIO m, MonadThrow m) => m ()
 repl = do
   cmd <- prompt "Enter command, one of: [cat, lex, resolve, expand, command]"
+  conf <- Conf.newConfig
   case cmd of
     "cat" -> do
       inpBSL <- promptLazyByteString "cat"
@@ -82,7 +85,7 @@ repl = do
               (L.NE.cons (newTokenSource Nothing inpBSL))
 
       -- TODO: Put back into state? What about version with input but before consuming?
-      (newS, mayErr, primToks) <- expandingStreamAsPrimTokens sWithInput
+      (newS, mayErr, primToks) <- expandingStreamAsPrimTokens sWithInput conf
 
       case primToks of
         [] -> putText "Returned no results"
@@ -102,7 +105,7 @@ repl = do
       let sWithInput = s & G.P.field @"streamTokenSources" %~
               (L.NE.cons (newTokenSource Nothing inpBSL))
 
-      (newS, mayErr, commandToks) <- expandingStreamAsCommands sWithInput
+      (newS, mayErr, commandToks) <- expandingStreamAsCommands sWithInput conf
 
       case commandToks of
         [] -> putText "Returned no results"
