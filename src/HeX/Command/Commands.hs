@@ -25,7 +25,7 @@ glueToElem
        , AsType EvaluationError e
        , AsType ConfigError e
 
-       , MonadReader st m
+       , MonadState st m -- Read-only
        , HasType Config st
        )
     => HP.Glue
@@ -34,7 +34,7 @@ glueToElem g =
     BL.ListGlue <$> texEvaluate g
 
 ruleToElem
-    :: ( MonadReader st m
+    :: ( MonadState st m -- Read-only
        , HasType Config st
        , MonadError e m
        , AsType EvaluationError e
@@ -97,7 +97,7 @@ hModeAddHGlue
        , AsType EvaluationError e
        , AsType ConfigError e
 
-       , MonadReader st m
+       , MonadState st m -- Read-only
        , HasType Config st
        )
     => HP.Glue
@@ -110,7 +110,7 @@ hModeAddCharacter
        , AsType EvaluationError e
        , AsType ConfigError e
 
-       , MonadReader st m
+       , MonadState st m -- Read-only
        , HasType Config st
        )
     => HP.CharCodeRef
@@ -125,7 +125,7 @@ hModeAddSpace
     :: ( MonadError e m
        , AsType ConfigError e
 
-       , MonadReader st m
+       , MonadState st m -- Read-only
        , HasType Config st
        )
     => m HListElem
@@ -137,7 +137,7 @@ hModeAddRule
        , AsType EvaluationError e
        , AsType ConfigError e
 
-       , MonadReader st m
+       , MonadState st m -- Read-only
        , HasType Config st
        )
     => HP.Rule
@@ -151,7 +151,7 @@ hModeAddRule rule =
 
 hModeStartParagraph
     :: ( MonadError e m
-       , MonadReader st m
+       , MonadState st m -- Read-only
        , HasType Config st
        )
     => HP.IndentFlag
@@ -163,13 +163,13 @@ hModeStartParagraph = \case
     -- list, and the space factor is set to 1000.
     -- TODO: Space factor.
     HP.Indent ->
-        Just <$> (asks $ view $ typed @Config . to parIndentBox)
+        Just <$> (gets $ view $ typed @Config . to parIndentBox)
 
 vModeAddVGlue
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
-       , MonadReader st m
+       , MonadState st m -- Read-only
        , HasType Config st
        )
     => HP.Glue
@@ -180,7 +180,7 @@ vModeAddRule
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
-       , MonadReader st m
+       , MonadState st m -- Read-only
        , HasType Config st
        )
     => HP.Rule
@@ -188,14 +188,14 @@ vModeAddRule
 vModeAddRule rule =
     ruleToElem rule defaultWidth defaultHeight defaultDepth
   where
-    defaultWidth = asks $ view $ typed @Config . to (lookupLengthParameter HP.HSize)
+    defaultWidth = gets $ view $ typed @Config . to (lookupLengthParameter HP.HSize)
     defaultHeight = pure $ toScaledPointApprox (0.4 :: Rational) Point
     defaultDepth = pure 0
 
 -- Horizontal mode commands.
 
 characterBox
-    :: ( MonadReader st m
+    :: ( MonadState st m -- Read-only
        , HasType Config st
 
        , MonadError e m
@@ -208,7 +208,7 @@ characterBox char = do
     let toSP = TFM.designScaleSP fontMetrics
     TFM.Character { TFM.width, TFM.height, TFM.depth } <-
         note (injectTyped $ ConfigError "No such character")
-        $ IntMap.lookup (fromIntegral $ Code.codeWord char) (characters fontMetrics)
+        (IntMap.lookup (fromIntegral $ Code.codeWord char) (characters fontMetrics))
     pure B.Character { B.char       = char
                      , B.charWidth  = toSP width
                      , B.charHeight = toSP height
@@ -216,7 +216,7 @@ characterBox char = do
                      }
 
 spaceGlue
-    :: ( MonadReader st m
+    :: ( MonadState st m -- Read-only
        , HasType Config st
 
        , MonadError e m
@@ -249,12 +249,12 @@ loadFont
     -> m B.FontDefinition
 loadFont (HP.TeXFilePath path) fontSpec = do
     fontName <- D.Path.fileNameText path
-    info@FontInfo{ fontMetrics } <- readOnState $ findFilePath (WithImplicitExtension "tfm") [] path >>= readFontInfo
+    info@FontInfo{ fontMetrics } <- findFilePath (WithImplicitExtension "tfm") [] path >>= readFontInfo
     let designSizeSP = TFM.designSizeSP fontMetrics
-    scaleRatio <- readOnState $ evaluateFontSpecification designSizeSP fontSpec
+    scaleRatio <- evaluateFontSpecification designSizeSP fontSpec
     -- liftIO
-    --     $  putText
-    --     $  "Loading font: "
+    --     putText
+    --     "Loading font: "
     --     <> show path
     --     <> ", with design size: "
     --     <> show designSizeSP

@@ -37,7 +37,7 @@ fetchBox
     -> m (Maybe (B.Box B.BoxContents))
 fetchBox fetchMode idx =
     do
-    eIdx <- readOnState $ texEvaluate idx
+    eIdx <- texEvaluate idx
     fetchedMaybeBox <- gets $ view $ typed @Config . to (lookupBoxRegister eIdx)
     case fetchMode of
         HP.Lookup -> pure ()
@@ -45,32 +45,27 @@ fetchBox fetchMode idx =
     pure fetchedMaybeBox
 
 handleModeIndependentCommand
-    :: ( HP.TeXStream (HP.Tgt st)
-       , MonadState st m
-       , HP.HasTgtType st
-       , HasType Config st
-
-       , MonadIO m
-       , MonadError e m
-       , AsType ConfigError e
-       , AsType EvaluationError e
+    :: ( MonadIO m
        , AsType D.Path.PathError e
        , AsType TFMError e
+
+       , HP.TeXParseable s st e m
        )
-    => HP.ModeIndependentCommand
-    -> m ModeIndependentResult
-handleModeIndependentCommand = \case
+    => s
+    -> HP.ModeIndependentCommand
+    -> m (s, ModeIndependentResult)
+handleModeIndependentCommand s = \case
     HP.Message stdOutStream eTxt ->
         do
         let _handle = case stdOutStream of
                 HP.StdOut -> stdout
                 HP.StdErr -> stderr
         liftIO $ hPutStrLn _handle (toS (Code.unsafeCodesAsChars (Com.showExpandedBalancedText eTxt)) :: Text)
-        pure DoNothing
+        pure (s, DoNothing)
     HP.Relax ->
-        pure DoNothing
+        pure (s, DoNothing)
     HP.IgnoreSpaces ->
-        pure DoNothing
+        pure (s, DoNothing)
     -- Re-insert the ⟨token⟩ into the input just after running the next
     -- assignment command. Later \afterassignment commands override earlier
     -- commands. If the assignment is a \setbox, and if the assigned ⟨box⟩ is
@@ -80,17 +75,17 @@ handleModeIndependentCommand = \case
     HP.SetAfterAssignmentToken lt ->
         do
         modify $ typed @Config . field @"afterAssignmentToken" .~ Just lt
-        pure DoNothing
+        pure (s, DoNothing)
     HP.AddPenalty n ->
-        AddElem . BL.ListPenalty . BL.Penalty <$> readOnState (texEvaluate n)
+        (s,) <$> AddElem . BL.ListPenalty . BL.Penalty <$> texEvaluate n
     HP.AddKern ln ->
-        AddElem . BL.VListBaseElem . B.ElemKern . B.Kern <$> readOnState (texEvaluate ln)
+        (s,) <$> AddElem . BL.VListBaseElem . B.ElemKern . B.Kern <$> texEvaluate ln
     HP.Assign HP.Assignment { HP.global, HP.body } ->
         do
         assignResult <- case body of
             HP.DefineControlSequence cs tgt ->
                 do
-                (maybeElem, newCSTok) <- readOnState $ case tgt of
+                (maybeElem, newCSTok) <- case tgt of
                     HP.MacroTarget macro ->
                         pure (Nothing, HR.syntaxTok $ HP.MacroTok macro)
                     -- TODO: If a \let target is an active character, should we
@@ -99,7 +94,7 @@ handleModeIndependentCommand = \case
                         pure (Nothing, HR.primTok $ HP.LetCharCat tgtCC)
                     HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                         do
-                        mayCS <- asks (view $ typed @Config . to (lookupCSProper tgtCS))
+                        mayCS <- gets (view $ typed @Config . to (lookupCSProper tgtCS))
                         let resTok = fromMaybe (HP.PrimitiveToken HP.RelaxTok) mayCS
                         pure (Nothing, resTok)
                     HP.ShortDefineTarget q n ->
@@ -159,8 +154,8 @@ handleModeIndependentCommand = \case
                 pure DoNothing
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
-                eIdx <- readOnState (texEvaluate idx)
-                eVal <- readOnState (texEvaluate val)
+                eIdx <- texEvaluate idx
+                eVal <- texEvaluate val
                 -- liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
                 -- liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
                 idxChar <- note (injectTyped $ ConfigError $ "Invalid character code index: " <> show eIdx) (fromTeXInt eIdx)
@@ -173,14 +168,14 @@ handleModeIndependentCommand = \case
                 pure $ AddElem $ BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr
             HP.SetFamilyMember fm fontRef ->
                 do
-                eFm <- readOnState (texEvaluate fm)
-                fNr <- readOnState (texEvaluate fontRef)
+                eFm <- texEvaluate fm
+                fNr <- texEvaluate fontRef
                 modify $ typed @Config %~ setFamilyMemberFont eFm fNr global
                 pure DoNothing
             -- Start a new level of grouping. Enter inner mode.
             HP.SetBoxRegister lhsIdx box ->
                 do
-                eLhsIdx <- readOnState (texEvaluate lhsIdx)
+                eLhsIdx <- texEvaluate lhsIdx
                 case box of
                     HP.FetchedRegisterBox fetchMode rhsIdx ->
                         do
@@ -193,13 +188,13 @@ handleModeIndependentCommand = \case
                         panic "Not implemented: SetBoxRegister to VSplitBox"
                     HP.ExplicitBox spec boxType ->
                         do
-                        eSpec <- readOnState (texEvaluate spec)
+                        eSpec <- texEvaluate spec
                         modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
                         pure $ EnterBoxMode eSpec boxType (IntentToSetBoxRegister eLhsIdx global)
             HP.SetFontChar (HP.FontCharRef fontChar fontRef) charRef ->
                 do
-                fNr <- readOnState (texEvaluate fontRef)
-                eCharRef <- readOnState (texEvaluate charRef)
+                fNr <- texEvaluate fontRef
+                eCharRef <- texEvaluate charRef
                 let updateFontChar f = case fontChar of
                         HP.SkewChar   -> f { skewChar = eCharRef }
                         HP.HyphenChar -> f { hyphenChar = eCharRef }
@@ -207,40 +202,40 @@ handleModeIndependentCommand = \case
                 pure DoNothing
             oth ->
                 panic $ show oth
-        (gets $ view $ typed @Config . field @"afterAssignmentToken") >>= \case
-            Nothing -> pure ()
-            Just lt ->
-                do
-                modify $ HP.tgtLens %~ (\s -> HP.insertLexToken s lt)
-                modify $ typed @Config . field @"afterAssignmentToken" .~ Nothing
-        pure assignResult
-    HP.WriteToStream n (HP.ImmediateWriteText eTxt) ->
-        readOnState $ do
-            en <- texEvaluate n
-            fStreams <- gets $ view $ typed @Config . field @"outFileStreams"
-            let txtTxt = toS $ Code.unsafeCodesAsChars (Com.showExpandedBalancedText eTxt)
-            -- Write to:
-            -- if stream number corresponds to existing, open file:
-            --     file
-            -- otherwise:
-            --     log
-            --     unless stream number is negative: terminal
-            case Com.getFileStream fStreams en of
-                Just fStream ->
-                     liftIO $ hPutStrLn fStream txtTxt
+        (,assignResult) <$> do
+            (gets $ view $ typed @Config . field @"afterAssignmentToken") >>= \case
                 Nothing ->
+                    pure s
+                Just lt ->
                     do
-                    -- Write to terminal.
-                    when (en >= 0) $ liftIO $ putText txtTxt
-                    -- Write to log
-                    logHandle <- gets $ view $ typed @Config . field @"logStream"
-                    liftIO $ hPutStrLn logHandle txtTxt
-            pure DoNothing
+                    modify $ typed @Config . field @"afterAssignmentToken" .~ Nothing
+                    pure (HP.insertLexToken s lt)
+    HP.WriteToStream n (HP.ImmediateWriteText eTxt) -> do
+        en <- texEvaluate n
+        fStreams <- gets $ view $ typed @Config . field @"outFileStreams"
+        let txtTxt = toS $ Code.unsafeCodesAsChars (Com.showExpandedBalancedText eTxt)
+        -- Write to:
+        -- if stream number corresponds to existing, open file:
+        --     file
+        -- otherwise:
+        --     log
+        --     unless stream number is negative: terminal
+        case Com.getFileStream fStreams en of
+            Just fStream ->
+                 liftIO $ hPutStrLn fStream txtTxt
+            Nothing ->
+                do
+                -- Write to terminal.
+                when (en >= 0) $ liftIO $ putText txtTxt
+                -- Write to log
+                logHandle <- gets $ view $ typed @Config . field @"logStream"
+                liftIO $ hPutStrLn logHandle txtTxt
+        pure (s, DoNothing)
     -- Start a new level of grouping.
     HP.ChangeScope HP.Positive trig ->
         do
         modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope (LocalStructureGroup trig))
-        pure DoNothing
+        pure (s, DoNothing)
     -- Do the appropriate finishing actions, undo the
     -- effects of non-global assignments, and leave the
     -- group. Maybe leave the current mode.
@@ -251,7 +246,7 @@ handleModeIndependentCommand = \case
             Just (group, poppedConfig) ->
                 do
                 modify $ typed @Config .~ poppedConfig
-                case group of
+                (s,) <$> case group of
                     -- Undo the effects of non-global
                     -- assignments without leaving the
                     -- current mode.
@@ -269,19 +264,15 @@ handleModeIndependentCommand = \case
                         pure FinishBoxMode
                     NonScopeGroup ->
                         pure DoNothing
-    HP.AddBox HP.NaturalPlacement (HP.FetchedRegisterBox fetchMode idx) ->
-        do
-        maybeBox <- fetchBox fetchMode idx
-        pure $ addMaybeElem' $ BL.VListBaseElem . B.ElemBox <$> maybeBox
-    HP.AddBox HP.NaturalPlacement (HP.ExplicitBox spec boxType) ->
+    HP.AddBox HP.NaturalPlacement (HP.FetchedRegisterBox fetchMode idx) -> do
+        res <- fetchBox fetchMode idx <&> \case
+            Nothing -> DoNothing
+            Just e -> AddElem $ BL.VListBaseElem $ B.ElemBox e
+        pure (s, res)
+    HP.AddBox HP.NaturalPlacement (HP.ExplicitBox spec boxType) -> do
         -- Start a new level of grouping. Enter inner mode.
-        do
-        eSpec <- readOnState (texEvaluate spec)
+        eSpec <- texEvaluate spec
         modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
-        pure $ EnterBoxMode eSpec boxType IntentToAddBox
+        pure (s, EnterBoxMode eSpec boxType IntentToAddBox)
     oth ->
         panic $ show oth
-  where
-    addMaybeElem' = \case
-        Nothing -> DoNothing
-        Just e -> AddElem e

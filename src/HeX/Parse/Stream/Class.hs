@@ -32,12 +32,6 @@ class TeXStream s where
 
   getConditionBodyState :: s -> Maybe ConditionBodyState
 
-class HasTgtType s where
-
-  type Tgt s
-
-  tgtLens :: Lens' s (Tgt s)
-
 data TokenSource
   = TokenSource
       { sourcePath :: Maybe (Path Abs File)
@@ -90,14 +84,16 @@ type SimpleParsecT s m a = P.ParsecT Void s m a
 
 type TeXParseable s st e m
   = ( Monad m
+    , MonadState st m -- Read-only
+    , HasType Config st
+
     , MonadError e m
     , AsTeXParseErrors e
+
     , P.Stream s m
     , P.Token s ~ PrimitiveToken
     , TeXStream s
     , Readable s
-    , MonadReader st m
-    , HasType Config st
     )
 
 type TeXParser s st e m a = TeXParseable s st e m => SimpleParsecT s m a
@@ -620,13 +616,13 @@ fetchResolvedToken
      , AsType ResolutionError e
      , TeXStream s
 
-     , MonadReader st m
+     , MonadState st m -- Read-only
      , HasType Config st
      )
   => s
   -> m (Maybe (Lex.Token, ResolvedToken, s))
 fetchResolvedToken stream = do
-  conf <- asks $ getTyped @Config
+  conf <- gets $ getTyped @Config
   let lkpCatCode t = lookupCatCode t conf
   let lkpCS cs = lookupCS cs conf
   extractResolvedToken stream lkpCatCode lkpCS
@@ -653,13 +649,13 @@ extractResolvedToken stream lkpCatCode lkpCS =
 fetchLexToken
   :: ( TeXStream s
 
-     , MonadReader st m
+     , MonadState st m -- Read-only
      , HasType Config st
      )
   => s
   -> m (Maybe (Lex.Token, s))
 fetchLexToken stream = do
-  conf <- asks $ getTyped @Config
+  conf <- gets $ getTyped @Config
   let lkpCatCode t = lookupCatCode t conf
   pure $ extractLexToken stream lkpCatCode
 

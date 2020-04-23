@@ -47,11 +47,6 @@ newExpandStream maybePath cs =
     , skipState = []
     }
 
-instance HasTgtType ExpandingStream where
-  type Tgt ExpandingStream = ExpandingStream
-
-  tgtLens = identity
-
 instance Readable ExpandingStream where
     describe (ExpandingStream { lexState, resolutionMode, skipState, streamTokenSources }) =
         "ExpandingStream["
@@ -67,7 +62,7 @@ instance
   , AsType ExpansionError e
   , AsType Data.Path.PathError e
   , MonadIO m
-  , MonadReader st m
+  , MonadState st m -- Read-only
   , HasType Conf.Config st
   )
   => P.Stream ExpandingStream m where
@@ -291,7 +286,7 @@ expandConditionToken
 expandConditionToken strm = \case
   ConditionHeadTok ifTok -> do
     (resultStream, condHead) <- runSimpleRunParserT' (conditionHeadParser ifTok) strm
-    conf <- asks $ getTyped @Conf.Config
+    conf <- gets $ getTyped @Conf.Config
     runReaderT (texEvaluate condHead) conf >>= \case
       IfBlockTarget IfPreElse ->
         pure $ Just resultStream {skipState = IfBodyState IfPreElse : skipState resultStream}
@@ -357,7 +352,7 @@ expandSyntaxCommand strm = \case
   RomanNumeralTok ->
     panic "Not implemented: syntax command RomanNumeralTok"
   StringTok -> do
-    conf <- asks $ getTyped @Conf.Config
+    conf <- gets $ getTyped @Conf.Config
     let escapeChar = (Conf.IntParamVal . Conf.lookupTeXIntParameter EscapeChar) conf
     (postArgStream, lexTok) <- runSimpleRunParserT' parseLexToken strm
     pure $ Just (postArgStream, expandString escapeChar lexTok)
@@ -389,7 +384,7 @@ expandSyntaxCommand strm = \case
           Just p -> [Path.parent p]
           Nothing -> []
     absPath <- Path.IO.makeAbsolute texPath
-    conf <- asks $ getTyped @Conf.Config
+    conf <- gets $ getTyped @Conf.Config
     path <- runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) conf
     newSource <- newTokenSource (Just absPath) <$> Code.readCharCodes path
     let newResultStream = resultStream & G.P.typed @(L.NE.NonEmpty TokenSource) %~ (L.NE.cons newSource)
@@ -398,11 +393,11 @@ expandSyntaxCommand strm = \case
     panic "Not implemented: syntax command EndInputTok"
   TheTok -> do
     (resultStream, intQuant) <- runSimpleRunParserT' parseInternalQuantity strm
-    conf <- asks $ getTyped @Conf.Config
+    conf <- gets $ getTyped @Conf.Config
     quantTokens <- (charCodeAsMadeToken <$>) <$> runReaderT (texEvaluate intQuant) conf
     pure $ Just (resultStream, quantTokens)
   ChangeCaseTok direction -> do
-    conf <- asks $ getTyped @Conf.Config
+    conf <- gets $ getTyped @Conf.Config
     runExpandCommand strm parseGeneralText $ expandChangeCase (\c -> Conf.lookupChangeCaseCode direction c conf) >>> pure
   where
     runExpandCommand inputStream parser f = do

@@ -44,7 +44,7 @@ instance ( MonadError e m
          , AsTeXParseErrors e
          , AsType NonExpandingStreamError e
 
-         , MonadReader st m
+         , MonadState st m -- Read-only
          , HasType Conf.Config st
          ) => P.Stream NonExpandingStream m where
     type Token NonExpandingStream = PrimitiveToken

@@ -12,7 +12,6 @@ data BoxModeIntent
     | IntentToSetBoxRegister EightBitInt HP.GlobalFlag
     deriving stock (Show)
 
-
 data RecursionResult a b
     = LoopAgain a
     | EndLoop b
@@ -22,31 +21,27 @@ addMaybeElem a mayE = case mayE of
     Nothing -> a
     Just e -> a :|> e
 
-runLoop :: Monad m => (a -> m (RecursionResult a b)) -> a -> m b
+runLoop :: Monad m => (s -> a -> m (s, RecursionResult a b)) -> s -> a -> m (s, b)
 runLoop f = go
   where
-    go state_ =
-        f state_ >>= \case
+    go s state_ = do
+        (newS, recRes) <- f s state_
+        case recRes of
             LoopAgain newState ->
-                go newState
+                go newS newState
             EndLoop result ->
-                pure result
+                pure (newS, result)
 
 runCommandLoop
-    :: ( HP.TeXParseable (HP.Tgt st) st e m
-       , HP.HasTgtType st
-
-       , MonadState st m
+    :: ( HP.TeXParseable s st e m
        )
-    => (a -> HP.Command -> HP.Tgt st -> m (RecursionResult a r))
+    => (s -> s -> a -> HP.Command -> m (s, RecursionResult a r))
+    -> s
     -> a
-    -> m r
-runCommandLoop f = runLoop g
+    -> m (s, r)
+runCommandLoop runCommand = runLoop parseAndRunCommand
   where
-    g elemList =
+    parseAndRunCommand oldS elemList =
         do
-        oldStream <- gets $ view HP.tgtLens
-        (newStream, command) <- HP.runSimpleRunParserT' HP.parseCommand oldStream
-        modify $ HP.tgtLens .~ newStream
-        -- liftIO $ putText $ describe command
-        f elemList command oldStream
+        (newS, command) <- HP.runSimpleRunParserT' HP.parseCommand oldS
+        runCommand oldS newS elemList command
