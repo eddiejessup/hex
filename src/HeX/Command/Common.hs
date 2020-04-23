@@ -3,33 +3,29 @@ module Hex.Command.Common where
 import qualified Hex.Parse as HP
 import Hexlude
 
-data RecursionResult a b
-  = LoopAgain a
-  | EndLoop b
-
 addMaybeElem :: Seq a -> Maybe a -> Seq a
 addMaybeElem a mayE = case mayE of
   Nothing -> a
   Just e -> a :|> e
 
-runLoop :: Monad m => (s -> a -> m (s, RecursionResult a b)) -> s -> a -> m (s, b)
+runLoop :: Monad m => (s -> a -> m (s, a, Maybe b)) -> s -> a -> m (s, a, b)
 runLoop f = go
   where
     go s state_ = do
-      (newS, recRes) <- f s state_
+      (newS, newState, recRes) <- f s state_
       case recRes of
-        LoopAgain newState ->
+        Nothing ->
           go newS newState
-        EndLoop result ->
-          pure (newS, result)
+        Just b ->
+          pure (newS, newState, b)
 
 runCommandLoop
   :: ( HP.TeXParseable s st e m
      )
-  => (s -> s -> a -> HP.Command -> m (s, RecursionResult a r))
+  => (s -> s -> a -> HP.Command -> m (s, a, Maybe b))
   -> s
   -> a
-  -> m (s, r)
+  -> m (s, a, b)
 runCommandLoop runCommand = runLoop parseAndRunCommand
   where
     parseAndRunCommand oldS elemList = do

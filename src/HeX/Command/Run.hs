@@ -145,7 +145,7 @@ runApp c f =
 -- Paragraph list.
 extractUnsetParaApp :: HP.ExpandingStream -> App HList
 extractUnsetParaApp s =
-  (\(_, ParaResult _ hList) -> hList) <$> extractPara HP.Indent s
+  (\(_, hList, _) -> hList) <$> extractPara HP.Indent s
 
 renderStreamUnsetPara
   :: MonadIO m
@@ -190,7 +190,7 @@ renderStreamPageList s c =
   runApp c (extractMainVList s) <&> \case
     Left err ->
       Left err
-    Right (_, MainVModeResult (VList vList)) ->
+    Right (_, VList vList) ->
       Right $ describeLined vList
 
 -- Pages boxes.

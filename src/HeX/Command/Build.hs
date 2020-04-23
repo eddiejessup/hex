@@ -26,8 +26,6 @@ import           Hex.Evaluate
 newtype BuildError = BuildError Text
     deriving stock (Show)
 
-data ParaResult = ParaResult EndParaReason HList
-
 data EndParaReason
     = EndParaSawEndParaCommand
     | EndParaSawLeaveBox
@@ -46,7 +44,7 @@ handleCommandInParaMode
     -> s
     -> HList
     -> HP.Command
-    -> m (s, RecursionResult HList ParaResult)
+    -> m (s, HList, Maybe EndParaReason)
 handleCommandInParaMode oldS newS hList@(BL.HList hElemSeq) command =
     case command of
         HP.VModeCommand _ ->
@@ -54,36 +52,32 @@ handleCommandInParaMode oldS newS hList@(BL.HList hElemSeq) command =
             -- sequence's current meaning will be used, which might no longer be the \par
             -- primitive.
             -- (Note that we use oldS.)
-            pure (HP.insertLexToken oldS Lex.parToken, doNothing)
+            pure (HP.insertLexToken oldS Lex.parToken, hList, Nothing)
         HP.HModeCommand (HP.AddHGlue g) ->
-            (newS,) . addElem <$> hModeAddHGlue g
+            (newS, , Nothing) . addElem <$> hModeAddHGlue g
         HP.HModeCommand (HP.AddCharacter c) ->
-            (newS,) . addElem <$> hModeAddCharacter c
+            (newS, , Nothing) . addElem <$> hModeAddCharacter c
         HP.HModeCommand (HP.AddHRule rule) ->
-            (newS,) . addElem <$> hModeAddRule rule
+            (newS, , Nothing) . addElem <$> hModeAddRule rule
         HP.AddSpace ->
-            (newS,) . addElem <$> hModeAddSpace
+            (newS, , Nothing) . addElem <$> hModeAddSpace
         HP.StartParagraph indentFlag ->
-            (newS,) . addMaybeElem' <$> hModeStartParagraph indentFlag
-        -- \par: Restricted: does nothing. Unrestricted: ends mode.
+            (newS, , Nothing) . addMaybeElem' <$> hModeStartParagraph indentFlag
+        -- \par: Restricted: does nothing. Unrestricted (this mode): ends mode.
         HP.EndParagraph ->
-            pure (newS, endLoop EndParaSawEndParaCommand hList)
+            pure (newS, hList, Just EndParaSawEndParaCommand)
         HP.ModeIndependentCommand modeIndependentCommand -> do
             (doneS, modeIndRes) <- handleModeIndependentCommand newS modeIndependentCommand
-            pure $ (doneS,) $ case modeIndRes of
+            pure $ case modeIndRes of
                 AddMaybeElem mayExtraElem ->
-                    addMaybeElem' (BL.HVListElem <$> mayExtraElem)
+                    (doneS, addMaybeElem' (BL.HVListElem <$> mayExtraElem), Nothing)
                 FinishBoxMode ->
-                    endLoop EndParaSawLeaveBox hList
+                    (doneS, hList, Just EndParaSawLeaveBox)
         oth ->
             panic $ show oth
   where
-    doNothing = LoopAgain hList
-    addElem e = LoopAgain $ BL.HList $ hElemSeq :|> e
-    addMaybeElem' mayE = LoopAgain $ BL.HList $ addMaybeElem hElemSeq mayE
-    endLoop reason result = EndLoop $ ParaResult reason result
-
-newtype HBoxResult = HBoxResult HList
+    addElem e = BL.HList $ hElemSeq :|> e
+    addMaybeElem' mayE = BL.HList $ addMaybeElem hElemSeq mayE
 
 handleCommandInHBoxMode
     :: ( MonadError e m
@@ -99,40 +93,36 @@ handleCommandInHBoxMode
     -> s
     -> HList
     -> HP.Command
-    -> m (s, RecursionResult HList HBoxResult)
+    -> m (s, HList, Maybe ())
 handleCommandInHBoxMode _ newS hList@(BL.HList hElemSeq) command =
     case command of
         HP.VModeCommand vModeCommand ->
             throwError $ injectTyped $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
         HP.HModeCommand (HP.AddCharacter c) ->
-            (newS,) . addElem <$> hModeAddCharacter c
+            (newS,,Nothing) . addElem <$> hModeAddCharacter c
         HP.HModeCommand (HP.AddHGlue g) ->
-            (newS,) . addElem <$> hModeAddHGlue g
+            (newS,,Nothing) . addElem <$> hModeAddHGlue g
         HP.HModeCommand (HP.AddHRule rule) ->
-            (newS,) . addElem <$> hModeAddRule rule
+            (newS,,Nothing) . addElem <$> hModeAddRule rule
         HP.AddSpace ->
-            (newS,) . addElem <$> hModeAddSpace
+            (newS,,Nothing) . addElem <$> hModeAddSpace
         HP.StartParagraph indentFlag ->
-            (newS,) . addMaybeElem' <$> hModeStartParagraph indentFlag
-        -- \par: Restricted: does nothing. Unrestricted: ends mode.
+            (newS,,Nothing) . addMaybeElem' <$> hModeStartParagraph indentFlag
+        -- \par: Restricted (this mode): does nothing. Unrestricted: ends mode.
         HP.EndParagraph ->
-            pure (newS, doNothing)
+            pure (newS, hList, Nothing)
         HP.ModeIndependentCommand modeIndependentCommand -> do
             (doneS, modeIndRes) <- handleModeIndependentCommand newS modeIndependentCommand
-            pure $ (doneS,) $ case modeIndRes of
+            pure $ case modeIndRes of
                 AddMaybeElem mayExtraElem ->
-                    addMaybeElem' (BL.HVListElem <$> mayExtraElem)
+                    (doneS, addMaybeElem' (BL.HVListElem <$> mayExtraElem), Nothing)
                 FinishBoxMode ->
-                    endLoop hList
+                    (doneS, hList, Just ())
         oth ->
             panic $ "Not implemented, outer V mode: " <> show oth
   where
-    doNothing = LoopAgain hList
-    addElem e = LoopAgain $ BL.HList $ hElemSeq :|> e
-    addMaybeElem' mayE = LoopAgain $ BL.HList $ addMaybeElem hElemSeq mayE
-    endLoop lst = EndLoop $ HBoxResult lst
-
-newtype VBoxResult = VBoxResult VList
+    addElem e = BL.HList $ hElemSeq :|> e
+    addMaybeElem' mayE = BL.HList $ addMaybeElem hElemSeq mayE
 
 handleCommandInVBoxMode
     :: forall s st e m
@@ -148,50 +138,48 @@ handleCommandInVBoxMode
     -> s
     -> VList
     -> HP.Command
-    -> m (s, RecursionResult VList VBoxResult)
+    -> m (s, VList, Maybe ())
 handleCommandInVBoxMode oldS newS vList command =
     case command of
         HP.VModeCommand HP.End ->
             throwError $ injectTyped $ BuildError "End not allowed in internal vertical mode"
         HP.VModeCommand (HP.AddVGlue g) ->
-            vModeAddVGlue g >>= addElem <&> (newS,)
+            vModeAddVGlue g >>= addElem <&> (newS,,Nothing)
         HP.VModeCommand (HP.AddVRule rule) ->
-            vModeAddRule rule >>= addElem <&> (newS,)
+            vModeAddRule rule >>= addElem <&> (newS,,Nothing)
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
             addPara indentFlag
         -- \par does nothing in vertical mode.
         HP.EndParagraph ->
-            pure (newS, doNothing)
+            pure (newS, vList, Nothing)
         -- <space token> has no effect in vertical modes.
         HP.AddSpace ->
-            pure (newS, doNothing)
+            pure (newS, vList, Nothing)
         HP.ModeIndependentCommand modeIndependentCommand -> do
             (doneS, modeIndRes) <- handleModeIndependentCommand newS modeIndependentCommand
             case modeIndRes of
                 AddMaybeElem mayExtraElem ->
-                    (doneS,) <$> addMaybeElem' mayExtraElem
+                    (doneS,, Nothing) <$> addMaybeElem' mayExtraElem
                 FinishBoxMode ->
-                    pure (doneS, endLoop vList)
+                    pure (doneS, vList, Just ())
         oth ->
             panic $ "Not implemented, outer V mode: " <> show oth
   where
-    doNothing = LoopAgain vList
-    addElem e = LoopAgain <$> addVListElem vList e
-    addMaybeElem' = maybe (pure doNothing) addElem
-    endLoop = EndLoop . VBoxResult
+    addElem e = addVListElem vList e
+    addMaybeElem' = maybe (pure vList) addElem
 
-    addPara :: HP.IndentFlag -> m (s, RecursionResult VList VBoxResult)
+    addPara :: HP.IndentFlag -> m (s, VList, Maybe ())
     addPara indentFlag = do
         -- Note oldS.
-        (doneS, ParaResult endParaReason finalParaHList) <- extractPara indentFlag oldS
+        (doneS, finalParaHList, endParaReason) <- extractPara indentFlag oldS
         vListWithPara <- appendParagraph finalParaHList vList
-        pure $ (doneS,) $ case endParaReason of
+        pure $ (doneS, vListWithPara,) $ case endParaReason of
             EndParaSawEndParaCommand ->
-                LoopAgain vListWithPara
+                Nothing
             EndParaSawLeaveBox ->
-                endLoop vListWithPara
+                Just ()
 
 appendParagraph
     :: ( MonadIO m
@@ -229,8 +217,6 @@ hListToParaLineBoxes hList =
         Left err -> throwError $ injectTyped $ BuildError err
         Right v -> pure v
 
-newtype MainVModeResult = MainVModeResult VList
-
 handleCommandInMainVMode
     :: ( MonadError e m
        , AsType BuildError e
@@ -245,52 +231,53 @@ handleCommandInMainVMode
     -> s
     -> VList
     -> HP.Command
-    -> m (s, RecursionResult VList MainVModeResult)
+    -> m (s, VList, Maybe ())
 handleCommandInMainVMode oldS newS vList command =
     -- traceText ("in main v mode, handling command: " <> show command) $ case command of
     case command of
         HP.VModeCommand HP.End ->
-            pure (newS, endLoop vList)
+            pure (newS, vList, Just ())
         HP.VModeCommand (HP.AddVGlue g) ->
-            vModeAddVGlue g >>= addElem <&> (newS,)
+            vModeAddVGlue g >>= addElem <&> (newS, , Nothing)
         HP.VModeCommand (HP.AddVRule rule) ->
-            vModeAddRule rule >>= addElem <&> (newS,)
+            vModeAddRule rule >>= addElem <&> (newS, , Nothing)
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
             addPara indentFlag
         -- \par does nothing in vertical mode.
         HP.EndParagraph ->
-            pure (newS, doNothing)
+            pure (newS, vList, Nothing)
         -- <space token> has no effect in vertical modes.
         HP.AddSpace ->
-            pure (newS, doNothing)
+            pure (newS, vList, Nothing)
         HP.ModeIndependentCommand modeIndependentCommand -> do
             (doneS, modeIndRes) <- handleModeIndependentCommand newS modeIndependentCommand
             case modeIndRes of
                 AddMaybeElem mayExtraElem ->
-                    (doneS,) <$> addMaybeElem' mayExtraElem
+                    (doneS, , Nothing) <$> addMaybeElem' mayExtraElem
                 FinishBoxMode ->
-                    throwError $ injectTyped $ BuildError "No box to end: in main V mode"
+                    throwError $ injectTyped $
+                        BuildError "No box to end: in main V mode"
         oth ->
             panic $ "Not implemented, outer V mode: " <> show oth
   where
-    doNothing = LoopAgain vList
-    addElem e = LoopAgain <$> addVListElem vList e
-    addMaybeElem' = maybe (pure doNothing) addElem
-    endLoop = EndLoop . MainVModeResult
+    addElem e = addVListElem vList e
+    addMaybeElem' = maybe (pure vList) addElem
 
     addPara indentFlag =
         do
         -- If the command shifts to horizontal mode, run '\indent', and re-read
         -- the stream as if the command hadn't been read. (Note that we read
         -- from "oldS", not "newS".)
-        (doneS, ParaResult endParaReason finalParaHList) <- extractPara indentFlag oldS
+        (doneS, paraHList, endParaReason) <- extractPara indentFlag oldS
         case endParaReason of
-            EndParaSawEndParaCommand ->
-                (doneS,) . LoopAgain <$> appendParagraph finalParaHList vList
+            EndParaSawEndParaCommand -> do
+                appendedVList <- appendParagraph paraHList vList
+                pure (doneS, appendedVList, Nothing)
             EndParaSawLeaveBox ->
-                throwError $ injectTyped $ BuildError "No box to end: in paragraph within main V mode"
+                throwError $ injectTyped $
+                    BuildError "No box to end: in paragraph within main V mode"
 
 extractPara
     :: ( MonadError e m
@@ -304,7 +291,7 @@ extractPara
        )
     => HP.IndentFlag
     -> s
-    -> m (s, ParaResult)
+    -> m (s, HList, EndParaReason)
 extractPara indentFlag s = do
     initList <- case indentFlag of
         HP.Indent -> do
@@ -325,8 +312,10 @@ extractMainVList
        , MonadIO m
        )
     => s
-    -> m (s, MainVModeResult)
-extractMainVList s = runCommandLoop handleCommandInMainVMode s mempty
+    -> m (s, VList)
+extractMainVList s = do
+    (doneS, vList, _) <- runCommandLoop handleCommandInMainVMode s mempty
+    pure (doneS, vList)
 
 extractBreakAndSetMainVList
     :: ( MonadError e m
@@ -341,7 +330,7 @@ extractBreakAndSetMainVList
     => s
     -> m (s, Seq B.Page, IntParamVal 'HP.Mag)
 extractBreakAndSetMainVList s = do
-    (finalS, MainVModeResult finalMainVList) <- extractMainVList s
+    (finalS, finalMainVList) <- extractMainVList s
     case HP.getConditionBodyState finalS of
         Nothing -> pure ()
         Just _condState -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show _condState
@@ -367,8 +356,7 @@ handleModeIndependentCommand
     -> HP.ModeIndependentCommand
     -> m (s, ModeIndependentResult)
 handleModeIndependentCommand s = \case
-    HP.Message stdOutStream eTxt ->
-        do
+    HP.Message stdOutStream eTxt -> do
         let _handle = case stdOutStream of
                 HP.StdOut -> stdout
                 HP.StdErr -> stderr
@@ -384,8 +372,7 @@ handleModeIndependentCommand s = \case
     -- \{hbox,vbox,vtop}, insert the ⟨token⟩ just after the '{' in the box
     -- construction (not after the '}'). Insert the ⟨token⟩ just before tokens
     -- inserted by \everyhbox or \everyvbox.
-    HP.SetAfterAssignmentToken lt ->
-        do
+    HP.SetAfterAssignmentToken lt -> do
         modify $ typed @Config . field @"afterAssignmentToken" ?~ lt
         pure (s, AddMaybeElem Nothing)
     HP.AddPenalty n ->
@@ -607,9 +594,9 @@ extractExplicitBoxContents
 extractExplicitBoxContents s desiredLength = \case
     HP.ExplicitHBox ->
         do
-        (doneS, HBoxResult finalHList) <- runCommandLoop handleCommandInHBoxMode s mempty
+        (doneS, finalHList, ()) <- runCommandLoop handleCommandInHBoxMode s mempty
         pure (doneS, B.HBoxContents <$> BL.setHList finalHList (BL.UncomputedTargetLength desiredLength))
     HP.ExplicitVBox vAlignType ->
         do
-        (doneS, VBoxResult finalVList) <- runCommandLoop handleCommandInVBoxMode s mempty
+        (doneS, finalVList, ()) <- runCommandLoop handleCommandInVBoxMode s mempty
         pure (doneS, B.VBoxContents <$> BL.setVList finalVList desiredLength vAlignType)
