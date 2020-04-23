@@ -25,12 +25,12 @@ data NonExpandingStream = NonExpandingStream
     deriving stock (Generic)
 
 instance Readable NonExpandingStream where
-    describe (NonExpandingStream { nesLexState, nesResolutionMode, nesTokenSources }) =
+    describe NonExpandingStream { nesLexState, nesResolutionMode, nesTokenSources } =
         "NonExpandingStream["
                     <> "lexState=" <> show nesLexState
             <> ", " <> "resolutionMode=" <> show nesResolutionMode
             <> "\n"
-            <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> (toList nesTokenSources))
+            <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> toList nesTokenSources)
 
 newNonExpandingStream :: Maybe (Path Abs File) -> BS.L.ByteString -> NonExpandingStream
 newNonExpandingStream maybePath cs =
@@ -111,7 +111,7 @@ instance TeXStream NonExpandingStream where
 
     getConditionBodyState = const Nothing
 
-data NonExpandingStreamError
+newtype NonExpandingStreamError
     = SawSyntaxCommandHeadToken SyntaxCommandHeadToken
     deriving stock (Show)
 

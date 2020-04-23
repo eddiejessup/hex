@@ -44,18 +44,18 @@ main = do
   evalStateT repl s
 
 putResult :: MonadIO m => Text -> m ()
-putResult r = do
+putResult r =
   putText $ "Got result:\n\n" <> r
 
 prompt :: MonadIO m => Text -> m Text
 prompt msg = do
   liftIO $ putStr @Text (msg <> " $> ")
-  liftIO $ getLine
+  liftIO getLine
 
 promptLazyByteString :: MonadIO m => Text -> m BS.L.ByteString
 promptLazyByteString msg = do
   liftIO $ putStr @Text (msg <> " $> ")
-  liftIO $ (BS.L.fromStrict . encodeUtf8) <$> getLine
+  liftIO $ BS.L.fromStrict . encodeUtf8 <$> getLine
 
 repl :: (MonadState ExpandingStream m, MonadIO m, MonadThrow m) => m ()
 repl = do
@@ -82,7 +82,7 @@ repl = do
       s <- get
 
       let sWithInput = s & G.P.field @"streamTokenSources" %~
-              (L.NE.cons (newTokenSource Nothing inpBSL))
+              L.NE.cons (newTokenSource Nothing inpBSL)
 
       -- TODO: Put back into state? What about version with input but before consuming?
       (newS, mayErr, primToks) <- expandingStreamAsPrimTokens sWithInput conf
@@ -91,7 +91,7 @@ repl = do
         [] -> putText "Returned no results"
         _ -> putResult $ describeLined primToks
 
-      flip traverse_ mayErr $ \err -> do
+      for_ mayErr $ \err -> do
         putText "Ended with error:"
         putText $ show err
         putText "Stream ended in state:"
@@ -103,7 +103,7 @@ repl = do
       s <- get
 
       let sWithInput = s & G.P.field @"streamTokenSources" %~
-              (L.NE.cons (newTokenSource Nothing inpBSL))
+              L.NE.cons (newTokenSource Nothing inpBSL)
 
       (newS, mayErr, commandToks) <- expandingStreamAsCommands sWithInput conf
 
@@ -111,7 +111,7 @@ repl = do
         [] -> putText "Returned no results"
         _ -> putResult $ describeLined commandToks
 
-      flip traverse_ mayErr $ \err -> do
+      for_ mayErr $ \err -> do
         putText "Ended with error:"
         putText $ show err
         putText "Stream ended in state:"

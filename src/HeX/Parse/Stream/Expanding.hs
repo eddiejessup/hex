@@ -48,13 +48,13 @@ newExpandStream maybePath cs =
     }
 
 instance Readable ExpandingStream where
-    describe (ExpandingStream { lexState, resolutionMode, skipState, streamTokenSources }) =
+    describe ExpandingStream { lexState, resolutionMode, skipState, streamTokenSources } =
         "ExpandingStream["
                     <> "lexState=" <> show lexState
             <> ", " <> "skipState=" <> show skipState
             <> ", " <> "resolutionMode=" <> show resolutionMode
             <> "\n"
-            <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> (toList streamTokenSources))
+            <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> toList streamTokenSources)
 
 instance
   ( MonadError e m
@@ -387,7 +387,7 @@ expandSyntaxCommand strm = \case
     conf <- gets $ getTyped @Conf.Config
     path <- runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) conf
     newSource <- newTokenSource (Just absPath) <$> Code.readCharCodes path
-    let newResultStream = resultStream & G.P.typed @(L.NE.NonEmpty TokenSource) %~ (L.NE.cons newSource)
+    let newResultStream = resultStream & G.P.typed @(L.NE.NonEmpty TokenSource) %~ L.NE.cons newSource
     pure $ Just (newResultStream, mempty)
   EndInputTok ->
     panic "Not implemented: syntax command EndInputTok"

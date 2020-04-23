@@ -141,7 +141,7 @@ instance TeXEvaluable AST.CodeTableRef where
         idxInt <- texEvaluate n
         idxChar <- note (injectTyped (EvaluationError ("Outside range: " <> show idxInt)))
             (fromTeXInt idxInt)
-        conf <- gets $ getTyped @Config
+        conf <- gets (getTyped @Config)
         let
             lookupFrom :: TeXCode v => (Scope -> CharCodeMap v) -> Maybe TeXInt
             lookupFrom getMap = toTeXInt <$> scopedMapLookup getMap idxChar conf

@@ -655,7 +655,7 @@ fetchLexToken
   => s
   -> m (Maybe (Lex.Token, s))
 fetchLexToken stream = do
-  conf <- gets $ getTyped @Config
+  conf <- gets (getTyped @Config)
   let lkpCatCode t = lookupCatCode t conf
   pure $ extractLexToken stream lkpCatCode
 

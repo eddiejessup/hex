@@ -68,32 +68,33 @@ main = do
         then preamble <> inputRaw <> postamble
         else inputRaw
       mode = lastDef Run.DVIBytesMode [m | Mode m <- flags]
-  pure ()
-  -- case lastMay [f | Output f <- flags] of
-  --   Nothing ->
-  --     do
-  --     appErrorOrTx <- Run.renderWithMode mode input
-  --     case appErrorOrTx of
-  --       Left appError ->
-  --         putText $ show appError
-  --       Right tx ->
-  --         putText tx
-  --   Just destPathStr ->
-  --     case mode of
-  --       Run.DVIBytesMode ->
-  --         do
-  --         s <- newExpandStream maybePath input
-  --         appErrorOrBytes <- Run.streamToDVIBytes s
-  --         case appErrorOrBytes of
-  --           Left appError ->
-  --             putText $ showAppError appError
-  --           Right bytes ->
-  --             BS.writeFile destPathStr bytes
-  --       _ ->
-  --         do
-  --         appErrorOrTx <- Run.renderWithMode mode input
-  --         case appErrorOrTx of
-  --           Left appError ->
-  --             putText $ show appError
-  --           Right tx ->
-  --             writeFile destPathStr tx
+  case lastMay [f | Output f <- flags] of
+    Nothing ->
+      do
+      appErrorOrTx <- renderWithMode input mode
+      case appErrorOrTx of
+        Left appError ->
+          putText $ show appError
+        Right tx ->
+          putText tx
+    Just destPathStr ->
+      case mode of
+        Run.DVIBytesMode ->
+          do
+          s <- newExpandStream maybePath input
+          appErrorOrBytes <- Run.streamToDVIBytes s
+          case appErrorOrBytes of
+            Left appError ->
+              putText $ showAppError appError
+            Right bytes ->
+              BS.writeFile destPathStr bytes
+        _ ->
+          do
+          appErrorOrTx <- renderWithMode input mode
+          case appErrorOrTx of
+            Left appError ->
+              putText $ show appError
+            Right tx ->
+              writeFile destPathStr tx
+
+renderWithMode input = \case

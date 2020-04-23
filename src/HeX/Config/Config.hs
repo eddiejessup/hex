@@ -141,7 +141,7 @@ newtype ConfigError = ConfigError Text
 
 newConfig :: (MonadIO m, MonadThrow m) => m Config
 newConfig = do
-    cwdRaw <- liftIO $ getCurrentDirectory
+    cwdRaw <- liftIO getCurrentDirectory
     _searchDirectories
         <- mapM parseAbsDir
                 [ "/usr/local/texlive/2018basic/texmf-dist/fonts/tfm/public/latex-fonts"
@@ -161,9 +161,9 @@ newConfig = do
                 , groups = []
                 }
 
-finaliseConfig :: Config -> IO ()
+finaliseConfig :: MonadIO m => Config -> m ()
 finaliseConfig config =
-    hClose $ logStream config
+    liftIO $ hClose $ logStream config
 
 -- Unscoped.
 
@@ -319,7 +319,7 @@ modifyKey mapLens k keyOp globalFlag c =
     case globalFlag of
         Global ->
             c   & G.P.field @"globalScope" %~ modOp
-                & G.P.field @"groups" %~ (fmap (modGroupScope deleteKeyFromScope))
+                & G.P.field @"groups" %~ fmap (modGroupScope deleteKeyFromScope)
         Local ->
             c & localScopeL %~ modOp
   where

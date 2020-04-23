@@ -122,8 +122,8 @@ expandingStreamAsPrimTokens
   => HP.ExpandingStream
   -> Conf.Config
   -> m (HP.ExpandingStream, Maybe AppError, [HP.PrimitiveToken])
-expandingStreamAsPrimTokens s c =
-  evalStateT (loopParser P.anySingle s) c
+expandingStreamAsPrimTokens s =
+  evalStateT (loopParser P.anySingle s)
 
 -- Command.
 expandingStreamAsCommands
@@ -131,15 +131,15 @@ expandingStreamAsCommands
   => HP.ExpandingStream
   -> Conf.Config
   -> m (HP.ExpandingStream, Maybe AppError, [HP.Command])
-expandingStreamAsCommands s c =
-  evalStateT (loopParser HP.parseCommand s) c
+expandingStreamAsCommands s =
+  evalStateT (loopParser HP.parseCommand s)
 
 runApp
   :: MonadIO m
   => Conf.Config
   -> App a
   -> m (Either AppError a)
-runApp c f = do
+runApp c f =
   liftIO (evalStateT (runExceptT $ unApp f) c)
 
 -- Paragraph list.
@@ -200,7 +200,7 @@ streamToPages
   -> Conf.Config
   -> m (Either AppError (Seq Page, Conf.IntParamVal 'HP.Mag))
 streamToPages s c =
-  runApp c $ extractBreakAndSetVList s
+  runApp c $ extractBreakAndSetMainVList s
     <&> \(_, pgs, mag_) -> (pgs, mag_)
 
 renderStreamPages
@@ -254,7 +254,7 @@ streamToRawDVI s c =
       let magInt = Quantity.unInt $ Conf.unIntParam mag
       in case runExcept @AppError (parseInstructions semDVI magInt) of
         Left err ->
-          pure $ Left $ err
+          pure $ Left err
         Right rawDVI ->
           pure $ Right rawDVI
 

@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeApplications #-}
+
 module Hex.Variable where
 
 import qualified Hex.BreakList as BL
@@ -36,7 +38,7 @@ setValueFromAST
   -> b
   -> m ()
 setValueFromAST var globalFlag astVal =
-  (texEvaluate astVal) >>= setValue var globalFlag
+  texEvaluate astVal >>= setValue var globalFlag
 
 instance TeXVariable HP.TeXIntVariable where
 
@@ -44,7 +46,7 @@ instance TeXVariable HP.TeXIntVariable where
     HP.ParamVar p ->
       modify $ typed @Config %~ setTeXIntParameter p tgt globalFlag
     HP.RegisterVar iRaw ->
-      (texEvaluate iRaw) >>=
+      texEvaluate iRaw >>=
         (\i -> modify $ typed @Config %~ setTeXIntRegister i tgt globalFlag)
 
 instance TeXVariable HP.LengthVariable where
@@ -52,7 +54,7 @@ instance TeXVariable HP.LengthVariable where
   setValue v globalFlag tgt = case v of
     HP.ParamVar p -> modify $ typed @Config %~ setLengthParameter p tgt globalFlag
     HP.RegisterVar iRaw ->
-      (texEvaluate iRaw) >>=
+      texEvaluate iRaw >>=
         (\i -> modify $ typed @Config %~ setLengthRegister i tgt globalFlag)
 
 instance TeXVariable HP.GlueVariable where
@@ -60,7 +62,7 @@ instance TeXVariable HP.GlueVariable where
   setValue v globalFlag tgt = case v of
     HP.ParamVar p -> modify $ typed @Config %~ setGlueParameter p tgt globalFlag
     HP.RegisterVar iRaw ->
-      (texEvaluate iRaw) >>=
+      texEvaluate iRaw >>=
         (\i -> modify $ typed @Config %~ setGlueRegister i tgt globalFlag)
 
 instance TeXVariable HP.MathGlueVariable where
@@ -68,7 +70,7 @@ instance TeXVariable HP.MathGlueVariable where
   setValue v globalFlag tgt = case v of
     HP.ParamVar p -> modify $ typed @Config %~ setMathGlueParameter p tgt globalFlag
     HP.RegisterVar iRaw ->
-      (texEvaluate iRaw) >>=
+      texEvaluate iRaw >>=
         (\i -> modify $ typed @Config %~ setMathGlueRegister i tgt globalFlag)
 
 instance TeXVariable HP.TokenListVariable where
@@ -76,7 +78,7 @@ instance TeXVariable HP.TokenListVariable where
   setValue v globalFlag tgt = case v of
     HP.ParamVar p -> modify $ typed @Config %~ setTokenListParameter p tgt globalFlag
     HP.RegisterVar iRaw ->
-      (texEvaluate iRaw) >>=
+      texEvaluate iRaw >>=
         (\i -> modify $ typed @Config %~ setTokenListRegister i tgt globalFlag)
 
 instance TeXVariable HP.SpecialTeXInt where
@@ -133,7 +135,7 @@ class TeXVariable a => TeXNumericVariable a where
     let op = case vDir of
           Upward -> scaleUpOp
           Downward -> scaleDownOp
-    ((op (Proxy @a)) <$> texEvaluate var <*> texEvaluate scaleVal) >>=
+    (op (Proxy @a) <$> texEvaluate var <*> texEvaluate scaleVal) >>=
       setValue var globalFlag
 
 instance TeXNumericVariable HP.TeXIntVariable where

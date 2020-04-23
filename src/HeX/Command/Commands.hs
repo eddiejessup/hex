@@ -163,7 +163,7 @@ hModeStartParagraph = \case
     -- list, and the space factor is set to 1000.
     -- TODO: Space factor.
     HP.Indent ->
-        Just <$> (gets $ view $ typed @Config . to parIndentBox)
+        Just <$> gets (view $ typed @Config . to parIndentBox)
 
 vModeAddVGlue
     :: ( MonadError e m
