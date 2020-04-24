@@ -33,9 +33,11 @@ instance Dimensioned Character where
     BoxHeight -> charHeight
     BoxDepth -> charDepth
 
-instance Readable Character where
+instance Describe Character where
 
-  describe Character {char} = describe char
+  describe Character {char} =
+    [ (0, "Character")
+    ] <> describeRel 1 char
 
 data FontDefinition
   = FontDefinition
@@ -48,16 +50,22 @@ data FontDefinition
       }
   deriving stock Show
 
-instance Readable FontDefinition where
+instance Describe FontDefinition where
 
-  describe v = "Font at " <> show (fontPath v)
+  describe v =
+    [ (0, "FontDefinition")
+    , (1, "At" <> show (fontPath v))
+    ]
 
 newtype FontSelection = FontSelection TeXInt
   deriving stock Show
 
-instance Readable FontSelection where
+instance Describe FontSelection where
 
-  describe (FontSelection n) = "Select font " <> show n
+  describe (FontSelection n) =
+    [ (0, "FontSelection")
+    , (1, "Font number" <> show n)
+    ]
 
 data Instruction
   = AddCharacter !Character
@@ -71,17 +79,37 @@ data Instruction
   -- \| DoSpecial !Text
   deriving stock Show
 
-instance Readable Instruction where
+instance Describe Instruction where
 
   describe = \case
-    AddCharacter c -> "Add " <> describe c
-    AddRule r -> "Add Rule:" <> show r
-    BeginNewPage -> "Begin Page"
-    Move axis sp -> "Move " <> show axis <> " " <> showSP sp
-    DefineFont v -> describe v
-    SelectFont v -> describe v
-    PushStack -> "Push stack"
-    PopStack -> "Pop stack"
+    AddCharacter c ->
+      [ (0, "Instruction/AddCharacter")
+      ]
+      <> describeRel 1 c
+    AddRule r ->
+      [ (0, "Instruction/AddRule")
+      , (1, show r)
+      ]
+    BeginNewPage ->
+      [ (0, "Instruction/BeginNewPage")
+      ]
+    Move axis sp ->
+      [ (0, "Instruction/Move")
+      , (1, "Axis " <> quote (show axis))
+      , (1, "By " <> quote (showSP sp))
+      ]
+    DefineFont v ->
+      [ (0, "Instruction/DefineFont")
+      ] <> describeRel 1 v
+    SelectFont v ->
+      [ (0, "Instruction/SelectFont")
+      ] <> describeRel 1 v
+    PushStack ->
+      [ (0, "Instruction/PushStack")
+      ]
+    PopStack ->
+      [ (0, "Instruction/PopStack")
+      ]
 
 data ParseState
   = ParseState

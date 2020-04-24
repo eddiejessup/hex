@@ -11,9 +11,11 @@ data CharCat
       }
   deriving stock Show
 
-instance Readable CharCat where
+instance Describe CharCat where
 
-  describe (CharCat c ct) = show ct <> " " <> describe c
+  describe (CharCat c ct) =
+    [ (0, "CharCat, Cat " <> quote (show ct))
+    ] <> describeRel 1 c
 
 extractCharCat
   :: (Code.CharCode -> Code.CatCode) -> BS.L.ByteString -> Maybe (CharCat, BS.L.ByteString)

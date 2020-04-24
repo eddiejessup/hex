@@ -40,19 +40,15 @@ data TokenSource
       }
   deriving stock (Show, Generic)
 
-instance Readable TokenSource where
+instance Describe TokenSource where
 
   describe TokenSource {sourcePath, sourceCharCodes, sourceLexTokens} =
-    "TokenSource[" <>
-      "path=" <>
-      show sourcePath <>
-      ", " <>
-      "codes=" <>
-      toStrict (Tx.L.Enc.decodeUtf8 (BS.L.take 50 sourceCharCodes)) <>
-      ", " <>
-      "lexTokens=" <>
-      describeFoldable (Seq.take 10 sourceLexTokens) <>
-      "]"
+      [ (0, "TokenSource")
+      ,   (1, "path " <> quote (show sourcePath))
+      ,   (1, "codes")
+      ,     (2, toStrict (Tx.L.Enc.decodeUtf8 (BS.L.take 50 sourceCharCodes)))
+      ]
+      <> describeNamedRelFoldable1 "lexTokens" (Seq.take 10 sourceLexTokens)
 
 newTokenSource :: Maybe (Path Abs File) -> BS.L.ByteString -> TokenSource
 newTokenSource maybePath cs = TokenSource maybePath cs mempty
@@ -93,7 +89,7 @@ type TeXParseable s st e m
     , P.Stream s m
     , P.Token s ~ PrimitiveToken
     , TeXStream s
-    , Readable s
+    , Describe s
     )
 
 type TeXParser s st e m a = TeXParseable s st e m => SimpleParsecT s m a
@@ -126,7 +122,7 @@ simpleRunParserT' parser stream = do
 runSimpleRunParserT'
   :: ( MonadError e m
      , AsType ParseError e
-     , Readable (P.Token s)
+     , Describe (P.Token s)
      )
   => P.ParsecT Void s m a
   -> s
@@ -136,7 +132,7 @@ runSimpleRunParserT' parser stream =
     (resultStream, Right a) ->
       pure (resultStream, a)
     (_, Left err) ->
-      throwError $ injectTyped $ ParseError $ describe err
+      throwError $ injectTyped $ ParseError $ renderDescribed err
 
 insertLexTokens :: TeXStream s => s -> Seq Lex.Token -> s
 insertLexTokens s (ts :|> t) = insertLexTokens (insertLexToken s t) ts
@@ -642,7 +638,7 @@ extractResolvedToken stream lkpCatCode lkpCS =
     Just (lt, newStream) -> do
       rt <-
         note
-          (injectTyped $ ResolutionError $ "Could not resolve lex token: " <> describe lt) $
+          (injectTyped $ ResolutionError $ "Could not resolve lex token: " <> renderDescribed lt) $
           resolveToken lkpCS (L.view resolutionModeLens newStream) lt
       pure $ Just (lt, rt, newStream)
 

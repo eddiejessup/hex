@@ -22,18 +22,19 @@ newtype Kern = Kern {kernDimen :: Length}
 newtype SetGlue a = SetGlue {glueDimen :: a}
   deriving stock Show
 
-instance Readable (SetGlue Length) where
+instance Describe (SetGlue Length) where
 
-  describe SetGlue {glueDimen} = "Glue<" <> showSP glueDimen <> ">"
+  describe SetGlue { glueDimen } =
+    singleLine $ "Glue " <> quote (showSP glueDimen)
 
 newtype HBox = HBox (Seq HBoxElem)
   deriving stock Show
   deriving newtype (Semigroup, Monoid)
 
-instance Readable HBox where
+instance Describe HBox where
 
   describe (HBox elems) =
-    describeListHeaded 1 "HBox" (condenseChary elems toMaybeChar)
+    describeNamedRelFoldable 0 "HBox" (condenseChary elems toMaybeChar)
     where
       toMaybeChar = \case
         HBoxHBaseElem (ElemCharacter DVI.D.Character {DVI.D.char}) ->
@@ -45,11 +46,11 @@ instance Readable HBox where
 data Sentential a = Sentence Text | NonSentence a
   deriving stock (Show, Functor, Foldable)
 
-instance Readable a => Readable (Sentential a) where
+instance Describe a => Describe (Sentential a) where
 
   describe = \case
-    Sentence s -> "\"" <> s <> "\""
-    NonSentence a -> describe a
+    Sentence s -> singleLine (quote s)
+    NonSentence a -> describeRel 0 a
 
 condenseChary :: Foldable t => t a -> (a -> Maybe Char) -> Seq (Sentential a)
 condenseChary elems toMaybeChar = foldl' append mempty elems
@@ -69,10 +70,10 @@ newtype VBox = VBox (Seq VBoxElem)
   deriving stock (Show)
   deriving newtype (Semigroup, Monoid)
 
-instance Readable VBox where
+instance Describe VBox where
 
   describe (VBox vElems) =
-    describeListHeaded 1 "VBox" vElems
+    describeNamedRelFoldable 0 "VBox" vElems
 
 data BoxContents
   = HBoxContents HBox
@@ -144,60 +145,81 @@ newtype Page = Page (Box VBox)
   deriving stock Show
 
 -- Display
-instance Readable BaseElem where
+instance Describe BaseElem where
 
   describe = \case
-    ElemBox box -> describe box
-    ElemRule rule -> show rule
-    ElemFontDefinition fontDef -> describe fontDef
-    ElemFontSelection fontSel -> describe fontSel
-    ElemKern (Kern d) -> "Kern<" <> showSP d <> ">"
+    ElemBox box ->
+      [ (0, "BaseElem/ElemBox")
+      ]
+      <> describeRel 1 box
+    ElemRule rule ->
+      [ (0, "BaseElem/ElemRule")
+      , (1, show rule)
+      ]
+    ElemFontDefinition fontDef ->
+      [ (0, "BaseElem/ElemFontDefinition")
+      ] <> describeRel 1 fontDef
+    ElemFontSelection fontSel ->
+      [ (0, "BaseElem/ElemFontSelection")
+      ] <> describeRel 1 fontSel
+    ElemKern (Kern d) ->
+      [ (0, "BaseElem/ElemKern " <> quote (showSP d))
+      ]
 
-instance Readable HBaseElem where
+instance Describe HBaseElem where
 
   describe = \case
-    ElemCharacter c -> describe c
+    ElemCharacter c ->
+      [ (0, "HBaseElem/ElemCharacter")
+      ] <> describeRel 1 c
 
-instance Readable VBoxElem where
+instance Describe VBoxElem where
 
   describe = \case
     VBoxBaseElem baseElem ->
-      describe baseElem
+      [ (0, "VBoxElem/VBoxBaseElem")
+      ] <> describeRel 1 baseElem
     BoxGlue sg ->
-      "VGlue<" <> describe sg <> ">"
+      [ (0, "VBoxElem/BoxGlue")
+      ] <> describeRel 1 sg
 
-instance Readable HBoxElem where
+instance Describe HBoxElem where
 
   describe = \case
     HVBoxElem (BoxGlue sg) ->
-      "HGlue<" <> describe sg <> ">"
+      [ (0, "HBoxElem/BoxGlue")
+      ] <> describeRel 1 sg
     HVBoxElem vBoxElem ->
-      describe vBoxElem
+      [ (0, "HBoxElem/HVBoxElem")
+      ] <> describeRel 1 vBoxElem
     HBoxHBaseElem hBaseElem ->
-      describe hBaseElem
+      [ (0, "HBoxElem/HBoxHBaseElem")
+      ] <> describeRel 1 hBaseElem
 
-instance Readable a => Readable (Box a) where
+instance Describe a => Describe (Box a) where
 
   describe Box {contents, boxWidth, boxHeight, boxDepth} =
-    "Box<w=" <> describe boxWidth <> ", h=" <> describe boxHeight <> ", d=" <> describe boxDepth <> "> [[[" <>
-      "\n" <>
-      describe contents <>
-      "\n]]] Box"
+    [ (0, "Box")
+    ]
+    <> describeNamedRel1 "Width" boxWidth
+    <> describeNamedRel1 "Height" boxHeight
+    <> describeNamedRel1 "Depth" boxDepth
+    <> describeNamedRel1 "Contents" contents
 
-instance Readable DesiredLength where
-
-  describe = \case
-    Natural -> "Natural"
-    Spread sp -> "Spread<" <> showSP sp <> ">"
-    To sp -> "To<" <> showSP sp <> ">"
-
-instance Readable BoxContents where
+instance Describe DesiredLength where
 
   describe = \case
-    HBoxContents hBox -> describe hBox
-    VBoxContents vBox -> describe vBox
+    Natural -> singleLine "DesiredLength/Natural"
+    Spread sp -> singleLine $ "DesiredLength/Spread " <> quote (showSP sp)
+    To sp -> singleLine $ "DesiredLength/To " <> quote (showSP sp)
 
-instance Readable Page where
+instance Describe BoxContents where
+
+  describe = \case
+    HBoxContents hBox -> describeNamedRel 0 "BoxContents/H" hBox
+    VBoxContents vBox -> describeNamedRel 0 "BoxContents/V" vBox
+
+instance Describe Page where
 
   describe (Page vBoxElems) =
-    describeListHeaded 1 "Page" vBoxElems
+    describeNamedRelFoldable 0 "Page" vBoxElems

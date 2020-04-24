@@ -22,9 +22,9 @@ breakPenalty NoBreak = 0
 newtype Penalty = Penalty TeXInt
   deriving stock Show
 
-instance Readable Penalty where
+instance Describe Penalty where
 
-  describe (Penalty p) = "|p" <> show p <> "|"
+  describe (Penalty p) = singleLine $ "Penalty " <> quote (show p)
 
 class BreakableListElem a where
 

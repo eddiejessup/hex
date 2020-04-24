@@ -168,6 +168,7 @@ handleCommandInVBoxMode oldS newS vList command =
             panic $ "Not implemented, outer V mode: " <> show oth
   where
     addElem e = addVListElem vList e
+
     addMaybeElem' = maybe (pure vList) addElem
 
     addPara :: HP.IndentFlag -> m (s, VList, Maybe ())

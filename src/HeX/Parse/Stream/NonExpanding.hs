@@ -8,7 +8,6 @@ import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.Generics.Product.Typed as G.P
 import qualified Data.List.NonEmpty        as L.NE
 import qualified Data.Sequence             as Seq
-import qualified Data.Text as Tx
 import           Path                      (Abs, File, Path)
 import qualified Text.Megaparsec           as P
 
@@ -24,13 +23,13 @@ data NonExpandingStream = NonExpandingStream
     }
     deriving stock (Generic)
 
-instance Readable NonExpandingStream where
+instance Describe NonExpandingStream where
     describe NonExpandingStream { nesLexState, nesResolutionMode, nesTokenSources } =
-        "NonExpandingStream["
-                    <> "lexState=" <> show nesLexState
-            <> ", " <> "resolutionMode=" <> show nesResolutionMode
-            <> "\n"
-            <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> toList nesTokenSources)
+      [ (0, "NonExpandingStream")
+      ,   (1, "lexState " <> quote (show nesLexState))
+      ,   (1, "resolutionMode " <> quote (show nesResolutionMode))
+      ]
+      <> describeNamedRelFoldable1 "tokenSources" nesTokenSources
 
 newNonExpandingStream :: Maybe (Path Abs File) -> BS.L.ByteString -> NonExpandingStream
 newNonExpandingStream maybePath cs =

@@ -25,9 +25,12 @@ instance Hashable ControlSequence where
   hash ControlSequence {csHash} =
     csHash
 
-instance Readable ControlSequence where
+instance Describe ControlSequence where
 
-  describe ControlSequence {csChars} = "\\" <> toS (toList (Code.unsafeCodeAsChar <$> csChars))
+  describe ControlSequence {csChars} =
+    let s = "\\" <> toS (toList (Code.unsafeCodeAsChar <$> csChars))
+    in singleLine $ "ControlSequence " <> quote s
+
 
 data ControlSequenceLike
   = ActiveCharacter Code.CharCode
@@ -56,16 +59,20 @@ data CharCat
       }
   deriving stock (Show, Eq)
 
-instance Readable CharCat where
+instance Describe CharCat where
 
-  describe CharCat {char, cat} = describe char <> "[" <> describe cat <> "]"
+  describe CharCat {char, cat} =
+    [ (0, "CharCat")
+    ]
+    <> describeRel 1 cat
+    <> describeRel 1 char
 
 data Token
   = CharCatToken CharCat
   | ControlSequenceToken ControlSequence
   deriving stock (Show, Eq)
 
-instance Readable Token where
+instance Describe Token where
 
   describe (CharCatToken cc) = describe cc
   describe (ControlSequenceToken cs) = describe cs

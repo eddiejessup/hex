@@ -52,10 +52,12 @@ data UnsignedLength =
     NormalLengthAsULength NormalLength | CoercedLength CoercedLength
     deriving stock (Show)
 
-instance Readable UnsignedLength where
+instance Describe UnsignedLength where
     describe = \case
-        NormalLengthAsULength v -> describe v
-        CoercedLength v -> describe v
+        NormalLengthAsULength v ->
+            describePrepended 0 "UnsignedLength/NormalLengthAsULength" v
+        CoercedLength v ->
+            describePrepended 0 "UnsignedLength/CoercedLength" v
 
 -- Think: 'un-coerced length'.
 data NormalLength =
@@ -64,10 +66,15 @@ data NormalLength =
     | InternalLength InternalLength
     deriving stock (Show)
 
-instance Readable NormalLength where
+instance Describe NormalLength where
     describe = \case
-        LengthSemiConstant f u -> show f <> " " <> describe u
-        InternalLength il -> show il
+        LengthSemiConstant f u ->
+            [ (0, "NormalLength/LengthSemiConstant")
+            , (1, "Factor " <> quote (show f))
+            ]
+            <> describeRel 1 u
+        InternalLength il ->
+            describePrepended 0 "NormalLength/InternalLength" il
 
 data Factor =
       NormalTeXIntFactor NormalTeXInt
@@ -86,11 +93,14 @@ data Unit =
     PhysicalUnit PhysicalUnitFrame Q.PhysicalUnit | InternalUnit InternalUnit
     deriving stock (Show)
 
-instance Readable Unit where
+instance Describe Unit where
     describe = \case
-        PhysicalUnit MagnifiedFrame pu -> describe pu
-        PhysicalUnit TrueFrame pu -> "true " <> describe pu
-        InternalUnit iu -> describe iu
+        PhysicalUnit MagnifiedFrame pu ->
+            describePrepended 0 "Unit/Physical MagnifiedFrame" pu
+        PhysicalUnit TrueFrame pu ->
+            describePrepended 0 "Unit/Physical TrueFrame" pu
+        InternalUnit iu ->
+            describePrepended 0 "Unit/Internal" iu
 
 scaledPointUnit :: Unit
 scaledPointUnit = PhysicalUnit MagnifiedFrame Q.ScaledPoint
@@ -103,11 +113,11 @@ data InternalUnit =
     | InternalGlueUnit InternalGlue
     deriving stock (Show)
 
-instance Readable InternalUnit where
+instance Describe InternalUnit where
     describe = \case
-        Em -> "em"
-        Ex -> "ex"
-        v -> show v
+        Em -> singleLine "InternalUnit/em"
+        Ex -> singleLine "InternalUnit/ex"
+        v -> singleLine $ show v
 
 data PhysicalUnitFrame = MagnifiedFrame | TrueFrame
     deriving stock (Show)
@@ -115,9 +125,9 @@ data PhysicalUnitFrame = MagnifiedFrame | TrueFrame
 newtype CoercedLength = InternalGlueAsLength InternalGlue
     deriving stock (Show)
 
-instance Readable CoercedLength where
-    describe (InternalGlueAsLength ig) = "fromGlue(" <> show ig <> ")"
-
+instance Describe CoercedLength where
+    describe (InternalGlueAsLength ig) =
+        singleLine $ "CoercedLength/InternalGlue " <> quote (show ig)
 -- Math-length.
 type MathLength = T.Signed UnsignedMathLength
 
@@ -142,21 +152,30 @@ data Glue = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
           | InternalGlue (T.Signed InternalGlue)
     deriving stock (Show)
 
-instance Readable Glue where
+instance Describe Glue where
     describe = \case
         ExplicitGlue len mayStretch mayShrink ->
-            describe len
+            [ (0, "Gliue/Explicit")
+            ]
+            <> describePrepended 1 "Length" len
             <> case mayStretch of
-                    Nothing -> ""
-                    Just stretch -> " plus " <> show stretch
+                    Nothing ->
+                        [(1, "No stretch")]
+                    Just stretch ->
+                        describePrepended 1 "Stretch" stretch
             <> case mayShrink of
-                    Nothing -> ""
-                    Just shrink -> " minus " <> show shrink
+                    Nothing -> [(1, "No shrink")]
+                    Just shrink ->
+                        describePrepended 1 "Shrink" shrink
         InternalGlue ig ->
-            show ig
+            [ (0, "Glue/Internal " <> quote (show ig))
+            ]
 
 data Flex = FiniteFlex Length | FilFlex FilLength
     deriving stock (Show)
+
+instance Describe Flex where
+    describe = singleLine . show
 
 oneFilFlex, minusOneFilFlex, oneFillFlex :: Flex
 oneFilFlex = FilFlex oneFil
@@ -236,6 +255,9 @@ data InternalLength =
     | InternalBoxDimensionRef BoxDimensionRef
     | LastKern
     deriving stock (Show)
+
+instance Describe InternalLength where
+    describe = singleLine . show
 
 data InternalGlue = InternalGlueVariable GlueVariable | LastGlue
     deriving stock (Show)
@@ -345,8 +367,8 @@ data ModeIndependentCommand
     | ChangeScope T.Sign CommandTrigger
     deriving stock (Show)
 
-instance Readable ModeIndependentCommand where
-    describe = show
+instance Describe ModeIndependentCommand where
+    describe = singleLine . show
 
 data Command
     = ShowToken Lex.Token
@@ -368,13 +390,16 @@ data Command
     | ModeIndependentCommand ModeIndependentCommand
     deriving stock (Show)
 
-instance Readable Command where
+instance Describe Command where
     describe = \case
-        HModeCommand c -> describe c
-        VModeCommand c -> describe c
-        ModeIndependentCommand c -> describe c
-        c -> show c
-
+        HModeCommand c ->
+            describePrepended 0 "Command/H" c
+        VModeCommand c ->
+            describePrepended 0 "Command/V" c
+        ModeIndependentCommand c ->
+            describePrepended 0 "Command/AllMode" c
+        c ->
+            singleLine $ show c
 
 data VModeCommand
     = End
@@ -386,8 +411,8 @@ data VModeCommand
     | AddUnwrappedFetchedVBox FetchedBoxRef -- \unv{box,copy}
     deriving stock (Show)
 
-instance Readable VModeCommand where
-    describe = show
+instance Describe VModeCommand where
+    describe = singleLine . show
 
 data HModeCommand =
       AddControlSpace
@@ -403,11 +428,14 @@ data HModeCommand =
     | AddUnwrappedFetchedHBox FetchedBoxRef -- \unh{box,copy}
     deriving stock (Show)
 
-instance Readable HModeCommand where
+instance Describe HModeCommand where
     describe = \case
-        AddCharacter ref -> "Add char " <> describe ref
-        AddHGlue g -> "Add glue " <> describe g
-        c -> show c
+        AddCharacter ref ->
+            describePrepended 0 "HModeCommand/AddCharacter" ref
+        AddHGlue g ->
+            describePrepended 0 "HModeCommand/AddGlue" g
+        c ->
+            singleLine $ "HModeCommand/" <> show c
 
 data FetchedBoxRef = FetchedBoxRef TeXInt T.BoxFetchMode
     deriving stock (Show)
@@ -450,10 +478,12 @@ data CharCodeRef =
     CharRef Code.CharCode | CharTokenRef Q.TeXInt | CharCodeNrRef TeXInt
     deriving stock (Show)
 
-instance Readable CharCodeRef where
+instance Describe CharCodeRef where
     describe = \case
-        CharRef c -> describe c
-        v -> show v
+        CharRef c ->
+            describePrepended 0 "CharCodeRef/CharRef" c
+        v ->
+            singleLine $ show v
 
 -- Condition heads.
 data IfConditionHead =

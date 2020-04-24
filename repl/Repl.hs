@@ -9,7 +9,6 @@ import Hex.Resolve
 import Hex.Parse
 import Hexlude
 import qualified System.Console.GetOpt as Opt
-import qualified Data.Text as Tx
 import System.IO (hSetBuffering, BufferMode(..))
 import qualified Data.Generics.Product as G.P
 import qualified Data.List.NonEmpty as L.NE
@@ -60,22 +59,24 @@ promptLazyByteString msg = do
 repl :: (MonadState ExpandingStream m, MonadIO m, MonadThrow m) => m ()
 repl = do
   cmd <- prompt "Enter command, one of: [cat, lex, resolve, expand, command]"
-  conf <- Conf.newConfig
+  conf <- Conf.newConfig []
   case cmd of
     "cat" -> do
       inpBSL <- promptLazyByteString "cat"
       let charCats = usableCodesToCharCats inpBSL
-      putResult $ describeLined charCats
+      putResult $ renderLines $ describeNamedRelFoldable 0 "CharCats" charCats
     "lex" -> do
       inpBSL <- promptLazyByteString "lex"
       let lexTokens = usableCodesToLexTokens inpBSL
-      putResult $ describeLined lexTokens
+      putResult $ renderLines $ describeNamedRelFoldable 0 "LexTokens" lexTokens
     "resolve" -> do
       inpBSL <- promptLazyByteString "resolve"
       let lexWithResolvedTokens = usableCodesToResolvedTokens inpBSL
-      let lns = lexWithResolvedTokens <&> \(lt, mayRt) ->
-            describe lt <> " <-> " <> maybe "[Nothing]" describe mayRt
-      putResult $ Tx.intercalate "\n" lns
+      putResult $ renderLines $ concat $ lexWithResolvedTokens <&> \(lt, mayRt) ->
+        [ (0, "Lex with resolved token")
+        ]
+        <> describeRel 1 lt
+        <> describeRel 1 mayRt
     "expand" -> do
       inpBSL <- promptLazyByteString "expand"
 
@@ -89,13 +90,13 @@ repl = do
 
       case primToks of
         [] -> putText "Returned no results"
-        _ -> putResult $ describeLined primToks
+        _ -> putResult $ renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" primToks
 
       for_ mayErr $ \err -> do
         putText "Ended with error:"
         putText $ show err
         putText "Stream ended in state:"
-        putText $ describe newS
+        putText $ renderDescribed newS
 
     "command" -> do
       inpBSL <- promptLazyByteString "command"
@@ -109,13 +110,13 @@ repl = do
 
       case commandToks of
         [] -> putText "Returned no results"
-        _ -> putResult $ describeLined commandToks
+        _ -> putResult $ renderLines $ describeNamedRelFoldable 0 "Commands" commandToks
 
       for_ mayErr $ \err -> do
         putText "Ended with error:"
         putText $ show err
         putText "Stream ended in state:"
-        putText $ describe newS
+        putText $ renderDescribed newS
     _ ->
       putText $ "Unrecognised command: " <> cmd
   repl

@@ -34,12 +34,12 @@ import Hexlude
 data FixParams = FixParams {ratio :: Rational, setOrder :: Int}
   deriving stock Show
 
-instance Readable FixParams where
+instance Describe FixParams where
 
   describe (FixParams r n) = case n of
-    0 -> "Finite ratio: " <> showFrac r
-    1 -> "Fil ratio: " <> showSP r
-    _ -> "Fil order: " <> show n <> ", ratio: " <> showSP r
+    0 -> singleLine $ "Finite ratio: " <> showFrac r
+    1 -> singleLine $ "Fil ratio: " <> showSP r
+    _ -> singleLine $ "Fil order: " <> show n <> ", ratio: " <> showSP r
 
 data LengthJudgment = Bare | Full | Overfull
   deriving stock Show

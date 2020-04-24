@@ -24,21 +24,21 @@ instance Monoid Sign where
 
   mempty = Positive
 
-instance Readable Sign where
+instance Describe Sign where
 
-  describe Positive = "+"
-  describe Negative = "-"
+  describe Positive = singleLine "Sign/+"
+  describe Negative = singleLine "Sign/-"
 
 data Signed a = Signed Sign a
   deriving stock Functor
 
 deriving stock instance Show a => Show (Signed a)
 
-instance Readable a => Readable (Signed a) where
+instance Describe a => Describe (Signed a) where
 
   describe (Signed sign v) = case sign of
-    Positive -> describe v
-    Negative -> "-" <> describe v
+    Positive -> describePrepended 0 "+" v
+    Negative -> describePrepended 0 "-" v
 
 evalSigned :: Num a => Signed a -> a
 evalSigned (Signed sign a) = case sign of
@@ -498,11 +498,12 @@ data PrimitiveToken
   | UnresolvedTok Lex.Token
   deriving stock (Show, Eq)
 
-instance Readable PrimitiveToken where
+instance Describe PrimitiveToken where
 
   describe = \case
-    UnresolvedTok lt -> "Unresolved[" <> describe lt <> "]"
-    x -> show x
+    UnresolvedTok lt ->
+      describePrepended 0 "PrimitiveToken/UnresolvedTok" lt
+    x -> singleLine $ show x
 
 instance Ord PrimitiveToken where
 
@@ -563,9 +564,9 @@ data SyntaxCommandHeadToken
   | ChangeCaseTok VDirection -- \uppercase, \lowercase
   deriving stock (Show, Eq)
 
-instance Readable SyntaxCommandHeadToken where
+instance Describe SyntaxCommandHeadToken where
 
-  describe = show
+  describe = singleLine . show
 
 -- TODO: I think we can make this independent of parsing, and move it out.
 data ResolvedToken
@@ -577,6 +578,6 @@ instance Ord ResolvedToken where
 
   compare _ _ = EQ
 
-instance Readable ResolvedToken where
+instance Describe ResolvedToken where
 
-  describe = show
+  describe = singleLine . show

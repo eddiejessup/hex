@@ -9,7 +9,6 @@ import qualified Data.List.NonEmpty as L.NE
 import Data.Map.Strict ((!?))
 import qualified Data.Map.Strict as Map
 import qualified Data.Path
-import qualified Data.Text as Tx
 import qualified Data.Sequence as Seq
 import qualified Hex.Config as Conf
 import qualified Hex.Config.Codes as Code
@@ -47,14 +46,14 @@ newExpandStream maybePath cs =
     , skipState = []
     }
 
-instance Readable ExpandingStream where
+instance Describe ExpandingStream where
     describe ExpandingStream { lexState, resolutionMode, skipState, streamTokenSources } =
-        "ExpandingStream["
-                    <> "lexState=" <> show lexState
-            <> ", " <> "skipState=" <> show skipState
-            <> ", " <> "resolutionMode=" <> show resolutionMode
-            <> "\n"
-            <> "Token sources:\n" <> Tx.intercalate "\n" (describe <$> toList streamTokenSources)
+      [ (0, "ExpandingStream")
+      ,   (1, "lexState " <> quote (show lexState))
+      ,   (1, "skipState " <> quote (show skipState))
+      ,   (1, "resolutionMode " <> quote (show resolutionMode))
+      ]
+      <> describeNamedRelFoldable1 "tokenSources" streamTokenSources
 
 instance
   ( MonadError e m

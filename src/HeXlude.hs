@@ -1,6 +1,6 @@
 module Hexlude
     ( module Protolude
-    , module Readable
+    , module Describe
     , module Data.Sequence
 
     , module Data.Generics.Sum.Typed
@@ -38,7 +38,7 @@ import           Control.Lens              ((^.), (%~), (.~), (?~), view, to)
 import           Data.Generics.Product     (field)
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)
 import qualified Data.Sequence             as Seq
-import           Debug.Readable            as Readable
+import           Debug.Describe            as Describe
 import           Data.Generics.Product.Typed
 import           Data.Generics.Sum.Typed
 

@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 module Hex.Command.Run where
 
+import Control.Monad.Trans.Writer.CPS as Wr
 import DVI.Document (Instruction, parseInstructions)
 import DVI.Encode (encode)
 import DVI.Instruction (DVIError, EncodableInstruction)
@@ -19,7 +20,6 @@ import qualified Hex.Quantity as Quantity
 import Hexlude
 import TFM (TFMError)
 import qualified Text.Megaparsec as P
-import Control.Monad.Trans.Writer.CPS as Wr
 
 data AppError
   = BuildError BuildError
@@ -40,11 +40,8 @@ newtype App a
     ( Functor
     , Applicative
     , Monad
-
     , MonadState Conf.Config
-
     , MonadIO
-
     , MonadError AppError
     )
 
@@ -65,19 +62,19 @@ data Mode
 
 readMode :: (IsString s, Eq s) => s -> Maybe Mode
 readMode = \case
-    "cat" -> Just CatMode
-    "lex" -> Just LexMode
-    "resolve" -> Just ResolveMode
-    "expand" -> Just ExpandMode
-    "command" -> Just CommandMode
-    "paralist" -> Just ParaListMode
-    "paraset" -> Just ParaSetMode
-    "pagelist" -> Just PageListMode
-    "page" -> Just PageMode
-    "dvi" -> Just SemanticDVIMode
-    "rawdvi" -> Just RawDVIMode
-    "bytes" -> Just DVIBytesMode
-    _ -> Nothing
+  "cat" -> Just CatMode
+  "lex" -> Just LexMode
+  "resolve" -> Just ResolveMode
+  "expand" -> Just ExpandMode
+  "command" -> Just CommandMode
+  "paralist" -> Just ParaListMode
+  "paraset" -> Just ParaSetMode
+  "pagelist" -> Just PageListMode
+  "page" -> Just PageMode
+  "dvi" -> Just SemanticDVIMode
+  "rawdvi" -> Just RawDVIMode
+  "bytes" -> Just DVIBytesMode
+  _ -> Nothing
 
 -- Cat
 benchCatBS
@@ -93,9 +90,8 @@ benchCatBS xs = case extractCharCat (Code.catLookup Code.usableCatCodes) xs of
 
 -- Expand.
 loopParser
-  :: forall m a
-   . ( Monad m
-     )
+  :: forall m a. ( Monad m
+                 )
   => HP.SimpleParsecT HP.ExpandingStream (ExceptT AppError m) a
   -> HP.ExpandingStream
   -> m (HP.ExpandingStream, Maybe AppError, [a])
@@ -156,8 +152,8 @@ renderStreamUnsetPara s c =
   runApp c (extractUnsetParaApp s) <&> \case
     Left err ->
       Left err
-    Right (HList elemSeq) ->
-      Right $ describeLined elemSeq
+    Right hList ->
+      Right $ renderDescribed hList
 
 -- Paragraph boxes.
 streamToParaBoxes
@@ -178,7 +174,7 @@ renderStreamSetPara s c =
     Left err ->
       Left err
     Right boxes ->
-      Right $ describeDoubleLined boxes
+      Right $ renderLines $ describeRelFoldable 0 boxes
 
 -- Pages list.
 renderStreamPageList
@@ -190,8 +186,8 @@ renderStreamPageList s c =
   runApp c (extractMainVList s) <&> \case
     Left err ->
       Left err
-    Right (_, VList vList) ->
-      Right $ describeLined vList
+    Right (_, vList) ->
+      Right $ renderDescribed vList
 
 -- Pages boxes.
 streamToPages
@@ -200,8 +196,7 @@ streamToPages
   -> Conf.Config
   -> m (Either AppError (Seq Page, Conf.IntParamVal 'HP.Mag))
 streamToPages s c =
-  runApp c $ extractBreakAndSetMainVList s
-    <&> \(_, pgs, mag_) -> (pgs, mag_)
+  runApp c $ extractBreakAndSetMainVList s <&> \(_, pgs, mag_) -> (pgs, mag_)
 
 renderStreamPages
   :: MonadIO m
@@ -213,7 +208,7 @@ renderStreamPages s c =
     Left err ->
       Left err
     Right (pages, _mag) ->
-      Right $ describeLined pages
+      Right $ renderLines $ describeRelFoldable 0 pages
 
 -- DVI instructions.
 streamToSemanticDVI
@@ -238,7 +233,7 @@ renderStreamSemanticDVI s c =
     Left err ->
       Left err
     Right (semDVI, _mag) ->
-      Right $ describeLined semDVI
+      Right $ renderLines $ describeRelFoldable 0 semDVI
 
 -- Raw DVI instructions.
 streamToRawDVI
@@ -253,10 +248,10 @@ streamToRawDVI s c =
     Right (semDVI, mag) ->
       let magInt = Quantity.unInt $ Conf.unIntParam mag
       in case runExcept @AppError (parseInstructions semDVI magInt) of
-        Left err ->
-          pure $ Left err
-        Right rawDVI ->
-          pure $ Right rawDVI
+           Left err ->
+             pure $ Left err
+           Right rawDVI ->
+             pure $ Right rawDVI
 
 renderStreamRawDVI
   :: MonadIO m
@@ -266,10 +261,11 @@ renderStreamRawDVI
 renderStreamRawDVI s c =
   streamToRawDVI s c <&> \case
     Left err -> Left err
-    Right rawDVI -> Right $ describeLined rawDVI
+    Right rawDVI -> Right $ renderLines $ describeRelFoldable 0 rawDVI
 
 -- DVI byte strings.
-streamToDVIBytes :: MonadIO m
+streamToDVIBytes
+  :: MonadIO m
   => HP.ExpandingStream
   -> Conf.Config
   -> m (Either AppError ByteString)

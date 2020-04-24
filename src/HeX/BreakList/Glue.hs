@@ -7,11 +7,12 @@ import Hexlude
 data GlueFlex = GlueFlex {factor :: Rational, order :: Int}
   deriving stock (Show, Eq)
 
-instance Readable GlueFlex where
+instance Describe GlueFlex where
 
-  describe (GlueFlex 0 0) = "0"
-  describe (GlueFlex f 0) = showSP f
-  describe (GlueFlex f n) = show f <> " fil" <> show n
+  describe = \case
+    GlueFlex 0 0 -> singleLine "GlueFlex 0"
+    GlueFlex f 0 -> singleLine $ "GlueFlex " <> quote (showSP f)
+    GlueFlex f n -> singleLine $ "GlueFlex " <> quote (show f) <> " fil" <> show n
 
 instance Semigroup GlueFlex where
 
@@ -59,12 +60,19 @@ instance Num a => Monoid (Glue a) where
 
   mempty = Glue 0 mempty mempty
 
-instance Readable (Glue Length) where
+instance Describe (Glue Length) where
 
-  describe (Glue d (GlueFlex 0 0) (GlueFlex 0 0)) =
-    "{- " <> showSP d <> " -}"
-  describe (Glue d str shr) =
-    "{" <> showSP d <> ("+" <> show str) <> ("-" <> show shr) <> "}"
+  describe = \case
+    Glue d (GlueFlex 0 0) (GlueFlex 0 0) ->
+      singleLine $ "Glue [No-Flex] " <> quote (showSP d)
+    Glue d str shr ->
+      singleLine $
+        "Glue "
+        <> quote (showSP d)
+        <> " "
+        <> quote ("+" <> show str)
+        <> " "
+        <> quote ("-" <> show shr)
 
 scaleLengthGlue :: Glue Length -> TeXInt -> Glue Length
 scaleLengthGlue (Glue dim str shr) i =

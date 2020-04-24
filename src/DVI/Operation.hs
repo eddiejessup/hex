@@ -81,3 +81,6 @@ instance Encodable Operation where
       Preamble -> 247
       Postamble -> 248
       PostPostamble -> 249
+
+instance Describe Operation where
+  describe op = singleLine $ "Operation/" <> show op

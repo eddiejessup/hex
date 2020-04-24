@@ -28,6 +28,25 @@ instance Encodable ArgVal where
   encode (SIntArgVal v) = encode v
   encode (StringArgVal v) = Ascii.toByteString v
 
+instance Describe ArgVal where
+  describe a = singleLine $ mappend "ArgVal/" $ case a of
+    UIntArgVal (U1 u) ->
+      "UnsignedInt/1Byte/" <> show u
+    UIntArgVal (U2 u) ->
+      "UnsignedInt/2Byte/" <> show u
+    UIntArgVal (U4 u) ->
+      "UnsignedInt/4Byte/" <> show u
+    SIntArgVal (S1 n) ->
+      "SignedInt/1Byte/" <> show n
+    SIntArgVal (S2 n) ->
+      "SignedInt/2Byte/" <> show n
+    SIntArgVal (S4 n) ->
+      "SignedInt/4Byte/" <> show n
+    SIntArgVal (S4 n) ->
+      "SignedInt/4Byte/" <> show n
+    StringArgVal s ->
+      "String/" <> show s
+
 data IntArgSize
   = B1
   | B2
@@ -103,9 +122,13 @@ instance Encodable EncodableInstruction where
 
   encode (EncodableInstruction op args) = encode op `BS.append` encode args
 
-instance Readable EncodableInstruction where
+instance Describe EncodableInstruction where
 
-  describe = show
+  describe (EncodableInstruction op args) =
+    [ (0, "EncodableInstruction")
+    ]
+    <> describeRel 1 op
+    <> describeNamedRelFoldable1 "Args" args
 
 uIntOpByteLength :: UIntArgVal -> ByteLength
 uIntOpByteLength = \case

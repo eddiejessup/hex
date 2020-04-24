@@ -2,10 +2,14 @@ module Main where
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BS.L
+import Hex.Categorise
+import qualified Hex.Command.Run as Run
+import Hex.Config.Config
+import Hex.Lex
 import Hex.Parse.Stream.Expanding (newExpandStream)
+import Hex.Resolve hiding (Output)
 import Hexlude
 import qualified Path
-import qualified Hex.Command.Run as Run
 import qualified Path.IO
 import qualified System.Console.GetOpt as Opt
 
@@ -14,7 +18,7 @@ data Flag
   | Amble
   | Output FilePath
   | Mode Run.Mode
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
 
 options :: [Opt.OptDescr Flag]
 options =
@@ -25,7 +29,6 @@ options =
   ]
   where
     output = Output . toS . fromMaybe "out.dvi"
-
     mode = \case
       Nothing -> Mode Run.DVIBytesMode
       Just modeStr -> case Run.readMode modeStr of
@@ -52,13 +55,13 @@ main :: IO ()
 main = do
   (flags, args) <- ((toS <$>) <$> getArgs) >>= parseArgs
   when (Help `elem` flags) $ panic usage
-  (inputRaw, maybePath) <-
+  (inputRaw, maybeInPath) <-
     case args of
       ["-"] -> do
         cs <- liftIO BS.L.getContents
         pure (cs, Nothing)
-      [pathStr] -> do
-        path <- Path.IO.resolveFile' (toS pathStr)
+      [inPathStr] -> do
+        path <- Path.IO.resolveFile' (toS inPathStr)
         cs <- BS.L.readFile (Path.toFilePath path)
         pure (cs, Just path)
       _ ->
@@ -68,33 +71,46 @@ main = do
         then preamble <> inputRaw <> postamble
         else inputRaw
       mode = lastDef Run.DVIBytesMode [m | Mode m <- flags]
+  conf <- newConfig (maybeToList (Path.parent <$> maybeInPath))
+  let s = newExpandStream maybeInPath input
   case lastMay [f | Output f <- flags] of
-    Nothing ->
-      do
-      appErrorOrTx <- renderWithMode input mode
+    Nothing -> do
+      appErrorOrTx <- renderWithMode conf input mode
       case appErrorOrTx of
         Left appError ->
           putText $ show appError
         Right tx ->
           putText tx
-    Just destPathStr ->
-      case mode of
-        Run.DVIBytesMode ->
-          do
-          s <- newExpandStream maybePath input
-          appErrorOrBytes <- Run.streamToDVIBytes s
-          case appErrorOrBytes of
-            Left appError ->
-              putText $ showAppError appError
-            Right bytes ->
-              BS.writeFile destPathStr bytes
-        _ ->
-          do
-          appErrorOrTx <- renderWithMode input mode
-          case appErrorOrTx of
-            Left appError ->
-              putText $ show appError
-            Right tx ->
-              writeFile destPathStr tx
+    Just destPathStr -> case mode of
+      Run.DVIBytesMode -> do
+        appErrorOrBytes <- Run.streamToDVIBytes s conf
+        case appErrorOrBytes of
+          Left appError ->
+            putText $ show appError
+          Right bytes -> do
+            putText $ "Writing to " <> toS destPathStr <> "..."
+            BS.writeFile destPathStr bytes
+      _ ->
+        panic "Writing non-DVI-bytes mode to file not supported"
 
-renderWithMode input = \case
+renderWithMode
+  :: MonadIO m
+  => Config
+  -> BS.L.ByteString
+  -> Run.Mode
+  -> m (Either Run.AppError Text)
+renderWithMode conf input = \case
+  Run.CatMode -> pure $ Right $ show $ usableCodesToCharCats input -- TODO: Render nicely.
+  Run.LexMode -> pure $ Right $ show $ usableCodesToLexTokens input
+  Run.ResolveMode -> pure $ Right $ show $ usableCodesToResolvedTokens input
+  Run.ExpandMode -> Run.expandingStreamAsPrimTokens s conf <&> undefined
+  Run.CommandMode -> Run.expandingStreamAsCommands s conf <&> undefined
+  Run.ParaListMode -> Run.renderStreamUnsetPara s conf
+  Run.ParaSetMode -> Run.renderStreamSetPara s conf
+  Run.PageListMode -> Run.renderStreamPageList s conf
+  Run.PageMode -> Run.renderStreamPages s conf
+  Run.SemanticDVIMode -> Run.renderStreamSemanticDVI s conf
+  Run.RawDVIMode -> Run.renderStreamRawDVI s conf
+  Run.DVIBytesMode -> panic "You probably don't want to render the DVI bytes as text"
+  where
+    s = newExpandStream Nothing input

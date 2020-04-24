@@ -21,6 +21,11 @@ newtype HList = HList (Seq HListElem)
   deriving stock (Show)
   deriving newtype (Semigroup, Monoid)
 
+instance Describe HList where
+
+  describe (HList elems) =
+    describeNamedRelFoldable 0 "HList" elems
+
 instance Dimensioned HList where
 
   naturalLength dim (HList elemSeq) = case dim of
@@ -93,10 +98,10 @@ instance Dimensioned VList where
            Nothing -> 0
            Just lst -> naturalLength BoxDepth lst
 
-instance Readable VList where
+instance Describe VList where
 
   describe (VList elems) =
-    describeListHeaded 1 "VList" elems
+    describeNamedRelFoldable 0 "VList" elems
 
 data VBoxAlignType
   = DefaultAlign -- \vbox
@@ -182,15 +187,20 @@ instance Dimensioned HListElem where
   naturalLength dim (HListHBaseElem e) = naturalLength dim e
 
 -- Display.
-instance Readable VListElem where
+instance Describe VListElem where
 
   describe = \case
-    VListBaseElem baseElem -> describe baseElem
-    ListGlue g -> show g
-    ListPenalty p -> "Penalty " <> show p
+    VListBaseElem baseElem ->
+      describeNamedRel 0 "VListElem/Base" baseElem
+    ListGlue g ->
+      describeNamedRel 0 "VListElem/Glue" g
+    ListPenalty p ->
+      describeNamedRel 0 "VListElem/Penalty" p
 
-instance Readable HListElem where
+instance Describe HListElem where
 
   describe = \case
-    HVListElem vListElem -> describe vListElem
-    HListHBaseElem hBaseElem -> describe hBaseElem
+    HVListElem vListElem ->
+      describeNamedRel 0 "HListElem/V" vListElem
+    HListHBaseElem hBaseElem ->
+      describeNamedRel 0 "HListElem/HBase" hBaseElem

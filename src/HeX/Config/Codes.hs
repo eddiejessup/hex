@@ -27,8 +27,8 @@ newtype CharCode = CharCode { codeWord :: Word8 }
 codeInt :: CharCode -> Int
 codeInt = fromIntegral . codeWord
 
-instance Readable CharCode where
-  describe c = "'" <> Text.singleton (unsafeCodeAsChar c) <> "'"
+instance Describe CharCode where
+  describe c = singleLine $ "CharCode/'" <> Text.singleton (unsafeCodeAsChar c) <> "'"
 
 instance TeXCode CharCode where
     toTeXInt = TeXInt . fromIntegral
@@ -323,8 +323,8 @@ data CoreCatCode
     | Active       -- 13
     deriving stock (Show, Eq)
 
-instance Readable CoreCatCode where
-    describe = show
+instance Describe CoreCatCode where
+    describe a = singleLine $ "CoreCatCode/" <> show a
 
 data CatCode
     = Escape       -- 0

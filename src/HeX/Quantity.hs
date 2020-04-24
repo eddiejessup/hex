@@ -62,17 +62,17 @@ data PhysicalUnit
     | ScaledPoint -- 'sp'
     deriving stock (Show)
 
-instance Readable PhysicalUnit where
+instance Describe PhysicalUnit where
     describe = \case
-        Point       -> "pt"
-        Pica        -> "pc"
-        Inch        -> "in"
-        BigPoint    -> "bp"
-        Centimetre  -> "cm"
-        Millimetre  -> "mm"
-        Didot       -> "dd"
-        Cicero      -> "cc"
-        ScaledPoint -> "sp"
+        Point       -> singleLine "PhysicalUnit/pt"
+        Pica        -> singleLine "PhysicalUnit/pc"
+        Inch        -> singleLine "PhysicalUnit/in"
+        BigPoint    -> singleLine "PhysicalUnit/bp"
+        Centimetre  -> singleLine "PhysicalUnit/cm"
+        Millimetre  -> singleLine "PhysicalUnit/mm"
+        Didot       -> singleLine "PhysicalUnit/dd"
+        Cicero      -> singleLine "PhysicalUnit/cc"
+        ScaledPoint -> singleLine "PhysicalUnit/sp"
 
 inScaledPoint :: PhysicalUnit -> Rational
 inScaledPoint u = case u of
@@ -126,8 +126,8 @@ scaleLength (Length d) (TeXInt n) = Length (d * n)
 shrinkLength :: Length -> TeXInt -> Length
 shrinkLength (Length d) (TeXInt n) = Length (d `quot` n)
 
-instance Readable Length where
-    describe = showSP
+instance Describe Length where
+    describe = singleLine . showSP
 
 newtype MathLength = MathLength { unMathLength :: Int }
     deriving stock (Show)
