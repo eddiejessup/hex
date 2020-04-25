@@ -6,6 +6,9 @@ module Hexlude
     , module Data.Generics.Sum.Typed
     , module Data.Generics.Product.Typed
 
+    , module Generic.Random
+    , module Test.QuickCheck
+
     , module Control.Lens
 
     , field
@@ -41,7 +44,8 @@ import qualified Data.Sequence             as Seq
 import           Debug.Describe            as Describe
 import           Data.Generics.Product.Typed
 import           Data.Generics.Sum.Typed
-
+import           Generic.Random            (genericArbitraryU)
+import           Test.QuickCheck           (Arbitrary(arbitrary), Gen)
 atEith :: (MonadError Text m, Show a) => Text -> [a] -> Int -> m a
 atEith str xs i = note
     ("No " <> str <> " at index " <> show i <> ", values are: "

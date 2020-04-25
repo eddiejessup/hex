@@ -13,7 +13,7 @@ import qualified Data.HashMap.Strict  as HashMap
 import qualified Data.Text            as Text
 import           Path                 (File, Path)
 import qualified Path
-
+import qualified Test.QuickCheck as QC
 import           Hex.Quantity
 
 class TeXCode a where
@@ -24,11 +24,14 @@ class TeXCode a where
 newtype CharCode = CharCode { codeWord :: Word8 }
     deriving newtype (Show, Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits, Hashable)
 
+instance Arbitrary CharCode where
+    arbitrary = QC.elements [0x20..0x7e]
+
 codeInt :: CharCode -> Int
 codeInt = fromIntegral . codeWord
 
 instance Describe CharCode where
-  describe c = singleLine $ "CharCode/'" <> Text.singleton (unsafeCodeAsChar c) <> "'"
+  describe c = singleLine $ "CharCode/" <> quote (Text.singleton (unsafeCodeAsChar c))
 
 instance TeXCode CharCode where
     toTeXInt = TeXInt . fromIntegral
@@ -38,24 +41,7 @@ instance TeXCode CharCode where
         | n < 0 = Nothing
         | otherwise = Just $ fromIntegral n
 
--- instance StringConv [CharCode] Text where
---     strConv leniency ccList =
---         let charList = unsafeCodeAsChar <$> ccList
---         in strConv leniency charList
-
--- instance StringConv (Seq CharCode) Text where
---     strConv leniency ccSeq =
---         let ccList = toList ccSeq
---         in strConv leniency ccList
-
-
--- instance StringConv [Char] (Seq CharCode) where
---     strConv _ chars = Seq.fromList $ CharCode . c2w <$> chars
-
--- instance StringConv [Char] [CharCode] where
---     strConv _ chars = CharCode . c2w <$> chars
-
--- Helper.
+-- TODO: Remove this hashing crap (see Hex.Lex).
 data SPInt = SP !Int !Int
 
 instance Hashable (Seq CharCode) where
@@ -63,12 +49,6 @@ instance Hashable (Seq CharCode) where
       where
         finalise (SP salt len) = hashWithSalt salt len
         step (SP salt len) x = SP (hashWithSalt salt x) (len + 1)
-
--- instance Hashable (Seq CharCode) where
---     hashWithSalt s x = hashWithSalt s (toList x)
-
--- codesToS :: (StringConv [Char] a, Functor f, Foldable f) => f CharCode -> a
--- codesToS cs = toS $ toList $ unsafeCodeAsChar <$> cs
 
 readCharCodes :: MonadIO m => Path a File -> m BS.L.ByteString
 readCharCodes path = liftIO (BS.L.readFile (Path.toFilePath path))
@@ -321,10 +301,13 @@ data CoreCatCode
     | Letter       -- 11
     | Other        -- 12
     | Active       -- 13
-    deriving stock (Show, Eq)
+    deriving stock (Show, Eq, Generic)
 
 instance Describe CoreCatCode where
     describe a = singleLine $ "CoreCatCode/" <> show a
+
+instance Arbitrary CoreCatCode where
+  arbitrary = genericArbitraryU
 
 data CatCode
     = Escape       -- 0
@@ -333,7 +316,16 @@ data CatCode
     | Comment      -- 14
     | Invalid      -- 15
     | CoreCatCode CoreCatCode
-    deriving stock (Show, Eq)
+    deriving stock (Show, Eq, Generic)
+
+instance Describe CatCode where
+    describe = \case
+        CoreCatCode ccc ->
+            describePrepended 0 "CatCode" ccc
+        a -> singleLine $ "CatCode " <> show a
+
+instance Arbitrary CatCode where
+  arbitrary = genericArbitraryU
 
 instance TeXCode CatCode where
     toTeXInt = \case

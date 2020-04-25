@@ -6,13 +6,15 @@ import qualified Data.Sequence as Seq
 import qualified Hex.Categorise as Cat
 import qualified Hex.Config.Codes as Code
 import Hexlude
+import qualified Test.QuickCheck as QC
 
+-- TODO: Fix this hashing crap.
 data ControlSequence
   = ControlSequence
       { csChars :: Seq Code.CharCode
       , csHash :: Int
       }
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
 
 mkControlSequence :: Seq Code.CharCode -> ControlSequence
 mkControlSequence csChars = ControlSequence {csChars, csHash = hash csChars}
@@ -31,11 +33,15 @@ instance Describe ControlSequence where
     let s = "\\" <> toS (toList (Code.unsafeCodeAsChar <$> csChars))
     in singleLine $ "ControlSequence " <> quote s
 
+-- Make sure code-list is non-empty.
+instance Arbitrary ControlSequence where
+  arbitrary =
+    mkControlSequence . Seq.fromList <$> QC.listOf1 arbitrary
 
 data ControlSequenceLike
   = ActiveCharacter Code.CharCode
   | ControlSequenceProper ControlSequence
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
 
 instance Hashable ControlSequenceLike where
 
@@ -52,12 +58,15 @@ instance Hashable ControlSequenceLike where
     ControlSequenceProper cs ->
       hash cs
 
+instance Arbitrary ControlSequenceLike where
+  arbitrary = genericArbitraryU
+
 data CharCat
   = CharCat
       { char :: Code.CharCode
       , cat :: Code.CoreCatCode
       }
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
 
 instance Describe CharCat where
 
@@ -67,19 +76,21 @@ instance Describe CharCat where
     <> describeRel 1 cat
     <> describeRel 1 char
 
+instance Arbitrary CharCat where
+  arbitrary = genericArbitraryU
+
 data Token
   = CharCatToken CharCat
   | ControlSequenceToken ControlSequence
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
 
 instance Describe Token where
 
   describe (CharCatToken cc) = describe cc
   describe (ControlSequenceToken cs) = describe cs
 
-instance Ord Token where
-
-  compare _ _ = EQ
+instance Arbitrary Token where
+  arbitrary = genericArbitraryU
 
 data LexState
   = SkippingBlanks
@@ -125,11 +136,11 @@ extractToken charToCat = go
   where
     go :: LexState -> BS.L.ByteString -> Maybe (Token, LexState, BS.L.ByteString)
     go _state cs = do
-      (Cat.CharCat n1 cat1, rest) <- getCC cs
+      (Cat.RawCharCat n1 cat1, rest) <- getCC cs
       case (cat1, _state) of
         -- Control sequence: Grab it.
         (Code.Escape, _) -> do
-          (csCC1@(Cat.CharCat _ ctrlSeqCat1), restPostEscape) <- getCC rest
+          (csCC1@(Cat.RawCharCat _ ctrlSeqCat1), restPostEscape) <- getCC rest
           let (ctrlSeqCCs, restPostCtrlSeq) = case ctrlSeqCat1 of
                 Code.CoreCatCode Code.Letter ->
                   let (ctrlWordCCsPostFirst, restPostCtrlWord) = chopBreak getLetterCC restPostEscape
@@ -178,7 +189,7 @@ extractToken charToCat = go
     getCC = Cat.extractCharCat charToCat
     getLetterCC xs =
       getCC xs >>= \case
-        r@(Cat.CharCat _ (Code.CoreCatCode Code.Letter), _) ->
+        r@(Cat.RawCharCat _ (Code.CoreCatCode Code.Letter), _) ->
           pure r
         _ ->
           Nothing

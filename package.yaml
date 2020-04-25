@@ -12,6 +12,7 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/eddiejessup/hex#readme>
 
 dependencies:
+- QuickCheck
 - base
 - binary
 - bytestring
@@ -19,6 +20,7 @@ dependencies:
 - directory
 - exceptions
 - generic-lens
+- generic-random
 - hashable
 - ilist
 - lens
@@ -29,14 +31,11 @@ dependencies:
 - path
 - path-io
 - protolude
-- QuickCheck
 - safe
 - text
 - transformers
 - unordered-containers
-- pretty-simple
 - vector
-- hspec
 
 library:
   source-dirs: src

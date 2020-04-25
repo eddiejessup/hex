@@ -42,8 +42,6 @@ instance Describe ArgVal where
       "SignedInt/2Byte/" <> show n
     SIntArgVal (S4 n) ->
       "SignedInt/4Byte/" <> show n
-    SIntArgVal (S4 n) ->
-      "SignedInt/4Byte/" <> show n
     StringArgVal s ->
       "String/" <> show s
 

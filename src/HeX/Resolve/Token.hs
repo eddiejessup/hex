@@ -505,6 +505,8 @@ instance Describe PrimitiveToken where
       describePrepended 0 "PrimitiveToken/UnresolvedTok" lt
     x -> singleLine $ show x
 
+-- Needed by Megaparsec.
+-- TODO: Find out what to do with this.
 instance Ord PrimitiveToken where
 
   compare _ _ = EQ
@@ -573,10 +575,6 @@ data ResolvedToken
   = SyntaxCommandHeadToken SyntaxCommandHeadToken
   | PrimitiveToken PrimitiveToken
   deriving stock (Show, Eq)
-
-instance Ord ResolvedToken where
-
-  compare _ _ = EQ
 
 instance Describe ResolvedToken where
 

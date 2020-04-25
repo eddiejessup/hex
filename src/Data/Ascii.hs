@@ -13,6 +13,7 @@ module Data.Ascii
   , toText
 
   , isAscii
+  , isAsciiPrintable
   , isAsciiLower
   , isAsciiUpper
   , isAsciiAlpha
@@ -89,6 +90,9 @@ toChars (AsciiString bs) = BS.Char8.unpack bs
 
 toText :: AsciiString -> Text
 toText (AsciiString bs) = Tx.Enc.decodeUtf8 bs
+
+isAsciiPrintable :: Word8 -> Bool
+isAsciiPrintable w = _space <= w && w <= _tilde
 
 isAscii :: Word8 -> Bool
 isAscii w = _nul <= w && w <= _del
