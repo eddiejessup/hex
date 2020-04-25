@@ -127,7 +127,7 @@ parseRationalConstant = do
     -- TODO: If performance matters, maybe we can infer the denominator
     -- faster from the integer itself than the digits.
     fracDigits <- PC.many (satisfyThen decCharToInt)
-    let fraction = fromIntegral (decDigitsToTeXInt fracDigits) % (10 ^ length fracDigits)
+    let fraction = fromIntegral (decDigitsToTeXInt fracDigits) `mkRatio` (10 ^ length fracDigits)
     -- Convert the whole number to a rational, and add it to the fraction.
     pure $ fromIntegral wholeNr + fraction
   where

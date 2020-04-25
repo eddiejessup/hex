@@ -1,6 +1,7 @@
 module Hex.Quantity where
 
-import           Hexlude
+import           Hexlude hiding ((%))
+import Data.Ratio              ((%))
 
 tenK :: TeXInt
 tenK = 10000

@@ -18,7 +18,7 @@ fetchBox
   -> m (Maybe (B.Box B.BoxContents))
 fetchBox fetchMode idx = do
   eIdx <- texEvaluate idx
-  fetchedMaybeBox <- gets $ view $ typed @Config . to (lookupBoxRegister eIdx)
+  fetchedMaybeBox <- gets $ view $ typed @Config % to (lookupBoxRegister eIdx)
   case fetchMode of
     HP.Lookup -> pure ()
     HP.Pop -> modify $ typed @Config %~ delBoxRegister eIdx HP.Local

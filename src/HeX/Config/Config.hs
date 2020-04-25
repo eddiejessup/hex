@@ -5,7 +5,6 @@ module Hex.Config.Config where
 
 import           Hexlude
 
-import           Control.Lens
 import           Control.Monad.Catch      (MonadThrow)
 import qualified Data.Containers          as D.C
 import qualified Data.Sequences           as D.S
@@ -184,7 +183,7 @@ findFilePath
     -> m (Path Abs File)
 findFilePath findPolicy extraPaths p =
     do
-    dirs <- gets $ view $ typed @Config . field @"searchDirectories" . to (<> extraPaths)
+    dirs <- gets $ view $ typed @Config % field @"searchDirectories" % to (<> extraPaths)
     getTgtPath
         >>= Path.IO.findFile dirs
         >>= note (injectTyped $ ConfigError $ "Could not find file: " <> show p)
@@ -224,7 +223,7 @@ lookupFontInfo
     => TeXInt
     -> m FontInfo
 lookupFontInfo fNr = do
-    mayInfo <- gets $ view $ typed @Config . field @"fontInfos" . to (!? fNr)
+    mayInfo <- gets $ view $ typed @Config % field @"fontInfos" % to (!? fNr)
     note (injectTyped (ConfigError "No such font number")) mayInfo
 
 addFont :: (MonadState st m, HasType Config st) => FontInfo -> m TeXInt
@@ -234,12 +233,12 @@ addFont newInfo = do
             Nothing     -> 0
             Just (i, _) -> succ i
         newInfos = Map.insert newKey newInfo infos
-    modify $ typed @Config . field @"fontInfos" .~ newInfos
+    modify $ typed @Config % field @"fontInfos" .~ newInfos
     pure newKey
 
 modifyFont :: (MonadState st m, HasType Config st) => TeXInt -> (FontInfo -> FontInfo) -> m ()
 modifyFont fNr f =
-    modify $ typed @Config . field @"fontInfos" %~ Map.adjust f fNr
+    modify $ typed @Config % field @"fontInfos" %~ Map.adjust f fNr
 
 -- Special quantities.
 
@@ -326,9 +325,9 @@ modifyKey mapLens k keyOp globalFlag c =
         DeleteVal   -> deleteKeyFromScope
         InsertVal v -> insertKeyToScope v
 
-    insertKeyToScope v = over mapLens (D.C.insertMap k v)
+    insertKeyToScope v = mapLens %~ D.C.insertMap k v
 
-    deleteKeyFromScope = over mapLens (D.C.deleteMap k)
+    deleteKeyFromScope = mapLens %~ D.C.deleteMap k
 
 insertKey :: D.C.IsMap map
           => Lens' Scope map
@@ -419,7 +418,7 @@ lookupFontFamilyMember
     => (FontRange, TeXInt)
     -> m TeXInt
 lookupFontFamilyMember k = do
-    mayMember <- gets $ view $ typed @Config . to (scopedMapLookup familyMemberFonts k)
+    mayMember <- gets $ view $ typed @Config % to (scopedMapLookup familyMemberFonts k)
     note (injectTyped $ ConfigError $ "Family member undefined: " <> show k) mayMember
 
 -- Control sequences.

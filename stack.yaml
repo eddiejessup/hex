@@ -5,6 +5,8 @@ packages:
 
 extra-deps:
 # - ascii-0.0.5.2@sha256:287657d24abe70eaa1ca37e709256f92f565743f08a16bbc896f3da85ee50434
+- generic-optics-2.0.0.0@sha256:54bcfc4ffce961600020f3d5de13827953c96e99012e7e6acc6e28b336ad50e0,3715
+- generic-lens-core-2.0.0.0@sha256:40b063c4a1399b3cdb19f2df1fae5a1a82f3313015c7c3e47fc23b8ef1b3e443,2913
 - ../../src/megaparsec
 
 extra-package-dbs: []

@@ -9,9 +9,11 @@ module Hexlude
     , module Generic.Random
     , module Test.QuickCheck
 
-    , module Control.Lens
+    , module Optics
 
     , field
+
+    , mkRatio
 
     , seqLookupEith
     , seqLastMay
@@ -34,18 +36,23 @@ module Hexlude
 where
 
 import           Prelude                   (id)
-import           Protolude                 hiding (group, catch, to)
+import           Protolude                 hiding ((%), group, catch, to)
 
 import           Control.Arrow             ((>>>))
-import           Control.Lens              ((^.), (%~), (.~), (?~), view, to)
-import           Data.Generics.Product     (field)
+import           Optics                    (Lens', lens, (%), (^.), (%~), (.~), (?~), view, to, prism)
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)
 import qualified Data.Sequence             as Seq
 import           Debug.Describe            as Describe
+import           Data.Generics.Product     (field)
 import           Data.Generics.Product.Typed
 import           Data.Generics.Sum.Typed
 import           Generic.Random            (genericArbitraryU)
 import           Test.QuickCheck           (Arbitrary(arbitrary), Gen)
+import qualified Data.Ratio as Ratio
+
+mkRatio :: Integral a => a -> a -> Ratio a
+mkRatio = (Ratio.%)
+
 atEith :: (MonadError Text m, Show a) => Text -> [a] -> Int -> m a
 atEith str xs i = note
     ("No " <> str <> " at index " <> show i <> ", values are: "

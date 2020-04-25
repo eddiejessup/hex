@@ -296,7 +296,7 @@ extractPara
 extractPara indentFlag s = do
     initList <- case indentFlag of
         HP.Indent -> do
-            indentBox <- gets (view $ typed @Config . to parIndentBox)
+            indentBox <- gets (view $ typed @Config % to parIndentBox)
             pure $ Seq.singleton indentBox
         HP.DoNotIndent ->
             pure mempty
@@ -335,10 +335,10 @@ extractBreakAndSetMainVList s = do
     case HP.getConditionBodyState finalS of
         Nothing -> pure ()
         Just _condState -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show _condState
-    join $ gets $ view $ typed @Config . to finaliseConfig
-    desiredH <- gets $ view $ typed @Config . to (LenParamVal . lookupLengthParameter HP.VSize)
+    join $ gets $ view $ typed @Config % to finaliseConfig
+    desiredH <- gets $ view $ typed @Config % to (LenParamVal . lookupLengthParameter HP.VSize)
     let pages = BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
-    mag <- gets $ view $ typed @Config . to (IntParamVal . lookupTeXIntParameter HP.Mag)
+    mag <- gets $ view $ typed @Config % to (IntParamVal . lookupTeXIntParameter HP.Mag)
     pure (finalS, pages, mag)
 
 data ModeIndependentResult
@@ -374,7 +374,7 @@ handleModeIndependentCommand s = \case
     -- construction (not after the '}'). Insert the ⟨token⟩ just before tokens
     -- inserted by \everyhbox or \everyvbox.
     HP.SetAfterAssignmentToken lt -> do
-        modify $ typed @Config . field @"afterAssignmentToken" ?~ lt
+        modify $ typed @Config % field @"afterAssignmentToken" ?~ lt
         pure (s, AddMaybeElem Nothing)
     HP.AddPenalty n ->
         (s,) . AddMaybeElem . Just . BL.ListPenalty . BL.Penalty <$> texEvaluate n
@@ -394,7 +394,7 @@ handleModeIndependentCommand s = \case
                         pure (Nothing, HR.primTok $ HP.LetCharCat tgtCC)
                     HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                         do
-                        mayCS <- gets (view $ typed @Config . to (lookupCSProper tgtCS))
+                        mayCS <- gets (view $ typed @Config % to (lookupCSProper tgtCS))
                         let resTok = fromMaybe (HP.PrimitiveToken HP.RelaxTok) mayCS
                         pure (Nothing, resTok)
                     HP.ShortDefineTarget q n ->
@@ -505,16 +505,16 @@ handleModeIndependentCommand s = \case
             oth ->
                 panic $ show oth
         (,assignResult) <$> do
-            gets (view $ typed @Config . field @"afterAssignmentToken") >>= \case
+            gets (view $ typed @Config % field @"afterAssignmentToken") >>= \case
                 Nothing ->
                     pure postAssignS
                 Just lt ->
                     do
-                    modify $ typed @Config . field @"afterAssignmentToken" .~ Nothing
+                    modify $ typed @Config % field @"afterAssignmentToken" .~ Nothing
                     pure (HP.insertLexToken postAssignS lt)
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) -> do
         en <- texEvaluate n
-        fStreams <- gets $ view $ typed @Config . field @"outFileStreams"
+        fStreams <- gets $ view $ typed @Config % field @"outFileStreams"
         let txtTxt = toS $ Codes.unsafeCodesAsChars (showExpandedBalancedText eTxt)
         -- Write to:
         -- if stream number corresponds to existing, open file:
@@ -530,7 +530,7 @@ handleModeIndependentCommand s = \case
                 -- Write to terminal.
                 when (en >= 0) $ liftIO $ putText txtTxt
                 -- Write to log
-                logHandle <- gets $ view $ typed @Config . field @"logStream"
+                logHandle <- gets $ view $ typed @Config % field @"logStream"
                 liftIO $ hPutStrLn logHandle txtTxt
         pure (s, AddMaybeElem Nothing)
     -- Start a new level of grouping.
@@ -542,7 +542,7 @@ handleModeIndependentCommand s = \case
     -- effects of non-global assignments, and leave the
     -- group. Maybe leave the current mode.
     HP.ChangeScope HP.Negative trig ->
-        gets (view $ typed @Config . to popGroup) >>= \case
+        gets (view $ typed @Config % to popGroup) >>= \case
             Nothing ->
                 throwError $ injectTyped $ ConfigError "No group to leave"
             Just (group, poppedConfig) ->

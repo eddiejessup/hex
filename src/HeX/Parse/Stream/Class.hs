@@ -2,9 +2,8 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Hex.Parse.Stream.Class where
 
-import qualified Control.Lens as L
-import Control.Lens (Lens')
-import qualified Control.Lens.Lens as L.C
+import qualified Optics as O
+import Optics.Cons ()
 import qualified Control.Monad.Combinators as PC
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Generics.Product.Typed as G.P
@@ -40,6 +39,10 @@ data TokenSource
       }
   deriving stock (Show, Generic)
 
+-- Lens for the head of a non-empty list.
+neHeadL :: Lens' (L.NE.NonEmpty a) a
+neHeadL = O.lens L.NE.head $ \(_ :| xs) x -> x :| xs
+
 instance Describe TokenSource where
 
   describe TokenSource {sourcePath, sourceCharCodes, sourceLexTokens} =
@@ -64,10 +67,7 @@ newtype ParseError = ParseError Text
 
 insertLexToken :: TeXStream b => b -> Lex.Token -> b
 insertLexToken s t =
-  s &
-    L.over
-      (tokenSourceLens . L.C.head1 . G.P.typed @(Seq Lex.Token))
-      (L.cons t)
+  s & tokenSourceLens % neHeadL % G.P.typed @(Seq Lex.Token) %~ O.cons t
 
 type AsTeXParseErrors e
   = ( AsType EvaluationError e
@@ -178,9 +178,9 @@ parseHeaded = (P.anySingle >>=)
 
 -- Inhibition.
 inhibitResolution, enableResolution :: TeXStream s => s -> s
-inhibitResolution = L.set resolutionModeLens NotResolving
+inhibitResolution = resolutionModeLens .~ NotResolving
 
-enableResolution = L.set resolutionModeLens Resolving
+enableResolution = resolutionModeLens .~ Resolving
 
 parseInhibited :: TeXParser s st e m a -> TeXParser s st e m a
 parseInhibited p = do
@@ -639,7 +639,7 @@ extractResolvedToken stream lkpCatCode lkpCS =
       rt <-
         note
           (injectTyped $ ResolutionError $ "Could not resolve lex token: " <> renderDescribed lt) $
-          resolveToken lkpCS (L.view resolutionModeLens newStream) lt
+          resolveToken lkpCS (newStream ^. resolutionModeLens) lt
       pure $ Just (lt, rt, newStream)
 
 fetchLexToken
@@ -657,15 +657,15 @@ fetchLexToken stream = do
 
 extractLexToken :: TeXStream s => s -> (Code.CharCode -> Code.CatCode) -> Maybe (Lex.Token, s)
 extractLexToken stream lkpCatCode = do
-  (lt, newLexState, newStreamTokenSources) <- extractFromSources (L.view tokenSourceLens stream)
+  (lt, newLexState, newStreamTokenSources) <- extractFromSources (stream ^. tokenSourceLens)
   pure
     ( lt
     , stream &
-      L.set tokenSourceLens newStreamTokenSources &
-      L.set lexStateLens newLexState
+        tokenSourceLens .~ newStreamTokenSources &
+        lexStateLens .~ newLexState
     )
   where
-    curLexState = L.view lexStateLens stream
+    curLexState = stream ^. lexStateLens
 
     -- TODO:
     -- [a] -> (a -> Maybe b) -> Maybe (b, [a])

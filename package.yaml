@@ -19,14 +19,14 @@ dependencies:
 - containers
 - directory
 - exceptions
-- generic-lens
+- generic-optics
 - generic-random
 - hashable
 - ilist
-- lens
 - megaparsec
 - mono-traversable
 - mtl
+- optics
 - parser-combinators
 - path
 - path-io

@@ -163,7 +163,7 @@ hModeStartParagraph = \case
     -- list, and the space factor is set to 1000.
     -- TODO: Space factor.
     HP.Indent ->
-        Just <$> gets (view $ typed @Config . to parIndentBox)
+        Just <$> gets (view $ typed @Config % to parIndentBox)
 
 vModeAddVGlue
     :: ( MonadError e m
@@ -188,7 +188,7 @@ vModeAddRule
 vModeAddRule rule =
     ruleToElem rule defaultWidth defaultHeight defaultDepth
   where
-    defaultWidth = gets $ view $ typed @Config . to (lookupLengthParameter HP.HSize)
+    defaultWidth = gets $ view $ typed @Config % to (lookupLengthParameter HP.HSize)
     defaultHeight = pure $ toScaledPointApprox (0.4 :: Rational) Point
     defaultDepth = pure 0
 

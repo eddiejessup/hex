@@ -1,12 +1,13 @@
 module TFM.Common where
 
-import           Hexlude
+import           Hexlude hiding ((%))
 
 import           Control.Monad.Fail (fail)
 
 import qualified Data.Ascii         as Ascii
 import           Data.Binary.Get    (Get)
 import qualified Data.Binary.Get    as B.G
+import Data.Ratio              ((%))
 
 -- The increment by which real numbers can be specified.
 fixWordScale :: Rational

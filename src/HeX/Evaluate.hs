@@ -119,7 +119,7 @@ getRegisterIdx
 getRegisterIdx n f =
     do
     en <- texEvaluate n
-    gets $ view $ typed @Config . to (f en)
+    gets $ view $ typed @Config % to (f en)
 
 instance TeXEvaluable AST.TeXIntVariable where
     type EvalTarget AST.TeXIntVariable = TeXInt
@@ -617,8 +617,8 @@ evaluateFontSpecification designSizeSP = \case
     AST.FontAt ln ->
         do
         eLn <- texEvaluate ln
-        pure $ fromIntegral eLn % fromIntegral designSizeSP
+        pure $ fromIntegral eLn `mkRatio` fromIntegral designSizeSP
     AST.FontScaled n ->
         do
         en <- texEvaluate n
-        pure $ fromIntegral en % 1000
+        pure $ fromIntegral en `mkRatio` 1000

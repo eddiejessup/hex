@@ -2,7 +2,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Hex.Parse.Stream.Expanding where
 
-import Control.Lens hiding (Empty, (|>))
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Generics.Product.Typed as G.P
 import qualified Data.List.NonEmpty as L.NE
