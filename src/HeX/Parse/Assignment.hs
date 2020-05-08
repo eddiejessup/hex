@@ -2,7 +2,6 @@
 module Hex.Parse.Assignment where
 
 import qualified Control.Monad.Combinators as PC
-import qualified Data.Set as Set
 import Hex.Config.Codes (unsafeCodesFromChars)
 import qualified Hex.Config.Codes as Code
 import Hex.Evaluate
@@ -14,14 +13,13 @@ import qualified Hex.Resolve.Token as T
 import qualified Hex.Quantity as Q
 import Hexlude
 import qualified Path
-import qualified Text.Megaparsec as P
 
-headToParseAssignment :: T.PrimitiveToken -> TeXParser s st e m Assignment
+headToParseAssignment :: TeXParseCtx st e m => T.PrimitiveToken -> m Assignment
 headToParseAssignment = go []
   where
     go prefixes = \case
       T.AssignPrefixTok prefix ->
-        P.anySingle >>= go (prefix : prefixes)
+        anySingle >>= go (prefix : prefixes)
       T.DefineMacroTok defGlobalType defExpandType -> do
         -- Macro's name.
         cs <- parseCSName
@@ -54,10 +52,10 @@ headToParseAssignment = go []
           }
 
 headToParseNonMacroAssignmentBody
-  :: forall s st e m
-   . TeXParseable s st e m
+  :: forall st e m
+   . TeXParseCtx st e m
   => T.PrimitiveToken
-  -> SimpleParsecT s m AssignmentBody
+  -> m AssignmentBody
 headToParseNonMacroAssignmentBody = \case
   T.HyphenationTok -> SetHyphenation <$> parseGeneralText
   T.HyphenationPatternsTok ->
@@ -82,7 +80,7 @@ headToParseNonMacroAssignmentBody = \case
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
     nrPairs <- parseTeXInt
-    Q.TeXInt eNrPairsInt <- lift $ texEvaluate nrPairs
+    Q.TeXInt eNrPairsInt <- texEvaluate nrPairs
     let parseLengthPair = (,) <$> parseLength <*> parseLength
     SetParShape <$> PC.count eNrPairsInt parseLengthPair
   T.ReadTok -> do
@@ -102,7 +100,7 @@ headToParseNonMacroAssignmentBody = \case
     skipOptionalEquals
     fname <- parseFileName
     fontSpec <-
-      tryChoice
+      PC.choice
         [ skipKeyword (unsafeCodesFromChars "at") >> (FontAt <$> parseLength)
         , skipKeyword (unsafeCodesFromChars "scaled") >> (FontScaled <$> parseTeXInt)
         , skipOptionalSpaces $> NaturalFont
@@ -127,7 +125,7 @@ headToParseNonMacroAssignmentBody = \case
       AssignCode . CodeAssignment ref <$> parseTeXInt
     headToModifyVariable = \case
       T.AdvanceVarTok ->
-        tryChoice
+        PC.choice
           [ do
               var <- parseHeaded headToParseTeXIntVariable
               skipOptionalBy
@@ -150,21 +148,21 @@ headToParseNonMacroAssignmentBody = \case
         skipOptionalBy
         ScaleVariable d var <$> parseTeXInt
       t ->
-        P.failure (Just (P.Tokens (t :| []))) (Set.singleton (P.Label ('M' :| "odify variable")))
+        parseError $ ParseError $ "Expected 'AdvanceVarTok' or 'ScaleVarTok', saw " <> show t
     parseNumericVariable =
-      tryChoice
+      PC.choice
         [ TeXIntNumericVariable <$> parseHeaded headToParseTeXIntVariable
         , LengthNumericVariable <$> parseHeaded headToParseLengthVariable
         , GlueNumericVariable <$> parseHeaded headToParseGlueVariable
         , MathGlueNumericVariable <$> parseHeaded headToParseMathGlueVariable
         ]
     skipOptionalBy =
-      tryChoice
+      PC.choice
         [ void $ parseOptionalKeyword $ unsafeCodesFromChars "by"
         , skipOptionalSpaces
         ]
     headToParseVariableAssignment t =
-      tryChoice
+      PC.choice
         [ do
             var <- headToParseTeXIntVariable t
             skipOptionalEquals
@@ -218,7 +216,7 @@ headToParseNonMacroAssignmentBody = \case
       SetBoxDimension var <$> parseLength
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-parseFileName :: TeXParser s st e m TeXFilePath
+parseFileName :: TeXParseCtx st e m=> m TeXFilePath
 parseFileName = do
   skipOptionalSpaces
   fileNameChars <-

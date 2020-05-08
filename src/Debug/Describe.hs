@@ -3,7 +3,6 @@ module Debug.Describe where
 
 import qualified Data.Text as Tx
 import Protolude
-import qualified Text.Megaparsec as P
 import qualified Test.QuickCheck as QC
 
 class Describe a where
@@ -62,33 +61,6 @@ instance Describe a => Describe (Maybe a) where
   describe Nothing = singleLine "Nothing"
   describe (Just a) =
     describePrepended 0 "Just" a
-
--- Parsec.
-instance Describe (P.ParseError s Void) => Describe (P.ParseErrorBundle s Void) where
-
-  describe P.ParseErrorBundle {P.bundleErrors} =
-    [ (0, "ParseErrorBundle")
-    , (1, "bundleErrors")
-    ] <>
-      describeNamedRelFoldable1 "bundleErrors" bundleErrors
-
-instance Describe (P.ErrorItem (P.Token s)) => Describe (P.ParseError s Void) where
-
-  describe (P.TrivialError _ maySaw expecteds) =
-    [ (0, "TrivialError")
-    ] <>
-      describeNamedRel1 "Saw" maySaw <>
-      describeNamedRelFoldable1 "Expected one of" expecteds
-
-instance Describe t => Describe (P.ErrorItem t) where
-
-  describe = \case
-    P.Tokens ts ->
-      describeNamedRelFoldable 0 "ErrorItem/Tokens" ts
-    P.Label cs ->
-      singleLine $ "ErrorItem/Label " <> quote (Tx.pack (toList cs))
-    P.EndOfInput ->
-      singleLine "ErrorItem/EndOfInput"
 
 -- Arbitrary.
 describeVectorOf :: Describe a => Int -> QC.Gen a -> IO ()

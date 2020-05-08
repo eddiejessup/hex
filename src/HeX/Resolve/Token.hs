@@ -505,12 +505,6 @@ instance Describe PrimitiveToken where
       describePrepended 0 "PrimitiveToken/UnresolvedTok" lt
     x -> singleLine $ show x
 
--- Needed by Megaparsec.
--- TODO: Find out what to do with this.
-instance Ord PrimitiveToken where
-
-  compare _ _ = EQ
-
 data TokenAttribute
   = CharCodeAttribute -- \if
   | CatCodeAttribute -- \ifcat

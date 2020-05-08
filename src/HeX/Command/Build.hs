@@ -36,7 +36,8 @@ handleCommandInParaMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s st e m
+       , HP.TeXParseOutsideCtx s st e m
+       , HP.TeXStream s
 
        , MonadIO m
        )
@@ -85,7 +86,8 @@ handleCommandInHBoxMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s st e m
+       , HP.TeXParseOutsideCtx s st e m
+       , HP.TeXStream s
 
        , MonadIO m
        )
@@ -126,7 +128,8 @@ handleCommandInHBoxMode _ newS hList@(BL.HList hElemSeq) command =
 
 handleCommandInVBoxMode
     :: forall s st e m
-     . ( HP.TeXParseable s st e m
+     . ( HP.TeXParseOutsideCtx s st e m
+       , HP.TeXStream s
 
        , AsType TFMError e
        , AsType BuildError e
@@ -224,7 +227,8 @@ handleCommandInMainVMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s st e m
+       , HP.TeXParseOutsideCtx s st e m
+       , HP.TeXStream s
 
        , MonadIO m
        )
@@ -286,7 +290,8 @@ extractPara
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s st e m -- Read-only.
+       , HP.TeXParseOutsideCtx s st e m
+       , HP.TeXStream s
 
        , MonadIO m
        )
@@ -308,7 +313,8 @@ extractMainVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s st e m
+       , HP.TeXParseOutsideCtx s st e m
+       , HP.TeXStream s
 
        , MonadIO m
        )
@@ -324,7 +330,8 @@ extractBreakAndSetMainVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s st e m
+       , HP.TeXParseOutsideCtx s st e m
+       , HP.TeXStream s
 
        , MonadIO m
        )
@@ -332,9 +339,9 @@ extractBreakAndSetMainVList
     -> m (s, Seq B.Page, IntParamVal 'HP.Mag)
 extractBreakAndSetMainVList s = do
     (finalS, finalMainVList) <- extractMainVList s
-    case HP.getConditionBodyState finalS of
-        Nothing -> pure ()
-        Just _condState -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show _condState
+    case finalS ^. HP.conditionBodyStateLens of
+        [] -> pure ()
+        condStates -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show condStates
     join $ gets $ view $ typed @Config % to finaliseConfig
     desiredH <- gets $ view $ typed @Config % to (LenParamVal . lookupLengthParameter HP.VSize)
     let pages = BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
@@ -351,7 +358,8 @@ handleModeIndependentCommand
        , AsType TFMError e
        , AsType BuildError e
 
-       , HP.TeXParseable s st e m
+       , HP.TeXParseOutsideCtx s st e m
+       , HP.TeXStream s
        )
     => s
     -> HP.ModeIndependentCommand
@@ -584,7 +592,8 @@ extractExplicitBoxContents
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseable s st e m
+       , HP.TeXParseOutsideCtx s st e m
+       , HP.TeXStream s
 
        , MonadIO m
        )

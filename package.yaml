@@ -23,7 +23,6 @@ dependencies:
 - generic-random
 - hashable
 - ilist
-- megaparsec
 - mono-traversable
 - mtl
 - optics

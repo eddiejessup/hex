@@ -19,7 +19,6 @@ import qualified Hex.Parse as HP
 import qualified Hex.Quantity as Quantity
 import Hexlude
 import TFM (TFMError)
-import qualified Text.Megaparsec as P
 
 data AppError
   = BuildError BuildError
@@ -92,7 +91,7 @@ benchCatBS xs = case extractCharCat (Code.catLookup Code.usableCatCodes) xs of
 loopParser
   :: forall m a. ( Monad m
                  )
-  => HP.SimpleParsecT HP.ExpandingStream (ExceptT AppError m) a
+  => HP.TeXParseT HP.ExpandingStream (ExceptT AppError m) a
   -> HP.ExpandingStream
   -> m (HP.ExpandingStream, Maybe AppError, [a])
 loopParser parser s = do
@@ -101,7 +100,7 @@ loopParser parser s = do
   where
     go :: HP.ExpandingStream -> Wr.WriterT [a] m (HP.ExpandingStream, Maybe AppError)
     go stream = do
-      errOrA <- lift $ runExceptT (HP.runSimpleRunParserT' parser stream)
+      errOrA <- lift $ runExceptT (HP.runTeXParseTEmbedded parser stream)
       case errOrA of
         Left err ->
           pure (stream, Just err)
@@ -119,7 +118,7 @@ expandingStreamAsPrimTokens
   -> Conf.Config
   -> m (HP.ExpandingStream, Maybe AppError, [HP.PrimitiveToken])
 expandingStreamAsPrimTokens s =
-  evalStateT (loopParser P.anySingle s)
+  evalStateT (loopParser HP.anySingle s)
 
 -- Command.
 expandingStreamAsCommands

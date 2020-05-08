@@ -8,16 +8,15 @@ import           Hex.Parse.AST
 import           Hex.Parse.Quantity
 import           Hex.Parse.Stream.Class
 import qualified Hex.Resolve.Token        as T
-import qualified Text.Megaparsec        as P
 
-parseRelation :: TeXParser s st e m Ordering
+parseRelation :: MonadTeXParse m => m Ordering
 parseRelation = satisfyThen $ \t -> if
     | matchOtherToken '<' t -> Just LT
     | matchOtherToken '>' t -> Just GT
     | matchOtherToken '=' t -> Just EQ
     | otherwise -> Nothing
 
-conditionHeadParser :: T.ConditionHeadTok -> TeXParser s st e m ConditionHead
+conditionHeadParser :: TeXParseCtx st e m => T.ConditionHeadTok -> m ConditionHead
 conditionHeadParser = \case
     T.IfTeXIntPairTestTok ->
         IfConditionHead <$> (IfTeXIntPairTest <$> parseTeXInt <*> parseRelation <*> parseTeXInt)
@@ -28,7 +27,7 @@ conditionHeadParser = \case
     T.IfInModeTok a ->
         pure $ (IfConditionHead . IfInMode) a
     T.IfTokenAttributesEqualTok attr ->
-        IfConditionHead <$> (IfTokenAttributesEqual attr <$> P.anySingle <*> P.anySingle)
+        IfConditionHead <$> (IfTokenAttributesEqual attr <$> anySingle <*> anySingle)
     T.IfTokensEqualTok ->
         IfConditionHead <$> (IfTokensEqual <$> parseLexToken <*> parseLexToken)
     T.IfBoxRegisterIsTok attr ->

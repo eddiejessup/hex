@@ -2,6 +2,7 @@ module Hex.Command.Common where
 
 import qualified Hex.Parse as HP
 import Hexlude
+import Hex.Config.Config
 
 addMaybeElem :: Seq a -> Maybe a -> Seq a
 addMaybeElem a mayE = case mayE of
@@ -20,7 +21,14 @@ runLoop f = go
           pure (newS, newState, b)
 
 runCommandLoop
-  :: ( HP.TeXParseable s st e m
+  :: ( MonadState st m
+     , HasType Config st
+
+     , HP.MonadTeXParse (HP.TeXParseT s m)
+
+     , MonadError e m
+     , HP.AsTeXParseErrors e
+     , AsType HP.ParseError e
      )
   => (s -> s -> a -> HP.Command -> m (s, a, Maybe b))
   -> s
@@ -29,5 +37,5 @@ runCommandLoop
 runCommandLoop runCommand = runLoop parseAndRunCommand
   where
     parseAndRunCommand oldS elemList = do
-      (newS, command) <- HP.runSimpleRunParserT' HP.parseCommand oldS
+      (newS, command) <- HP.runTeXParseTEmbedded HP.parseCommand oldS
       runCommand oldS newS elemList command
