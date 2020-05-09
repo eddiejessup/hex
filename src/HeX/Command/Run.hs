@@ -6,11 +6,9 @@ import DVI.Document (Instruction, parseInstructions)
 import DVI.Encode (encode)
 import DVI.Instruction (DVIError, EncodableInstruction)
 import Data.Byte (ByteError)
-import qualified Data.ByteString.Lazy as BS.L
 import Data.Path (PathError)
 import Hex.Box
 import Hex.BreakList
-import Hex.Categorise
 import Hex.Command.Build
 import qualified Hex.Config as Conf
 import qualified Hex.Config.Codes as Code
@@ -75,19 +73,6 @@ readMode = \case
   "bytes" -> Just DVIBytesMode
   _ -> Nothing
 
--- Cat
-benchCatBS
-  :: ( MonadIO m
-     )
-  => BS.L.ByteString
-  -> m ()
-benchCatBS xs = case extractCharCat (Code.catLookup Code.usableCatCodes) xs of
-  Just (_, xs') ->
-    benchCatBS xs'
-  Nothing ->
-    pure ()
-
--- Expand.
 loopParser
   :: forall m a. ( Monad m
                  )

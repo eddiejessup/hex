@@ -148,7 +148,7 @@ headToParseNonMacroAssignmentBody = \case
         skipOptionalBy
         ScaleVariable d var <$> parseTeXInt
       t ->
-        parseError $ ParseError $ "Expected 'AdvanceVarTok' or 'ScaleVarTok', saw " <> show t
+        parseError $ ParseErrorWithMsg $ "Expected 'AdvanceVarTok' or 'ScaleVarTok', saw " <> show t
     parseNumericVariable =
       PC.choice
         [ TeXIntNumericVariable <$> parseHeaded headToParseTeXIntVariable

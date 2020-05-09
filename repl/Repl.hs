@@ -112,11 +112,14 @@ repl = do
         [] -> putText "Returned no results"
         _ -> putResult $ renderLines $ describeNamedRelFoldable 0 "Commands" commandToks
 
-      for_ mayErr $ \err -> do
-        putText "Ended with error:"
-        putText $ show err
-        putText "Stream ended in state:"
-        putText $ renderDescribed newS
+      for_ mayErr $ \case
+        ParseError EndOfInput ->
+          pure ()
+        err -> do
+          putText "Ended with error:"
+          putText $ show err
+          putText "Stream ended in state:"
+          putText $ renderDescribed newS
     _ ->
       putText $ "Unrecognised command: " <> cmd
   repl

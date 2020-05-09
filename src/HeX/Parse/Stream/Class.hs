@@ -19,7 +19,7 @@ import Hex.Lex (CharCat (..))
 import qualified Hex.Lex as Lex
 import Hex.Resolve
 import Hexlude hiding (many)
-import Path (Abs, File, Path)
+import Path (Rel, Abs, File, Path)
 import Control.Monad.Trans.Class
 
 class TeXStream s where
@@ -63,12 +63,19 @@ newtype ExpansionError = ExpansionError Text
 newtype ResolutionError = ResolutionError Text
   deriving stock Show
 
-newtype ParseError = ParseError Text
+data ParseError
+  = ParseErrorWithMsg Text
+  | EndOfInput
+  | ExplicitFailure
   deriving stock Show
 
 insertLexToken :: TeXStream b => b -> Lex.Token -> b
 insertLexToken s t =
   s & tokenSourceLens % neHeadL % G.P.typed @(Seq Lex.Token) %~ O.cons t
+
+insertLexTokensToStream :: TeXStream s => s -> Seq Lex.Token -> s
+insertLexTokensToStream s (ts :|> t) = insertLexTokensToStream (insertLexToken s t) ts
+insertLexTokensToStream s Empty = s
 
 type AsTeXParseErrors e
   = ( AsType EvaluationError e
@@ -86,7 +93,11 @@ class MonadPlus m => MonadTeXParse m where
 
   takeWhileP :: (PrimitiveToken -> Bool) -> m (Seq PrimitiveToken)
 
-  takeResolvedToken :: m ResolvedToken
+  takeLexToken :: m Lex.Token
+
+  takeAndResolveLexToken :: m (Lex.Token, ResolvedToken)
+
+  takeAndExpandResolvedToken :: m (ResolvedToken, Seq Lex.Token)
 
   pushSkipState :: ConditionBodyState -> m ()
 
@@ -94,12 +105,20 @@ class MonadPlus m => MonadTeXParse m where
 
   popSkipState :: m (Maybe ConditionBodyState)
 
+  inputPath :: Path Rel File -> m ()
+
+  insertLexTokens :: Seq Lex.Token -> m ()
+
 satisfyIf :: MonadTeXParse m => (PrimitiveToken -> Bool) -> m PrimitiveToken
 satisfyIf f = satisfyThen (\x -> if f x then Just x else Nothing)
 
 anySingle :: MonadTeXParse m => m PrimitiveToken
 anySingle = satisfyIf (const True)
 
+takeResolvedToken :: MonadTeXParse m => m ResolvedToken
+takeResolvedToken = do
+  (_, rt) <- takeAndResolveLexToken
+  pure rt
 
 type TeXParseCtx st e m
   = ( MonadState st m -- Read-only
@@ -163,12 +182,13 @@ instance Monad m => Monad (TeXParseT s m) where
         let (TeXParseT parseB) = aToTParseB a
         in parseB s'
 
-instance Monad m => Alternative (TeXParseT s m) where
+instance (Monad m, Describe s) => Alternative (TeXParseT s m) where
   empty = mzero
   (<|>) = mplus
 
-instance Monad m => MonadPlus (TeXParseT s m) where
-  mzero = TeXParseT $ \s -> pure (s, Left $ ParseError "mzero")
+instance (Monad m, Describe s) => MonadPlus (TeXParseT s m) where
+  mzero = TeXParseT $ \s ->
+    pure (s, Left ExplicitFailure)
 
   -- m a -> m a -> m a
   mplus (TeXParseT parseA1) (TeXParseT parseA2) = TeXParseT $ \s -> do
@@ -194,8 +214,6 @@ instance MonadTrans (TeXParseT s) where
 instance (MonadError e m) => MonadError e (TeXParseT s m) where
   throwError = lift . throwError
 
-  -- catchError :: TeXParseT s m a -> (e -> TeXParseT s m a) -> TeXParseT s m a
-  -- catchError :: m a -> (e -> m a) -> m a
   catchError (TeXParseT parseA) errToHandle = TeXParseT $ \s ->
     catchError (parseA s) $ \e -> do
       let (TeXParseT parseRecover) = errToHandle e
@@ -204,6 +222,9 @@ instance (MonadError e m) => MonadError e (TeXParseT s m) where
 instance MonadState st m => MonadState st (TeXParseT s m) where
   get = lift get
   put = lift . put
+
+instance MonadIO m => MonadIO (TeXParseT s m) where
+  liftIO = lift . liftIO
 
 runTeXParseT
   :: TeXParseT s m a
@@ -225,10 +246,6 @@ runTeXParseTEmbedded p s = do
       throwError $ injectTyped err
     Right v ->
       pure (s', v)
-
-insertLexTokens :: TeXStream s => s -> Seq Lex.Token -> s
-insertLexTokens s (ts :|> t) = insertLexTokens (insertLexToken s t) ts
-insertLexTokens s Empty = s
 
 manySatisfiedIf :: MonadTeXParse m => (PrimitiveToken -> Bool) -> m [PrimitiveToken]
 manySatisfiedIf testTok = PC.many $ satisfyIf testTok
@@ -682,6 +699,7 @@ withJust a k =
 fetchResolvedToken
   :: ( MonadError e m
      , AsType ResolutionError e
+
      , TeXStream s
 
      , MonadState st m -- Read-only

@@ -48,6 +48,9 @@ renderLines :: [(Int, Text)] -> Text
 renderLines lns =
   Tx.intercalate "\n" $ lns <&> \(n, t) -> Tx.replicate n " " <> t
 
+traceDescribe :: Describe a => a -> b -> b
+traceDescribe a = trace (renderDescribed a)
+
 quote :: Text -> Text
 quote v = "'" <> v <> "'"
 

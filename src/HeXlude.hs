@@ -36,7 +36,7 @@ module Hexlude
 where
 
 import           Prelude                   (id)
-import           Protolude                 hiding ((%), group, catch, to)
+import           Protolude                 hiding ((%), group, catch, to, try)
 
 import           Control.Arrow             ((>>>))
 import           Optics                    (Lens', lens, (%), (^.), (%~), (.~), (?~), view, to, prism)

@@ -313,14 +313,14 @@ headToParseCodeTableRef = \case
     T.CodeTypeTok c ->
         CodeTableRef c <$> parseTeXInt
     t ->
-        parseError $ ParseError $ "Expected 'CodeTypeTok', saw " <> show t
+        parseError $ ParseErrorWithMsg $ "Expected 'CodeTypeTok', saw " <> show t
 
 headToParseCharToken :: TeXParseCtx st e m => T.PrimitiveToken -> m Q.TeXInt
 headToParseCharToken = \case
     T.IntRefTok T.CharQuantity c ->
         pure c
     t ->
-        parseError $ ParseError $ "Expected 'IntRefTok CharQuantity', saw " <> show t
+        parseError $ ParseErrorWithMsg $ "Expected 'IntRefTok CharQuantity', saw " <> show t
 
 headToParseMathCharToken :: TeXParseCtx st e m => T.PrimitiveToken -> m Q.TeXInt
 headToParseMathCharToken = \case

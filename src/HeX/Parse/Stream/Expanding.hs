@@ -4,7 +4,7 @@ module Hex.Parse.Stream.Expanding where
 
 import qualified Optics as O
 import qualified Data.ByteString.Lazy as BS.L
-import qualified Data.Generics.Product.Typed as G.P
+import qualified Data.Generics.Product as G.P
 import qualified Data.List.NonEmpty as L.NE
 import Data.Map.Strict ((!?))
 import qualified Data.Map.Strict as Map
@@ -53,106 +53,11 @@ instance Describe ExpandingStream where
       ]
       <> describeNamedRelFoldable1 "tokenSources" streamTokenSources
 
--- instance
---   ( MonadError e m
---   , AsTeXParseErrors e
---   , AsType ExpansionError e
---   , AsType Data.Path.PathError e
---   , MonadIO m
---   , MonadState st m -- Read-only
---   , HasType Conf.Config st
---   )
---   => P.Stream ExpandingStream m where
-
---   type Token ExpandingStream = PrimitiveToken
-
---   type Tokens ExpandingStream = Seq PrimitiveToken
-
---   -- take1_ :: s -> m (Maybe (Token s, s))
---   take1_ stream =
---     withJust (fetchAndExpandToken stream) $ \(lts, rt, newStream) -> case newStream `seq` rt of
---       -- If it's a primitive token, provide that.
---       PrimitiveToken pt ->
---         pure $ Just (pt, newStream)
---       -- If it indicates the start of a syntax command, parse the
---       -- remainder of the syntax command.
---       SyntaxCommandHeadToken _ ->
---         P.take1_ $ insertLexTokens newStream lts
-
---   -- tokensToChunk :: Proxy s -> Proxy m -> [Token s] -> Tokens s
---   tokensToChunk _ _ = Seq.fromList
-
---   -- chunkToTokens :: Proxy s -> Proxy m -> Tokens s -> [Token s]
---   chunkToTokens _ _ = toList
-
---   -- chunkLength :: Proxy s -> Proxy m -> Tokens s -> Int
---   chunkLength _ _ = length
-
---   -- If n <= 0, return 'Just (mempty, s)', where s is the original stream.
---   -- If n > 0 and the stream is empty, return Nothing.
---   -- Otherwise, take a chunk of length n, or shorter if the stream is
---   -- not long enough, and return the chunk along with the rest of the stream.
---   -- takeN_ :: Int -> s -> m (Maybe (Tokens s, s))
---   takeN_ = go mempty
---     where
---       go acc n strm
---         | n <= 0 = pure $ Just (acc, strm)
---         | otherwise =
---           P.take1_ strm >>= \case
---             Nothing ->
---               pure $ case acc of
---                 Empty -> Nothing
---                 _ -> Just (acc, strm)
---             Just (t, newS) ->
---               go (acc |> t) (pred n) newS
-
---   -- Extract chunk while the supplied predicate returns True.
---   -- takeWhile_ :: (Token s -> Bool) -> s -> m (Tokens s, s)
---   takeWhile_ f = go mempty
---     where
---       go acc s =
---         P.take1_ s >>= \case
---           Just (t, newS)
---             | f t ->
---               go (acc |> t) newS
---           _ ->
---             pure (acc, s)
-
-fetchPrimitiveToken
+pFetchPrimitiveToken
   :: ( MonadError e m
      , AsTeXParseErrors e
      , AsType ExpansionError e
      , AsType Data.Path.PathError e
-     , AsType ParseError e
-
-     , MonadIO m
-
-     , MonadState st m
-     , HasType Conf.Config st
-     )
-  => ExpandingStream
-  -> m (ExpandingStream, Either ParseError PrimitiveToken)
-fetchPrimitiveToken s =
-  fetchAndExpandToken s >>= \case
-      Nothing ->
-        pure (s, Left $ ParseError "End of input")
-      Just (lts, rt, s') ->
-        -- Tamp down dat memory.
-        case s' `seq` rt of
-          -- If it's a primitive token, provide that.
-          PrimitiveToken pt ->
-            pure (s', Right pt)
-          -- If it indicates the start of a syntax command, parse the
-          -- remainder of the syntax command.
-          SyntaxCommandHeadToken _ ->
-            fetchPrimitiveToken (insertLexTokens s' lts)
-
-fetchPrimitiveTokenT
-  :: ( MonadError e m
-     , AsTeXParseErrors e
-     , AsType ExpansionError e
-     , AsType Data.Path.PathError e
-     , AsType ParseError e
 
      , MonadIO m
 
@@ -160,14 +65,34 @@ fetchPrimitiveTokenT
      , HasType Conf.Config st
      )
   => TeXParseT ExpandingStream m PrimitiveToken
-fetchPrimitiveTokenT = TeXParseT fetchPrimitiveToken
+pFetchPrimitiveToken = do
+  (rt, _) <- pTakeAndExpandResolvedToken
+  case rt of
+    -- If it's a primitive token, provide that.
+    PrimitiveToken pt ->
+      pure pt
+    -- If it indicates the start of a syntax command, parse the
+    -- remainder of the syntax command.
+    SyntaxCommandHeadToken _ ->
+      -- traceText ("inserting lextoks: " <> show lts <> " and reading again") (pInsertLexTokens lts)
+      pFetchPrimitiveToken
+
+try :: Monad m => TeXParseT ExpandingStream m a -> TeXParseT ExpandingStream m a
+try (TeXParseT parse) = TeXParseT $ \s -> do
+  (s', errOrA) <- parse s
+  case errOrA of
+    Left err ->
+      -- If parse fails, revert to the old stream.
+      pure (s, Left err)
+    Right a ->
+      -- If parse succeeds, stick with the new stream.
+      pure (s', Right a)
 
 instance
   ( MonadError e m
   , AsTeXParseErrors e
   , AsType ExpansionError e
   , AsType Data.Path.PathError e
-  , AsType ParseError e -- TODO: Remove
 
   , MonadIO m
 
@@ -179,23 +104,13 @@ instance
   parseError e = TeXParseT $ \s -> pure (s, Left e)
 
   -- satisfyThen :: (PrimitiveToken -> Maybe a) -> m a
-  satisfyThen f = do
-    pt <- fetchPrimitiveTokenT
+  satisfyThen f = try $ do
+    pt <- pFetchPrimitiveToken
     case f pt of
       Nothing ->
-        -- throwError $ injectTyped $ ParseError $ "Saw unexpected primitive token: " <> show pt
-        empty
+        parseError $ ParseErrorWithMsg $ "Saw unexpected primitive token: " <> show pt
       Just a ->
         pure a
-
---     withJust (fetchAndExpandToken stream) $ \(lts, rt, newStream) -> case newStream `seq` rt of
---       -- If it's a primitive token, provide that.
---       PrimitiveToken pt ->
---         pure $ Just (pt, newStream)
---       -- If it indicates the start of a syntax command, parse the
---       -- remainder of the syntax command.
---       SyntaxCommandHeadToken _ ->
---         P.take1_ $ insertLexTokens newStream lts
 
   -- withInhibition :: m a -> m a
   withInhibition (TeXParseT parse) = TeXParseT $ \s -> do
@@ -204,23 +119,22 @@ instance
     pure (enableResolution s', errOrA)
 
   -- takeWhileP :: (PrimitiveToken -> Bool) -> m (Seq PrimitiveToken)
-  takeWhileP f = TeXParseT (go mempty)
+  takeWhileP f = TeXParseT $ \s -> go mempty s
     where
       go acc s = do
-        (s', errOrPT) <- fetchPrimitiveToken s
-        case errOrPT of
+        let (TeXParseT parsePrimToken) = pFetchPrimitiveToken
+        (s', errOrPt) <- parsePrimToken s
+        case errOrPt of
           Right pt | f pt ->
             go (acc |> pt) s'
           _ ->
             pure (s, Right acc)
 
-  -- takeResolvedToken :: m ResolvedToken
-  takeResolvedToken = TeXParseT $ \s ->
-    fetchResolvedToken s <&> \case
-      Nothing ->
-        (s, Left $ ParseError "End of input")
-      Just (_, rt, s') ->
-        (s', Right rt)
+  takeLexToken = pTakeLexToken
+
+  takeAndResolveLexToken = pTakeAndResolveLexToken
+
+  takeAndExpandResolvedToken = pTakeAndExpandResolvedToken
 
   -- -- pushSkipState :: ConditionBodyState -> m ()
   pushSkipState cbs = TeXParseT $ \s ->
@@ -237,6 +151,63 @@ instance
         (s, Right Nothing)
       Just (x, xs) ->
         (s & conditionBodyStateLens .~ xs, Right $ Just x)
+
+  inputPath texPath = TeXParseT $ \s -> do
+    let extraDirs = case s ^. tokenSourceLens % neHeadL % G.P.field @"sourcePath" of
+          Just p -> [Path.parent p]
+          Nothing -> []
+    absPath <- Path.IO.makeAbsolute texPath
+    path <- Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath
+    newSource <- newTokenSource (Just absPath) <$> Code.readCharCodes path
+    pure (s & tokenSourceLens %~ L.NE.cons newSource, Right ())
+
+  insertLexTokens = pInsertLexTokens
+
+pInsertLexTokens :: (Applicative m, TeXStream s) => Seq Lex.Token -> TeXParseT s m ()
+pInsertLexTokens lts = TeXParseT $ \s ->
+    pure (insertLexTokensToStream s lts, Right ())
+
+pTakeLexToken :: (MonadState st m, HasType Conf.Config st) => TeXParseT ExpandingStream m Lex.Token
+pTakeLexToken = TeXParseT takeLexTokenS
+
+takeLexTokenS
+  :: ( MonadState st m
+     , HasType Conf.Config st
+     )
+  => ExpandingStream
+  -> m (ExpandingStream, Either ParseError Lex.Token)
+takeLexTokenS s =
+  fetchLexToken s <&> \case
+    Nothing ->
+      (s, Left EndOfInput)
+    Just (lt, s') ->
+      (s', Right lt)
+
+pTakeAndResolveLexToken
+  :: ( MonadError e m
+     , AsType ResolutionError e
+
+     , MonadState st m -- Read-only
+     , HasType Conf.Config st
+     )
+  => TeXParseT ExpandingStream m (Lex.Token, ResolvedToken)
+pTakeAndResolveLexToken = TeXParseT takeAndResolveLexTokenS
+
+takeAndResolveLexTokenS
+  :: ( MonadError e m
+     , AsType ResolutionError e
+
+     , MonadState st m -- Read-only
+     , HasType Conf.Config st
+     )
+  => ExpandingStream
+  -> m (ExpandingStream, Either ParseError (Lex.Token, ResolvedToken))
+takeAndResolveLexTokenS s =
+  fetchResolvedToken s <&> \case
+    Nothing ->
+      (s, Left EndOfInput)
+    Just (lt, rt, s') ->
+      (s', Right (lt, rt))
 
 instance TeXStream ExpandingStream where
 
@@ -313,11 +284,7 @@ expandChangeCase lookupChangeCaseCode (BalancedText caseToks) =
       Conf.NoCaseChange -> char
       Conf.ChangeToCode char' -> char'
 
-skipToIfDelim
-  :: forall m
-   . ( MonadTeXParse m)
-  => IfBodyState
-  -> m ()
+skipToIfDelim :: forall m. MonadTeXParse m => IfBodyState -> m ()
 skipToIfDelim blk = go 1
   where
     go :: Int -> m ()
@@ -381,7 +348,13 @@ skipUpToCaseBlock tgt = go 0 1
 
 expandConditionToken
   :: forall st e m
-   . ( TeXParseCtx st e m
+   . ( MonadState st m -- Read-only
+     , HasType Conf.Config st
+
+     , MonadTeXParse m
+
+     , MonadError e m
+     , AsTeXParseErrors e
      , AsType ExpansionError e
      )
   => ConditionTok
@@ -389,8 +362,7 @@ expandConditionToken
 expandConditionToken = \case
   ConditionHeadTok ifTok -> do
     condHead <- conditionHeadParser ifTok
-    conf <- gets $ getTyped @Conf.Config
-    runReaderT (texEvaluate condHead) conf >>= \case
+    texEvaluate condHead >>= \case
       IfBlockTarget IfPreElse ->
         pushSkipState (IfBodyState IfPreElse)
       IfBlockTarget IfPostElse ->
@@ -443,21 +415,21 @@ expandSyntaxCommand
      , MonadState st m -- Read-only
      , HasType Conf.Config st
 
+     , MonadTeXParse m
+
      , MonadError e m
      , AsTeXParseErrors e
-     , AsType ParseError e
      , AsType ExpansionError e
-     , AsType Data.Path.PathError e
      )
-  => ExpandingStream
-  -> SyntaxCommandHeadToken
-  -> m (Maybe (ExpandingStream, Seq Lex.Token))
-expandSyntaxCommand strm = \case
-  MacroTok m ->
-    runExpandCommand strm (parseMacroArgs m) (expandMacro m)
+  => SyntaxCommandHeadToken
+  -> m (Seq Lex.Token)
+expandSyntaxCommand = \case
+  MacroTok m -> do
+    args <- parseMacroArgs m
+    expandMacro m args
   ConditionTok ct -> do
-    (newStrm, ()) <- runTeXParseTEmbedded (expandConditionToken ct) strm
-    pure $ Just (newStrm, mempty)
+    expandConditionToken ct
+    pure mempty
   NumberTok ->
     panic "Not implemented: syntax command NumberTok"
   RomanNumeralTok ->
@@ -465,22 +437,21 @@ expandSyntaxCommand strm = \case
   StringTok -> do
     conf <- gets $ getTyped @Conf.Config
     let escapeChar = (Conf.IntParamVal . Conf.lookupTeXIntParameter EscapeChar) conf
-    (postArgStream, lexTok) <- runTeXParseTEmbedded parseLexToken strm
-    pure $ Just (postArgStream, expandString escapeChar lexTok)
+    expandString escapeChar <$> parseLexToken
   JobNameTok ->
     panic "Not implemented: syntax command JobNameTok"
   FontNameTok ->
     panic "Not implemented: syntax command FontNameTok"
   MeaningTok ->
     panic "Not implemented: syntax command MeaningTok"
-  CSNameTok ->
-    runExpandCommand strm parseCSNameArgs (expandCSName >>> pure)
-  ExpandAfterTok -> fetchLexToken strm >>= \case
-    Nothing -> pure Nothing
-    Just (argLT, postArgStream) ->
-      withJust (fetchAndExpandToken postArgStream) $ \(postArgLTs, _, postExpandStream) ->
-        -- Prepend the unexpanded token.
-        pure $ Just (postExpandStream, argLT :<| postArgLTs)
+  CSNameTok -> do
+    a <- parseCSNameArgs
+    singleton <$> expandCSName a
+  ExpandAfterTok -> do
+    argLT <- takeLexToken
+    (_, postArgLTs) <- takeAndExpandResolvedToken
+    -- Prepend the unexpanded token.
+    pure (argLT <| postArgLTs)
   NoExpandTok ->
     panic "Not implemented: syntax command NoExpandTok"
   MarkRegisterTok _ ->
@@ -490,51 +461,38 @@ expandSyntaxCommand strm = \case
   -- - Prepare to read from the specified file before looking at any more
   --   tokens from the current source.
   InputTok -> do
-    (resultStream@ExpandingStream {streamTokenSources}, TeXFilePath texPath) <- runTeXParseTEmbedded parseFileName strm
-    let extraDirs = case sourcePath $ L.NE.head streamTokenSources of
-          Just p -> [Path.parent p]
-          Nothing -> []
-    absPath <- Path.IO.makeAbsolute texPath
-    conf <- gets $ getTyped @Conf.Config
-    path <- runReaderT (Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath) conf
-    newSource <- newTokenSource (Just absPath) <$> Code.readCharCodes path
-    let newResultStream = resultStream & G.P.typed @(L.NE.NonEmpty TokenSource) %~ L.NE.cons newSource
-    pure $ Just (newResultStream, mempty)
+    TeXFilePath texPath <- parseFileName
+    inputPath texPath
+    pure mempty
   EndInputTok ->
     panic "Not implemented: syntax command EndInputTok"
   TheTok -> do
-    (resultStream, intQuant) <- runTeXParseTEmbedded parseInternalQuantity strm
-    quantTokens <- fmap charCodeAsMadeToken <$> texEvaluate intQuant
-    pure $ Just (resultStream, quantTokens)
+    intQuant <- parseInternalQuantity
+    fmap charCodeAsMadeToken <$> texEvaluate intQuant
   ChangeCaseTok direction -> do
     conf <- gets $ getTyped @Conf.Config
-    runExpandCommand strm parseGeneralText $ expandChangeCase (\c -> Conf.lookupChangeCaseCode direction c conf) >>> pure
-  where
-    runExpandCommand inputStream parser f = do
-      (stream, a) <- runTeXParseTEmbedded parser inputStream
-      v <- f a
-      pure $ Just (stream, v)
+    expandChangeCase
+      (\c -> Conf.lookupChangeCaseCode direction c conf)
+      <$> parseGeneralText
 
-fetchAndExpandToken
+pTakeAndExpandResolvedToken
   :: ( MonadIO m
 
      , MonadState st m
      , HasType Conf.Config st
 
+     , MonadTeXParse m
+
      , MonadError e m
      , AsTeXParseErrors e
-     , AsType ParseError e
      , AsType ExpansionError e
-     , AsType Data.Path.PathError e
      )
-  => ExpandingStream
-  -> m (Maybe (Seq Lex.Token, ResolvedToken, ExpandingStream))
-fetchAndExpandToken stream =
-  withJust (fetchResolvedToken stream) $ \(lt, rt, newStream) -> case rt of
+  => m (ResolvedToken, Seq Lex.Token)
+pTakeAndExpandResolvedToken = do
+  (lt, rt) <- takeAndResolveLexToken
+  case rt of
     PrimitiveToken _ ->
-      -- putText $ "$> ---- Got Lex-token: " <> describe lt <> "\n*> ---- Resolved to Primitive-token: " <> describe pt <> "\n\n"
-      pure $ Just (singleton lt, rt, newStream)
-    SyntaxCommandHeadToken c ->
-      withJust (expandSyntaxCommand newStream c) $ \(expandStream, lts) ->
-        -- putText $ "$> ---- Got Lex-token: " <> describe lt <> "\n*> ---- Resolved to Syntax-command-head-token: " <> describe c <> "\n>> ---- Expanded to lex-tokens: " <> describe lts <> "\n\n"
-        pure $ Just (lts, rt, expandStream)
+      pure (rt, singleton lt)
+    SyntaxCommandHeadToken c -> do
+      lts <- expandSyntaxCommand c
+      pure (rt, lts)

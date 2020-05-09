@@ -242,7 +242,7 @@ parseCommand =
     parseNonSetBoxAssignment =
         parseHeaded headToParseAssignment >>= \case
             Assignment (SetBoxRegister _ _) _ ->
-                parseError $ ParseError "While parsing assignments in accent, saw 'SetBoxRegister'"
+                parseError $ ParseErrorWithMsg "While parsing assignments in accent, saw 'SetBoxRegister'"
             a -> pure a
 
     headToParseModedGlue :: Axis -> T.PrimitiveToken -> m Glue
