@@ -22,7 +22,6 @@ dependencies:
 - generic-optics
 - generic-random
 - hashable
-- ilist
 - mono-traversable
 - mtl
 - optics

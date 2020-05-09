@@ -7,8 +7,6 @@ import           Hexlude
 
 import           Control.Monad.Catch      (MonadThrow)
 import qualified Data.Containers          as D.C
-import qualified Data.Sequences           as D.S
-import qualified Data.MonoTraversable     as D.MT
 import qualified Data.Generics.Product    as G.P
 
 import           Data.Map.Strict          ((!?))
@@ -364,14 +362,6 @@ scopedMapLookup
     -> Config
     -> Maybe (D.C.MapValue map)
 scopedMapLookup getMap k = scopedLookup (D.C.lookup k . getMap)
-
-scopedSequenceLookup
-    :: (D.S.IsSequence seq, D.MT.Element seq ~ Maybe v)
-    => (Scope -> seq)
-    -> D.S.Index seq
-    -> Config
-    -> Maybe v
-scopedSequenceLookup getSeq i = scopedLookup (\sc -> fromMaybe Nothing (D.S.index (getSeq sc) i))
 
 -- Font number (scoped).
 lookupCurrentFontNr :: Config -> Maybe TeXInt

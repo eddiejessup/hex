@@ -29,7 +29,6 @@ import           Hexlude
 --   arbitrarily large. The pieces are specified in 'exten[remainder]'.
 import qualified Data.Binary.Get    as B.G
 import           Data.IntMap.Strict
-import           Data.List.Index    (indexed)
 
 import           TFM.Common
 import           TFM.Recipe
@@ -97,6 +96,13 @@ readCharacters _minCode charInfos recipes widths heights depths italicCorrs =
     do
     charList <- mapM (character recipes widths heights depths italicCorrs) charInfos
     pure $ fromList $ (\(idx, c) -> (idx + _minCode, c)) <$> indexed charList
+  where
+    -- Taken from package ilist-0.4.0.1.
+    indexed :: [a] -> [(Int, a)]
+    indexed xs = go 0 xs
+      where
+        go i (a:as) = (i, a) : go (i + 1) as
+        go _ _      = []
 
 data CharInfo = CharInfo
     { widthIdx
