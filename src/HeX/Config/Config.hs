@@ -29,6 +29,7 @@ import qualified Hex.Lex                  as Lex
 import qualified Hex.Parse.AST            as AST
 import           Hex.Resolve
 import           Hex.Quantity
+import qualified System.Log.FastLogger as Log
 
 data Group
     = ScopeGroup Scope ScopeGroup
@@ -127,6 +128,8 @@ data Config =
              -- File streams.
            , logStream            :: Handle
            , outFileStreams       :: Map FourBitInt Handle
+           , internalLoggerSet    :: Log.LoggerSet
+             -- / File streams.
            , afterAssignmentToken :: Maybe Lex.Token
            , globalScope          :: Scope
            , groups               :: [Group]
@@ -146,6 +149,9 @@ newConfig extraSearchDirs = do
         , cwdRaw
         ]
     logHandle <- liftIO $ openFile "hex.log" WriteMode
+
+    internalLoggerSet <- liftIO $ Log.newFileLoggerSet Log.defaultBufSize "hex_internal.log"
+
     pure Config { fontInfos = Map.empty
                 , searchDirectories = _searchDirectories <> extraSearchDirs
                 , specialTeXInts = newSpecialTeXInts
@@ -155,6 +161,7 @@ newConfig extraSearchDirs = do
                 , afterAssignmentToken = Nothing
                 , globalScope = newGlobalScope
                 , groups = []
+                , internalLoggerSet
                 }
 
 finaliseConfig :: MonadIO m => Config -> m ()

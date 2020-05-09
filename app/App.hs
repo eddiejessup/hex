@@ -12,6 +12,7 @@ import Hexlude
 import qualified Path
 import qualified Path.IO
 import qualified System.Console.GetOpt as Opt
+import qualified Hex.App as App
 
 data Flag
   = Help
@@ -71,20 +72,20 @@ main = do
         then preamble <> inputRaw <> postamble
         else inputRaw
       mode = lastDef Run.DVIBytesMode [m | Mode m <- flags]
+
   conf <- newConfig (maybeToList (Path.parent <$> maybeInPath))
+
   let s = newExpandStream maybeInPath input
   case lastMay [f | Output f <- flags] of
-    Nothing -> do
-      appErrorOrTx <- renderWithMode conf input mode
-      case appErrorOrTx of
+    Nothing ->
+      renderWithMode conf input mode >>= \case
         Left appError ->
           putText $ show appError
         Right tx ->
           putText tx
     Just destPathStr -> case mode of
-      Run.DVIBytesMode -> do
-        appErrorOrBytes <- Run.streamToDVIBytes s conf
-        case appErrorOrBytes of
+      Run.DVIBytesMode ->
+        App.runApp (Run.streamToDVIBytes s) conf >>= \case
           Left appError ->
             putText $ show appError
           Right bytes -> do
@@ -94,23 +95,24 @@ main = do
         panic "Writing non-DVI-bytes mode to file not supported"
 
 renderWithMode
-  :: MonadIO m
+  :: forall m
+   . MonadIO m
   => Config
   -> BS.L.ByteString
   -> Run.Mode
-  -> m (Either Run.AppError Text)
+  -> m (Either App.AppError Text)
 renderWithMode conf input = \case
   Run.CatMode -> pure $ Right $ show $ usableCodesToCharCats input -- TODO: Render nicely.
   Run.LexMode -> pure $ Right $ show $ usableCodesToLexTokens input
   Run.ResolveMode -> pure $ Right $ show $ usableCodesToResolvedTokens input
-  Run.ExpandMode -> Run.expandingStreamAsPrimTokens s conf <&> undefined
-  Run.CommandMode -> Run.expandingStreamAsCommands s conf <&> undefined
-  Run.ParaListMode -> Run.renderStreamUnsetPara s conf
-  Run.ParaSetMode -> Run.renderStreamSetPara s conf
-  Run.PageListMode -> Run.renderStreamPageList s conf
-  Run.PageMode -> Run.renderStreamPages s conf
-  Run.SemanticDVIMode -> Run.renderStreamSemanticDVI s conf
-  Run.RawDVIMode -> Run.renderStreamRawDVI s conf
+  Run.ExpandMode -> Run.expandingStreamAsPrimTokens @m @App.AppError s conf <&> undefined
+  Run.CommandMode -> Run.expandingStreamAsCommands @m @App.AppError s conf <&> undefined
+  Run.ParaListMode -> App.runApp (Run.renderStreamUnsetPara s) conf
+  Run.ParaSetMode -> App.runApp (Run.renderStreamSetPara s) conf
+  Run.PageListMode -> App.runApp (Run.renderStreamPageList s) conf
+  Run.PageMode -> App.runApp (Run.renderStreamPages s) conf
+  Run.SemanticDVIMode -> App.runApp (Run.renderStreamSemanticDVI s) conf
+  Run.RawDVIMode -> App.runApp (Run.renderStreamRawDVI s) conf
   Run.DVIBytesMode -> panic "You probably don't want to render the DVI bytes as text"
   where
     s = newExpandStream Nothing input

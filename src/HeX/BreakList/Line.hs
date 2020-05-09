@@ -13,7 +13,6 @@ import Hex.Config.Parameters
 import qualified Hex.Resolve.Token as HP
 import Hex.Quantity
 import Hexlude
-import qualified Safe.Foldable as Safe.F
 
 newtype BadnessSize = BadnessSize {unBadnessSize :: TeXInt}
   deriving newtype (Eq, Show, Num)
@@ -201,7 +200,7 @@ bestRoute
   -> m Route
 bestRoute decoratedInEdges nodeToBestRouteSeq =
   mapM bestRouteGivenEdge decoratedInEdges <&>
-    Safe.F.minimumMay >>=
+    (minimumMay . toList) >>=
     note "No routes available"
   where
     bestRouteGivenEdge (InEdge {elems, src}, tgt, edgeDemerit) =

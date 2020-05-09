@@ -12,13 +12,13 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/eddiejessup/hex#readme>
 
 dependencies:
-- QuickCheck
 - base
 - binary
 - bytestring
 - containers
 - directory
 - exceptions
+- fast-logger
 - generic-optics
 - generic-random
 - hashable
@@ -29,7 +29,7 @@ dependencies:
 - path
 - path-io
 - protolude
-- safe
+- QuickCheck
 - text
 - transformers
 - unordered-containers
