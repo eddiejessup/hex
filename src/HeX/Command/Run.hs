@@ -123,6 +123,7 @@ renderStreamUnsetPara
      , AsType Data.Path.PathError e
 
      , MonadIO m
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m Text
@@ -146,6 +147,7 @@ streamToParaBoxes
      , AsType Data.Path.PathError e
 
      , MonadIO m
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m (Seq (Box HBox))
@@ -168,6 +170,7 @@ renderStreamSetPara
      , AsType Data.Path.PathError e
 
      , MonadIO m
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m Text
@@ -191,6 +194,7 @@ renderStreamPageList
      , AsType Data.Path.PathError e
 
      , MonadIO m
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m Text
@@ -214,6 +218,7 @@ renderStreamPages
      , AsType Data.Path.PathError e
 
      , MonadIO m
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m Text
@@ -237,11 +242,13 @@ streamToSemanticDVI
      , AsType Data.Path.PathError e
 
      , MonadIO m
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m (Seq Instruction, Conf.IntParamVal 'HP.Mag)
 streamToSemanticDVI s = do
   (_, pages, _mag) <- extractBreakAndSetMainVList s
+  sLog "In streamToSemanticDVI, done extractBreakAndSetMainVList"
   pure (pagesToDVI pages, _mag)
 
 renderStreamSemanticDVI
@@ -259,6 +266,7 @@ renderStreamSemanticDVI
      , AsType Data.Path.PathError e
 
      , MonadIO m
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m Text
@@ -280,16 +288,17 @@ streamToRawDVI
      , AsType BuildError e
      , AsType TFMError e
      , AsType Data.Path.PathError e
-
      , AsType ByteError e
      , AsType DVIError e
 
      , MonadIO m
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m (Seq EncodableInstruction)
 streamToRawDVI s = do
   (semDVI, _mag) <- streamToSemanticDVI s
+  sLog "In streamToRawDVI, done streamToSemanticDVI"
   parseInstructions semDVI (Quantity.unInt $ Conf.unIntParam _mag)
 
 renderStreamRawDVI
@@ -305,11 +314,11 @@ renderStreamRawDVI
      , AsType BuildError e
      , AsType TFMError e
      , AsType Data.Path.PathError e
-
      , AsType ByteError e
      , AsType DVIError e
 
      , MonadIO m
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m Text
@@ -331,13 +340,16 @@ streamToDVIBytes
      , AsType BuildError e
      , AsType TFMError e
      , AsType Data.Path.PathError e
-
      , AsType ByteError e
      , AsType DVIError e
 
      , MonadIO m
+
+     , MonadSlog m
      )
   => HP.ExpandingStream
   -> m ByteString
-streamToDVIBytes s =
-  encode <$> streamToRawDVI s
+streamToDVIBytes s = do
+  rawDVI <- streamToRawDVI s
+  sLog "In streamToDVIBytes, done streamToRawDVI"
+  pure $ encode rawDVI

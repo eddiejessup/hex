@@ -3,8 +3,6 @@
 
 module Hex.Parse.Stream.Class where
 
-import qualified Optics as O
-import Optics.Cons ()
 import qualified Control.Monad.Combinators as PC
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Generics.Product.Typed as G.P
@@ -21,6 +19,7 @@ import Hex.Resolve
 import Hexlude hiding (many)
 import Path (Rel, Abs, File, Path)
 import Control.Monad.Trans.Class
+import qualified Optics.Cons.Core as O.Cons
 
 class TeXStream s where
 
@@ -42,7 +41,7 @@ data TokenSource
 
 -- Lens for the head of a non-empty list.
 neHeadL :: Lens' (L.NE.NonEmpty a) a
-neHeadL = O.lens L.NE.head $ \(_ :| xs) x -> x :| xs
+neHeadL = lens L.NE.head $ \(_ :| xs) x -> x :| xs
 
 instance Describe TokenSource where
 
@@ -71,7 +70,7 @@ data ParseError
 
 insertLexToken :: TeXStream b => b -> Lex.Token -> b
 insertLexToken s t =
-  s & tokenSourceLens % neHeadL % G.P.typed @(Seq Lex.Token) %~ O.cons t
+  s & tokenSourceLens % neHeadL % G.P.typed @(Seq Lex.Token) %~ O.Cons.cons t
 
 insertLexTokensToStream :: TeXStream s => s -> Seq Lex.Token -> s
 insertLexTokensToStream s (ts :|> t) = insertLexTokensToStream (insertLexToken s t) ts

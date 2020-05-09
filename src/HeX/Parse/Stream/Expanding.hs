@@ -2,7 +2,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Hex.Parse.Stream.Expanding where
 
-import qualified Optics as O
+import qualified Optics.Cons.Core as O.Cons
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Generics.Product as G.P
 import qualified Data.List.NonEmpty as L.NE
@@ -138,7 +138,7 @@ instance
 
   -- -- pushSkipState :: ConditionBodyState -> m ()
   pushSkipState cbs = TeXParseT $ \s ->
-    pure (s & conditionBodyStateLens %~ O.cons cbs, Right ())
+    pure (s & conditionBodyStateLens %~ O.Cons.cons cbs, Right ())
 
   -- peekSkipState :: m (Maybe ConditionBodyState)
   peekSkipState = TeXParseT $ \s ->
@@ -146,7 +146,7 @@ instance
 
   -- -- popSkipState :: m (Maybe ConditionBodyState)
   popSkipState = TeXParseT $ \s ->
-    pure $ case s ^. conditionBodyStateLens % to O.uncons of
+    pure $ case s ^. conditionBodyStateLens % to O.Cons.uncons of
       Nothing ->
         (s, Right Nothing)
       Just (x, xs) ->

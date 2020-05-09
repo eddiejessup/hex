@@ -4,7 +4,6 @@ module Hex.Parse.Stream.NonExpanding where
 
 import           Hexlude
 
-import qualified Optics as O
 import qualified Data.ByteString.Lazy      as BS.L
 import qualified Data.Generics.Product.Typed as G.P
 import qualified Data.List.NonEmpty        as L.NE
@@ -107,7 +106,7 @@ instance TeXStream NonExpandingStream where
 
     lexStateLens = G.P.typed @Lex.LexState
 
-    conditionBodyStateLens = O.lens (const []) const
+    conditionBodyStateLens = lens (const []) const
 
 newtype NonExpandingStreamError
     = SawSyntaxCommandHeadToken SyntaxCommandHeadToken

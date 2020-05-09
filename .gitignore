@@ -10,3 +10,5 @@ hex.cabal
 support/*.tex
 dist/
 dist-newstyle/
+*.sublime-project
+*.sublime-workspace

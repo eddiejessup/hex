@@ -5,7 +5,7 @@ import Hexlude
 import Hex.Config.Config
 
 addMaybeElem :: Seq a -> Maybe a -> Seq a
-addMaybeElem a mayE = case mayE of
+addMaybeElem a = \case
   Nothing -> a
   Just e -> a :|> e
 
@@ -29,6 +29,8 @@ runCommandLoop
      , MonadError e m
      , HP.AsTeXParseErrors e
      , AsType HP.ParseError e
+
+     , MonadSlog m
      )
   => (s -> s -> a -> HP.Command -> m (s, a, Maybe b))
   -> s
@@ -38,4 +40,5 @@ runCommandLoop runCommand = runLoop parseAndRunCommand
   where
     parseAndRunCommand oldS elemList = do
       (newS, command) <- HP.runTeXParseTEmbedded HP.parseCommand oldS
+      sLog $ "In parseAndRunCommand, got command " <> renderDescribed command
       runCommand oldS newS elemList command

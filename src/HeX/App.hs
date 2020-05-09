@@ -34,6 +34,10 @@ newtype App a
     , MonadIO
     , MonadError AppError
     )
+instance MonadSlog App where
+  sLog msg = do
+    loggerSet <- gets Conf.internalLoggerSet
+    liftIO $ Log.pushLogStrLn loggerSet (Log.toLogStr msg)
 
 runApp
   :: MonadIO m
@@ -42,12 +46,3 @@ runApp
   -> m (Either AppError a)
 runApp f c =
   liftIO (evalStateT (runExceptT $ unApp f) c)
-
-class MonadLog m where
-
-  mLog :: Text -> m ()
-
-instance MonadLog App where
-  mLog msg = do
-    loggerSet <- gets Conf.internalLoggerSet
-    liftIO $ Log.pushLogStrLn loggerSet (Log.toLogStr msg)

@@ -24,7 +24,7 @@ dependencies:
 - hashable
 - mono-traversable
 - mtl
-- optics
+- optics-core
 - parser-combinators
 - path
 - path-io

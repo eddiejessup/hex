@@ -40,6 +40,7 @@ handleCommandInParaMode
        , HP.TeXStream s
 
        , MonadIO m
+       , MonadSlog m
        )
     => s
     -> s
@@ -90,6 +91,7 @@ handleCommandInHBoxMode
        , HP.TeXStream s
 
        , MonadIO m
+       , MonadSlog m
        )
     => s
     -> s
@@ -135,6 +137,7 @@ handleCommandInVBoxMode
        , AsType BuildError e
        , AsType Data.Path.PathError e
 
+       , MonadSlog m
        , MonadIO m
        )
     => s
@@ -231,6 +234,7 @@ handleCommandInMainVMode
        , HP.TeXStream s
 
        , MonadIO m
+       , MonadSlog m
        )
     => s
     -> s
@@ -294,6 +298,7 @@ extractPara
        , HP.TeXStream s
 
        , MonadIO m
+       , MonadSlog m
        )
     => HP.IndentFlag
     -> s
@@ -317,11 +322,13 @@ extractMainVList
        , HP.TeXStream s
 
        , MonadIO m
+       , MonadSlog m
        )
     => s
     -> m (s, VList)
 extractMainVList s = do
     (doneS, vList, _) <- runCommandLoop handleCommandInMainVMode s mempty
+    sLog "In extractMainVList, done runCommandLoop handleCommandInMainVMode"
     pure (doneS, vList)
 
 extractBreakAndSetMainVList
@@ -334,11 +341,13 @@ extractBreakAndSetMainVList
        , HP.TeXStream s
 
        , MonadIO m
+       , MonadSlog m
        )
     => s
     -> m (s, Seq B.Page, IntParamVal 'HP.Mag)
 extractBreakAndSetMainVList s = do
     (finalS, finalMainVList) <- extractMainVList s
+    sLog "In extractBreakAndSetMainVList, done extractMainVList"
     case finalS ^. HP.conditionBodyStateLens of
         [] -> pure ()
         condStates -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show condStates
@@ -354,6 +363,8 @@ data ModeIndependentResult
 
 handleModeIndependentCommand
     :: ( MonadIO m
+       , MonadSlog m
+
        , AsType Data.Path.PathError e
        , AsType TFMError e
        , AsType BuildError e
@@ -596,6 +607,7 @@ extractExplicitBoxContents
        , HP.TeXStream s
 
        , MonadIO m
+       , MonadSlog m
        )
     => s
     -> B.DesiredLength

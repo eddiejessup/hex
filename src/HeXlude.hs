@@ -9,7 +9,12 @@ module Hexlude
     , module Generic.Random
     , module Test.QuickCheck
 
-    , module Optics
+    , module System.Log.Slog
+
+    , module Optics.Lens
+    , module Optics.Operators
+    , module Optics.Getter
+    , module Optics.Optic
 
     , field
 
@@ -39,7 +44,11 @@ import           Prelude                   (id)
 import           Protolude                 hiding ((%), group, catch, to, try, log)
 
 import           Control.Arrow             ((>>>))
-import           Optics                    (Lens', lens, (%), (^.), (%~), (.~), (?~), view, to, prism)
+import           Optics.Lens               (Lens', lens)
+import           Optics.Optic              ((%))
+import           Optics.Operators          ((^.), (%~), (.~), (?~))
+import           Optics.Getter             (view, to)
+-- import           Optics                    (Lens', lens, (%), (^.), (%~), (.~), (?~), view, to, prism)
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)
 import qualified Data.Sequence             as Seq
 import           Debug.Describe            as Describe
@@ -49,6 +58,7 @@ import           Data.Generics.Sum.Typed
 import           Generic.Random            (genericArbitraryU)
 import           Test.QuickCheck           (Arbitrary(arbitrary), Gen)
 import qualified Data.Ratio as Ratio
+import System.Log.Slog
 
 mkRatio :: Integral a => a -> a -> Ratio a
 mkRatio = (Ratio.%)
