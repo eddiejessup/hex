@@ -58,6 +58,14 @@ instance Hashable ControlSequenceLike where
     ControlSequenceProper cs ->
       hash cs
 
+instance Describe ControlSequenceLike where
+
+  describe = \case
+    ControlSequenceProper cs ->
+      describePrepended 0 "CSLike/ControlSequenceProper" cs
+    ActiveCharacter cc ->
+      describePrepended 0 "CSLike/ActiveCharacter" cc
+
 instance Arbitrary ControlSequenceLike where
   arbitrary = genericArbitraryU
 

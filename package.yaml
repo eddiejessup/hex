@@ -12,6 +12,7 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/eddiejessup/hex#readme>
 
 dependencies:
+- aeson
 - base
 - binary
 - bytestring
@@ -31,6 +32,7 @@ dependencies:
 - protolude
 - QuickCheck
 - text
+- time
 - transformers
 - unordered-containers
 - vector

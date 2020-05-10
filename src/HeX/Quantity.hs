@@ -112,7 +112,7 @@ showSP n =
 newtype TeXInt = TeXInt { unInt :: Int }
     deriving stock (Show, Generic)
     deriving newtype (Num, Eq, Ord, Enum, Bounded, Real, Integral, Hashable, Bits,
-                      FiniteBits)
+                      FiniteBits, Describe)
 
 newtype Length = Length { unLength :: Int }
     deriving stock (Show)

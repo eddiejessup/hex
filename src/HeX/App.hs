@@ -10,6 +10,7 @@ import qualified Hex.Parse as HP
 import Hexlude
 import TFM (TFMError)
 import qualified System.Log.FastLogger as Log
+import Data.Time.Clock
 
 data AppError
   = BuildAppError BuildError
@@ -34,10 +35,13 @@ newtype App a
     , MonadIO
     , MonadError AppError
     )
+
 instance MonadSlog App where
   sLog msg = do
     loggerSet <- gets Conf.internalLoggerSet
     liftIO $ Log.pushLogStrLn loggerSet (Log.toLogStr msg)
+
+  sTime = liftIO getCurrentTime
 
 runApp
   :: MonadIO m

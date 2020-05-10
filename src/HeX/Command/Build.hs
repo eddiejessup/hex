@@ -428,7 +428,11 @@ handleModeIndependentCommand s = \case
                         pure (Just boxElem, fontRefTok)
                     oth ->
                         panic $ "Not implemented: DefineControlSequence target " <> show oth
-                -- liftIO $ putText $ "Setting CS " <> show cs <> " to token: " <> show newCSTok <> (if global == HP.Global then " globally" else " locally")
+                sLogStampedJSON "Defining control sequence"
+                    [ ("controlSequence", renderDescribed cs)
+                    , ("token", show newCSTok)
+                    , ("global", show global)
+                    ]
                 modify $ typed @Config %~ setControlSequence cs newCSTok global
                 pure (s, AddMaybeElem maybeElem)
             HP.SetVariable ass ->
@@ -475,10 +479,16 @@ handleModeIndependentCommand s = \case
                 do
                 eIdx <- texEvaluate idx
                 eVal <- texEvaluate val
-                -- liftIO $ putText $ "Evaluated code table index " <> show idx <> " to " <> show eIdx
-                -- liftIO $ putText $ "Evaluated code table value " <> show val <> " to " <> show eVal
                 idxChar <- note (injectTyped $ ConfigError $ "Invalid character code index: " <> show eIdx) (fromTeXInt eIdx)
-                -- liftIO $ putText $ "Setting " <> show codeType <> "@" <> show eIdx <> " (" <> show idxChar <> ") to " <> show eVal
+                sLogStampedJSON "Doing code assignment"
+                    [ ("codeTableIndexSymbolic", show idx)
+                    , ("codeTableIndexEvaluated", show eIdx)
+                    , ("codeTableIndexAsChar", show idxChar)
+                    , ("codeTableValueSymbolic", show val)
+                    , ("codeTableValueEvaluated", renderDescribed eVal)
+                    , ("codeType", show codeType)
+                    , ("global", show global)
+                    ]
                 updateCharCodeMap codeType idxChar eVal global
                 pure (s, AddMaybeElem Nothing)
             HP.SelectFont fNr ->
@@ -547,7 +557,7 @@ handleModeIndependentCommand s = \case
             Nothing ->
                 do
                 -- Write to terminal.
-                when (en >= 0) $ liftIO $ putText txtTxt
+                when (en >= 0) $ sLog txtTxt
                 -- Write to log
                 logHandle <- gets $ view $ typed @Config % field @"logStream"
                 liftIO $ hPutStrLn logHandle txtTxt
