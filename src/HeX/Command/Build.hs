@@ -23,6 +23,17 @@ import qualified Hex.Resolve          as HR
 import qualified Hex.Variable         as Var
 import           Hex.Evaluate
 
+type TeXBuildCtx s st e m
+  = ( MonadState st m -- Read-only
+    , HasType Config st
+
+    , HP.MonadTeXParse (HP.TeXParseT s m)
+
+    , MonadError e m
+    , HP.AsTeXParseErrors e
+    , AsType HP.ParseError e
+    )
+
 newtype BuildError = BuildError Text
     deriving stock (Show)
 
@@ -36,7 +47,7 @@ handleCommandInParaMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseOutsideCtx s st e m
+       , TeXBuildCtx s st e m
        , HP.TeXStream s
 
        , MonadIO m
@@ -87,7 +98,7 @@ handleCommandInHBoxMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseOutsideCtx s st e m
+       , TeXBuildCtx s st e m
        , HP.TeXStream s
 
        , MonadIO m
@@ -130,7 +141,7 @@ handleCommandInHBoxMode _ newS hList@(BL.HList hElemSeq) command =
 
 handleCommandInVBoxMode
     :: forall s st e m
-     . ( HP.TeXParseOutsideCtx s st e m
+     . ( TeXBuildCtx s st e m
        , HP.TeXStream s
 
        , AsType TFMError e
@@ -230,7 +241,7 @@ handleCommandInMainVMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseOutsideCtx s st e m
+       , TeXBuildCtx s st e m
        , HP.TeXStream s
 
        , MonadIO m
@@ -294,7 +305,7 @@ extractPara
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseOutsideCtx s st e m
+       , TeXBuildCtx s st e m
        , HP.TeXStream s
 
        , MonadIO m
@@ -318,7 +329,7 @@ extractMainVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseOutsideCtx s st e m
+       , TeXBuildCtx s st e m
        , HP.TeXStream s
 
        , MonadIO m
@@ -337,7 +348,7 @@ extractBreakAndSetMainVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseOutsideCtx s st e m
+       , TeXBuildCtx s st e m
        , HP.TeXStream s
 
        , MonadIO m
@@ -369,7 +380,7 @@ handleModeIndependentCommand
        , AsType TFMError e
        , AsType BuildError e
 
-       , HP.TeXParseOutsideCtx s st e m
+       , TeXBuildCtx s st e m
        , HP.TeXStream s
        )
     => s
@@ -613,7 +624,7 @@ extractExplicitBoxContents
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , HP.TeXParseOutsideCtx s st e m
+       , TeXBuildCtx s st e m
        , HP.TeXStream s
 
        , MonadIO m

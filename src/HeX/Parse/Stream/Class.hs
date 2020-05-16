@@ -130,17 +130,6 @@ type TeXParseCtx st e m
     , AsTeXParseErrors e
     )
 
-type TeXParseOutsideCtx s st e m
-  = ( MonadState st m -- Read-only
-    , HasType Config st
-
-    , MonadTeXParse (TeXParseT s m)
-
-    , MonadError e m
-    , AsTeXParseErrors e
-    , AsType ParseError e
-    )
-
 newtype TeXParseT s m a = TeXParseT (s -> m (s, Either ParseError a))
 
 instance Functor m => Functor (TeXParseT s m) where
