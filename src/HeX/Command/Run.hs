@@ -3,7 +3,7 @@ module Hex.Command.Run where
 
 import Control.Monad.Trans.Writer.CPS as Wr
 import DVI.Document (Instruction, parseInstructions)
-import DVI.Encode (encode)
+import DVI.Encode (dviEncode)
 import DVI.Instruction (DVIError, EncodableInstruction)
 import Data.Byte (ByteError)
 import Data.Path (PathError)
@@ -61,9 +61,8 @@ loopParser parser s = do
   pure (postLoopStream, mayErr, xs)
   where
     go :: HP.ExpandingStream -> Wr.WriterT [a] m (HP.ExpandingStream, Maybe e)
-    go stream = do
-      errOrA <- lift $ runExceptT (HP.runTeXParseTEmbedded parser stream)
-      case errOrA of
+    go stream =
+      lift (runExceptT (HP.runTeXParseTEmbedded parser stream)) >>= \case
         Left err ->
           pure (stream, Just err)
         Right (postParseStream, a) -> do
@@ -76,6 +75,10 @@ loopParser parser s = do
 
 expandingStreamAsPrimTokens
   :: ( MonadIO m
+     , MonadSlog m
+
+     , MonadState st m
+     , HasType Conf.Config st
 
      , AsType EvaluationError e
      , AsType Conf.ConfigError e
@@ -85,14 +88,16 @@ expandingStreamAsPrimTokens
      , AsType Data.Path.PathError e
      )
   => HP.ExpandingStream
-  -> Conf.Config
   -> m (HP.ExpandingStream, Maybe e, [HP.PrimitiveToken])
-expandingStreamAsPrimTokens s =
-  evalStateT (loopParser HP.anySingle s)
+expandingStreamAsPrimTokens = loopParser HP.anySingle
 
 -- Command.
 expandingStreamAsCommands
   :: ( MonadIO m
+     , MonadSlog m
+
+     , MonadState st m
+     , HasType Conf.Config st
 
      , AsType EvaluationError e
      , AsType Conf.ConfigError e
@@ -102,10 +107,8 @@ expandingStreamAsCommands
      , AsType Data.Path.PathError e
      )
   => HP.ExpandingStream
-  -> Conf.Config
   -> m (HP.ExpandingStream, Maybe e, [HP.Command])
-expandingStreamAsCommands s =
-  evalStateT (loopParser HP.parseCommand s)
+expandingStreamAsCommands = loopParser HP.parseCommand
 
 -- Paragraph list.
 renderStreamUnsetPara
@@ -126,10 +129,10 @@ renderStreamUnsetPara
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m Text
+  -> m (HP.ExpandingStream, Text)
 renderStreamUnsetPara s = do
-  (_, hList, _) <- extractPara HP.Indent s
-  pure $ renderDescribed hList
+  (endS, hList, _) <- extractPara HP.Indent s
+  pure (endS, renderDescribed hList)
 
 -- Paragraph boxes.
 streamToParaBoxes
@@ -150,10 +153,11 @@ streamToParaBoxes
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m (Seq (Box HBox))
+  -> m (HP.ExpandingStream, Seq (Box HBox))
 streamToParaBoxes s = do
-  (_, hList, _) <- extractPara HP.Indent s
-  hListToParaLineBoxes hList
+  (endS, hList, _) <- extractPara HP.Indent s
+  boxes <- hListToParaLineBoxes hList
+  pure (endS, boxes)
 
 renderStreamSetPara
   :: ( MonadState st m
@@ -173,10 +177,10 @@ renderStreamSetPara
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m Text
+  -> m (HP.ExpandingStream, Text)
 renderStreamSetPara s = do
-  boxes <- streamToParaBoxes s
-  pure $ renderLines $ describeRelFoldable 0 boxes
+  (endS, boxes) <- streamToParaBoxes s
+  pure (endS, renderLines $ describeRelFoldable 0 boxes)
 
 -- Pages list.
 renderStreamPageList
@@ -197,10 +201,10 @@ renderStreamPageList
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m Text
+  -> m (HP.ExpandingStream, Text)
 renderStreamPageList s = do
-  (_, vList) <- extractMainVList s
-  pure $ renderDescribed vList
+  (endS, vList) <- extractMainVList s
+  pure (endS, renderDescribed vList)
 
 -- Pages boxes.
 renderStreamPages
@@ -221,10 +225,10 @@ renderStreamPages
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m Text
+  -> m (HP.ExpandingStream, Text)
 renderStreamPages s = do
-  (_, pages, _mag) <- extractBreakAndSetMainVList s
-  pure $ renderLines $ describeRelFoldable 0 pages
+  (endS, pages, _mag) <- extractBreakAndSetMainVList s
+  pure (endS, renderLines $ describeRelFoldable 0 pages)
 
 -- DVI instructions.
 streamToSemanticDVI
@@ -245,11 +249,11 @@ streamToSemanticDVI
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m (Seq Instruction, Conf.IntParamVal 'HP.Mag)
+  -> m (HP.ExpandingStream, Seq Instruction, Conf.IntParamVal 'HP.Mag)
 streamToSemanticDVI s = do
-  (_, pages, _mag) <- extractBreakAndSetMainVList s
+  (endS, pages, _mag) <- extractBreakAndSetMainVList s
   sLog "In streamToSemanticDVI, done extractBreakAndSetMainVList"
-  pure (pagesToDVI pages, _mag)
+  pure (endS, pagesToDVI pages, _mag)
 
 renderStreamSemanticDVI
   :: ( MonadState st m
@@ -269,10 +273,10 @@ renderStreamSemanticDVI
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m Text
+  -> m (HP.ExpandingStream, Text)
 renderStreamSemanticDVI s = do
-  (semDVI, _mag) <- streamToSemanticDVI s
-  pure $ renderLines $ describeRelFoldable 0 semDVI
+  (endS, semDVI, _mag) <- streamToSemanticDVI s
+  pure (endS, renderLines $ describeRelFoldable 0 semDVI)
 
 -- Raw DVI instructions.
 streamToRawDVI
@@ -295,11 +299,12 @@ streamToRawDVI
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m (Seq EncodableInstruction)
+  -> m (HP.ExpandingStream, Seq EncodableInstruction)
 streamToRawDVI s = do
-  (semDVI, _mag) <- streamToSemanticDVI s
+  (endS, semDVI, _mag) <- streamToSemanticDVI s
   sLog "In streamToRawDVI, done streamToSemanticDVI"
-  parseInstructions semDVI (Quantity.unInt $ Conf.unIntParam _mag)
+  rawDVI <- parseInstructions semDVI (Quantity.unInt $ Conf.unIntParam _mag)
+  pure (endS, rawDVI)
 
 renderStreamRawDVI
   :: ( MonadState st m
@@ -321,10 +326,10 @@ renderStreamRawDVI
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m Text
+  -> m (HP.ExpandingStream, Text)
 renderStreamRawDVI s = do
-  rawDVI <- streamToRawDVI s
-  pure $ renderLines $ describeRelFoldable 0 rawDVI
+  (endS, rawDVI) <- streamToRawDVI s
+  pure (endS, renderLines $ describeRelFoldable 0 rawDVI)
 
 -- DVI byte strings.
 streamToDVIBytes
@@ -348,8 +353,8 @@ streamToDVIBytes
      , MonadSlog m
      )
   => HP.ExpandingStream
-  -> m ByteString
+  -> m (HP.ExpandingStream, ByteString)
 streamToDVIBytes s = do
-  rawDVI <- streamToRawDVI s
+  (endS, rawDVI) <- streamToRawDVI s
   sLog "In streamToDVIBytes, done streamToRawDVI"
-  pure $ encode rawDVI
+  pure (endS, dviEncode rawDVI)

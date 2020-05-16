@@ -4,6 +4,7 @@ import           Control.Monad.Catch      (MonadThrow)
 import qualified Data.ByteString.Lazy as BS.L
 import Hex.Categorise
 import Hex.Command.Run
+import Hex.App
 import Hex.Lex
 import Hex.Resolve
 import Hex.Parse
@@ -92,7 +93,7 @@ repl = do
         [] -> putText "Returned no results"
         _ -> putResult $ renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" primToks
 
-      for_ mayErr $ \err -> do
+      for_ mayErr $ \(err :: AppError) -> do
         putText "Ended with error:"
         putText $ show err
         putText "Stream ended in state:"
@@ -113,7 +114,7 @@ repl = do
         _ -> putResult $ renderLines $ describeNamedRelFoldable 0 "Commands" commandToks
 
       for_ mayErr $ \case
-        ParseError EndOfInput ->
+        ParseAppError EndOfInput ->
           pure ()
         err -> do
           putText "Ended with error:"

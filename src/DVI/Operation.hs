@@ -48,9 +48,9 @@ data Operation
   | PostPostamble
   deriving stock Show
 
-instance Encodable Operation where
+instance DVIEncodable Operation where
 
-  encode op =
+  dviEncode op =
     BS.L.toStrict $
       B.encode $ case op of
       AddChar (FastCharOp n) -> n

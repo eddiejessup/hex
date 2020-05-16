@@ -1,6 +1,6 @@
 module DVI.Document where
 
-import DVI.Encode (encLength)
+import DVI.Encode (dviEncLength)
 import DVI.Instruction
 import DVI.Operation (Operation (DefineFontNr))
 import Data.Byte (ByteError)
@@ -171,7 +171,7 @@ parseMundaneInstruction st = \case
     pure
       st
         { instrs = instrsDone
-        , beginPagePointers = encLength instrsEnded : points
+        , beginPagePointers = dviEncLength instrsEnded : points
         }
   DefineFont
     FontDefinition
@@ -219,7 +219,7 @@ parseInstructions _instrs magnification = do
           maxPageHeightPlusDepth
           maxPageWidth
           maxStackDepth
-      postamblePointer = encLength mundaneInstrs
+      postamblePointer = dviEncLength mundaneInstrs
       postPostambleInstr = getPostPostambleInstr postamblePointer
       fontDefinitions = Seq.filter isDefineFontInstr mundaneInstrs
   pure $ (mundaneInstrs :|> postambleInstr) <> fontDefinitions :|> postPostambleInstr

@@ -1,22 +1,21 @@
 module Hexlude
     ( module Protolude
-    , module Describe
     , module Data.Sequence
 
-    , module Data.Generics.Sum.Typed
-    , module Data.Generics.Product.Typed
+    , module Data.Generics.Sum
+    , module Data.Generics.Product
 
     , module Generic.Random
     , module Test.QuickCheck
 
+    , module Describe
     , module System.Log.Slog
+    , module Data.Aeson
 
     , module Optics.Lens
     , module Optics.Operators
     , module Optics.Getter
     , module Optics.Optic
-
-    , field
 
     , mkRatio
 
@@ -41,20 +40,19 @@ module Hexlude
 where
 
 import           Prelude                   (id)
-import           Protolude                 hiding ((%), group, catch, to, try, log)
+import           Protolude                 hiding ((%), group, catch, to, try, log, getField, HasField)
 
 import           Control.Arrow             ((>>>))
 import           Optics.Lens               (Lens', lens)
 import           Optics.Optic              ((%))
 import           Optics.Operators          ((^.), (%~), (.~), (?~))
 import           Optics.Getter             (view, to)
--- import           Optics                    (Lens', lens, (%), (^.), (%~), (.~), (?~), view, to, prism)
+import           Data.Aeson
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)
 import qualified Data.Sequence             as Seq
 import           Debug.Describe            as Describe
-import           Data.Generics.Product     (field)
-import           Data.Generics.Product.Typed
-import           Data.Generics.Sum.Typed
+import           Data.Generics.Product     hiding (list)
+import           Data.Generics.Sum
 import           Generic.Random            (genericArbitraryU)
 import           Test.QuickCheck           (Arbitrary(arbitrary), Gen)
 import qualified Data.Ratio as Ratio
@@ -103,22 +101,26 @@ seqMapMaybe f = Seq.fromList . mapMaybe f . toList
 data HDirection
     = Leftward
     | Rightward
-    deriving stock (Show, Eq)
+    deriving stock (Show, Eq, Generic)
+    deriving anyclass (ToJSON)
 
 data VDirection
     = Upward
     | Downward
-    deriving stock (Show, Eq)
+    deriving stock (Show, Eq, Generic)
+    deriving anyclass (ToJSON)
 
 data Direction
     = Forward
     | Backward
-    deriving stock (Show, Eq)
+    deriving stock (Show, Eq, Generic)
+    deriving anyclass (ToJSON)
 
 data Axis
     = Horizontal
     | Vertical
-    deriving stock (Show, Eq)
+    deriving stock (Show, Eq, Generic)
+    deriving anyclass (ToJSON)
 
 data MoveMode
     = Put
@@ -129,4 +131,5 @@ data BoxDim
      = BoxWidth
      | BoxHeight
      | BoxDepth
-     deriving stock (Show, Eq)
+     deriving stock (Show, Eq, Generic)
+     deriving anyclass (ToJSON)

@@ -2,10 +2,10 @@ module Hex.Command.Commands where
 
 import           Hexlude
 
+import qualified Data.ByteString     as BS
 import qualified Data.Map.Strict     as Map
 import qualified Data.IntMap.Strict  as IntMap
 import qualified Data.Path           as D.Path
-import qualified Data.Sequence       as Seq
 
 import           TFM                 (TexFont (..))
 import qualified TFM
@@ -280,21 +280,21 @@ getFileStream strms (TeXInt n) = do
 
 -- Showing things.
 
-showLexTok :: Lex.Token -> Seq CharCode
+showLexTok :: Lex.Token -> [CharCode]
 showLexTok = \case
     Lex.CharCatToken Lex.CharCat { Lex.char } ->
-        singleton char
-    Lex.ControlSequenceToken Lex.ControlSequence { Lex.csChars } ->
-        singleton (Code.CharCode_ '\\') <> csChars
+        [char]
+    Lex.ControlSequenceToken (Lex.ControlSequence bs) ->
+        Code.CharCode_ '\\' : (Code.CharCode <$> BS.unpack bs)
 
-showPrimTok :: HP.PrimitiveToken -> Seq CharCode
+showPrimTok :: HP.PrimitiveToken -> [CharCode]
 showPrimTok = \case
     HP.UnresolvedTok t -> showLexTok t
-    pt                 -> Seq.fromList $ unsafeCodesFromChars (show pt)
+    pt                 -> unsafeCodesFromChars (show pt)
 
-showBalancedText :: HP.BalancedText -> Seq CharCode
+showBalancedText :: HP.BalancedText -> [CharCode]
 showBalancedText (HP.BalancedText lexToks) =
-    Seq.fromList $ concat $ toList . showLexTok <$> lexToks
+    concat $ toList . showLexTok <$> lexToks
 
 showExpandedBalancedText :: HP.ExpandedBalancedText -> [CharCode]
 showExpandedBalancedText (HP.ExpandedBalancedText primToks) =

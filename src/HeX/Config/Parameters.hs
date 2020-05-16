@@ -2,7 +2,8 @@ module Hex.Config.Parameters where
 
 import           Hexlude
 
-import qualified Data.Map.Strict     as Map
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 
 import qualified Hex.BreakList.Glue  as BL.G
 import           Hex.Resolve.Token
@@ -28,9 +29,9 @@ newtype TokenListParamVal (a :: TokenListParameter) =
     TokenListParamVal { unTokenListParam :: BalancedText }
     deriving newtype (Show)
 
-newTeXIntParameters :: Map TeXIntParameter TeXInt
+newTeXIntParameters :: HashMap TeXIntParameter TeXInt
 newTeXIntParameters =
-    Map.fromList
+    HashMap.fromList
         [ (Tolerance, 10000)
         , (EscapeChar, 92)  -- '\'
         , (EndLineChar, 13)  -- '\r'
@@ -43,46 +44,46 @@ newTeXIntParameters =
         , (Year, 1970)
         ]
 
-newLengthParameters :: Map LengthParameter Length
+newLengthParameters :: HashMap LengthParameter Length
 newLengthParameters = mempty
 
-newGlueParameters :: Map GlueParameter (BL.G.Glue Length)
+newGlueParameters :: HashMap GlueParameter (BL.G.Glue Length)
 newGlueParameters = mempty
 
-newMathGlueParameters :: Map MathGlueParameter (BL.G.Glue MathLength)
+newMathGlueParameters :: HashMap MathGlueParameter (BL.G.Glue MathLength)
 newMathGlueParameters = mempty
 
-newTokenListParameters :: Map TokenListParameter BalancedText
+newTokenListParameters :: HashMap TokenListParameter BalancedText
 newTokenListParameters = mempty
 
-newSpecialTeXInts :: Map SpecialTeXInt TeXInt
+newSpecialTeXInts :: HashMap SpecialTeXInt TeXInt
 newSpecialTeXInts = mempty
 
-newSpecialLengths :: Map SpecialLength Length
+newSpecialLengths :: HashMap SpecialLength Length
 newSpecialLengths =
-    Map.fromList
+    HashMap.fromList
         [ (PrevDepth, fromIntegral $ -oneKPt)
         ]
 
-usableTeXIntParameters :: Map TeXIntParameter TeXInt
+usableTeXIntParameters :: HashMap TeXIntParameter TeXInt
 usableTeXIntParameters =
-    Map.union newTeXIntParameters $ Map.fromList
+    HashMap.union newTeXIntParameters $ HashMap.fromList
         [ (Tolerance, 500)
         , (LinePenalty, 10)
         , (Mag, 1000)
         ]
 
-usableLengthParameters :: Map LengthParameter Length
+usableLengthParameters :: HashMap LengthParameter Length
 usableLengthParameters =
-    Map.union newLengthParameters $ Map.fromList
+    HashMap.union newLengthParameters $ HashMap.fromList
         [ (HSize, 30750000)
         , (VSize, 37500000)
         , (ParIndent, toScaledPointApprox (20 :: Int) Point)
         ]
 
-usableGlueParameters :: Map GlueParameter (BL.G.Glue Length)
+usableGlueParameters :: HashMap GlueParameter (BL.G.Glue Length)
 usableGlueParameters =
-    Map.union newGlueParameters $ Map.fromList
+    HashMap.union newGlueParameters $ HashMap.fromList
         [ (BaselineSkip , BL.G.fixedGlue $ toScaledPointApprox (12 :: Int) Point )
         , (LineSkip, BL.G.fixedGlue $ toScaledPointApprox (1 :: Int) Point)
         ]

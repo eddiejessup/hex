@@ -3,13 +3,13 @@ module DVI.Encode where
 import qualified Data.ByteString as BS
 import Hexlude
 
-class Encodable a where
+class DVIEncodable a where
 
-  encode :: a -> ByteString
+  dviEncode :: a -> ByteString
 
-encLength :: Encodable a => a -> Int
-encLength = fromIntegral . BS.length . encode
+dviEncLength :: DVIEncodable a => a -> Int
+dviEncLength = fromIntegral . BS.length . dviEncode
 
-instance (Encodable a, Foldable t) => Encodable (t a) where
+instance (DVIEncodable a, Foldable t) => DVIEncodable (t a) where
 
-  encode = BS.concat . fmap encode . toList
+  dviEncode = BS.concat . fmap dviEncode . toList

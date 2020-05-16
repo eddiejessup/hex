@@ -14,7 +14,7 @@ import Hexlude
 data Sign
   = Positive
   | Negative
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
 
 instance Semigroup Sign where
 
@@ -24,15 +24,19 @@ instance Monoid Sign where
 
   mempty = Positive
 
+instance ToJSON Sign
+
 instance Describe Sign where
 
   describe Positive = singleLine "Sign/+"
   describe Negative = singleLine "Sign/-"
 
 data Signed a = Signed Sign a
-  deriving stock Functor
+  deriving stock (Functor, Generic)
 
 deriving stock instance Show a => Show (Signed a)
+
+instance ToJSON a => ToJSON (Signed a)
 
 instance Describe a => Describe (Signed a) where
 
@@ -101,8 +105,8 @@ data TeXIntParameter
   | ShowBoxBreadth -- Maximum items per level when boxes are shown
   | ShowBoxDepth -- Maximum level when boxes are shown
   | ErrorContextLines -- Maximum extra context shown when errors occur
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass Hashable
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON, Hashable)
 
 data LengthParameter
   = HFuzz -- Maximum overrun before overfull hbox messages occur
@@ -126,8 +130,8 @@ data LengthParameter
   | HangIndent -- Amount of hanging indentation
   | HOffset -- Horizontal offset in \shipout
   | VOffset -- Vertical offset in \shipout
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass Hashable
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON, Hashable)
 
 data GlueParameter
   = BaselineSkip -- Desired glue between baselines
@@ -145,15 +149,15 @@ data GlueParameter
   | SpaceSkip -- Glue between words, if nonzero
   | XSpaceSkip -- Glue between sentences, if nonzero
   | ParFillSkip -- Additional \rightskip at end of paragraphs
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass Hashable
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON, Hashable)
 
 data MathGlueParameter
   = ThinMuSkip -- Thin space in math formulas
   | MedMuSkip -- Medium space in math formulas
   | ThickMuSkip -- Thick space in math formulas
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass Hashable
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON, Hashable)
 
 data TokenListParameter
   = Output -- The user's output routine
@@ -165,16 +169,16 @@ data TokenListParameter
   | EveryJob -- Tokens to insert when the job begins
   | EveryCR -- Tokens to insert after every \cr or nonredundant \crcr
   | ErrHelp -- Tokens that supplement an \errmessage
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass Hashable
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON, Hashable)
 
 data SpecialTeXInt
   = SpaceFactorTeXInt
   | PrevGrafTeXInt
   | DeadCyclesTeXInt
   | InsertPenaltiesTeXInt
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass Hashable
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON, Hashable)
 
 data SpecialLength
   = PrevDepth
@@ -186,76 +190,88 @@ data SpecialLength
   | PageFilllStretch
   | PageShrink
   | PageDepth
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass Hashable
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON, Hashable)
 
 data AssignPrefixTok
   = LongTok
   | OuterTok
   | GlobalTok
-  deriving stock (Show, Eq, Ord)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data IndentFlag
   = Indent
   | DoNotIndent
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data ExpandDefFlag
   = ExpandDef
   | InhibitDef
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data GlobalFlag
   = Global
   | Local
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data StandardOutputStream
   = StdOut
   | StdErr
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data BoxFetchMode
   = Pop
   | Lookup
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data PresetGlueType
   = Fil -- \{h,v}fil
   | Fill -- \{h,v}fill
   | StretchOrShrink -- \{h,v}ss
   | FilNeg -- \{h,v}filneg
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data LeadersType
   = Aligned -- \leaders
   | Centered -- \cleaders
   | Expanded -- \xleaders
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data ModeAttribute
   = VerticalMode
   | HorizontalMode
   | MathMode
   | InnerMode
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data BoxRegisterAttribute
   = HasVerticalBox
   | HasHorizontalBox
   | IsVoid
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data FontChar
   = HyphenChar -- \hyphenchar
   | SkewChar -- \skewchar
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data FontRange
   = TextSizeFontRange -- \textfont
   | ScriptSizeFontRange -- \scriptfont
   | ScriptScriptSizeFontRange -- \scriptscriptfont
-  deriving stock (Show, Eq, Ord, Generic)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 instance Hashable FontRange
 
@@ -266,11 +282,13 @@ data ModedCommandPrimitiveToken
   | ShiftedBoxTok Direction -- \moveleft, \moveright, \raise, \lower
   | UnwrappedFetchedBoxTok BoxFetchMode -- \un{v,h}{box,copy}
   | RuleTok -- \hrule, \vrule
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data SyntaxCommandArg
   = EndCSNameTok -- \endcsname
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data CodeType
   = CategoryCodeType
@@ -278,13 +296,15 @@ data CodeType
   | ChangeCaseCodeType VDirection
   | SpaceFactorCodeType
   | DelimiterCodeType
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data QuantityType
   = CharQuantity -- \chardef
   | MathCharQuantity -- \mathchardef
   | RegQuantity RegisterType
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data RegisterType
   = RegInt -- \count, \countdef
@@ -292,14 +312,16 @@ data RegisterType
   | RegGlue -- \skip, \skipdef
   | RegMathGlue -- \muskip, \muskipdef
   | RegTokenList -- \toks, \toksdef
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data InteractionMode
   = ErrorStopMode -- \errorstopmode
   | ScrollMode -- \scrollmode
   | NonStopMode -- \nonstopmode
   | BatchMode -- \batchmode
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data Digit
   = One
@@ -311,7 +333,11 @@ data Digit
   | Seven
   | Eight
   | Nine
-  deriving stock (Eq, Ord, Bounded, Enum, Show)
+  deriving stock (Eq, Ord, Bounded, Enum, Show, Generic)
+  deriving anyclass (ToJSON)
+
+instance ToJSONKey Digit where
+  toJSONKey = genericToJSONKey defaultJSONKeyOptions
 
 digitToChar :: Digit -> CharCode
 digitToChar d =
@@ -340,11 +366,13 @@ charCodeToDigit cc = case unsafeCodeAsChar cc of
   _ -> Nothing
 
 newtype BalancedText = BalancedText (Seq Lex.Token)
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
   deriving newtype (Eq, Semigroup, Monoid)
 
 newtype ExpandedBalancedText = ExpandedBalancedText (Seq PrimitiveToken)
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
   deriving newtype (Eq, Semigroup, Monoid)
 
 -- We use a map to restrict our parameter keys' domain to [1..9].
@@ -358,11 +386,13 @@ data MacroTextToken
     MacroTextLexToken Lex.Token
   | -- A token to be substituted by a macro argument.
     MacroTextParamToken Digit
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON)
 
 -- A macro template.
 newtype MacroText = MacroText (Seq MacroTextToken)
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
   deriving newtype Eq
 
 data MacroContents
@@ -373,18 +403,21 @@ data MacroContents
       , replacementTokens :: MacroText
       , long, outer :: Bool
       }
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data RemovableItem
   = PenaltyItem -- \unpenalty
   | KernItem -- \unkern
   | GlueItem -- \unskip
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data ExplicitBox
   = ExplicitHBox -- \hbox
   | ExplicitVBox BL.E.VBoxAlignType
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data PrimitiveToken
   = SyntaxCommandArg SyntaxCommandArg
@@ -496,7 +529,8 @@ data PrimitiveToken
     -- > Setting interaction mode.
   | InteractionModeTok InteractionMode
   | UnresolvedTok Lex.Token
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 instance Describe PrimitiveToken where
 
@@ -508,19 +542,22 @@ instance Describe PrimitiveToken where
 data TokenAttribute
   = CharCodeAttribute -- \if
   | CatCodeAttribute -- \ifcat
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data MarkRegister
   = TopMark -- \topmark
   | FirstMark -- \firstmark
   | BottomMark -- \botmark
   | SplitFirstMark -- \splitfirstmark
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data ConditionTok
   = ConditionHeadTok ConditionHeadTok
   | ConditionBodyTok ConditionBodyTok
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data ConditionHeadTok
   = IfTeXIntPairTestTok -- \ifnum
@@ -533,13 +570,15 @@ data ConditionHeadTok
   | IfInputEndedTok -- \ifeof
   | IfConstTok Bool -- \iftrue, \iffalse
   | CaseTok -- \ifcase
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data ConditionBodyTok
   = Else -- \else
   | Or -- \or
   | EndIf -- \fi
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 data SyntaxCommandHeadToken
   = MacroTok MacroContents
@@ -558,7 +597,8 @@ data SyntaxCommandHeadToken
   | EndInputTok -- \endinput
   | TheTok -- \the
   | ChangeCaseTok VDirection -- \uppercase, \lowercase
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 instance Describe SyntaxCommandHeadToken where
 
@@ -568,7 +608,8 @@ instance Describe SyntaxCommandHeadToken where
 data ResolvedToken
   = SyntaxCommandHeadToken SyntaxCommandHeadToken
   | PrimitiveToken PrimitiveToken
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 instance Describe ResolvedToken where
 

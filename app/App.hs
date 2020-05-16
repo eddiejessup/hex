@@ -2,17 +2,17 @@ module Main where
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BS.L
+import qualified Hex.App as App
 import Hex.Categorise
 import qualified Hex.Command.Run as Run
 import Hex.Config.Config
 import Hex.Lex
-import Hex.Parse.Stream.Expanding (newExpandStream)
+import Hex.Parse.Stream.Expanding
 import Hex.Resolve hiding (Output)
 import Hexlude
 import qualified Path
 import qualified Path.IO
 import qualified System.Console.GetOpt as Opt
-import qualified Hex.App as App
 
 data Flag
   = Help
@@ -23,10 +23,10 @@ data Flag
 
 options :: [Opt.OptDescr Flag]
 options =
-  [ Opt.Option ['h'] ["help"] (Opt.NoArg Help) "show usage information"
-  , Opt.Option ['a'] ["amble"] (Opt.NoArg Amble) "prepend pre- and post-amble to input"
-  , Opt.Option ['o'] ["output"] (Opt.OptArg output "FILE") "output to FILE"
-  , Opt.Option ['m'] ["mode"] (Opt.OptArg mode "MODE") "output in mode MODE"
+  [ Opt.Option ['h'] ["help"] (Opt.NoArg Help) "show usage information",
+    Opt.Option ['a'] ["amble"] (Opt.NoArg Amble) "prepend pre- and post-amble to input",
+    Opt.Option ['o'] ["output"] (Opt.OptArg output "FILE") "output to FILE",
+    Opt.Option ['m'] ["mode"] (Opt.OptArg mode "MODE") "output in mode MODE"
   ]
   where
     output = Output . toS . fromMaybe "out.dvi"
@@ -69,8 +69,8 @@ main = do
         panic "Please specify a file to execute, or '-' to read from the standard-input stream"
   let input =
         if Amble `elem` flags
-        then preamble <> inputRaw <> postamble
-        else inputRaw
+          then preamble <> inputRaw <> postamble
+          else inputRaw
       mode = lastDef Run.DVIBytesMode [m | Mode m <- flags]
 
   conf <- newConfig (maybeToList (Path.parent <$> maybeInPath))
@@ -78,41 +78,102 @@ main = do
   let s = newExpandStream maybeInPath input
   case lastMay [f | Output f <- flags] of
     Nothing ->
-      renderWithMode conf input mode >>= \case
-        Left appError ->
-          putText $ show appError
-        Right tx ->
-          putText tx
+      renderWithMode conf input mode
     Just destPathStr -> case mode of
       Run.DVIBytesMode ->
         App.runApp (Run.streamToDVIBytes s) conf >>= \case
           Left appError ->
             putText $ show appError
-          Right bytes -> do
+          Right (_endS, bytes) -> do
             putText $ "Writing to " <> toS destPathStr <> "..."
             BS.writeFile destPathStr bytes
       _ ->
         panic "Writing non-DVI-bytes mode to file not supported"
 
-renderWithMode
-  :: forall m
-   . MonadIO m
-  => Config
-  -> BS.L.ByteString
-  -> Run.Mode
-  -> m (Either App.AppError Text)
+renderWithMode ::
+  forall m.
+  MonadIO m =>
+  Config ->
+  BS.L.ByteString ->
+  Run.Mode ->
+  m ()
 renderWithMode conf input = \case
-  Run.CatMode -> pure $ Right $ show $ usableCodesToCharCats input -- TODO: Render nicely.
-  Run.LexMode -> pure $ Right $ show $ usableCodesToLexTokens input
-  Run.ResolveMode -> pure $ Right $ show $ usableCodesToResolvedTokens input
-  Run.ExpandMode -> Run.expandingStreamAsPrimTokens @m @App.AppError s conf <&> undefined
-  Run.CommandMode -> Run.expandingStreamAsCommands @m @App.AppError s conf <&> undefined
-  Run.ParaListMode -> App.runApp (Run.renderStreamUnsetPara s) conf
-  Run.ParaSetMode -> App.runApp (Run.renderStreamSetPara s) conf
-  Run.PageListMode -> App.runApp (Run.renderStreamPageList s) conf
-  Run.PageMode -> App.runApp (Run.renderStreamPages s) conf
-  Run.SemanticDVIMode -> App.runApp (Run.renderStreamSemanticDVI s) conf
-  Run.RawDVIMode -> App.runApp (Run.renderStreamRawDVI s) conf
-  Run.DVIBytesMode -> panic "You probably don't want to render the DVI bytes as text"
+  Run.CatMode ->
+    putText $ show $ usableCodesToCharCats input -- TODO: Render nicely.
+  Run.LexMode ->
+    putText $ show $ usableCodesToLexTokens input
+  Run.ResolveMode ->
+    putText $ show $ usableCodesToResolvedTokens input
+  Run.ExpandMode -> do
+    (endS, mayErr, primToks) <- App.runErrorlessApp (Run.expandingStreamAsPrimTokens inputS) conf
+    case primToks of
+      [] ->
+        putText "Returned no results"
+      _ ->
+        putText $ resultTxt $
+          renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" primToks
+
+    for_ mayErr $ \err -> putText $ errTxtWithStream err endS
+  Run.CommandMode -> do
+    (endS, mayErr, commands) <- App.runErrorlessApp (Run.expandingStreamAsCommands inputS) conf
+    case commands of
+      [] ->
+        putText "Returned no results"
+      _ ->
+        putText $ resultTxt $
+          renderLines $ describeNamedRelFoldable 0 "Commands" commands
+
+    for_ mayErr $ \err -> putText $ errTxtWithStream err endS
+  Run.ParaListMode ->
+    App.runApp (Run.renderStreamUnsetPara inputS) conf >>= \case
+      Left err ->
+        putText $ errTxt err
+      Right (_, txt) ->
+        putText $ resultTxt txt
+  Run.ParaSetMode ->
+    App.runApp (Run.renderStreamSetPara inputS) conf >>= \case
+      Left err ->
+        putText $ errTxt err
+      Right (_, txt) ->
+        putText $ resultTxt txt
+  Run.PageListMode ->
+    App.runApp (Run.renderStreamPageList inputS) conf >>= \case
+      Left err ->
+        putText $ errTxt err
+      Right (_, txt) ->
+        putText $ resultTxt txt
+  Run.PageMode ->
+    App.runApp (Run.renderStreamPages inputS) conf >>= \case
+      Left err ->
+        putText $ errTxt err
+      Right (_, txt) ->
+        putText $ resultTxt txt
+  Run.SemanticDVIMode ->
+    App.runApp (Run.renderStreamSemanticDVI inputS) conf >>= \case
+      Left err ->
+        putText $ errTxt err
+      Right (_, txt) ->
+        putText $ resultTxt txt
+  Run.RawDVIMode ->
+    App.runApp (Run.renderStreamRawDVI inputS) conf >>= \case
+      Left err ->
+        putText $ errTxt err
+      Right (_, txt) ->
+        putText $ resultTxt txt
+  Run.DVIBytesMode ->
+    panic "You probably don't want to render the DVI bytes as text"
   where
-    s = newExpandStream Nothing input
+    inputS = newExpandStream Nothing input
+
+    errTxtWithStream :: App.AppError -> ExpandingStream -> Text
+    errTxtWithStream err s =
+      errTxt err
+      <> "\nStream ended in state:\n"
+      <> renderDescribed s
+
+    errTxt :: App.AppError -> Text
+    errTxt err = "Ended with error:\n" <> show err
+
+    resultTxt :: Text -> Text
+    resultTxt r =
+      "Got result:\n\n" <> r

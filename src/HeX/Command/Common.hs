@@ -41,6 +41,6 @@ runCommandLoop runCommand = runLoop parseAndRunCommand
     parseAndRunCommand oldS elemList = do
       (newS, command) <- HP.runTeXParseTEmbedded HP.parseCommand oldS
       sLogStampedJSON "Parsed command"
-        [ ("command", renderDescribed command)
+        [ ("command", toJSON command)
         ]
       runCommand oldS newS elemList command

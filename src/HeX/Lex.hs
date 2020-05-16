@@ -2,61 +2,40 @@
 module Hex.Lex where
 
 import qualified Data.ByteString.Lazy as BS.L
-import qualified Data.Sequence as Seq
+import qualified Data.ByteString as BS
 import qualified Hex.Categorise as Cat
 import qualified Hex.Config.Codes as Code
 import Hexlude
 import qualified Test.QuickCheck as QC
 
 -- TODO: Fix this hashing crap.
-data ControlSequence
-  = ControlSequence
-      { csChars :: Seq Code.CharCode
-      , csHash :: Int
-      }
-  deriving stock (Show, Eq, Generic)
+newtype ControlSequence = ControlSequence ByteString
+  deriving newtype (Show, Eq, Hashable)
 
-mkControlSequence :: Seq Code.CharCode -> ControlSequence
-mkControlSequence csChars = ControlSequence {csChars, csHash = hash csChars}
+instance ToJSON ControlSequence where
+  toJSON (ControlSequence bs) = String $ "\\" <> toS bs
 
-instance Hashable ControlSequence where
-
-  hashWithSalt salt ControlSequence {csHash} =
-    salt + csHash
-
-  hash ControlSequence {csHash} =
-    csHash
+mkControlSequence :: [Code.CharCode] -> ControlSequence
+mkControlSequence csChars = ControlSequence $ BS.pack $ Code.codeWord <$> csChars
 
 instance Describe ControlSequence where
 
-  describe ControlSequence {csChars} =
-    let s = "\\" <> toS (toList (Code.unsafeCodeAsChar <$> csChars))
+  describe (ControlSequence bs) =
+    let s = "\\" <> toS bs
     in singleLine $ "ControlSequence " <> quote s
 
 -- Make sure code-list is non-empty.
 instance Arbitrary ControlSequence where
   arbitrary =
-    mkControlSequence . Seq.fromList <$> QC.listOf1 arbitrary
+    mkControlSequence <$> QC.listOf1 arbitrary
 
 data ControlSequenceLike
   = ActiveCharacter Code.CharCode
   | ControlSequenceProper ControlSequence
   deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
-instance Hashable ControlSequenceLike where
-
-  hashWithSalt salt csLike =
-    salt + case csLike of
-      ActiveCharacter c ->
-        Code.codeInt c
-      ControlSequenceProper cs ->
-        hashWithSalt salt cs
-
-  hash = \case
-    ActiveCharacter c ->
-      Code.codeInt c
-    ControlSequenceProper cs ->
-      hash cs
+instance Hashable ControlSequenceLike
 
 instance Describe ControlSequenceLike where
 
@@ -75,6 +54,7 @@ data CharCat
       , cat :: Code.CoreCatCode
       }
   deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 instance Describe CharCat where
 
@@ -91,6 +71,7 @@ data Token
   = CharCatToken CharCat
   | ControlSequenceToken ControlSequence
   deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 instance Describe Token where
 
@@ -133,7 +114,7 @@ chopBreak getNext = go Empty
         go (acc :|> c) csRest
 
 parToken :: Token
-parToken = ControlSequenceToken $ mkControlSequence $ Seq.fromList $ Code.unsafeCodeFromChar <$> ("par" :: [Char])
+parToken = ControlSequenceToken $ mkControlSequence $ Code.unsafeCodeFromChar <$> ("par" :: [Char])
 
 extractToken
   :: (Code.CharCode -> Code.CatCode)
@@ -160,7 +141,7 @@ extractToken charToCat = go
                 Code.CoreCatCode Code.Letter -> SkippingBlanks
                 _ -> LineMiddle
           pure
-            ( ControlSequenceToken $ mkControlSequence (Cat.char <$> ctrlSeqCCs)
+            ( ControlSequenceToken $ mkControlSequence $ toList (Cat.char <$> ctrlSeqCCs)
             , nextState
             , restPostCtrlSeq
             )

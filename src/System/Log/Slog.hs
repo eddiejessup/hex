@@ -14,24 +14,23 @@ class Monad m => MonadSlog m where
 
   sTime :: m UTCTime
 
-sLogs :: (MonadSlog m, Foldable f, Functor f) => f ByteString -> m ()
-sLogs ts = sequence_ $ sLog <$> ts
+instance MonadSlog m => MonadSlog (StateT st m) where
+  sLog bs = lift $ sLog bs
 
-sLogText :: MonadSlog m => Text -> m ()
-sLogText = sLog . encodeUtf8
+  sTime = lift sTime
 
-sLogJSONMap :: MonadSlog m => Map Text Text -> m ()
-sLogJSONMap = sLog . BS.L.toStrict . Ae.encode
+instance MonadSlog m => MonadSlog (ExceptT e m) where
+  sLog bs = lift $ sLog bs
 
-sLogStampedJSONMap :: MonadSlog m => Map Text Text -> m ()
-sLogStampedJSONMap kvs = do
-  utcTime <- sTime
-  sLogJSONMap $ insert "timestamp" (toS $ iso8601Show utcTime) kvs
+  sTime = lift sTime
 
-sLogStampedJSON :: MonadSlog m => Text -> [(Text, Text)] -> m ()
+sLogAsJSON :: (MonadSlog m, Ae.ToJSON a) => a -> m ()
+sLogAsJSON = sLog . BS.L.toStrict . Ae.encode
+
+sLogStampedJSON :: MonadSlog m => Text -> [(Text, Ae.Value)] -> m ()
 sLogStampedJSON msg kvs = do
   utcTime <- sTime
-  sLogJSONMap
-    $ insert "timestamp" (toS $ iso8601Show utcTime)
-    $ insert "message" msg
+  sLogAsJSON
+    $ insert "timestamp" (Ae.String (toS $ iso8601Show utcTime))
+    $ insert "message" (Ae.String msg)
     $ fromList kvs

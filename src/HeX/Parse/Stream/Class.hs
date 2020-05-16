@@ -5,6 +5,7 @@ module Hex.Parse.Stream.Class where
 
 import qualified Control.Monad.Combinators as PC
 import qualified Data.ByteString.Lazy as BS.L
+import qualified Data.ByteString as BS
 import qualified Data.Generics.Product.Typed as G.P
 import qualified Data.List.NonEmpty as L.NE
 import qualified Data.Map.Strict as Map
@@ -540,17 +541,6 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr parseNext Discard
       _ ->
         Nothing
 
--- Case 10, character constant like "`c".
-unsafeParseCharLike :: MonadTeXParse m => m Code.CharCode
-unsafeParseCharLike = handleLex tokToCharLike
-  where
-    tokToCharLike (Lex.CharCatToken CharCat {char = c}) =
-      Just c
-    tokToCharLike (Lex.ControlSequenceToken Lex.ControlSequence {Lex.csChars = c :<| Empty}) =
-      Just c
-    tokToCharLike _ =
-      Nothing
-
 -- Interface.
 parseBalancedText :: MonadTeXParse m => TerminusPolicy -> m BalancedText
 parseBalancedText = withInhibition . unsafeParseBalancedText
@@ -558,8 +548,19 @@ parseBalancedText = withInhibition . unsafeParseBalancedText
 parseMacroArgs :: MonadTeXParse m => MacroContents -> m (Map.Map Digit MacroArgument)
 parseMacroArgs = withInhibition . unsafeParseMacroArgs
 
+-- Case 10, character constant like "`c".
 parseCharLike :: MonadTeXParse m => m Code.CharCode
-parseCharLike = withInhibition unsafeParseCharLike
+parseCharLike =
+  withInhibition $ handleLex $ \case
+    Lex.CharCatToken CharCat {char = c} ->
+      Just c
+    Lex.ControlSequenceToken (Lex.ControlSequence bs) -> do
+      -- If bytestring is empty, fail to parse.
+      (c, rest) <- BS.uncons bs
+      -- Succeed if rest is empty, i.e. whole thing is one word long.
+      if BS.null rest
+        then Just $ Code.CharCode c
+        else Nothing
 
 parseCSName :: MonadTeXParse m => m Lex.ControlSequenceLike
 parseCSName = withInhibition unsafeParseCSName

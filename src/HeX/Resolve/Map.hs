@@ -4,7 +4,6 @@ import           Hexlude
 
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.ByteString.Lazy as BS.L
-import qualified Data.Sequence as Seq
 
 import qualified Hex.BreakList.Elem  as BL.E
 import qualified Hex.Config.Codes    as Code
@@ -49,7 +48,6 @@ usableCodesToResolvedTokens = codesToResolvedTokens Code.usableCatLookup default
 _cs :: [Char] -> Lex.ControlSequenceLike
 _cs = Lex.ControlSequenceProper
       . Lex.mkControlSequence
-      . Seq.fromList
       . fmap Code.unsafeCodeFromChar
 
 syntaxTok :: SyntaxCommandHeadToken -> ResolvedToken

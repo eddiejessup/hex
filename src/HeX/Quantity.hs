@@ -61,7 +61,8 @@ data PhysicalUnit
     | Didot -- 'dd'
     | Cicero -- 'cc'
     | ScaledPoint -- 'sp'
-    deriving stock (Show)
+    deriving stock (Show, Generic)
+    deriving anyclass (ToJSON)
 
 instance Describe PhysicalUnit where
     describe = \case
@@ -110,13 +111,13 @@ showSP n =
   showFrac ((realToFrac n * realToFrac (scaledPointIn Point)) :: Double) <> "pt"
 
 newtype TeXInt = TeXInt { unInt :: Int }
-    deriving stock (Show, Generic)
+    deriving stock (Show)
     deriving newtype (Num, Eq, Ord, Enum, Bounded, Real, Integral, Hashable, Bits,
-                      FiniteBits, Describe)
+                      FiniteBits, Describe, ToJSON)
 
 newtype Length = Length { unLength :: Int }
     deriving stock (Show)
-    deriving newtype (Num, Eq, Ord, Enum, Real, Integral)
+    deriving newtype (Num, Eq, Ord, Enum, Real, Integral, ToJSON)
 
 lengthToInt :: Length -> TeXInt
 lengthToInt (Length x) = TeXInt x

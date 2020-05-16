@@ -9,6 +9,8 @@ import           Control.Monad.Catch      (MonadThrow)
 import qualified Data.Containers          as D.C
 import qualified Data.Generics.Product    as G.P
 
+import           Data.HashMap.Strict      (HashMap)
+import qualified Data.HashMap.Strict      as HashMap
 import           Data.Map.Strict          ((!?))
 import qualified Data.Map.Strict          as Map
 import qualified Data.Path                as D.Path
@@ -46,7 +48,7 @@ type RegisterMap v = Map EightBitInt v
 data Scope =
     Scope { -- Fonts.
             currentFontNr :: Maybe TeXInt
-          , familyMemberFonts :: Map (FontRange, TeXInt) TeXInt
+          , familyMemberFonts :: HashMap (FontRange, TeXInt) TeXInt
             -- Control sequences.
           , csMap :: CSMap
             -- Char-code attribute maps.
@@ -57,11 +59,11 @@ data Scope =
           , spaceFactors :: Code.CharCodeMap Code.SpaceFactorCode
           , delimiterCodes :: Code.CharCodeMap Code.DelimiterCode
             -- Parameters.
-          , texIntParameters :: Map TeXIntParameter TeXInt
-          , lengthParameters :: Map LengthParameter Length
-          , glueParameters :: Map GlueParameter (BL.Glue Length)
-          , mathGlueParameters :: Map MathGlueParameter (BL.Glue MathLength)
-          , tokenListParameters :: Map TokenListParameter BalancedText
+          , texIntParameters :: HashMap TeXIntParameter TeXInt
+          , lengthParameters :: HashMap LengthParameter Length
+          , glueParameters :: HashMap GlueParameter (BL.Glue Length)
+          , mathGlueParameters :: HashMap MathGlueParameter (BL.Glue MathLength)
+          , tokenListParameters :: HashMap TokenListParameter BalancedText
             -- Registers.
           , texIntRegister :: RegisterMap TeXInt
           , lengthRegister :: RegisterMap Length
@@ -123,8 +125,8 @@ newLocalScope =
 data Config =
     Config { fontInfos            :: Map TeXInt FontInfo
            , searchDirectories    :: [Path Abs Dir]
-           , specialTeXInts       :: Map SpecialTeXInt TeXInt
-           , specialLengths       :: Map SpecialLength Length
+           , specialTeXInts       :: HashMap SpecialTeXInt TeXInt
+           , specialLengths       :: HashMap SpecialLength Length
              -- File streams.
            , logStream            :: Handle
            , outFileStreams       :: Map FourBitInt Handle
@@ -248,18 +250,18 @@ modifyFont fNr f =
 -- Special quantities.
 
 lookupSpecialTeXInt :: SpecialTeXInt -> Config -> TeXInt
-lookupSpecialTeXInt p c = Map.findWithDefault 0 p (specialTeXInts c)
+lookupSpecialTeXInt p c = HashMap.lookupDefault 0 p (specialTeXInts c)
 
 lookupSpecialLength :: SpecialLength -> Config -> Length
-lookupSpecialLength p c = Map.findWithDefault (Length 0) p (specialLengths c)
+lookupSpecialLength p c = HashMap.lookupDefault (Length 0) p (specialLengths c)
 
 setSpecialTeXInt :: SpecialTeXInt -> TeXInt -> Config -> Config
 setSpecialTeXInt p v c =
-    c{ specialTeXInts = Map.insert p v $ specialTeXInts c }
+    c{ specialTeXInts = HashMap.insert p v $ specialTeXInts c }
 
 setSpecialLength :: SpecialLength -> Length -> Config -> Config
 setSpecialLength p v c =
-    c{ specialLengths = Map.insert p v $ specialLengths c }
+    c{ specialLengths = HashMap.insert p v $ specialLengths c }
 
 -- Scoped.
 

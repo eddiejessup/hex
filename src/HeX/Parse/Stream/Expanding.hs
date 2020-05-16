@@ -4,11 +4,13 @@ module Hex.Parse.Stream.Expanding where
 
 import qualified Optics.Cons.Core as O.Cons
 import qualified Data.ByteString.Lazy as BS.L
+import qualified Data.ByteString as BS
 import qualified Data.Generics.Product as G.P
 import qualified Data.List.NonEmpty as L.NE
 import Data.Map.Strict ((!?))
 import qualified Data.Map.Strict as Map
 import qualified Data.Path
+import qualified Data.Sequence as Seq
 import qualified Hex.Config as Conf
 import qualified Hex.Config.Codes as Code
 import Hex.Evaluate
@@ -60,21 +62,26 @@ pFetchPrimitiveToken
      , AsType Data.Path.PathError e
 
      , MonadIO m
+     , MonadSlog m
 
      , MonadState st m
      , HasType Conf.Config st
      )
   => TeXParseT ExpandingStream m PrimitiveToken
 pFetchPrimitiveToken = do
-  (rt, _) <- pTakeAndExpandResolvedToken
+  (rt, lts) <- pTakeAndExpandResolvedToken
   case rt of
     -- If it's a primitive token, provide that.
     PrimitiveToken pt ->
       pure pt
     -- If it indicates the start of a syntax command, parse the
     -- remainder of the syntax command.
-    SyntaxCommandHeadToken _ ->
-      -- traceText ("inserting lextoks: " <> show lts <> " and reading again") (pInsertLexTokens lts)
+    SyntaxCommandHeadToken t -> do
+      lift $ sLogStampedJSON "Inserting lex tokens and reading again"
+        [ ("lexTokens", toJSON lts)
+        , ("SyntaxCommandHeadToken", toJSON t)
+        ]
+      pInsertLexTokens lts
       pFetchPrimitiveToken
 
 try :: Monad m => TeXParseT ExpandingStream m a -> TeXParseT ExpandingStream m a
@@ -95,6 +102,7 @@ instance
   , AsType Data.Path.PathError e
 
   , MonadIO m
+  , MonadSlog m
 
   , MonadState st m -- Read-only
   , HasType Conf.Config st
@@ -220,7 +228,7 @@ instance TeXStream ExpandingStream where
   conditionBodyStateLens = G.P.typed @[ConditionBodyState]
 
 -- Expanding syntax commands.
-expandCSName :: Applicative t => Seq Code.CharCode -> t Lex.Token
+expandCSName :: Applicative t => [Code.CharCode] -> t Lex.Token
 expandCSName charToks =
   -- TODO: if control sequence doesn't exist, define one that holds
   -- '\relax'.
@@ -230,18 +238,19 @@ expandString
   :: Conf.IntParamVal 'EscapeChar
   -> Lex.Token
   -> Seq Lex.Token
-expandString (Conf.IntParamVal escapeCharCodeInt) tok = case tok of
-  Lex.CharCatToken _ ->
-    singleton tok
-  Lex.ControlSequenceToken Lex.ControlSequence {Lex.csChars} ->
-    charCodeAsMadeToken <$> addEscapeChar csChars
-  where
-    addEscapeChar = case Code.fromTeXInt escapeCharCodeInt of
-      Nothing -> id
-      Just escapeCharCode ->
-        if (escapeCharCodeInt < 0) || (escapeCharCodeInt > 255)
-        then id
-        else (escapeCharCode :<|)
+expandString (Conf.IntParamVal escapeCharCodeInt) tok =
+  case tok of
+    Lex.CharCatToken _ ->
+      singleton tok
+    Lex.ControlSequenceToken (Lex.ControlSequence bs) ->
+      let csCodes = Seq.fromList $ Code.CharCode <$> BS.unpack bs
+      in charCodeAsMadeToken <$> case Code.fromTeXInt escapeCharCodeInt of
+        Nothing -> csCodes
+        Just escapeCharCode
+          | (escapeCharCodeInt < 0) || (escapeCharCodeInt > 255) ->
+            csCodes
+          | otherwise ->
+            escapeCharCode <| csCodes
 
 expandMacro
   :: ( MonadError e m

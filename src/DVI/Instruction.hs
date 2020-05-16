@@ -22,11 +22,11 @@ newtype DVIError = DVIError Text
 data ArgVal = UIntArgVal UIntArgVal | SIntArgVal SIntArgVal | StringArgVal Ascii.AsciiString
   deriving stock Show
 
-instance Encodable ArgVal where
+instance DVIEncodable ArgVal where
 
-  encode (UIntArgVal v) = encode v
-  encode (SIntArgVal v) = encode v
-  encode (StringArgVal v) = Ascii.toByteString v
+  dviEncode (UIntArgVal v) = dviEncode v
+  dviEncode (SIntArgVal v) = dviEncode v
+  dviEncode (StringArgVal v) = Ascii.toByteString v
 
 instance Describe ArgVal where
   describe a = singleLine $ mappend "ArgVal/" $ case a of
@@ -97,17 +97,17 @@ sintArgValFromInt n = case bytesNeededSigned n of
   4 -> pure $ S4 $ fromIntegral n
   b -> throwError $ injectTyped $ DVIError $ "Cannot represent " <> show n <> " as signed int: needs " <> show b <> " bytes"
 
-instance Encodable UIntArgVal where
+instance DVIEncodable UIntArgVal where
 
-  encode a =
+  dviEncode a =
     BS.L.toStrict $ case a of
       U1 v -> B.encode v
       U2 v -> B.encode v
       U4 v -> B.encode v
 
-instance Encodable SIntArgVal where
+instance DVIEncodable SIntArgVal where
 
-  encode a =
+  dviEncode a =
     BS.L.toStrict $ case a of
       S1 v -> B.encode v
       S2 v -> B.encode v
@@ -116,9 +116,9 @@ instance Encodable SIntArgVal where
 data EncodableInstruction = EncodableInstruction Operation [ArgVal]
   deriving stock Show
 
-instance Encodable EncodableInstruction where
+instance DVIEncodable EncodableInstruction where
 
-  encode (EncodableInstruction op args) = encode op `BS.append` encode args
+  dviEncode (EncodableInstruction op args) = dviEncode op `BS.append` dviEncode args
 
 instance Describe EncodableInstruction where
 

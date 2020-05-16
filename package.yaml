@@ -91,6 +91,7 @@ tests:
 default-extensions:
 - ConstraintKinds
 - DataKinds
+- DeriveAnyClass
 - DeriveFoldable
 - DeriveFunctor
 - DeriveGeneric

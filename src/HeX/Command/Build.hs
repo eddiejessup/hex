@@ -429,9 +429,9 @@ handleModeIndependentCommand s = \case
                     oth ->
                         panic $ "Not implemented: DefineControlSequence target " <> show oth
                 sLogStampedJSON "Defining control sequence"
-                    [ ("controlSequence", renderDescribed cs)
-                    , ("token", show newCSTok)
-                    , ("global", show global)
+                    [ ("controlSequence", toJSON cs)
+                    , ("token", toJSON newCSTok)
+                    , ("global", toJSON global)
                     ]
                 modify $ typed @Config %~ setControlSequence cs newCSTok global
                 pure (s, AddMaybeElem maybeElem)
@@ -481,13 +481,13 @@ handleModeIndependentCommand s = \case
                 eVal <- texEvaluate val
                 idxChar <- note (injectTyped $ ConfigError $ "Invalid character code index: " <> show eIdx) (fromTeXInt eIdx)
                 sLogStampedJSON "Doing code assignment"
-                    [ ("codeTableIndexSymbolic", show idx)
-                    , ("codeTableIndexEvaluated", show eIdx)
-                    , ("codeTableIndexAsChar", show idxChar)
-                    , ("codeTableValueSymbolic", show val)
-                    , ("codeTableValueEvaluated", renderDescribed eVal)
-                    , ("codeType", show codeType)
-                    , ("global", show global)
+                    [ ("codeTableIndexSymbolic", toJSON idx)
+                    , ("codeTableIndexEvaluated", toJSON eIdx)
+                    , ("codeTableIndexAsChar", toJSON idxChar)
+                    , ("codeTableValueSymbolic", toJSON val)
+                    , ("codeTableValueEvaluated", toJSON eVal)
+                    , ("codeType", toJSON codeType)
+                    , ("global", toJSON global)
                     ]
                 updateCharCodeMap codeType idxChar eVal global
                 pure (s, AddMaybeElem Nothing)

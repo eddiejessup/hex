@@ -106,7 +106,8 @@ instance Describe VList where
 data VBoxAlignType
   = DefaultAlign -- \vbox
   | TopAlign -- \vtop
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
 
 -- Vertical list.
 data VListElem

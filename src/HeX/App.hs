@@ -50,3 +50,30 @@ runApp
   -> m (Either AppError a)
 runApp f c =
   liftIO (evalStateT (runExceptT $ unApp f) c)
+
+
+
+newtype ErrorlessApp a
+  = ErrorlessApp {unErrorlessApp :: StateT Conf.Config IO a}
+  deriving newtype
+    ( Functor
+    , Applicative
+    , Monad
+    , MonadState Conf.Config
+    , MonadIO
+    )
+
+instance MonadSlog ErrorlessApp where
+  sLog msg = do
+    loggerSet <- gets Conf.internalLoggerSet
+    liftIO $ Log.pushLogStrLn loggerSet (Log.toLogStr msg)
+
+  sTime = liftIO getCurrentTime
+
+runErrorlessApp
+  :: MonadIO m
+  => ErrorlessApp a
+  -> Conf.Config
+  -> m a
+runErrorlessApp f c =
+  liftIO (evalStateT (unErrorlessApp f) c)

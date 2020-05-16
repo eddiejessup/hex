@@ -22,7 +22,7 @@ class TeXCode a where
     fromTeXInt :: TeXInt -> Maybe a
 
 newtype CharCode = CharCode { codeWord :: Word8 }
-    deriving newtype (Show, Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits, Hashable)
+    deriving newtype (Show, Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits, Hashable, ToJSON)
 
 instance Arbitrary CharCode where
     arbitrary = QC.elements [0x20..0x7e]
@@ -40,15 +40,6 @@ instance TeXCode CharCode where
         | n > 256 = Nothing
         | n < 0 = Nothing
         | otherwise = Just $ fromIntegral n
-
--- TODO: Remove this hashing crap (see Hex.Lex).
-data SPInt = SP !Int !Int
-
-instance Hashable (Seq CharCode) where
-    hashWithSalt salt0 arr = finalise (foldl' step (SP salt0 0) arr)
-      where
-        finalise (SP salt len) = hashWithSalt salt len
-        step (SP salt len) x = SP (hashWithSalt salt x) (len + 1)
 
 readCharCodes :: MonadIO m => Path a File -> m BS.L.ByteString
 readCharCodes path = liftIO (BS.L.readFile (Path.toFilePath path))
@@ -302,6 +293,7 @@ data CoreCatCode
     | Other        -- 12
     | Active       -- 13
     deriving stock (Show, Eq, Generic)
+    deriving anyclass (ToJSON)
 
 instance Describe CoreCatCode where
     describe a = singleLine $ "CoreCatCode/" <> show a
@@ -317,6 +309,7 @@ data CatCode
     | Invalid      -- 15
     | CoreCatCode CoreCatCode
     deriving stock (Show, Eq, Generic)
+    deriving anyclass (ToJSON)
 
 instance Describe CatCode where
     describe = \case
