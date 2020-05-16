@@ -212,7 +212,7 @@ data ExpandDefFlag
   deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
-data GlobalFlag
+data ScopeFlag
   = Global
   | Local
   deriving stock (Show, Eq, Generic)
@@ -466,7 +466,7 @@ data PrimitiveToken
   | AssignPrefixTok AssignPrefixTok
   | -- > > Modifying how to parse the macro.
     --     \def, \gdef, \edef (expanded-def), \xdef (global-expanded-def).
-    DefineMacroTok GlobalFlag ExpandDefFlag
+    DefineMacroTok ScopeFlag ExpandDefFlag
   | -- > Setting variable values.
     IntParamVarTok TeXIntParameter
   | LenParamVarTok LengthParameter

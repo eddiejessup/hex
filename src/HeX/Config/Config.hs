@@ -317,11 +317,11 @@ modifyKey :: D.C.IsMap map
           => Lens' Scope map
           -> D.C.ContainerKey map
           -> KeyOperation (D.C.MapValue map)
-          -> GlobalFlag
+          -> ScopeFlag
           -> Config
           -> Config
-modifyKey mapLens k keyOp globalFlag c =
-    case globalFlag of
+modifyKey mapLens k keyOp scopeFlag c =
+    case scopeFlag of
         Global ->
             c   & G.P.field @"globalScope" %~ modOp
                 & G.P.field @"groups" %~ fmap (modGroupScope deleteKeyFromScope)
@@ -340,7 +340,7 @@ insertKey :: D.C.IsMap map
           => Lens' Scope map
           -> D.C.ContainerKey map
           -> D.C.MapValue map
-          -> GlobalFlag
+          -> ScopeFlag
           -> Config
           -> Config
 insertKey mapLens k v = modifyKey mapLens k (InsertVal v)
@@ -348,7 +348,7 @@ insertKey mapLens k v = modifyKey mapLens k (InsertVal v)
 deleteKey :: D.C.IsMap map
           => Lens' Scope map
           -> D.C.ContainerKey map
-          -> GlobalFlag
+          -> ScopeFlag
           -> Config
           -> Config
 deleteKey mapLens k = modifyKey mapLens k DeleteVal
@@ -387,9 +387,9 @@ mLookupCurrentFontNr = do
     mayFNr <- gets $ lookupCurrentFontNr . getTyped @Config
     note (injectTyped $ ConfigError "Font number isn't set") mayFNr
 
-selectFontNr :: TeXInt -> GlobalFlag -> Config -> Config
-selectFontNr n globalFlag c@Config{ globalScope, groups } =
-    case globalFlag of
+selectFontNr :: TeXInt -> ScopeFlag -> Config -> Config
+selectFontNr n scopeFlag c@Config{ globalScope, groups } =
+    case scopeFlag of
         Global ->
             c{ globalScope = selectFontInScope globalScope
              , groups = modGroupScope deselectFontInScope <$> groups
@@ -403,7 +403,7 @@ selectFontNr n globalFlag c@Config{ globalScope, groups } =
 setFamilyMemberFont
     :: (FontRange, TeXInt)
     -> TeXInt
-    -> GlobalFlag
+    -> ScopeFlag
     -> Config
     -> Config
 setFamilyMemberFont = insertKey (G.P.field @"familyMemberFonts")
@@ -430,7 +430,7 @@ lookupCSProper cs = lookupCS (Lex.ControlSequenceProper cs)
 setControlSequence
     :: Lex.ControlSequenceLike
     -> ResolvedToken
-    -> GlobalFlag
+    -> ScopeFlag
     -> Config
     -> Config
 setControlSequence = insertKey (G.P.field @"csMap")
@@ -457,9 +457,9 @@ updateCharCodeMap
     => CodeType
     -> Code.CharCode
     -> TeXInt
-    -> GlobalFlag
+    -> ScopeFlag
     -> m ()
-updateCharCodeMap t c n globalFlag = do
+updateCharCodeMap t c n scopeFlag = do
     insert <- case t of
         CategoryCodeType       ->
             noteConfigError (Code.fromTeXInt n) <&> insertKey (G.P.field @"catCodes") c
@@ -476,7 +476,7 @@ updateCharCodeMap t c n globalFlag = do
             noteConfigError $ Code.fromTeXInt n <&> insertKey (G.P.field @"spaceFactors") c
         DelimiterCodeType      ->
             noteConfigError $ Code.fromTeXInt n <&> insertKey (G.P.field @"delimiterCodes") c
-    modify $ typed @Config %~ insert globalFlag
+    modify $ typed @Config %~ insert scopeFlag
   where
     noteConfigError :: (MonadError e m, AsType ConfigError e) => Maybe a -> m a
     noteConfigError =
@@ -507,7 +507,7 @@ lookupTokenListParameter p conf =
 setTeXIntParameter
     :: TeXIntParameter
     -> TeXInt
-    -> GlobalFlag
+    -> ScopeFlag
     -> Config
     -> Config
 setTeXIntParameter = insertKey (G.P.field @"texIntParameters")
@@ -515,18 +515,18 @@ setTeXIntParameter = insertKey (G.P.field @"texIntParameters")
 setLengthParameter
     :: LengthParameter
     -> Length
-    -> GlobalFlag
+    -> ScopeFlag
     -> Config
     -> Config
 setLengthParameter = insertKey (G.P.field @"lengthParameters")
 
-setGlueParameter :: GlueParameter -> BL.Glue Length -> GlobalFlag -> Config -> Config
+setGlueParameter :: GlueParameter -> BL.Glue Length -> ScopeFlag -> Config -> Config
 setGlueParameter = insertKey (G.P.field @"glueParameters")
 
 setMathGlueParameter
     :: MathGlueParameter
     -> BL.Glue MathLength
-    -> GlobalFlag
+    -> ScopeFlag
     -> Config
     -> Config
 setMathGlueParameter = insertKey (G.P.field @"mathGlueParameters")
@@ -534,7 +534,7 @@ setMathGlueParameter = insertKey (G.P.field @"mathGlueParameters")
 setTokenListParameter
     :: TokenListParameter
     -> BalancedText
-    -> GlobalFlag
+    -> ScopeFlag
     -> Config
     -> Config
 setTokenListParameter = insertKey (G.P.field @"tokenListParameters")
@@ -573,21 +573,21 @@ lookupTokenListRegister p conf =
 lookupBoxRegister :: EightBitInt -> Config -> Maybe (B.Box B.BoxContents)
 lookupBoxRegister = scopedMapLookup boxRegister
 
-setTeXIntRegister :: EightBitInt -> TeXInt -> GlobalFlag -> Config -> Config
+setTeXIntRegister :: EightBitInt -> TeXInt -> ScopeFlag -> Config -> Config
 setTeXIntRegister =
     insertKey (G.P.field @"texIntRegister")
 
-setLengthRegister :: EightBitInt -> Length -> GlobalFlag -> Config -> Config
+setLengthRegister :: EightBitInt -> Length -> ScopeFlag -> Config -> Config
 setLengthRegister =
     insertKey (G.P.field @"lengthRegister")
 
-setGlueRegister :: EightBitInt -> BL.Glue Length -> GlobalFlag -> Config -> Config
+setGlueRegister :: EightBitInt -> BL.Glue Length -> ScopeFlag -> Config -> Config
 setGlueRegister = insertKey (G.P.field @"glueRegister")
 
 setMathGlueRegister
     :: EightBitInt
     -> BL.Glue MathLength
-    -> GlobalFlag
+    -> ScopeFlag
     -> Config
     -> Config
 setMathGlueRegister = insertKey (G.P.field @"mathGlueRegister")
@@ -595,20 +595,20 @@ setMathGlueRegister = insertKey (G.P.field @"mathGlueRegister")
 setTokenListRegister
     :: EightBitInt
     -> BalancedText
-    -> GlobalFlag
+    -> ScopeFlag
     -> Config
     -> Config
 setTokenListRegister =
     insertKey (G.P.field @"tokenListRegister")
 
-setBoxRegister :: EightBitInt -> B.Box B.BoxContents -> GlobalFlag -> Config -> Config
+setBoxRegister :: EightBitInt -> B.Box B.BoxContents -> ScopeFlag -> Config -> Config
 setBoxRegister = insertKey (G.P.field @"boxRegister")
 
-delBoxRegister :: EightBitInt -> GlobalFlag -> Config -> Config
+delBoxRegister :: EightBitInt -> ScopeFlag -> Config -> Config
 delBoxRegister = deleteKey (G.P.field @"boxRegister")
 
 setBoxRegisterNullable :: EightBitInt
-                            -> GlobalFlag -> Maybe (B.Box B.BoxContents) -> Config -> Config
+                            -> ScopeFlag -> Maybe (B.Box B.BoxContents) -> Config -> Config
 setBoxRegisterNullable idx global = \case
     -- If the fetched box is null, delete the left-hand
     -- register's contents. Otherwise set the register to

@@ -19,7 +19,7 @@ class TeXVariable a where
        , AsType ConfigError e
        )
     => a
-    -> HP.GlobalFlag
+    -> HP.ScopeFlag
     -> EvalTarget a
     -> m ()
 
@@ -34,52 +34,52 @@ setValueFromAST
      , EvalTarget a ~ EvalTarget b
      )
   => a
-  -> HP.GlobalFlag
+  -> HP.ScopeFlag
   -> b
   -> m ()
-setValueFromAST var globalFlag astVal =
-  texEvaluate astVal >>= setValue var globalFlag
+setValueFromAST var scopeFlag astVal =
+  texEvaluate astVal >>= setValue var scopeFlag
 
 instance TeXVariable HP.TeXIntVariable where
 
-  setValue v globalFlag tgt = case v of
+  setValue v scopeFlag tgt = case v of
     HP.ParamVar p ->
-      modify $ typed @Config %~ setTeXIntParameter p tgt globalFlag
+      modify $ typed @Config %~ setTeXIntParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setTeXIntRegister i tgt globalFlag)
+        (\i -> modify $ typed @Config %~ setTeXIntRegister i tgt scopeFlag)
 
 instance TeXVariable HP.LengthVariable where
 
-  setValue v globalFlag tgt = case v of
-    HP.ParamVar p -> modify $ typed @Config %~ setLengthParameter p tgt globalFlag
+  setValue v scopeFlag tgt = case v of
+    HP.ParamVar p -> modify $ typed @Config %~ setLengthParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setLengthRegister i tgt globalFlag)
+        (\i -> modify $ typed @Config %~ setLengthRegister i tgt scopeFlag)
 
 instance TeXVariable HP.GlueVariable where
 
-  setValue v globalFlag tgt = case v of
-    HP.ParamVar p -> modify $ typed @Config %~ setGlueParameter p tgt globalFlag
+  setValue v scopeFlag tgt = case v of
+    HP.ParamVar p -> modify $ typed @Config %~ setGlueParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setGlueRegister i tgt globalFlag)
+        (\i -> modify $ typed @Config %~ setGlueRegister i tgt scopeFlag)
 
 instance TeXVariable HP.MathGlueVariable where
 
-  setValue v globalFlag tgt = case v of
-    HP.ParamVar p -> modify $ typed @Config %~ setMathGlueParameter p tgt globalFlag
+  setValue v scopeFlag tgt = case v of
+    HP.ParamVar p -> modify $ typed @Config %~ setMathGlueParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setMathGlueRegister i tgt globalFlag)
+        (\i -> modify $ typed @Config %~ setMathGlueRegister i tgt scopeFlag)
 
 instance TeXVariable HP.TokenListVariable where
 
-  setValue v globalFlag tgt = case v of
-    HP.ParamVar p -> modify $ typed @Config %~ setTokenListParameter p tgt globalFlag
+  setValue v scopeFlag tgt = case v of
+    HP.ParamVar p -> modify $ typed @Config %~ setTokenListParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setTokenListRegister i tgt globalFlag)
+        (\i -> modify $ typed @Config %~ setTokenListRegister i tgt scopeFlag)
 
 instance TeXVariable HP.SpecialTeXInt where
 
@@ -111,12 +111,12 @@ class TeXVariable a => TeXNumericVariable a where
        , EvalTarget b ~ EvalTarget a
        )
     => a
-    -> HP.GlobalFlag
+    -> HP.ScopeFlag
     -> b
     -> m ()
-  advanceValueFromAST var globalFlag astPlusVal =
+  advanceValueFromAST var scopeFlag astPlusVal =
     (advanceOp (Proxy @a) <$> texEvaluate var <*> texEvaluate astPlusVal) >>=
-      setValue var globalFlag
+      setValue var scopeFlag
 
   scaleValueFromAST
     :: ( MonadState st m
@@ -127,16 +127,16 @@ class TeXVariable a => TeXNumericVariable a where
        , TeXEvaluable a
        )
     => a
-    -> HP.GlobalFlag
+    -> HP.ScopeFlag
     -> VDirection
     -> HP.TeXInt
     -> m ()
-  scaleValueFromAST var globalFlag vDir scaleVal = do
+  scaleValueFromAST var scopeFlag vDir scaleVal = do
     let op = case vDir of
           Upward -> scaleUpOp
           Downward -> scaleDownOp
     (op (Proxy @a) <$> texEvaluate var <*> texEvaluate scaleVal) >>=
-      setValue var globalFlag
+      setValue var scopeFlag
 
 instance TeXNumericVariable HP.TeXIntVariable where
 

@@ -399,7 +399,7 @@ handleModeIndependentCommand s = \case
         (s,) . AddMaybeElem . Just . BL.ListPenalty . BL.Penalty <$> texEvaluate n
     HP.AddKern ln ->
         (s,) . AddMaybeElem . Just . BL.VListBaseElem . B.ElemKern . B.Kern <$> texEvaluate ln
-    HP.Assign HP.Assignment { HP.global, HP.body } ->
+    HP.Assign HP.Assignment { HP.scope, HP.body } ->
         do
         (postAssignS, assignResult) <- case body of
             HP.DefineControlSequence cs tgt ->
@@ -431,49 +431,49 @@ handleModeIndependentCommand s = \case
                 sLogStampedJSON "Defining control sequence"
                     [ ("controlSequence", toJSON cs)
                     , ("token", toJSON newCSTok)
-                    , ("global", toJSON global)
+                    , ("scope", toJSON scope)
                     ]
-                modify $ typed @Config %~ setControlSequence cs newCSTok global
+                modify $ typed @Config %~ setControlSequence cs newCSTok scope
                 pure (s, AddMaybeElem maybeElem)
             HP.SetVariable ass ->
                 do
                 case ass of
                     HP.TeXIntVariableAssignment v tgt ->
-                        Var.setValueFromAST v global tgt
+                        Var.setValueFromAST v scope tgt
                     HP.LengthVariableAssignment v tgt  ->
-                        Var.setValueFromAST v global tgt
+                        Var.setValueFromAST v scope tgt
                     HP.GlueVariableAssignment v tgt    ->
-                        Var.setValueFromAST v global tgt
+                        Var.setValueFromAST v scope tgt
                     HP.MathGlueVariableAssignment v tgt  ->
-                        Var.setValueFromAST v global tgt
+                        Var.setValueFromAST v scope tgt
                     HP.TokenListVariableAssignment v tgt ->
-                        Var.setValueFromAST v global tgt
+                        Var.setValueFromAST v scope tgt
                     HP.SpecialTeXIntVariableAssignment v tgt ->
-                        Var.setValueFromAST v global tgt
+                        Var.setValueFromAST v scope tgt
                     HP.SpecialLengthVariableAssignment v tgt ->
-                        Var.setValueFromAST v global tgt
+                        Var.setValueFromAST v scope tgt
                 pure (s, AddMaybeElem Nothing)
             HP.ModifyVariable modCommand ->
                 do
                 case modCommand of
                     HP.AdvanceTeXIntVariable var plusVal ->
-                        Var.advanceValueFromAST var global plusVal
+                        Var.advanceValueFromAST var scope plusVal
                     HP.AdvanceLengthVariable var plusVal ->
-                        Var.advanceValueFromAST var global plusVal
+                        Var.advanceValueFromAST var scope plusVal
                     HP.AdvanceGlueVariable var plusVal ->
-                        Var.advanceValueFromAST var global plusVal
+                        Var.advanceValueFromAST var scope plusVal
                     HP.AdvanceMathGlueVariable var plusVal ->
-                        Var.advanceValueFromAST var global plusVal
+                        Var.advanceValueFromAST var scope plusVal
                     HP.ScaleVariable vDir numVar scaleVal ->
                         case numVar of
                             HP.TeXIntNumericVariable var ->
-                                Var.scaleValueFromAST var global vDir scaleVal
+                                Var.scaleValueFromAST var scope vDir scaleVal
                             HP.LengthNumericVariable var ->
-                                Var.scaleValueFromAST var global vDir scaleVal
+                                Var.scaleValueFromAST var scope vDir scaleVal
                             HP.GlueNumericVariable var ->
-                                Var.scaleValueFromAST var global vDir scaleVal
+                                Var.scaleValueFromAST var scope vDir scaleVal
                             HP.MathGlueNumericVariable var ->
-                                Var.scaleValueFromAST var global vDir scaleVal
+                                Var.scaleValueFromAST var scope vDir scaleVal
                 pure (s, AddMaybeElem Nothing)
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
@@ -487,19 +487,19 @@ handleModeIndependentCommand s = \case
                     , ("codeTableValueSymbolic", toJSON val)
                     , ("codeTableValueEvaluated", toJSON eVal)
                     , ("codeType", toJSON codeType)
-                    , ("global", toJSON global)
+                    , ("scope", toJSON scope)
                     ]
-                updateCharCodeMap codeType idxChar eVal global
+                updateCharCodeMap codeType idxChar eVal scope
                 pure (s, AddMaybeElem Nothing)
             HP.SelectFont fNr ->
                 do
-                selectFont fNr global
+                selectFont fNr scope
                 pure (s, AddMaybeElem $ Just $ BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr)
             HP.SetFamilyMember fm fontRef ->
                 do
                 eFm <- texEvaluate fm
                 fNr <- texEvaluate fontRef
-                modify $ typed @Config %~ setFamilyMemberFont eFm fNr global
+                modify $ typed @Config %~ setFamilyMemberFont eFm fNr scope
                 pure (s, AddMaybeElem Nothing)
             -- Start a new level of grouping. Enter inner mode.
             HP.SetBoxRegister lhsIdx box ->
@@ -509,7 +509,7 @@ handleModeIndependentCommand s = \case
                     HP.FetchedRegisterBox fetchMode rhsIdx ->
                         do
                         fetchedMaybeBox <- fetchBox fetchMode rhsIdx
-                        modify $ typed @Config %~ setBoxRegisterNullable eLhsIdx global fetchedMaybeBox
+                        modify $ typed @Config %~ setBoxRegisterNullable eLhsIdx scope fetchedMaybeBox
                         pure (s, AddMaybeElem Nothing)
                     HP.LastBox ->
                         panic "Not implemented: SetBoxRegister to LastBox"
@@ -520,7 +520,7 @@ handleModeIndependentCommand s = \case
                         eSpec <- texEvaluate spec
                         modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
                         (doneS, boxArg) <- extractExplicitBoxContents s eSpec boxType
-                        modify $ typed @Config %~ setBoxRegister eLhsIdx boxArg global
+                        modify $ typed @Config %~ setBoxRegister eLhsIdx boxArg scope
                         pure (doneS, AddMaybeElem Nothing)
             HP.SetFontChar (HP.FontCharRef fontChar fontRef) charRef ->
                 do

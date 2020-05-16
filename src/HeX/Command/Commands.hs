@@ -270,8 +270,8 @@ loadFont (HP.TeXFilePath path) fontSpec = do
                           , B.fontName           = fontName
                           }
 
-selectFont :: (MonadState st m, HasType Config st) => TeXInt -> HP.GlobalFlag -> m ()
-selectFont n globalFlag = modify $ typed @Config %~ selectFontNr n globalFlag
+selectFont :: (MonadState st m, HasType Config st) => TeXInt -> HP.ScopeFlag -> m ()
+selectFont n scopeFlag = modify $ typed @Config %~ selectFontNr n scopeFlag
 
 getFileStream :: Map.Map FourBitInt Handle -> TeXInt -> Maybe Handle
 getFileStream strms (TeXInt n) = do

@@ -38,7 +38,7 @@ headToParseAssignment = go []
         let body = DefineControlSequence cs (MacroTarget tgt)
         pure $ Assignment
           { body
-          , global = if defGlobalType == T.Global || T.GlobalTok `elem` prefixes
+          , scope = if defGlobalType == T.Global || T.GlobalTok `elem` prefixes
           then T.Global
           else T.Local
           }
@@ -46,7 +46,7 @@ headToParseAssignment = go []
         body <- headToParseNonMacroAssignmentBody t
         pure $ Assignment
           { body
-          , global = if T.GlobalTok `elem` prefixes
+          , scope = if T.GlobalTok `elem` prefixes
           then T.Global
           else T.Local
           }
