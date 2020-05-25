@@ -21,7 +21,6 @@ import           Hex.Command.Commands
 import           Hex.Command.Common
 import           Hex.Command.ModeIndependent
 import           Hex.Config
-import           Hex.Quantity
 import qualified Hex.Lex                     as Lex
 import qualified Hex.Parse                   as HP
 import qualified Hex.Resolve          as HR
@@ -49,58 +48,64 @@ data EndParaReason
 
 class MonadModeIndependentBuild m where
 
-    addElem :: BL.VListElem -> m ()
-
     extractExplicitBox :: B.DesiredLength -> HP.ExplicitBox -> m (B.Box B.BoxContents)
 
     insertLexToken :: Lex.Token -> m ()
 
-newtype ModeIndependentBuildT s l m a
-  = ModeIndependentBuildT {unModeIndependentBuildT :: s -> l -> m (s, l, a)}
+    revertStream :: m ()
 
-instance Functor m => Functor (ModeIndependentBuildT s l m) where
-    fmap g (ModeIndependentBuildT f) = ModeIndependentBuildT $ \s l ->
-        f s l <&> (\(s_, l_, a_) -> (s_, l_, g a_))
+    addVElem :: BL.VListElem -> m ()
 
-instance Monad m => Applicative (ModeIndependentBuildT s l m) where
-  pure a = ModeIndependentBuildT $ \s l -> pure (s, l, a)
+class MonadHModeBuild m where
+
+    addHElem :: BL.HListElem -> m ()
+
+newtype ListBuilderT s l m a
+  = ListBuilderT {unListBuilderT :: s -> s -> l -> m (s, s, l, a)}
+
+instance Functor m => Functor (ListBuilderT s l m) where
+    fmap g (ListBuilderT f) = ListBuilderT $ \s0 s1 l ->
+        f s0 s1 l <&> (\(s0_, s1_, l_, a_) -> (s0_, s1_, l_, g a_))
+
+instance Monad m => Applicative (ListBuilderT s l m) where
+  pure a = ListBuilderT $ \s0 s1 l -> pure (s0, s1, l, a)
 
   -- (<*>) :: m (a -> b) -> m a -> m b
-  (ModeIndependentBuildT fAToB) <*> (ModeIndependentBuildT fA) = ModeIndependentBuildT $ \s l -> do
-    (s_, l_, aToB) <- fAToB s l
-    (s__, l__, a) <- fA s_ l_
-    pure (s__, l__, aToB a)
+  (ListBuilderT fAToB) <*> (ListBuilderT fA) = ListBuilderT $ \s0 s1 l -> do
+    (s0_, s1_, l_, aToB) <- fAToB s0 s1 l
+    (s0__, s1__, l__, a) <- fA s0_ s1_ l_
+    pure (s0__, s1__, l__, aToB a)
 
-instance Monad m => Monad (ModeIndependentBuildT s l m) where
+instance Monad m => Monad (ListBuilderT s l m) where
   return = pure
 
   -- m a -> (a -> m b) -> m b
-  (ModeIndependentBuildT fA) >>= aToTFB = ModeIndependentBuildT $ \s l -> do
-    (s_, l_, a) <- fA s l
-    let (ModeIndependentBuildT fB) = aToTFB a
-    fB s_ l_
+  (ListBuilderT fA) >>= aToTFB = ListBuilderT $ \s0 s1 l -> do
+    (s0_, s1_, l_, a) <- fA s0 s1 l
+    let (ListBuilderT fB) = aToTFB a
+    fB s0_ s1_ l_
 
-instance MonadTrans (ModeIndependentBuildT s l) where
-  lift m = ModeIndependentBuildT $ \s l -> do
+instance MonadTrans (ListBuilderT s l) where
+  lift m = ListBuilderT $ \s0 s1 l -> do
     a <- m
-    pure (s, l, a)
+    pure (s0, s1, l, a)
 
-instance (MonadError e m) => MonadError e (ModeIndependentBuildT s l m) where
+instance (MonadError e m) => MonadError e (ListBuilderT s l m) where
   throwError = lift . throwError
 
-  catchError (ModeIndependentBuildT f) errToHandle = ModeIndependentBuildT $ \s l ->
-    catchError (f s l) $ \e -> do
-      let (ModeIndependentBuildT fRecover) = errToHandle e
-      fRecover s l
+  catchError (ListBuilderT f) errToHandle = ListBuilderT $ \s0 s1 l ->
+    catchError (f s0 s1 l) $ \e -> do
+      let (ListBuilderT fRecover) = errToHandle e
+      fRecover s0 s1 l
 
-instance MonadState st m => MonadState st (ModeIndependentBuildT s l m) where
+instance MonadState st m => MonadState st (ListBuilderT s l m) where
   get = lift get
   put = lift . put
 
-instance MonadIO m => MonadIO (ModeIndependentBuildT s l m) where
+instance MonadIO m => MonadIO (ListBuilderT s l m) where
   liftIO = lift . liftIO
 
-instance MonadSlog m => MonadSlog (ModeIndependentBuildT s l m) where
+instance MonadSlog m => MonadSlog (ListBuilderT s l m) where
   sLog = lift . sLog
 
   sTime = lift sTime
@@ -118,20 +123,24 @@ instance
 
   , MonadIO m
   , MonadSlog m
-  ) => MonadModeIndependentBuild (ModeIndependentBuildT s HList m) where
-    addElem e =
-        ModeIndependentBuildT $ \s (HList hElemSeq) ->
-            let newLst = HList $ hElemSeq :|> BL.HVListElem e
-            in pure (s, newLst, ())
+  ) => MonadModeIndependentBuild (ListBuilderT s HList m) where
+    addVElem e = addHElem (BL.HVListElem e)
 
-    insertLexToken lt =
-      ModeIndependentBuildT $ \s list_ ->
-        pure (HP.insertLexToken s lt, list_, ())
+    insertLexToken = commonInsertLexToken
 
-    extractExplicitBox desiredLength boxType =
-      ModeIndependentBuildT $ \s list_ -> do
-        (s_, box) <- extractExplicitBoxContents s desiredLength boxType
-        pure (s_, list_, box)
+    extractExplicitBox = commonExtractExplicitBox
+
+    revertStream = commonRevertStream
+
+instance
+  ( MonadError e m
+  , TeXBuildCtx st e m
+  , MonadIO m
+  ) => MonadHModeBuild (ListBuilderT s HList m) where
+    addHElem e =
+      ListBuilderT $ \s0 s1 (HList hElemSeq) ->
+        let newLst = HList $ hElemSeq :|> e
+        in pure (s0, s1, newLst, ())
 
 instance
   ( MonadError e m
@@ -146,20 +155,56 @@ instance
 
   , MonadIO m
   , MonadSlog m
-  ) => MonadModeIndependentBuild (ModeIndependentBuildT s VList m) where
-    addElem e =
-        ModeIndependentBuildT $ \s (VList vElemSeq) ->
+  ) => MonadModeIndependentBuild (ListBuilderT s VList m) where
+    addVElem e =
+        ListBuilderT $ \s0 s1 (VList vElemSeq) ->
             let newLst = VList $ vElemSeq :|> e
-            in pure (s, newLst, ())
+            in pure (s0, s1, newLst, ())
 
-    insertLexToken lt =
-      ModeIndependentBuildT $ \s list_ ->
-        pure (HP.insertLexToken s lt, list_, ())
+    insertLexToken = commonInsertLexToken
 
-    extractExplicitBox desiredLength boxType =
-      ModeIndependentBuildT $ \s list_ -> do
-        (s_, box) <- extractExplicitBoxContents s desiredLength boxType
-        pure (s_, list_, box)
+    extractExplicitBox = commonExtractExplicitBox
+
+    revertStream = commonRevertStream
+
+commonInsertLexToken
+  :: ( Applicative m
+     , HP.TeXStream s
+     )
+  => Lex.Token
+  -> ListBuilderT s l m ()
+commonInsertLexToken lt =
+  ListBuilderT $ \s0 s1 list_ ->
+    pure (s0, HP.insertLexToken s1 lt, list_, ())
+
+commonExtractExplicitBox
+  :: ( MonadError e m
+     , AsType BuildError e
+     , AsType TFMError e
+     , AsType Data.Path.PathError e
+
+     , TeXBuildCtx st e m
+
+     , HP.MonadTeXParse (HP.TeXParseT s m)
+     , HP.TeXStream s
+
+     , MonadIO m
+     , MonadSlog m
+     )
+  => B.DesiredLength
+  -> HP.ExplicitBox
+  -> ListBuilderT s l m (B.Box B.BoxContents)
+commonExtractExplicitBox desiredLength boxType =
+  ListBuilderT $ \s0 s1 list_ -> do
+    (s1_, box) <- extractExplicitBoxContents s1 desiredLength boxType
+    pure (s0, s1_, list_, box)
+
+commonRevertStream
+  :: (Applicative m)
+  => ListBuilderT s l m ()
+commonRevertStream =
+  ListBuilderT $ \s0 _s1 list_ ->
+    pure (s0, s0, list_, ())
 
 
 
@@ -168,52 +213,55 @@ instance
 
 handleCommandInParaMode
     :: ( MonadError e m
-       , AsType BuildError e
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
        , TeXBuildCtx st e m
 
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
+       , MonadModeIndependentBuild m
+       , MonadHModeBuild m
 
        , MonadIO m
        , MonadSlog m
        )
-    => s
-    -> s
-    -> HList
-    -> HP.Command
-    -> m (s, HList, Maybe EndParaReason)
-handleCommandInParaMode oldS newS hList@(HList hElemSeq) command =
-    case command of
-        HP.VModeCommand _ ->
-            -- Insert the control sequence "\par" into the input. The control
-            -- sequence's current meaning will be used, which might no longer be the \par
-            -- primitive.
-            -- (Note that we use oldS.)
-            pure (HP.insertLexToken oldS Lex.parToken, hList, Nothing)
-        HP.HModeCommand (HP.AddHGlue g) ->
-            (newS, , Nothing) . addElem_ <$> hModeAddHGlue g
-        HP.HModeCommand (HP.AddCharacter c) ->
-            (newS, , Nothing) . addElem_ <$> hModeAddCharacter c
-        HP.HModeCommand (HP.AddHRule rule) ->
-            (newS, , Nothing) . addElem_ <$> hModeAddRule rule
-        HP.AddSpace ->
-            (newS, , Nothing) . addElem_ <$> hModeAddSpace
-        HP.StartParagraph indentFlag ->
-            (newS, , Nothing) . addMaybeElem_ <$> hModeStartParagraph indentFlag
-        -- \par: Restricted: does nothing. Unrestricted (this mode): ends mode.
-        HP.EndParagraph ->
-            pure (newS, hList, Just EndParaSawEndParaCommand)
-        HP.ModeIndependentCommand modeIndependentCommand -> do
-            (doneS, doneList, sawEndBox) <- unModeIndependentBuildT (handleModeIndependentCommand modeIndependentCommand) newS hList
-            pure (doneS, doneList, if sawEndBox then Just EndParaSawLeaveBox else Nothing)
-        oth ->
-            panic $ show oth
-  where
-    addElem_ e = HList $ hElemSeq :|> e
-    addMaybeElem_ mayE = HList $ addMaybeElem hElemSeq mayE
+    => HP.Command
+    -> m (Maybe EndParaReason)
+handleCommandInParaMode = \case
+  HP.VModeCommand _ -> do
+      -- Insert the control sequence "\par" into the input. The control
+      -- sequence's current meaning will be used, which might no longer be the \par
+      -- primitive.
+      -- (Note that we use oldS.)
+      revertStream
+      insertLexToken Lex.parToken
+      pure Nothing
+  HP.HModeCommand (HP.AddHGlue g) -> do
+      addVElem =<< glueToElem g
+      pure Nothing
+  HP.HModeCommand (HP.AddCharacter c) -> do
+      addHElem =<< hModeCharacterElem c
+      pure Nothing
+  HP.HModeCommand (HP.AddHRule rule) -> do
+      addHElem =<< hModeRuleElem rule
+      pure Nothing
+  HP.AddSpace -> do
+      addHElem =<< hModeSpaceElem
+      pure Nothing
+  HP.StartParagraph indentFlag -> do
+      hModeStartParagraph indentFlag >>= \case
+        Nothing ->
+          pure ()
+        Just parIndentElem ->
+          addHElem parIndentElem
+      pure Nothing
+  -- \par: Restricted: does nothing. Unrestricted (this mode): ends mode.
+  HP.EndParagraph ->
+      pure $ Just EndParaSawEndParaCommand
+  HP.ModeIndependentCommand modeIndependentCommand -> do
+      sawEndBox <- handleModeIndependentCommand modeIndependentCommand
+      pure (if sawEndBox then Just EndParaSawLeaveBox else Nothing)
+  oth ->
+      panic $ show oth
 
 handleCommandInHBoxMode
     :: ( MonadError e m
@@ -234,25 +282,25 @@ handleCommandInHBoxMode
     -> HList
     -> HP.Command
     -> m (s, HList, Maybe ())
-handleCommandInHBoxMode _ newS hList@(HList hElemSeq) command =
+handleCommandInHBoxMode oldS newS hList@(HList hElemSeq) command =
     case command of
         HP.VModeCommand vModeCommand ->
             throwError $ injectTyped $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
         HP.HModeCommand (HP.AddCharacter c) ->
-            (newS,,Nothing) . addElem_ <$> hModeAddCharacter c
+            (newS,,Nothing) . addElem_ <$> hModeCharacterElem c
         HP.HModeCommand (HP.AddHGlue g) ->
-            (newS,,Nothing) . addElem_ <$> hModeAddHGlue g
+            (newS,,Nothing) . addElem_ . BL.HVListElem <$> glueToElem g
         HP.HModeCommand (HP.AddHRule rule) ->
-            (newS,,Nothing) . addElem_ <$> hModeAddRule rule
+            (newS,,Nothing) . addElem_ <$> hModeRuleElem rule
         HP.AddSpace ->
-            (newS,,Nothing) . addElem_ <$> hModeAddSpace
+            (newS,,Nothing) . addElem_ <$> hModeSpaceElem
         HP.StartParagraph indentFlag ->
             (newS,,Nothing) . addMaybeElem_ <$> hModeStartParagraph indentFlag
         -- \par: Restricted (this mode): does nothing. Unrestricted: ends mode.
         HP.EndParagraph ->
             pure (newS, hList, Nothing)
         HP.ModeIndependentCommand modeIndependentCommand -> do
-            (doneS, doneList, sawEndBox) <- unModeIndependentBuildT (handleModeIndependentCommand modeIndependentCommand) newS hList
+            (_, doneS, doneList, sawEndBox) <- unListBuilderT (handleModeIndependentCommand modeIndependentCommand) oldS newS hList
             pure (doneS, doneList, if sawEndBox then Just () else Nothing)
         oth ->
             panic $ "Not implemented, outer V mode: " <> show oth
@@ -284,9 +332,9 @@ handleCommandInVBoxMode oldS newS vList command =
         HP.VModeCommand HP.End ->
             throwError $ injectTyped $ BuildError "End not allowed in internal vertical mode"
         HP.VModeCommand (HP.AddVGlue g) ->
-            vModeAddVGlue g >>= addElem_ <&> (newS,,Nothing)
+            glueToElem g >>= addElem_ <&> (newS,,Nothing)
         HP.VModeCommand (HP.AddVRule rule) ->
-            vModeAddRule rule >>= addElem_ <&> (newS,,Nothing)
+            vModeRuleElem rule >>= addElem_ <&> (newS,,Nothing)
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -298,7 +346,7 @@ handleCommandInVBoxMode oldS newS vList command =
         HP.AddSpace ->
             pure (newS, vList, Nothing)
         HP.ModeIndependentCommand modeIndependentCommand -> do
-            (doneS, doneList, sawEndBox) <- unModeIndependentBuildT (handleModeIndependentCommand modeIndependentCommand) newS vList
+            (_, doneS, doneList, sawEndBox) <- unListBuilderT (handleModeIndependentCommand modeIndependentCommand) oldS newS vList
             pure (doneS, doneList, if sawEndBox then Just () else Nothing)
         oth ->
             panic $ "Not implemented, outer V mode: " <> show oth
@@ -377,9 +425,9 @@ handleCommandInMainVMode oldS newS vList command =
         HP.VModeCommand HP.End ->
             pure (newS, vList, Just ())
         HP.VModeCommand (HP.AddVGlue g) ->
-            vModeAddVGlue g >>= addElem_ <&> (newS, , Nothing)
+            glueToElem g >>= addElem_ <&> (newS, , Nothing)
         HP.VModeCommand (HP.AddVRule rule) ->
-            vModeAddRule rule >>= addElem_ <&> (newS, , Nothing)
+            vModeRuleElem rule >>= addElem_ <&> (newS, , Nothing)
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -391,7 +439,7 @@ handleCommandInMainVMode oldS newS vList command =
         HP.AddSpace ->
             pure (newS, vList, Nothing)
         HP.ModeIndependentCommand modeIndependentCommand -> do
-            (doneS, doneList, sawEndBox) <- unModeIndependentBuildT (handleModeIndependentCommand modeIndependentCommand) newS vList
+            (_, doneS, doneList, sawEndBox) <- unListBuilderT (handleModeIndependentCommand modeIndependentCommand) oldS newS vList
             when sawEndBox $ throwError $ injectTyped $ BuildError "No box to end: in main V mode"
             pure (doneS, doneList, Nothing)
         oth ->
@@ -437,7 +485,11 @@ extractPara indentFlag s = do
             pure $ Seq.singleton indentBox
         HP.DoNotIndent ->
             pure mempty
-    runCommandLoop handleCommandInParaMode s (HList initList)
+    let handleCommand oldS newS hList cmd = do
+          (_, doneS, doneList, mayEndParaReason) <- unListBuilderT (handleCommandInParaMode cmd) oldS newS hList
+          pure (doneS, doneList, mayEndParaReason)
+
+    runCommandLoop handleCommand s (HList initList)
 
 extractMainVList
     :: ( MonadError e m
@@ -488,16 +540,6 @@ extractBreakAndSetMainVList s = do
     mag <- gets $ view $ typed @Config % to (IntParamVal . lookupTeXIntParameter HP.Mag)
     pure (finalS, pages, mag)
 
-data ModeIndependentCommandAction
-    = AddElem BL.VListElem
-    | FinishBoxMode
-    | FetchBox B.DesiredLength HP.ExplicitBox BoxDestiny
-    | InsertLexToken Lex.Token
-
-data BoxDestiny
-    = RegisterDestiny EightBitInt HR.ScopeFlag
-    | ListDestiny
-
 handleModeIndependentCommand
     :: ( MonadIO m
        , MonadSlog m
@@ -532,10 +574,10 @@ handleModeIndependentCommand = \case
         modify $ typed @Config % field @"afterAssignmentToken" ?~ lt
         pure False
     HP.AddPenalty n -> do
-        addElem . BL.ListPenalty . BL.Penalty =<< texEvaluate n
+        addVElem . BL.ListPenalty . BL.Penalty =<< texEvaluate n
         pure False
     HP.AddKern ln -> do
-        addElem . BL.VListBaseElem . B.ElemKern . B.Kern =<< texEvaluate ln
+        addVElem . BL.VListBaseElem . B.ElemKern . B.Kern =<< texEvaluate ln
         pure False
     HP.Assign HP.Assignment { HP.scope, HP.body } ->
         do
@@ -561,7 +603,7 @@ handleModeIndependentCommand = \case
                     HP.FontTarget fontSpec fPath ->
                         do
                         fontDef@B.FontDefinition { B.fontNr } <- loadFont fPath fontSpec
-                        addElem $ BL.VListBaseElem $ B.ElemFontDefinition fontDef
+                        addVElem $ BL.VListBaseElem $ B.ElemFontDefinition fontDef
                         pure $ HR.primTok $ HP.FontRefToken fontNr
                     oth ->
                         panic $ "Not implemented: DefineControlSequence target " <> show oth
@@ -625,7 +667,7 @@ handleModeIndependentCommand = \case
             HP.SelectFont fNr ->
                 do
                 selectFont fNr scope
-                addElem $ BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr
+                addVElem $ BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr
             HP.SetFamilyMember fm fontRef ->
                 do
                 eFm <- texEvaluate fm
@@ -728,13 +770,13 @@ handleModeIndependentCommand = \case
                     Nothing ->
                         pure ()
                     Just b ->
-                        addElem (BL.VListBaseElem $ B.ElemBox b)
+                        addVElem (BL.VListBaseElem $ B.ElemBox b)
             HP.ExplicitBox spec boxType -> do
                 -- Start a new level of grouping. Enter inner mode.
                 eSpec <- texEvaluate spec
                 modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
                 b <- extractExplicitBox eSpec boxType
-                addElem (BL.VListBaseElem $ B.ElemBox b)
+                addVElem (BL.VListBaseElem $ B.ElemBox b)
         pure False
     oth ->
         panic $ show oth

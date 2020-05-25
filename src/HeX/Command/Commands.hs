@@ -91,21 +91,7 @@ addVListElem (BL.VList accSeq) = \case
     e ->
         pure (BL.VList (accSeq :|> e))
 
-
-hModeAddHGlue
-    :: ( MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
-
-       , MonadState st m -- Read-only
-       , HasType Config st
-       )
-    => HP.Glue
-    -> m HListElem
-hModeAddHGlue g =
-    BL.HVListElem <$> glueToElem g
-
-hModeAddCharacter
+hModeCharacterElem
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
@@ -115,13 +101,13 @@ hModeAddCharacter
        )
     => HP.CharCodeRef
     -> m HListElem
-hModeAddCharacter c =
+hModeCharacterElem c =
     texEvaluate c
         >>= characterBox
         <&> B.ElemCharacter
         <&> BL.HListHBaseElem
 
-hModeAddSpace
+hModeSpaceElem
     :: ( MonadError e m
        , AsType ConfigError e
 
@@ -129,10 +115,10 @@ hModeAddSpace
        , HasType Config st
        )
     => m HListElem
-hModeAddSpace =
+hModeSpaceElem =
     BL.HVListElem . BL.ListGlue <$> spaceGlue
 
-hModeAddRule
+hModeRuleElem
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
@@ -142,7 +128,7 @@ hModeAddRule
        )
     => HP.Rule
     -> m HListElem
-hModeAddRule rule =
+hModeRuleElem rule =
     BL.HVListElem <$> ruleToElem rule defaultWidth defaultHeight defaultDepth
   where
     defaultWidth = pure (toScaledPointApprox (0.4 :: Rational) Point)
@@ -165,18 +151,7 @@ hModeStartParagraph = \case
     HP.Indent ->
         Just <$> gets (view $ typed @Config % to parIndentBox)
 
-vModeAddVGlue
-    :: ( MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
-       , MonadState st m -- Read-only
-       , HasType Config st
-       )
-    => HP.Glue
-    -> m VListElem
-vModeAddVGlue = glueToElem
-
-vModeAddRule
+vModeRuleElem
     :: ( MonadError e m
        , AsType EvaluationError e
        , AsType ConfigError e
@@ -185,7 +160,7 @@ vModeAddRule
        )
     => HP.Rule
     -> m VListElem
-vModeAddRule rule =
+vModeRuleElem rule =
     ruleToElem rule defaultWidth defaultHeight defaultDepth
   where
     defaultWidth = gets $ view $ typed @Config % to (lookupLengthParameter HP.HSize)
