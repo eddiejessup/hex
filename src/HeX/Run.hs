@@ -112,7 +112,7 @@ expandingStreamAsCommands
 expandingStreamAsCommands = loopParser HP.parseCommand
 
 -- Paragraph list.
-renderStreamUnsetPara
+renderStreamParaList
   :: ( MonadState st m
      , HasType Conf.Config st
 
@@ -131,8 +131,8 @@ renderStreamUnsetPara
      )
   => HP.ExpandingStream
   -> m (HP.ExpandingStream, Text)
-renderStreamUnsetPara s = do
-  (endS, hList, _) <- extractParaImpl HP.Indent s
+renderStreamParaList s = do
+  (endS, hList, _) <- extractParaListImpl HP.Indent s
   pure (endS, renderDescribed hList)
 
 -- Paragraph boxes.
@@ -156,7 +156,7 @@ streamToParaBoxes
   => HP.ExpandingStream
   -> m (HP.ExpandingStream, Seq (Box HBox))
 streamToParaBoxes s = do
-  (endS, hList, _) <- extractParaImpl HP.Indent s
+  (endS, hList, _) <- extractParaListImpl HP.Indent s
   boxes <- hListToParaLineBoxes hList
   pure (endS, boxes)
 

@@ -142,9 +142,9 @@ instance
   , MonadIO m
   , MonadSlog m
   ) => MonadVModeBuild (ListBuilderT s VList m) where
-    extractPara indentFlag =
+    extractParaList indentFlag =
         ListBuilderT $ \s0 s1 list_ -> do
-          (s1_, hList, endReason) <- extractParaImpl indentFlag s1
+          (s1_, hList, endReason) <- extractParaListImpl indentFlag s1
           pure (s0, s1_, list_, (hList, endReason))
 
 insertLexTokenImpl
@@ -220,7 +220,7 @@ revertStreamImpl =
   ListBuilderT $ \s0 _s1 list_ ->
     pure (s0, s0, list_, ())
 
-extractParaImpl
+extractParaListImpl
     :: ( MonadError e m
        , AsType BuildError e
        , AsType TFMError e
@@ -237,7 +237,7 @@ extractParaImpl
     => HP.IndentFlag
     -> s
     -> m (s, HList, EndParaReason)
-extractParaImpl indentFlag s = do
+extractParaListImpl indentFlag s = do
     initList <- case indentFlag of
         HP.Indent -> do
             indentBox <- gets (view $ typed @Config % to parIndentBox)

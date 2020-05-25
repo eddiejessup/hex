@@ -4,8 +4,9 @@ import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Generics.Product as G.P
 import qualified Data.List.NonEmpty as L.NE
 import qualified Hex.App as App
+import Hex.Build.ListBuilderT
 import Hex.Categorise
-import qualified Hex.Config as Conf
+import Hex.Config
 import Hex.Lex
 import Hex.Parse
 import Hex.Resolve
@@ -40,7 +41,7 @@ main = do
   hSetBuffering stdout NoBuffering
   putText "Welcome to Hex repl"
   let s = newExpandStream Nothing mempty
-  conf <- Conf.newConfig []
+  conf <- newConfig []
   evalStateT (forever repl) (DoCat, s, conf)
 
 putResult :: MonadIO m => Text -> m ()
@@ -70,6 +71,7 @@ data ReplState
   | DoResolve
   | DoExpand
   | DoCommand
+  | DoParaList
 
 renderReplState :: ReplState -> Text
 renderReplState = \case
@@ -78,12 +80,13 @@ renderReplState = \case
   DoResolve -> "resolve"
   DoExpand -> "expand"
   DoCommand -> "command"
+  DoParaList -> "paralist"
 
-repl :: (MonadState (ReplState, ExpandingStream, Conf.Config) m, MonadIO m) => m ()
+repl :: (MonadState (ReplState, ExpandingStream, Config) m, MonadIO m) => m ()
 repl = do
   replState <- gets $ view $ typed @ReplState
   s <- gets (view (typed @ExpandingStream))
-  conf <- gets (view (typed @Conf.Config))
+  conf <- gets (view (typed @Config))
   cmd <- prompt $ "[" <> renderReplState replState <> "]"
   case cmd of
     "$cat" ->
@@ -96,6 +99,8 @@ repl = do
       modify $ typed @ReplState .~ DoExpand
     "$command" ->
       modify $ typed @ReplState .~ DoCommand
+    "$paralist" ->
+      modify $ typed @ReplState .~ DoParaList
     _ -> do
       let inpBSL = BS.L.fromStrict $ encodeUtf8 cmd
       case replState of
@@ -132,3 +137,17 @@ repl = do
 
           putResult $ renderLines $ describeNamedRelFoldable 0 "Commands" commandToks
           putMayError newS mayErr
+        DoParaList -> do
+          let sWithInput =
+                s & G.P.field @"streamTokenSources"
+                  %~ L.NE.cons (newTokenSource Nothing inpBSL)
+
+          App.runApp (extractParaListImpl DoNotIndent sWithInput) conf >>= \case
+            Right (_, hList, endParaReason) -> do
+              putText "Ended because:"
+              putText $ show endParaReason
+              putText "\n"
+              putResult $ renderDescribed hList
+            Left err -> do
+              putText "Ended with error:"
+              putText $ show err

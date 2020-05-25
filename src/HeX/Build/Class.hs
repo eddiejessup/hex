@@ -12,6 +12,7 @@ import qualified Hex.Parse                   as HP
 data EndParaReason
     = EndParaSawEndParaCommand
     | EndParaSawLeaveBox
+    deriving stock (Show)
 
 newtype BuildError = BuildError Text
     deriving stock (Show)
@@ -41,4 +42,4 @@ class MonadHModeBuild m where
 
 class MonadVModeBuild m where
 
-  extractPara :: HP.IndentFlag -> m (HList, EndParaReason)
+  extractParaList :: HP.IndentFlag -> m (HList, EndParaReason)

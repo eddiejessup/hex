@@ -125,7 +125,7 @@ renderWithMode conf input = \case
 
     for_ mayErr $ \err -> putText $ errTxtWithStream err endS
   Run.ParaListMode ->
-    App.runApp (Run.renderStreamUnsetPara inputS) conf >>= \case
+    App.runApp (Run.renderStreamParaList inputS) conf >>= \case
       Left err ->
         putText $ errTxt err
       Right (_, txt) ->

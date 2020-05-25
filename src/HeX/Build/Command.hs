@@ -151,7 +151,7 @@ handleCommandInVBoxMode = \case
     addPara indentFlag = do
       -- Note oldS.
       revertStream
-      (finalParaHList, endParaReason) <- extractPara indentFlag
+      (finalParaHList, endParaReason) <- extractParaList indentFlag
       appendParagraph finalParaHList
       pure $ case endParaReason of
         EndParaSawEndParaCommand ->
@@ -237,7 +237,7 @@ handleCommandInMainVMode = \case
       -- the stream as if the command hadn't been read. (Note that we read
       -- from "oldS", not "newS".)
       revertStream
-      (paraHList, endParaReason) <- extractPara indentFlag
+      (paraHList, endParaReason) <- extractParaList indentFlag
       appendParagraph paraHList
       case endParaReason of
         EndParaSawEndParaCommand ->
