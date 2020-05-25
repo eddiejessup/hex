@@ -1,4 +1,4 @@
-module Hex.Command.Commands where
+module Hex.Build.Helpers where
 
 import           Hexlude
 
@@ -253,6 +253,24 @@ getFileStream strms (TeXInt n) = do
     fourBitN <- newFourBitInt n
     Map.lookup fourBitN strms
 
+fetchBox
+  :: ( MonadState st m
+     , HasType Config st
+     , MonadError e m
+     , AsType ConfigError e
+     , AsType EvaluationError e
+     )
+  => HP.BoxFetchMode
+  -> HP.EightBitTeXInt
+  -> m (Maybe (B.Box B.BoxContents))
+fetchBox fetchMode idx = do
+  eIdx <- texEvaluate idx
+  fetchedMaybeBox <- gets $ view $ typed @Config % to (lookupBoxRegister eIdx)
+  case fetchMode of
+    HP.Lookup -> pure ()
+    HP.Pop -> modify $ typed @Config %~ delBoxRegister eIdx HP.Local
+  pure fetchedMaybeBox
+
 -- Showing things.
 
 showLexTok :: Lex.Token -> [CharCode]
@@ -274,3 +292,41 @@ showBalancedText (HP.BalancedText lexToks) =
 showExpandedBalancedText :: HP.ExpandedBalancedText -> [CharCode]
 showExpandedBalancedText (HP.ExpandedBalancedText primToks) =
     concat $ toList . showPrimTok <$> primToks
+
+-- Looping.
+
+runLoop :: Monad m => (s -> a -> m (s, a, Maybe b)) -> s -> a -> m (s, a, b)
+runLoop f = go
+  where
+    go s state_ = do
+      (newS, newState, recRes) <- f s state_
+      case recRes of
+        Nothing ->
+          go newS newState
+        Just b ->
+          pure (newS, newState, b)
+
+runCommandLoop
+  :: ( MonadState st m
+     , HasType Config st
+
+     , HP.MonadTeXParse (HP.TeXParseT s m)
+
+     , MonadError e m
+     , HP.AsTeXParseErrors e
+     , AsType HP.ParseError e
+
+     , MonadSlog m
+     )
+  => (s -> s -> a -> HP.Command -> m (s, a, Maybe b))
+  -> s
+  -> a
+  -> m (s, a, b)
+runCommandLoop runCommand = runLoop parseAndRunCommand
+  where
+    parseAndRunCommand oldS elemList = do
+      (newS, command) <- HP.runTeXParseTEmbedded HP.parseCommand oldS
+      sLogStampedJSON "Parsed command"
+        [ ("command", toJSON command)
+        ]
+      runCommand oldS newS elemList command

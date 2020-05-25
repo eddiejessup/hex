@@ -1,5 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
-module Hex.Command.Run where
+module Hex.Run where
 
 import Control.Monad.Trans.Writer.CPS as Wr
 import DVI.Document (Instruction, parseInstructions)
@@ -8,7 +7,9 @@ import DVI.Instruction (DVIError, EncodableInstruction)
 import Data.Byte (ByteError)
 import Data.Path (PathError)
 import Hex.Box
-import Hex.Command.Build
+import Hex.Build.Class
+import Hex.Build.Command
+import Hex.Build.ListBuilderT
 import qualified Hex.Config as Conf
 import qualified Hex.Config.Codes as Code
 import Hex.Evaluate (EvaluationError)
@@ -131,7 +132,7 @@ renderStreamUnsetPara
   => HP.ExpandingStream
   -> m (HP.ExpandingStream, Text)
 renderStreamUnsetPara s = do
-  (endS, hList, _) <- extractPara HP.Indent s
+  (endS, hList, _) <- extractParaImpl HP.Indent s
   pure (endS, renderDescribed hList)
 
 -- Paragraph boxes.
@@ -155,7 +156,7 @@ streamToParaBoxes
   => HP.ExpandingStream
   -> m (HP.ExpandingStream, Seq (Box HBox))
 streamToParaBoxes s = do
-  (endS, hList, _) <- extractPara HP.Indent s
+  (endS, hList, _) <- extractParaImpl HP.Indent s
   boxes <- hListToParaLineBoxes hList
   pure (endS, boxes)
 

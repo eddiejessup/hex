@@ -1,238 +1,24 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE UndecidableInstances #-}
-
-module Hex.Command.Build where
+module Hex.Build.Command where
 
 import           Hexlude
 
-import           Control.Monad.Trans.Class
-
-import qualified Data.Sequence               as Seq
 import qualified Data.Path
 
 import           TFM                         (TFMError)
 
 
 import qualified Hex.Box                     as B
-import           Hex.BreakList               (HList(..), VList(..))
+import           Hex.BreakList               (HList(..))
 import qualified Hex.BreakList               as BL
+import           Hex.Build.Helpers
+import           Hex.Build.Class
 import qualified Hex.Config.Codes     as Codes
-import           Hex.Command.Commands
-import           Hex.Command.Common
-import           Hex.Command.ModeIndependent
 import           Hex.Config
 import qualified Hex.Lex                     as Lex
 import qualified Hex.Parse                   as HP
 import qualified Hex.Resolve          as HR
 import qualified Hex.Variable         as Var
 import           Hex.Evaluate
-
-type TeXBuildCtx st e m
-  = ( MonadState st m
-    , HasType Config st
-
-    , MonadError e m
-    , HP.AsTeXParseErrors e
-    , AsType HP.ParseError e
-    )
-
-newtype BuildError = BuildError Text
-    deriving stock (Show)
-
-data EndParaReason
-    = EndParaSawEndParaCommand
-    | EndParaSawLeaveBox
-
-
-
-
-class MonadModeIndependentBuild m where
-
-    extractExplicitBox :: B.DesiredLength -> HP.ExplicitBox -> m (B.Box B.BoxContents)
-
-    insertLexToken :: Lex.Token -> m ()
-
-    revertStream :: m ()
-
-    addVElem :: BL.VListElem -> m ()
-
-class MonadHModeBuild m where
-
-    addHElem :: BL.HListElem -> m ()
-
-class MonadVModeBuild m where
-
-  builderExtractPara :: HP.IndentFlag -> m (HList, EndParaReason)
-
-newtype ListBuilderT s l m a
-  = ListBuilderT {unListBuilderT :: s -> s -> l -> m (s, s, l, a)}
-
-instance Functor m => Functor (ListBuilderT s l m) where
-    fmap g (ListBuilderT f) = ListBuilderT $ \s0 s1 l ->
-        f s0 s1 l <&> (\(s0_, s1_, l_, a_) -> (s0_, s1_, l_, g a_))
-
-instance Monad m => Applicative (ListBuilderT s l m) where
-  pure a = ListBuilderT $ \s0 s1 l -> pure (s0, s1, l, a)
-
-  -- (<*>) :: m (a -> b) -> m a -> m b
-  (ListBuilderT fAToB) <*> (ListBuilderT fA) = ListBuilderT $ \s0 s1 l -> do
-    (s0_, s1_, l_, aToB) <- fAToB s0 s1 l
-    (s0__, s1__, l__, a) <- fA s0_ s1_ l_
-    pure (s0__, s1__, l__, aToB a)
-
-instance Monad m => Monad (ListBuilderT s l m) where
-  return = pure
-
-  -- m a -> (a -> m b) -> m b
-  (ListBuilderT fA) >>= aToTFB = ListBuilderT $ \s0 s1 l -> do
-    (s0_, s1_, l_, a) <- fA s0 s1 l
-    let (ListBuilderT fB) = aToTFB a
-    fB s0_ s1_ l_
-
-instance MonadTrans (ListBuilderT s l) where
-  lift m = ListBuilderT $ \s0 s1 l -> do
-    a <- m
-    pure (s0, s1, l, a)
-
-instance (MonadError e m) => MonadError e (ListBuilderT s l m) where
-  throwError = lift . throwError
-
-  catchError (ListBuilderT f) errToHandle = ListBuilderT $ \s0 s1 l ->
-    catchError (f s0 s1 l) $ \e -> do
-      let (ListBuilderT fRecover) = errToHandle e
-      fRecover s0 s1 l
-
-instance MonadState st m => MonadState st (ListBuilderT s l m) where
-  get = lift get
-  put = lift . put
-
-instance MonadIO m => MonadIO (ListBuilderT s l m) where
-  liftIO = lift . liftIO
-
-instance MonadSlog m => MonadSlog (ListBuilderT s l m) where
-  sLog = lift . sLog
-
-  sTime = lift sTime
-
-instance
-  ( MonadError e m
-  , AsType BuildError e
-  , AsType TFMError e
-  , AsType Data.Path.PathError e
-
-  , TeXBuildCtx st e m
-
-  , HP.MonadTeXParse (HP.TeXParseT s m)
-  , HP.TeXStream s
-
-  , MonadIO m
-  , MonadSlog m
-  ) => MonadModeIndependentBuild (ListBuilderT s HList m) where
-    addVElem e = addHElem (BL.HVListElem e)
-
-    insertLexToken = commonInsertLexToken
-
-    extractExplicitBox = commonExtractExplicitBox
-
-    revertStream = commonRevertStream
-
-instance
-  ( MonadError e m
-  , TeXBuildCtx st e m
-  , MonadIO m
-  ) => MonadHModeBuild (ListBuilderT s HList m) where
-    addHElem e =
-      ListBuilderT $ \s0 s1 (HList hElemSeq) ->
-        let newLst = HList $ hElemSeq :|> e
-        in pure (s0, s1, newLst, ())
-
-instance
-  ( MonadError e m
-  , AsType BuildError e
-  , AsType TFMError e
-  , AsType Data.Path.PathError e
-
-  , TeXBuildCtx st e m
-
-  , HP.MonadTeXParse (HP.TeXParseT s m)
-  , HP.TeXStream s
-
-  , MonadIO m
-  , MonadSlog m
-  ) => MonadModeIndependentBuild (ListBuilderT s VList m) where
-    addVElem e =
-      ListBuilderT $ \s0 s1 list_ -> do
-        list__ <- addVListElem list_ e
-        pure (s0, s1, list__, ())
-
-    insertLexToken = commonInsertLexToken
-
-    extractExplicitBox = commonExtractExplicitBox
-
-    revertStream = commonRevertStream
-
-instance
-  ( MonadError e m
-  , AsType BuildError e
-  , AsType TFMError e
-  , AsType Data.Path.PathError e
-
-  , TeXBuildCtx st e m
-
-  , HP.MonadTeXParse (HP.TeXParseT s m)
-  , HP.TeXStream s
-
-  , MonadIO m
-  , MonadSlog m
-  ) => MonadVModeBuild (ListBuilderT s VList m) where
-    builderExtractPara indentFlag =
-        ListBuilderT $ \s0 s1 list_ -> do
-          (s1_, hList, endReason) <- extractPara indentFlag s1
-          pure (s0, s1_, list_, (hList, endReason))
-
-commonInsertLexToken
-  :: ( Applicative m
-     , HP.TeXStream s
-     )
-  => Lex.Token
-  -> ListBuilderT s l m ()
-commonInsertLexToken lt =
-  ListBuilderT $ \s0 s1 list_ ->
-    pure (s0, HP.insertLexToken s1 lt, list_, ())
-
-commonExtractExplicitBox
-  :: ( MonadError e m
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
-
-     , TeXBuildCtx st e m
-
-     , HP.MonadTeXParse (HP.TeXParseT s m)
-     , HP.TeXStream s
-
-     , MonadIO m
-     , MonadSlog m
-     )
-  => B.DesiredLength
-  -> HP.ExplicitBox
-  -> ListBuilderT s l m (B.Box B.BoxContents)
-commonExtractExplicitBox desiredLength boxType =
-  ListBuilderT $ \s0 s1 list_ -> do
-    (s1_, box) <- extractExplicitBoxContents s1 desiredLength boxType
-    pure (s0, s1_, list_, box)
-
-commonRevertStream
-  :: (Applicative m)
-  => ListBuilderT s l m ()
-commonRevertStream =
-  ListBuilderT $ \s0 _s1 list_ ->
-    pure (s0, s0, list_, ())
-
-
-
-
-
 
 handleCommandInParaMode
     :: ( MonadError e m
@@ -378,15 +164,15 @@ handleCommandInVBoxMode = \case
     addPara indentFlag = do
       -- Note oldS.
       revertStream
-      (finalParaHList, endParaReason) <- builderExtractPara indentFlag
-      builderAppendParagraph finalParaHList
+      (finalParaHList, endParaReason) <- extractPara indentFlag
+      appendParagraph finalParaHList
       pure $ case endParaReason of
         EndParaSawEndParaCommand ->
             Nothing
         EndParaSawLeaveBox ->
             Just ()
 
-builderAppendParagraph
+appendParagraph
     :: ( MonadIO m
 
        , MonadState st m
@@ -399,30 +185,10 @@ builderAppendParagraph
        )
     => HList
     -> m ()
-builderAppendParagraph paraHList = do
+appendParagraph paraHList = do
   lineBoxes <- hListToParaLineBoxes paraHList
-  let lineBoxContents = (B.HBoxContents <$>) <$> lineBoxes
-  let boxElems = BL.VListBaseElem . B.ElemBox <$> lineBoxContents
-  for_ boxElems addVElem
-
-appendParagraph
-    :: ( MonadIO m
-
-       , MonadState st m
-       , HasType Config st
-
-       , MonadError e m
-       , AsType BuildError e
-       )
-    => HList
-    -> VList
-    -> m VList
-appendParagraph paraHList vList =
-    do
-    lineBoxes <- hListToParaLineBoxes paraHList
-    let lineBoxContents = (B.HBoxContents <$>) <$> lineBoxes
-    let boxElems = BL.VListBaseElem . B.ElemBox <$> lineBoxContents
-    foldM addVListElem vList boxElems
+  for_ lineBoxes $ \b ->
+    addVElem $ BL.VListBaseElem $ B.ElemBox $ B.HBoxContents <$> b
 
 hListToParaLineBoxes
     :: ( MonadState st m -- Read-only
@@ -449,137 +215,55 @@ handleCommandInMainVMode
 
        , TeXBuildCtx st e m
 
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
+       , MonadModeIndependentBuild m
+       , MonadVModeBuild m
 
        , MonadIO m
        , MonadSlog m
        )
-    => s
-    -> s
-    -> VList
-    -> HP.Command
-    -> m (s, VList, Maybe ())
-handleCommandInMainVMode oldS newS vList command =
-    -- traceText ("in main v mode, handling command: " <> show command) $ case command of
-    case command of
-        HP.VModeCommand HP.End ->
-            pure (newS, vList, Just ())
-        HP.VModeCommand (HP.AddVGlue g) ->
-            glueToElem g >>= addElem_ <&> (newS, , Nothing)
-        HP.VModeCommand (HP.AddVRule rule) ->
-            vModeRuleElem rule >>= addElem_ <&> (newS, , Nothing)
-        HP.HModeCommand _ ->
-            addPara HP.Indent
-        HP.StartParagraph indentFlag ->
-            addPara indentFlag
-        -- \par does nothing in vertical mode.
-        HP.EndParagraph ->
-            pure (newS, vList, Nothing)
-        -- <space token> has no effect in vertical modes.
-        HP.AddSpace ->
-            pure (newS, vList, Nothing)
-        HP.ModeIndependentCommand modeIndependentCommand -> do
-            (_, doneS, doneList, sawEndBox) <- unListBuilderT (handleModeIndependentCommand modeIndependentCommand) oldS newS vList
-            when sawEndBox $ throwError $ injectTyped $ BuildError "No box to end: in main V mode"
-            pure (doneS, doneList, Nothing)
-        oth ->
-            panic $ "Not implemented, outer V mode: " <> show oth
+    => HP.Command
+    -> m (Maybe ())
+handleCommandInMainVMode = \case
+  HP.VModeCommand HP.End ->
+      pure (Just ())
+  HP.VModeCommand (HP.AddVGlue g) -> do
+      glueToElem g >>= addVElem
+      pure Nothing
+  HP.VModeCommand (HP.AddVRule rule) -> do
+      vModeRuleElem rule >>= addVElem
+      pure Nothing
+  HP.HModeCommand _ -> do
+      addPara HP.Indent
+      pure Nothing
+  HP.StartParagraph indentFlag -> do
+      addPara indentFlag
+      pure Nothing
+  -- \par does nothing in vertical mode.
+  HP.EndParagraph ->
+      pure Nothing
+  -- <space token> has no effect in vertical modes.
+  HP.AddSpace ->
+      pure Nothing
+  HP.ModeIndependentCommand modeIndependentCommand -> do
+      sawEndBox <- handleModeIndependentCommand modeIndependentCommand
+      when sawEndBox $ throwError $ injectTyped $ BuildError "No box to end: in main V mode"
+      pure Nothing
+  oth ->
+      panic $ "Not implemented, outer V mode: " <> show oth
   where
-    addElem_ e = addVListElem vList e
-
-    addPara indentFlag =
-        do
-        -- If the command shifts to horizontal mode, run '\indent', and re-read
-        -- the stream as if the command hadn't been read. (Note that we read
-        -- from "oldS", not "newS".)
-        (doneS, paraHList, endParaReason) <- extractPara indentFlag oldS
-        case endParaReason of
-            EndParaSawEndParaCommand -> do
-                appendedVList <- appendParagraph paraHList vList
-                pure (doneS, appendedVList, Nothing)
-            EndParaSawLeaveBox ->
-                throwError $ injectTyped $
-                    BuildError "No box to end: in paragraph within main V mode"
-
-extractPara
-    :: ( MonadError e m
-       , AsType BuildError e
-       , AsType TFMError e
-       , AsType Data.Path.PathError e
-
-       , TeXBuildCtx st e m
-
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
-
-       , MonadIO m
-       , MonadSlog m
-       )
-    => HP.IndentFlag
-    -> s
-    -> m (s, HList, EndParaReason)
-extractPara indentFlag s = do
-    initList <- case indentFlag of
-        HP.Indent -> do
-            indentBox <- gets (view $ typed @Config % to parIndentBox)
-            pure $ Seq.singleton indentBox
-        HP.DoNotIndent ->
-            pure mempty
-    let handleCommand oldS newS hList cmd = do
-          (_, doneS, doneList, mayEndParaReason) <- unListBuilderT (handleCommandInParaMode cmd) oldS newS hList
-          pure (doneS, doneList, mayEndParaReason)
-
-    runCommandLoop handleCommand s (HList initList)
-
-extractMainVList
-    :: ( MonadError e m
-       , AsType BuildError e
-       , AsType TFMError e
-       , AsType Data.Path.PathError e
-
-       , TeXBuildCtx st e m
-
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
-
-       , MonadIO m
-       , MonadSlog m
-       )
-    => s
-    -> m (s, VList)
-extractMainVList s = do
-    (doneS, vList, _) <- runCommandLoop handleCommandInMainVMode s mempty
-    sLog "In extractMainVList, done runCommandLoop handleCommandInMainVMode"
-    pure (doneS, vList)
-
-extractBreakAndSetMainVList
-    :: ( MonadError e m
-       , AsType BuildError e
-       , AsType TFMError e
-       , AsType Data.Path.PathError e
-
-       , TeXBuildCtx st e m
-
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
-
-       , MonadIO m
-       , MonadSlog m
-       )
-    => s
-    -> m (s, Seq B.Page, IntParamVal 'HP.Mag)
-extractBreakAndSetMainVList s = do
-    (finalS, finalMainVList) <- extractMainVList s
-    sLog "In extractBreakAndSetMainVList, done extractMainVList"
-    case finalS ^. HP.conditionBodyStateLens of
-        [] -> pure ()
-        condStates -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show condStates
-    join $ gets $ view $ typed @Config % to finaliseConfig
-    desiredH <- gets $ view $ typed @Config % to (LenParamVal . lookupLengthParameter HP.VSize)
-    let pages = BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
-    mag <- gets $ view $ typed @Config % to (IntParamVal . lookupTeXIntParameter HP.Mag)
-    pure (finalS, pages, mag)
+    addPara indentFlag = do
+      -- If the command shifts to horizontal mode, run '\indent', and re-read
+      -- the stream as if the command hadn't been read. (Note that we read
+      -- from "oldS", not "newS".)
+      revertStream
+      (paraHList, endParaReason) <- extractPara indentFlag
+      appendParagraph paraHList
+      case endParaReason of
+        EndParaSawEndParaCommand ->
+          pure ()
+        EndParaSawLeaveBox ->
+          throwError $ injectTyped $
+            BuildError "No box to end: in paragraph within main V mode"
 
 handleModeIndependentCommand
     :: ( MonadIO m
@@ -821,37 +505,3 @@ handleModeIndependentCommand = \case
         pure False
     oth ->
         panic $ show oth
-
-extractExplicitBoxContents
-    :: ( MonadError e m
-       , AsType BuildError e
-       , AsType TFMError e
-       , AsType Data.Path.PathError e
-
-       , TeXBuildCtx st e m
-
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
-
-       , MonadIO m
-       , MonadSlog m
-       )
-    => s
-    -> B.DesiredLength
-    -> HP.ExplicitBox
-    -> m (s, B.Box B.BoxContents)
-extractExplicitBoxContents s desiredLength = \case
-    HP.ExplicitHBox ->
-        do
-        let handleCommand oldS newS hList cmd = do
-              (_, doneS, doneList, mayEndUnit) <- unListBuilderT (handleCommandInHBoxMode cmd) oldS newS hList
-              pure (doneS, doneList, mayEndUnit)
-        (doneS, finalHList, ()) <- runCommandLoop handleCommand s mempty
-        pure (doneS, B.HBoxContents <$> BL.setHList finalHList (BL.UncomputedTargetLength desiredLength))
-    HP.ExplicitVBox vAlignType ->
-        do
-        let handleCommand oldS newS vList cmd = do
-              (_, doneS, doneList, mayEndUnit) <- unListBuilderT (handleCommandInVBoxMode cmd) oldS newS vList
-              pure (doneS, doneList, mayEndUnit)
-        (doneS, finalVList, ()) <- runCommandLoop handleCommand s mempty
-        pure (doneS, B.VBoxContents <$> BL.setVList finalVList desiredLength vAlignType)

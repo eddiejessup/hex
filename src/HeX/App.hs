@@ -3,7 +3,7 @@ module Hex.App where
 import DVI.Instruction (DVIError)
 import Data.Byte (ByteError)
 import Data.Path (PathError)
-import Hex.Command.Build
+import Hex.Build.Class (BuildError)
 import qualified Hex.Config as Conf
 import Hex.Evaluate (EvaluationError)
 import qualified Hex.Parse as HP

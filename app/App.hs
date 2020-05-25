@@ -4,7 +4,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BS.L
 import qualified Hex.App as App
 import Hex.Categorise
-import qualified Hex.Command.Run as Run
+import qualified Hex.Run as Run
 import Hex.Config.Config
 import Hex.Lex
 import Hex.Parse.Stream.Expanding
