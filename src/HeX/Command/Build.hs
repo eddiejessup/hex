@@ -271,42 +271,44 @@ handleCommandInHBoxMode
 
        , TeXBuildCtx st e m
 
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
+       , MonadModeIndependentBuild m
+       , MonadHModeBuild m
 
        , MonadIO m
        , MonadSlog m
        )
-    => s
-    -> s
-    -> HList
-    -> HP.Command
-    -> m (s, HList, Maybe ())
-handleCommandInHBoxMode oldS newS hList@(HList hElemSeq) command =
-    case command of
-        HP.VModeCommand vModeCommand ->
-            throwError $ injectTyped $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
-        HP.HModeCommand (HP.AddCharacter c) ->
-            (newS,,Nothing) . addElem_ <$> hModeCharacterElem c
-        HP.HModeCommand (HP.AddHGlue g) ->
-            (newS,,Nothing) . addElem_ . BL.HVListElem <$> glueToElem g
-        HP.HModeCommand (HP.AddHRule rule) ->
-            (newS,,Nothing) . addElem_ <$> hModeRuleElem rule
-        HP.AddSpace ->
-            (newS,,Nothing) . addElem_ <$> hModeSpaceElem
-        HP.StartParagraph indentFlag ->
-            (newS,,Nothing) . addMaybeElem_ <$> hModeStartParagraph indentFlag
-        -- \par: Restricted (this mode): does nothing. Unrestricted: ends mode.
-        HP.EndParagraph ->
-            pure (newS, hList, Nothing)
-        HP.ModeIndependentCommand modeIndependentCommand -> do
-            (_, doneS, doneList, sawEndBox) <- unListBuilderT (handleModeIndependentCommand modeIndependentCommand) oldS newS hList
-            pure (doneS, doneList, if sawEndBox then Just () else Nothing)
-        oth ->
-            panic $ "Not implemented, outer V mode: " <> show oth
-  where
-    addElem_ e = HList $ hElemSeq :|> e
-    addMaybeElem_ mayE = HList $ addMaybeElem hElemSeq mayE
+    => HP.Command
+    -> m (Maybe ())
+handleCommandInHBoxMode = \case
+  HP.VModeCommand vModeCommand ->
+      throwError $ injectTyped $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
+  HP.HModeCommand (HP.AddCharacter c) -> do
+      addHElem =<< hModeCharacterElem c
+      pure Nothing
+  HP.HModeCommand (HP.AddHGlue g) -> do
+      addHElem . BL.HVListElem =<< glueToElem g
+      pure Nothing
+  HP.HModeCommand (HP.AddHRule rule) -> do
+      addHElem =<< hModeRuleElem rule
+      pure Nothing
+  HP.AddSpace -> do
+      addHElem =<< hModeSpaceElem
+      pure Nothing
+  HP.StartParagraph indentFlag -> do
+      hModeStartParagraph indentFlag >>= \case
+        Nothing ->
+          pure ()
+        Just parIndentElem ->
+          addHElem parIndentElem
+      pure Nothing
+  -- \par: Restricted (this mode): does nothing. Unrestricted: ends mode.
+  HP.EndParagraph ->
+      pure Nothing
+  HP.ModeIndependentCommand modeIndependentCommand -> do
+      sawEndBox <- handleModeIndependentCommand modeIndependentCommand
+      pure (if sawEndBox then Just () else Nothing)
+  oth ->
+      panic $ "Not implemented, outer V mode: " <> show oth
 
 handleCommandInVBoxMode
     :: forall s st e m
@@ -802,7 +804,10 @@ extractExplicitBoxContents
 extractExplicitBoxContents s desiredLength = \case
     HP.ExplicitHBox ->
         do
-        (doneS, finalHList, ()) <- runCommandLoop handleCommandInHBoxMode s mempty
+        let handleCommand oldS newS hList cmd = do
+              (_, doneS, doneList, mayEndUnit) <- unListBuilderT (handleCommandInHBoxMode cmd) oldS newS hList
+              pure (doneS, doneList, mayEndUnit)
+        (doneS, finalHList, ()) <- runCommandLoop handleCommand s mempty
         pure (doneS, B.HBoxContents <$> BL.setHList finalHList (BL.UncomputedTargetLength desiredLength))
     HP.ExplicitVBox vAlignType ->
         do
