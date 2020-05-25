@@ -1,19 +1,18 @@
 module Main where
 
-import           Control.Monad.Catch      (MonadThrow)
 import qualified Data.ByteString.Lazy as BS.L
-import Hex.Categorise
-import Hex.Command.Run
-import Hex.App
-import Hex.Lex
-import Hex.Resolve
-import Hex.Parse
-import Hexlude
-import qualified System.Console.GetOpt as Opt
-import System.IO (hSetBuffering, BufferMode(..))
 import qualified Data.Generics.Product as G.P
 import qualified Data.List.NonEmpty as L.NE
+import qualified Hex.App as App
+import Hex.Categorise
 import qualified Hex.Config as Conf
+import Hex.Lex
+import Hex.Parse
+import Hex.Resolve
+import Hex.Run
+import Hexlude
+import qualified System.Console.GetOpt as Opt
+import System.IO (BufferMode (..), hSetBuffering)
 
 data Flag
   = Help
@@ -41,87 +40,95 @@ main = do
   hSetBuffering stdout NoBuffering
   putText "Welcome to Hex repl"
   let s = newExpandStream Nothing mempty
-  evalStateT repl s
+  conf <- Conf.newConfig []
+  evalStateT (forever repl) (DoCat, s, conf)
 
 putResult :: MonadIO m => Text -> m ()
 putResult r =
-  putText $ "Got result:\n\n" <> r
+  putText $ ">>>\n" <> r <> "\n<<<"
+
+putMayError :: (MonadIO m, Describe a) => a -> Maybe App.AppError -> m ()
+putMayError s = \case
+  Nothing ->
+    pure ()
+  Just (App.ParseAppError EndOfInput) ->
+    pure ()
+  Just (err :: App.AppError) -> do
+    putText "Ended with error:"
+    putText $ show err
+    putText "Stream ended in state:"
+    putText $ renderDescribed s
 
 prompt :: MonadIO m => Text -> m Text
 prompt msg = do
   liftIO $ putStr @Text (msg <> " $> ")
   liftIO getLine
 
-promptLazyByteString :: MonadIO m => Text -> m BS.L.ByteString
-promptLazyByteString msg = do
-  liftIO $ putStr @Text (msg <> " $> ")
-  liftIO $ BS.L.fromStrict . encodeUtf8 <$> getLine
+data ReplState
+  = DoCat
+  | DoLex
+  | DoResolve
+  | DoExpand
+  | DoCommand
 
-repl :: (MonadState ExpandingStream m, MonadIO m, MonadThrow m) => m ()
+renderReplState :: ReplState -> Text
+renderReplState = \case
+  DoCat -> "cat"
+  DoLex -> "lex"
+  DoResolve -> "resolve"
+  DoExpand -> "expand"
+  DoCommand -> "command"
+
+repl :: (MonadState (ReplState, ExpandingStream, Conf.Config) m, MonadIO m) => m ()
 repl = do
-  cmd <- prompt "Enter command, one of: [cat, lex, resolve, expand, command]"
-  conf <- Conf.newConfig []
+  replState <- gets $ view $ typed @ReplState
+  s <- gets (view (typed @ExpandingStream))
+  conf <- gets (view (typed @Conf.Config))
+  cmd <- prompt $ "[" <> renderReplState replState <> "]"
   case cmd of
-    "cat" -> do
-      inpBSL <- promptLazyByteString "cat"
-      let charCats = usableCodesToCharCats inpBSL
-      putResult $ renderLines $ describeNamedRelFoldable 0 "CharCats" charCats
-    "lex" -> do
-      inpBSL <- promptLazyByteString "lex"
-      let lexTokens = usableCodesToLexTokens inpBSL
-      putResult $ renderLines $ describeNamedRelFoldable 0 "LexTokens" lexTokens
-    "resolve" -> do
-      inpBSL <- promptLazyByteString "resolve"
-      let lexWithResolvedTokens = usableCodesToResolvedTokens inpBSL
-      putResult $ renderLines $ concat $ lexWithResolvedTokens <&> \(lt, mayRt) ->
-        [ (0, "Lex with resolved token")
-        ]
-        <> describeRel 1 lt
-        <> describeRel 1 mayRt
-    "expand" -> do
-      inpBSL <- promptLazyByteString "expand"
+    "$cat" ->
+      modify $ typed @ReplState .~ DoCat
+    "$lex" ->
+      modify $ typed @ReplState .~ DoLex
+    "$resolve" ->
+      modify $ typed @ReplState .~ DoResolve
+    "$expand" ->
+      modify $ typed @ReplState .~ DoExpand
+    "$command" ->
+      modify $ typed @ReplState .~ DoCommand
+    _ -> do
+      let inpBSL = BS.L.fromStrict $ encodeUtf8 cmd
+      case replState of
+        DoCat -> do
+          let charCats = usableCodesToCharCats inpBSL
+          putResult $ renderLines $ describeNamedRelFoldable 0 "CharCats" charCats
+        DoLex -> do
+          let lexTokens = usableCodesToLexTokens inpBSL
+          putResult $ renderLines $ describeNamedRelFoldable 0 "LexTokens" lexTokens
+        DoResolve -> do
+          let lexWithResolvedTokens = usableCodesToResolvedTokens inpBSL
+          putResult $ renderLines $ concat $
+            lexWithResolvedTokens <&> \(lt, mayRt) ->
+              [ (0, "Lex with resolved token")
+              ]
+                <> describeRel 1 lt
+                <> describeRel 1 mayRt
+        DoExpand -> do
+          let sWithInput =
+                s & G.P.field @"streamTokenSources"
+                  %~ L.NE.cons (newTokenSource Nothing inpBSL)
 
-      s <- get
+          -- TODO: Put back into state? What about version with input but before consuming?
+          (newS, mayErr, primToks) <- App.runErrorlessApp (expandingStreamAsPrimTokens sWithInput) conf
 
-      let sWithInput = s & G.P.field @"streamTokenSources" %~
-              L.NE.cons (newTokenSource Nothing inpBSL)
+          putResult $ renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" primToks
+          putMayError newS mayErr
+        DoCommand -> do
+          let sWithInput =
+                s & G.P.field @"streamTokenSources"
+                  %~ L.NE.cons (newTokenSource Nothing inpBSL)
 
-      -- TODO: Put back into state? What about version with input but before consuming?
-      (newS, mayErr, primToks) <- expandingStreamAsPrimTokens sWithInput conf
+          (newS, mayErr, commandToks) <- App.runErrorlessApp (expandingStreamAsCommands sWithInput) conf
 
-      case primToks of
-        [] -> putText "Returned no results"
-        _ -> putResult $ renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" primToks
-
-      for_ mayErr $ \(err :: AppError) -> do
-        putText "Ended with error:"
-        putText $ show err
-        putText "Stream ended in state:"
-        putText $ renderDescribed newS
-
-    "command" -> do
-      inpBSL <- promptLazyByteString "command"
-
-      s <- get
-
-      let sWithInput = s & G.P.field @"streamTokenSources" %~
-              L.NE.cons (newTokenSource Nothing inpBSL)
-
-      (newS, mayErr, commandToks) <- expandingStreamAsCommands sWithInput conf
-
-      case commandToks of
-        [] -> putText "Returned no results"
-        _ -> putResult $ renderLines $ describeNamedRelFoldable 0 "Commands" commandToks
-
-      for_ mayErr $ \case
-        ParseAppError EndOfInput ->
-          pure ()
-        err -> do
-          putText "Ended with error:"
-          putText $ show err
-          putText "Stream ended in state:"
-          putText $ renderDescribed newS
-    _ ->
-      putText $ "Unrecognised command: " <> cmd
-  repl
-
+          putResult $ renderLines $ describeNamedRelFoldable 0 "Commands" commandToks
+          putMayError newS mayErr
