@@ -38,6 +38,15 @@ data Group
     | NonScopeGroup
     deriving stock (Show)
 
+renderGroupType :: Group -> Text
+renderGroupType = \case
+    ScopeGroup _ (LocalStructureGroup trigger) ->
+        "Scope/LocalStructure/" <> show trigger
+    ScopeGroup _ ExplicitBoxGroup ->
+        "Scope/ExplicitBox"
+    NonScopeGroup ->
+        "NonScope"
+
 data ScopeGroup
     = LocalStructureGroup AST.CommandTrigger
     | ExplicitBoxGroup

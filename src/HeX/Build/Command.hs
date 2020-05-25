@@ -436,30 +436,40 @@ handleModeIndependentCommand = \case
           liftIO $ hPutStrLn logHandle txtTxt
     pure False
   -- Start a new level of grouping.
-  HP.ChangeScope HP.Positive trig ->
+  HP.ChangeScope HP.Positive entryTrig ->
     do
-      modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope (LocalStructureGroup trig))
+      modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope (LocalStructureGroup entryTrig))
       pure False
   -- Do the appropriate finishing actions, undo the
   -- effects of non-global assignments, and leave the
   -- group. Maybe leave the current mode.
-  HP.ChangeScope HP.Negative trig -> do
+  HP.ChangeScope HP.Negative exitTrig -> do
+    prePopCurrentFontNr <- gets (view $ typed @Config % to lookupCurrentFontNr)
     (group, poppedConfig) <- gets (view $ typed @Config % to popGroup) >>= \case
       Nothing ->
         throwError $ injectTyped $ ConfigError "No group to leave"
       Just v ->
         pure v
     modify $ typed @Config .~ poppedConfig
+    postPopCurrentFontNr <- gets (view $ typed @Config % to lookupCurrentFontNr)
+    when (prePopCurrentFontNr /= postPopCurrentFontNr) $ do
+      sLogStampedJSON
+        "After exiting scope, reverting changed font"
+        [ ("fontNrPrePop", toJSON prePopCurrentFontNr),
+          ("fontNrPostPop", toJSON postPopCurrentFontNr),
+          ("groupType", toJSON (renderGroupType group))
+        ]
+      addVElem $ BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection (fromMaybe 0 postPopCurrentFontNr)
     case group of
       -- Undo the effects of non-global
       -- assignments without leaving the
       -- current mode.
-      ScopeGroup _ (LocalStructureGroup trigConf) -> do
-        when (trigConf /= trig)
+      ScopeGroup _ (LocalStructureGroup entryTrig) -> do
+        when (entryTrig /= exitTrig)
           $ throwError
           $ injectTyped
           $ ConfigError
-          $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
+          $ "Entry and exit group triggers differ: " <> show (exitTrig, entryTrig)
         pure False
       -- - Undo the effects of non-global assignments
       -- - package the [box] using the size that was saved on the
@@ -478,13 +488,13 @@ handleModeIndependentCommand = \case
           Nothing ->
             pure ()
           Just b ->
-            addVElem (BL.VListBaseElem $ B.ElemBox b)
+            addVElem $ BL.VListBaseElem $ B.ElemBox b
       HP.ExplicitBox spec boxType -> do
         -- Start a new level of grouping. Enter inner mode.
         eSpec <- texEvaluate spec
         modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
         b <- extractExplicitBox eSpec boxType
-        addVElem (BL.VListBaseElem $ B.ElemBox b)
+        addVElem $ BL.VListBaseElem $ B.ElemBox b
     pure False
   oth ->
     panic $ show oth
