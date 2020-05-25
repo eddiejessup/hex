@@ -60,6 +60,10 @@ class MonadHModeBuild m where
 
     addHElem :: BL.HListElem -> m ()
 
+class MonadVModeBuild m where
+
+  builderExtractPara :: HP.IndentFlag -> m (HList, EndParaReason)
+
 newtype ListBuilderT s l m a
   = ListBuilderT {unListBuilderT :: s -> s -> l -> m (s, s, l, a)}
 
@@ -157,15 +161,34 @@ instance
   , MonadSlog m
   ) => MonadModeIndependentBuild (ListBuilderT s VList m) where
     addVElem e =
-        ListBuilderT $ \s0 s1 (VList vElemSeq) ->
-            let newLst = VList $ vElemSeq :|> e
-            in pure (s0, s1, newLst, ())
+      ListBuilderT $ \s0 s1 list_ -> do
+        list__ <- addVListElem list_ e
+        pure (s0, s1, list__, ())
 
     insertLexToken = commonInsertLexToken
 
     extractExplicitBox = commonExtractExplicitBox
 
     revertStream = commonRevertStream
+
+instance
+  ( MonadError e m
+  , AsType BuildError e
+  , AsType TFMError e
+  , AsType Data.Path.PathError e
+
+  , TeXBuildCtx st e m
+
+  , HP.MonadTeXParse (HP.TeXParseT s m)
+  , HP.TeXStream s
+
+  , MonadIO m
+  , MonadSlog m
+  ) => MonadVModeBuild (ListBuilderT s VList m) where
+    builderExtractPara indentFlag =
+        ListBuilderT $ \s0 s1 list_ -> do
+          (s1_, hList, endReason) <- extractPara indentFlag s1
+          pure (s0, s1_, list_, (hList, endReason))
 
 commonInsertLexToken
   :: ( Applicative m
@@ -311,11 +334,11 @@ handleCommandInHBoxMode = \case
       panic $ "Not implemented, outer V mode: " <> show oth
 
 handleCommandInVBoxMode
-    :: forall s st e m
+    :: forall st e m
      . ( TeXBuildCtx st e m
 
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
+       , MonadModeIndependentBuild m
+       , MonadVModeBuild m
 
        , AsType TFMError e
        , AsType BuildError e
@@ -324,47 +347,63 @@ handleCommandInVBoxMode
        , MonadSlog m
        , MonadIO m
        )
-    => s
-    -> s
-    -> VList
-    -> HP.Command
-    -> m (s, VList, Maybe ())
-handleCommandInVBoxMode oldS newS vList command =
-    case command of
-        HP.VModeCommand HP.End ->
-            throwError $ injectTyped $ BuildError "End not allowed in internal vertical mode"
-        HP.VModeCommand (HP.AddVGlue g) ->
-            glueToElem g >>= addElem_ <&> (newS,,Nothing)
-        HP.VModeCommand (HP.AddVRule rule) ->
-            vModeRuleElem rule >>= addElem_ <&> (newS,,Nothing)
-        HP.HModeCommand _ ->
-            addPara HP.Indent
-        HP.StartParagraph indentFlag ->
-            addPara indentFlag
-        -- \par does nothing in vertical mode.
-        HP.EndParagraph ->
-            pure (newS, vList, Nothing)
-        -- <space token> has no effect in vertical modes.
-        HP.AddSpace ->
-            pure (newS, vList, Nothing)
-        HP.ModeIndependentCommand modeIndependentCommand -> do
-            (_, doneS, doneList, sawEndBox) <- unListBuilderT (handleModeIndependentCommand modeIndependentCommand) oldS newS vList
-            pure (doneS, doneList, if sawEndBox then Just () else Nothing)
-        oth ->
-            panic $ "Not implemented, outer V mode: " <> show oth
+    => HP.Command
+    -> m (Maybe ())
+handleCommandInVBoxMode = \case
+  HP.VModeCommand HP.End ->
+      throwError $ injectTyped $ BuildError "End not allowed in internal vertical mode"
+  HP.VModeCommand (HP.AddVGlue g) -> do
+      addVElem =<< glueToElem g
+      pure Nothing
+  HP.VModeCommand (HP.AddVRule rule) -> do
+      addVElem =<< vModeRuleElem rule
+      pure Nothing
+  HP.HModeCommand _ ->
+      addPara HP.Indent
+  HP.StartParagraph indentFlag ->
+      addPara indentFlag
+  -- \par does nothing in vertical mode.
+  HP.EndParagraph ->
+      pure Nothing
+  -- <space token> has no effect in vertical modes.
+  HP.AddSpace ->
+      pure Nothing
+  HP.ModeIndependentCommand modeIndependentCommand -> do
+      sawEndBox <- handleModeIndependentCommand modeIndependentCommand
+      pure (if sawEndBox then Just () else Nothing)
+  oth ->
+      panic $ "Not implemented, outer V mode: " <> show oth
   where
-    addElem_ e = addVListElem vList e
-
-    addPara :: HP.IndentFlag -> m (s, VList, Maybe ())
+    addPara :: HP.IndentFlag -> m (Maybe ())
     addPara indentFlag = do
-        -- Note oldS.
-        (doneS, finalParaHList, endParaReason) <- extractPara indentFlag oldS
-        vListWithPara <- appendParagraph finalParaHList vList
-        pure $ (doneS, vListWithPara,) $ case endParaReason of
-            EndParaSawEndParaCommand ->
-                Nothing
-            EndParaSawLeaveBox ->
-                Just ()
+      -- Note oldS.
+      revertStream
+      (finalParaHList, endParaReason) <- builderExtractPara indentFlag
+      builderAppendParagraph finalParaHList
+      pure $ case endParaReason of
+        EndParaSawEndParaCommand ->
+            Nothing
+        EndParaSawLeaveBox ->
+            Just ()
+
+builderAppendParagraph
+    :: ( MonadIO m
+
+       , MonadState st m
+       , HasType Config st
+
+       , MonadModeIndependentBuild m
+
+       , MonadError e m
+       , AsType BuildError e
+       )
+    => HList
+    -> m ()
+builderAppendParagraph paraHList = do
+  lineBoxes <- hListToParaLineBoxes paraHList
+  let lineBoxContents = (B.HBoxContents <$>) <$> lineBoxes
+  let boxElems = BL.VListBaseElem . B.ElemBox <$> lineBoxContents
+  for_ boxElems addVElem
 
 appendParagraph
     :: ( MonadIO m
@@ -811,5 +850,8 @@ extractExplicitBoxContents s desiredLength = \case
         pure (doneS, B.HBoxContents <$> BL.setHList finalHList (BL.UncomputedTargetLength desiredLength))
     HP.ExplicitVBox vAlignType ->
         do
-        (doneS, finalVList, ()) <- runCommandLoop handleCommandInVBoxMode s mempty
+        let handleCommand oldS newS vList cmd = do
+              (_, doneS, doneList, mayEndUnit) <- unListBuilderT (handleCommandInVBoxMode cmd) oldS newS vList
+              pure (doneS, doneList, mayEndUnit)
+        (doneS, finalVList, ()) <- runCommandLoop handleCommand s mempty
         pure (doneS, B.VBoxContents <$> BL.setVList finalVList desiredLength vAlignType)
