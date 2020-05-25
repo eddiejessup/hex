@@ -1,33 +1,36 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Hex.Command.Build where
 
 import           Hexlude
+
+import           Control.Monad.Trans.Class
 
 import qualified Data.Sequence               as Seq
 import qualified Data.Path
 
 import           TFM                         (TFMError)
 
+
 import qualified Hex.Box                     as B
-import           Hex.BreakList               (HList, VList)
+import           Hex.BreakList               (HList(..), VList(..))
 import qualified Hex.BreakList               as BL
 import qualified Hex.Config.Codes     as Codes
 import           Hex.Command.Commands
 import           Hex.Command.Common
 import           Hex.Command.ModeIndependent
 import           Hex.Config
+import           Hex.Quantity
 import qualified Hex.Lex                     as Lex
 import qualified Hex.Parse                   as HP
 import qualified Hex.Resolve          as HR
 import qualified Hex.Variable         as Var
 import           Hex.Evaluate
 
-type TeXBuildCtx s st e m
-  = ( MonadState st m -- Read-only
+type TeXBuildCtx st e m
+  = ( MonadState st m
     , HasType Config st
-
-    , HP.MonadTeXParse (HP.TeXParseT s m)
 
     , MonadError e m
     , HP.AsTeXParseErrors e
@@ -41,13 +44,137 @@ data EndParaReason
     = EndParaSawEndParaCommand
     | EndParaSawLeaveBox
 
+
+
+
+class MonadModeIndependentBuild m where
+
+    addElem :: BL.VListElem -> m ()
+
+    extractExplicitBox :: B.DesiredLength -> HP.ExplicitBox -> m (B.Box B.BoxContents)
+
+    insertLexToken :: Lex.Token -> m ()
+
+newtype ModeIndependentBuildT s l m a
+  = ModeIndependentBuildT {unModeIndependentBuildT :: s -> l -> m (s, l, a)}
+
+instance Functor m => Functor (ModeIndependentBuildT s l m) where
+    fmap g (ModeIndependentBuildT f) = ModeIndependentBuildT $ \s l ->
+        f s l <&> (\(s_, l_, a_) -> (s_, l_, g a_))
+
+instance Monad m => Applicative (ModeIndependentBuildT s l m) where
+  pure a = ModeIndependentBuildT $ \s l -> pure (s, l, a)
+
+  -- (<*>) :: m (a -> b) -> m a -> m b
+  (ModeIndependentBuildT fAToB) <*> (ModeIndependentBuildT fA) = ModeIndependentBuildT $ \s l -> do
+    (s_, l_, aToB) <- fAToB s l
+    (s__, l__, a) <- fA s_ l_
+    pure (s__, l__, aToB a)
+
+instance Monad m => Monad (ModeIndependentBuildT s l m) where
+  return = pure
+
+  -- m a -> (a -> m b) -> m b
+  (ModeIndependentBuildT fA) >>= aToTFB = ModeIndependentBuildT $ \s l -> do
+    (s_, l_, a) <- fA s l
+    let (ModeIndependentBuildT fB) = aToTFB a
+    fB s_ l_
+
+instance MonadTrans (ModeIndependentBuildT s l) where
+  lift m = ModeIndependentBuildT $ \s l -> do
+    a <- m
+    pure (s, l, a)
+
+instance (MonadError e m) => MonadError e (ModeIndependentBuildT s l m) where
+  throwError = lift . throwError
+
+  catchError (ModeIndependentBuildT f) errToHandle = ModeIndependentBuildT $ \s l ->
+    catchError (f s l) $ \e -> do
+      let (ModeIndependentBuildT fRecover) = errToHandle e
+      fRecover s l
+
+instance MonadState st m => MonadState st (ModeIndependentBuildT s l m) where
+  get = lift get
+  put = lift . put
+
+instance MonadIO m => MonadIO (ModeIndependentBuildT s l m) where
+  liftIO = lift . liftIO
+
+instance MonadSlog m => MonadSlog (ModeIndependentBuildT s l m) where
+  sLog = lift . sLog
+
+  sTime = lift sTime
+
+instance
+  ( MonadError e m
+  , AsType BuildError e
+  , AsType TFMError e
+  , AsType Data.Path.PathError e
+
+  , TeXBuildCtx st e m
+
+  , HP.MonadTeXParse (HP.TeXParseT s m)
+  , HP.TeXStream s
+
+  , MonadIO m
+  , MonadSlog m
+  ) => MonadModeIndependentBuild (ModeIndependentBuildT s HList m) where
+    addElem e =
+        ModeIndependentBuildT $ \s (HList hElemSeq) ->
+            let newLst = HList $ hElemSeq :|> BL.HVListElem e
+            in pure (s, newLst, ())
+
+    insertLexToken lt =
+      ModeIndependentBuildT $ \s list_ ->
+        pure (HP.insertLexToken s lt, list_, ())
+
+    extractExplicitBox desiredLength boxType =
+      ModeIndependentBuildT $ \s list_ -> do
+        (s_, box) <- extractExplicitBoxContents s desiredLength boxType
+        pure (s_, list_, box)
+
+instance
+  ( MonadError e m
+  , AsType BuildError e
+  , AsType TFMError e
+  , AsType Data.Path.PathError e
+
+  , TeXBuildCtx st e m
+
+  , HP.MonadTeXParse (HP.TeXParseT s m)
+  , HP.TeXStream s
+
+  , MonadIO m
+  , MonadSlog m
+  ) => MonadModeIndependentBuild (ModeIndependentBuildT s VList m) where
+    addElem e =
+        ModeIndependentBuildT $ \s (VList vElemSeq) ->
+            let newLst = VList $ vElemSeq :|> e
+            in pure (s, newLst, ())
+
+    insertLexToken lt =
+      ModeIndependentBuildT $ \s list_ ->
+        pure (HP.insertLexToken s lt, list_, ())
+
+    extractExplicitBox desiredLength boxType =
+      ModeIndependentBuildT $ \s list_ -> do
+        (s_, box) <- extractExplicitBoxContents s desiredLength boxType
+        pure (s_, list_, box)
+
+
+
+
+
+
 handleCommandInParaMode
     :: ( MonadError e m
        , AsType BuildError e
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , TeXBuildCtx s st e m
+       , TeXBuildCtx st e m
+
+       , HP.MonadTeXParse (HP.TeXParseT s m)
        , HP.TeXStream s
 
        , MonadIO m
@@ -58,7 +185,7 @@ handleCommandInParaMode
     -> HList
     -> HP.Command
     -> m (s, HList, Maybe EndParaReason)
-handleCommandInParaMode oldS newS hList@(BL.HList hElemSeq) command =
+handleCommandInParaMode oldS newS hList@(HList hElemSeq) command =
     case command of
         HP.VModeCommand _ ->
             -- Insert the control sequence "\par" into the input. The control
@@ -67,30 +194,26 @@ handleCommandInParaMode oldS newS hList@(BL.HList hElemSeq) command =
             -- (Note that we use oldS.)
             pure (HP.insertLexToken oldS Lex.parToken, hList, Nothing)
         HP.HModeCommand (HP.AddHGlue g) ->
-            (newS, , Nothing) . addElem <$> hModeAddHGlue g
+            (newS, , Nothing) . addElem_ <$> hModeAddHGlue g
         HP.HModeCommand (HP.AddCharacter c) ->
-            (newS, , Nothing) . addElem <$> hModeAddCharacter c
+            (newS, , Nothing) . addElem_ <$> hModeAddCharacter c
         HP.HModeCommand (HP.AddHRule rule) ->
-            (newS, , Nothing) . addElem <$> hModeAddRule rule
+            (newS, , Nothing) . addElem_ <$> hModeAddRule rule
         HP.AddSpace ->
-            (newS, , Nothing) . addElem <$> hModeAddSpace
+            (newS, , Nothing) . addElem_ <$> hModeAddSpace
         HP.StartParagraph indentFlag ->
-            (newS, , Nothing) . addMaybeElem' <$> hModeStartParagraph indentFlag
+            (newS, , Nothing) . addMaybeElem_ <$> hModeStartParagraph indentFlag
         -- \par: Restricted: does nothing. Unrestricted (this mode): ends mode.
         HP.EndParagraph ->
             pure (newS, hList, Just EndParaSawEndParaCommand)
         HP.ModeIndependentCommand modeIndependentCommand -> do
-            (doneS, modeIndRes) <- handleModeIndependentCommand newS modeIndependentCommand
-            pure $ case modeIndRes of
-                AddMaybeElem mayExtraElem ->
-                    (doneS, addMaybeElem' (BL.HVListElem <$> mayExtraElem), Nothing)
-                FinishBoxMode ->
-                    (doneS, hList, Just EndParaSawLeaveBox)
+            (doneS, doneList, sawEndBox) <- unModeIndependentBuildT (handleModeIndependentCommand modeIndependentCommand) newS hList
+            pure (doneS, doneList, if sawEndBox then Just EndParaSawLeaveBox else Nothing)
         oth ->
             panic $ show oth
   where
-    addElem e = BL.HList $ hElemSeq :|> e
-    addMaybeElem' mayE = BL.HList $ addMaybeElem hElemSeq mayE
+    addElem_ e = HList $ hElemSeq :|> e
+    addMaybeElem_ mayE = HList $ addMaybeElem hElemSeq mayE
 
 handleCommandInHBoxMode
     :: ( MonadError e m
@@ -98,7 +221,9 @@ handleCommandInHBoxMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , TeXBuildCtx s st e m
+       , TeXBuildCtx st e m
+
+       , HP.MonadTeXParse (HP.TeXParseT s m)
        , HP.TeXStream s
 
        , MonadIO m
@@ -109,39 +234,37 @@ handleCommandInHBoxMode
     -> HList
     -> HP.Command
     -> m (s, HList, Maybe ())
-handleCommandInHBoxMode _ newS hList@(BL.HList hElemSeq) command =
+handleCommandInHBoxMode _ newS hList@(HList hElemSeq) command =
     case command of
         HP.VModeCommand vModeCommand ->
             throwError $ injectTyped $ BuildError $ "Saw invalid vertical command in restricted horizontal mode: " <> show vModeCommand
         HP.HModeCommand (HP.AddCharacter c) ->
-            (newS,,Nothing) . addElem <$> hModeAddCharacter c
+            (newS,,Nothing) . addElem_ <$> hModeAddCharacter c
         HP.HModeCommand (HP.AddHGlue g) ->
-            (newS,,Nothing) . addElem <$> hModeAddHGlue g
+            (newS,,Nothing) . addElem_ <$> hModeAddHGlue g
         HP.HModeCommand (HP.AddHRule rule) ->
-            (newS,,Nothing) . addElem <$> hModeAddRule rule
+            (newS,,Nothing) . addElem_ <$> hModeAddRule rule
         HP.AddSpace ->
-            (newS,,Nothing) . addElem <$> hModeAddSpace
+            (newS,,Nothing) . addElem_ <$> hModeAddSpace
         HP.StartParagraph indentFlag ->
-            (newS,,Nothing) . addMaybeElem' <$> hModeStartParagraph indentFlag
+            (newS,,Nothing) . addMaybeElem_ <$> hModeStartParagraph indentFlag
         -- \par: Restricted (this mode): does nothing. Unrestricted: ends mode.
         HP.EndParagraph ->
             pure (newS, hList, Nothing)
         HP.ModeIndependentCommand modeIndependentCommand -> do
-            (doneS, modeIndRes) <- handleModeIndependentCommand newS modeIndependentCommand
-            pure $ case modeIndRes of
-                AddMaybeElem mayExtraElem ->
-                    (doneS, addMaybeElem' (BL.HVListElem <$> mayExtraElem), Nothing)
-                FinishBoxMode ->
-                    (doneS, hList, Just ())
+            (doneS, doneList, sawEndBox) <- unModeIndependentBuildT (handleModeIndependentCommand modeIndependentCommand) newS hList
+            pure (doneS, doneList, if sawEndBox then Just () else Nothing)
         oth ->
             panic $ "Not implemented, outer V mode: " <> show oth
   where
-    addElem e = BL.HList $ hElemSeq :|> e
-    addMaybeElem' mayE = BL.HList $ addMaybeElem hElemSeq mayE
+    addElem_ e = HList $ hElemSeq :|> e
+    addMaybeElem_ mayE = HList $ addMaybeElem hElemSeq mayE
 
 handleCommandInVBoxMode
     :: forall s st e m
-     . ( TeXBuildCtx s st e m
+     . ( TeXBuildCtx st e m
+
+       , HP.MonadTeXParse (HP.TeXParseT s m)
        , HP.TeXStream s
 
        , AsType TFMError e
@@ -161,9 +284,9 @@ handleCommandInVBoxMode oldS newS vList command =
         HP.VModeCommand HP.End ->
             throwError $ injectTyped $ BuildError "End not allowed in internal vertical mode"
         HP.VModeCommand (HP.AddVGlue g) ->
-            vModeAddVGlue g >>= addElem <&> (newS,,Nothing)
+            vModeAddVGlue g >>= addElem_ <&> (newS,,Nothing)
         HP.VModeCommand (HP.AddVRule rule) ->
-            vModeAddRule rule >>= addElem <&> (newS,,Nothing)
+            vModeAddRule rule >>= addElem_ <&> (newS,,Nothing)
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -175,18 +298,12 @@ handleCommandInVBoxMode oldS newS vList command =
         HP.AddSpace ->
             pure (newS, vList, Nothing)
         HP.ModeIndependentCommand modeIndependentCommand -> do
-            (doneS, modeIndRes) <- handleModeIndependentCommand newS modeIndependentCommand
-            case modeIndRes of
-                AddMaybeElem mayExtraElem ->
-                    (doneS,, Nothing) <$> addMaybeElem' mayExtraElem
-                FinishBoxMode ->
-                    pure (doneS, vList, Just ())
+            (doneS, doneList, sawEndBox) <- unModeIndependentBuildT (handleModeIndependentCommand modeIndependentCommand) newS vList
+            pure (doneS, doneList, if sawEndBox then Just () else Nothing)
         oth ->
             panic $ "Not implemented, outer V mode: " <> show oth
   where
-    addElem e = addVListElem vList e
-
-    addMaybeElem' = maybe (pure vList) addElem
+    addElem_ e = addVListElem vList e
 
     addPara :: HP.IndentFlag -> m (s, VList, Maybe ())
     addPara indentFlag = do
@@ -241,7 +358,9 @@ handleCommandInMainVMode
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , TeXBuildCtx s st e m
+       , TeXBuildCtx st e m
+
+       , HP.MonadTeXParse (HP.TeXParseT s m)
        , HP.TeXStream s
 
        , MonadIO m
@@ -258,9 +377,9 @@ handleCommandInMainVMode oldS newS vList command =
         HP.VModeCommand HP.End ->
             pure (newS, vList, Just ())
         HP.VModeCommand (HP.AddVGlue g) ->
-            vModeAddVGlue g >>= addElem <&> (newS, , Nothing)
+            vModeAddVGlue g >>= addElem_ <&> (newS, , Nothing)
         HP.VModeCommand (HP.AddVRule rule) ->
-            vModeAddRule rule >>= addElem <&> (newS, , Nothing)
+            vModeAddRule rule >>= addElem_ <&> (newS, , Nothing)
         HP.HModeCommand _ ->
             addPara HP.Indent
         HP.StartParagraph indentFlag ->
@@ -272,18 +391,13 @@ handleCommandInMainVMode oldS newS vList command =
         HP.AddSpace ->
             pure (newS, vList, Nothing)
         HP.ModeIndependentCommand modeIndependentCommand -> do
-            (doneS, modeIndRes) <- handleModeIndependentCommand newS modeIndependentCommand
-            case modeIndRes of
-                AddMaybeElem mayExtraElem ->
-                    (doneS, , Nothing) <$> addMaybeElem' mayExtraElem
-                FinishBoxMode ->
-                    throwError $ injectTyped $
-                        BuildError "No box to end: in main V mode"
+            (doneS, doneList, sawEndBox) <- unModeIndependentBuildT (handleModeIndependentCommand modeIndependentCommand) newS vList
+            when sawEndBox $ throwError $ injectTyped $ BuildError "No box to end: in main V mode"
+            pure (doneS, doneList, Nothing)
         oth ->
             panic $ "Not implemented, outer V mode: " <> show oth
   where
-    addElem e = addVListElem vList e
-    addMaybeElem' = maybe (pure vList) addElem
+    addElem_ e = addVListElem vList e
 
     addPara indentFlag =
         do
@@ -305,7 +419,9 @@ extractPara
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , TeXBuildCtx s st e m
+       , TeXBuildCtx st e m
+
+       , HP.MonadTeXParse (HP.TeXParseT s m)
        , HP.TeXStream s
 
        , MonadIO m
@@ -321,7 +437,7 @@ extractPara indentFlag s = do
             pure $ Seq.singleton indentBox
         HP.DoNotIndent ->
             pure mempty
-    runCommandLoop handleCommandInParaMode s (BL.HList initList)
+    runCommandLoop handleCommandInParaMode s (HList initList)
 
 extractMainVList
     :: ( MonadError e m
@@ -329,7 +445,9 @@ extractMainVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , TeXBuildCtx s st e m
+       , TeXBuildCtx st e m
+
+       , HP.MonadTeXParse (HP.TeXParseT s m)
        , HP.TeXStream s
 
        , MonadIO m
@@ -348,7 +466,9 @@ extractBreakAndSetMainVList
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , TeXBuildCtx s st e m
+       , TeXBuildCtx st e m
+
+       , HP.MonadTeXParse (HP.TeXParseT s m)
        , HP.TeXStream s
 
        , MonadIO m
@@ -368,9 +488,15 @@ extractBreakAndSetMainVList s = do
     mag <- gets $ view $ typed @Config % to (IntParamVal . lookupTeXIntParameter HP.Mag)
     pure (finalS, pages, mag)
 
-data ModeIndependentResult
-    = AddMaybeElem (Maybe BL.VListElem)
+data ModeIndependentCommandAction
+    = AddElem BL.VListElem
     | FinishBoxMode
+    | FetchBox B.DesiredLength HP.ExplicitBox BoxDestiny
+    | InsertLexToken Lex.Token
+
+data BoxDestiny
+    = RegisterDestiny EightBitInt HR.ScopeFlag
+    | ListDestiny
 
 handleModeIndependentCommand
     :: ( MonadIO m
@@ -378,25 +504,24 @@ handleModeIndependentCommand
 
        , AsType Data.Path.PathError e
        , AsType TFMError e
-       , AsType BuildError e
 
-       , TeXBuildCtx s st e m
-       , HP.TeXStream s
+       , TeXBuildCtx st e m
+
+       , MonadModeIndependentBuild m
        )
-    => s
-    -> HP.ModeIndependentCommand
-    -> m (s, ModeIndependentResult)
-handleModeIndependentCommand s = \case
+    => HP.ModeIndependentCommand
+    -> m Bool
+handleModeIndependentCommand = \case
     HP.Message stdOutStream eTxt -> do
         let _handle = case stdOutStream of
                 HP.StdOut -> stdout
                 HP.StdErr -> stderr
         liftIO $ hPutStrLn _handle (toS (Codes.unsafeCodesAsChars (showExpandedBalancedText eTxt)) :: Text)
-        pure (s, AddMaybeElem Nothing)
+        pure False
     HP.Relax ->
-        pure (s, AddMaybeElem Nothing)
+        pure False
     HP.IgnoreSpaces ->
-        pure (s, AddMaybeElem Nothing)
+        pure False
     -- Re-insert the ⟨token⟩ into the input just after running the next
     -- assignment command. Later \afterassignment commands override earlier
     -- commands. If the assignment is a \setbox, and if the assigned ⟨box⟩ is
@@ -405,38 +530,39 @@ handleModeIndependentCommand s = \case
     -- inserted by \everyhbox or \everyvbox.
     HP.SetAfterAssignmentToken lt -> do
         modify $ typed @Config % field @"afterAssignmentToken" ?~ lt
-        pure (s, AddMaybeElem Nothing)
-    HP.AddPenalty n ->
-        (s,) . AddMaybeElem . Just . BL.ListPenalty . BL.Penalty <$> texEvaluate n
-    HP.AddKern ln ->
-        (s,) . AddMaybeElem . Just . BL.VListBaseElem . B.ElemKern . B.Kern <$> texEvaluate ln
+        pure False
+    HP.AddPenalty n -> do
+        addElem . BL.ListPenalty . BL.Penalty =<< texEvaluate n
+        pure False
+    HP.AddKern ln -> do
+        addElem . BL.VListBaseElem . B.ElemKern . B.Kern =<< texEvaluate ln
+        pure False
     HP.Assign HP.Assignment { HP.scope, HP.body } ->
         do
-        (postAssignS, assignResult) <- case body of
+        case body of
             HP.DefineControlSequence cs tgt ->
                 do
-                (maybeElem, newCSTok) <- case tgt of
+                newCSTok <- case tgt of
                     HP.MacroTarget macro ->
-                        pure (Nothing, HR.syntaxTok $ HP.MacroTok macro)
+                        pure (HR.syntaxTok $ HP.MacroTok macro)
                     -- TODO: If a \let target is an active character, should we
                     -- treat it as a control sequence, or a char-cat pair?
                     HP.LetTarget (Lex.CharCatToken tgtCC) ->
-                        pure (Nothing, HR.primTok $ HP.LetCharCat tgtCC)
+                        pure (HR.primTok $ HP.LetCharCat tgtCC)
                     HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                         do
                         mayCS <- gets (view $ typed @Config % to (lookupCSProper tgtCS))
                         let resTok = fromMaybe (HP.PrimitiveToken HP.RelaxTok) mayCS
-                        pure (Nothing, resTok)
+                        pure resTok
                     HP.ShortDefineTarget q n ->
                         do
                         en <- texEvaluate n
-                        pure (Nothing, HR.primTok $ HP.IntRefTok q en)
+                        pure (HR.primTok $ HP.IntRefTok q en)
                     HP.FontTarget fontSpec fPath ->
                         do
                         fontDef@B.FontDefinition { B.fontNr } <- loadFont fPath fontSpec
-                        let fontRefTok = HR.primTok $ HP.FontRefToken fontNr
-                            boxElem = BL.VListBaseElem $ B.ElemFontDefinition fontDef
-                        pure (Just boxElem, fontRefTok)
+                        addElem $ BL.VListBaseElem $ B.ElemFontDefinition fontDef
+                        pure $ HR.primTok $ HP.FontRefToken fontNr
                     oth ->
                         panic $ "Not implemented: DefineControlSequence target " <> show oth
                 sLogStampedJSON "Defining control sequence"
@@ -445,9 +571,7 @@ handleModeIndependentCommand s = \case
                     , ("scope", toJSON scope)
                     ]
                 modify $ typed @Config %~ setControlSequence cs newCSTok scope
-                pure (s, AddMaybeElem maybeElem)
             HP.SetVariable ass ->
-                do
                 case ass of
                     HP.TeXIntVariableAssignment v tgt ->
                         Var.setValueFromAST v scope tgt
@@ -463,9 +587,7 @@ handleModeIndependentCommand s = \case
                         Var.setValueFromAST v scope tgt
                     HP.SpecialLengthVariableAssignment v tgt ->
                         Var.setValueFromAST v scope tgt
-                pure (s, AddMaybeElem Nothing)
             HP.ModifyVariable modCommand ->
-                do
                 case modCommand of
                     HP.AdvanceTeXIntVariable var plusVal ->
                         Var.advanceValueFromAST var scope plusVal
@@ -485,7 +607,6 @@ handleModeIndependentCommand s = \case
                                 Var.scaleValueFromAST var scope vDir scaleVal
                             HP.MathGlueNumericVariable var ->
                                 Var.scaleValueFromAST var scope vDir scaleVal
-                pure (s, AddMaybeElem Nothing)
             HP.AssignCode (HP.CodeAssignment (HP.CodeTableRef codeType idx) val) ->
                 do
                 eIdx <- texEvaluate idx
@@ -501,17 +622,15 @@ handleModeIndependentCommand s = \case
                     , ("scope", toJSON scope)
                     ]
                 updateCharCodeMap codeType idxChar eVal scope
-                pure (s, AddMaybeElem Nothing)
             HP.SelectFont fNr ->
                 do
                 selectFont fNr scope
-                pure (s, AddMaybeElem $ Just $ BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr)
+                addElem $ BL.VListBaseElem $ B.ElemFontSelection $ B.FontSelection fNr
             HP.SetFamilyMember fm fontRef ->
                 do
                 eFm <- texEvaluate fm
                 fNr <- texEvaluate fontRef
                 modify $ typed @Config %~ setFamilyMemberFont eFm fNr scope
-                pure (s, AddMaybeElem Nothing)
             -- Start a new level of grouping. Enter inner mode.
             HP.SetBoxRegister lhsIdx box ->
                 do
@@ -521,18 +640,15 @@ handleModeIndependentCommand s = \case
                         do
                         fetchedMaybeBox <- fetchBox fetchMode rhsIdx
                         modify $ typed @Config %~ setBoxRegisterNullable eLhsIdx scope fetchedMaybeBox
-                        pure (s, AddMaybeElem Nothing)
                     HP.LastBox ->
                         panic "Not implemented: SetBoxRegister to LastBox"
                     HP.VSplitBox _ _ ->
                         panic "Not implemented: SetBoxRegister to VSplitBox"
-                    HP.ExplicitBox spec boxType ->
-                        do
+                    HP.ExplicitBox spec boxType -> do
                         eSpec <- texEvaluate spec
                         modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
-                        (doneS, boxArg) <- extractExplicitBoxContents s eSpec boxType
-                        modify $ typed @Config %~ setBoxRegister eLhsIdx boxArg scope
-                        pure (doneS, AddMaybeElem Nothing)
+                        extractedBox <- extractExplicitBox eSpec boxType
+                        modify $ typed @Config %~ setBoxRegister eLhsIdx extractedBox scope
             HP.SetFontChar (HP.FontCharRef fontChar fontRef) charRef ->
                 do
                 fNr <- texEvaluate fontRef
@@ -541,17 +657,16 @@ handleModeIndependentCommand s = \case
                         HP.SkewChar   -> f { skewChar = eCharRef }
                         HP.HyphenChar -> f { hyphenChar = eCharRef }
                 modifyFont fNr updateFontChar
-                pure (s, AddMaybeElem Nothing)
             oth ->
                 panic $ show oth
-        (,assignResult) <$> do
-            gets (view $ typed @Config % field @"afterAssignmentToken") >>= \case
-                Nothing ->
-                    pure postAssignS
-                Just lt ->
-                    do
-                    modify $ typed @Config % field @"afterAssignmentToken" .~ Nothing
-                    pure (HP.insertLexToken postAssignS lt)
+        gets (view $ typed @Config % field @"afterAssignmentToken") >>= \case
+            Nothing ->
+                pure ()
+            Just lt ->
+                do
+                insertLexToken lt
+                modify $ typed @Config % field @"afterAssignmentToken" .~ Nothing
+        pure False
     HP.WriteToStream n (HP.ImmediateWriteText eTxt) -> do
         en <- texEvaluate n
         fStreams <- gets $ view $ typed @Config % field @"outFileStreams"
@@ -572,49 +687,55 @@ handleModeIndependentCommand s = \case
                 -- Write to log
                 logHandle <- gets $ view $ typed @Config % field @"logStream"
                 liftIO $ hPutStrLn logHandle txtTxt
-        pure (s, AddMaybeElem Nothing)
+        pure False
     -- Start a new level of grouping.
     HP.ChangeScope HP.Positive trig ->
         do
         modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope (LocalStructureGroup trig))
-        pure (s, AddMaybeElem Nothing)
+        pure False
     -- Do the appropriate finishing actions, undo the
     -- effects of non-global assignments, and leave the
     -- group. Maybe leave the current mode.
-    HP.ChangeScope HP.Negative trig ->
-        gets (view $ typed @Config % to popGroup) >>= \case
+    HP.ChangeScope HP.Negative trig -> do
+        (group, poppedConfig) <- gets (view $ typed @Config % to popGroup) >>= \case
             Nothing ->
                 throwError $ injectTyped $ ConfigError "No group to leave"
-            Just (group, poppedConfig) ->
-                do
-                modify $ typed @Config .~ poppedConfig
-                (s,) <$> case group of
-                    -- Undo the effects of non-global
-                    -- assignments without leaving the
-                    -- current mode.
-                    ScopeGroup _ (LocalStructureGroup trigConf) ->
-                        do
-                        when (trigConf /= trig) $ throwError $ injectTyped $ ConfigError $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
-                        pure (AddMaybeElem Nothing)
-                    -- - Undo the effects of non-global assignments
-                    -- - package the [box] using the size that was saved on the
-                    --   stack
-                    -- - complete the \setbox command
-                    -- - return to the mode we were in at the time of the
-                    --   \setbox.
-                    ScopeGroup _ ExplicitBoxGroup ->
-                        pure FinishBoxMode
-                    NonScopeGroup ->
-                        pure (AddMaybeElem Nothing)
-    HP.AddBox HP.NaturalPlacement (HP.FetchedRegisterBox fetchMode idx) -> do
-        mayBox <- fetchBox fetchMode idx
-        pure (s, AddMaybeElem (BL.VListBaseElem . B.ElemBox <$> mayBox))
-    HP.AddBox HP.NaturalPlacement (HP.ExplicitBox spec boxType) -> do
-        -- Start a new level of grouping. Enter inner mode.
-        eSpec <- texEvaluate spec
-        modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
-        (doneS, box) <- extractExplicitBoxContents s eSpec boxType
-        pure (doneS, AddMaybeElem $ Just $ BL.VListBaseElem $ B.ElemBox box)
+            Just v ->
+                pure v
+        modify $ typed @Config .~ poppedConfig
+        case group of
+            -- Undo the effects of non-global
+            -- assignments without leaving the
+            -- current mode.
+            ScopeGroup _ (LocalStructureGroup trigConf) -> do
+                when (trigConf /= trig) $
+                    throwError $ injectTyped $ ConfigError $ "Entry and exit group triggers differ: " <> show (trig, trigConf)
+                pure False
+            -- - Undo the effects of non-global assignments
+            -- - package the [box] using the size that was saved on the
+            --   stack
+            -- - complete the \setbox command
+            -- - return to the mode we were in at the time of the
+            --   \setbox.
+            ScopeGroup _ ExplicitBoxGroup ->
+                pure True
+            NonScopeGroup ->
+                pure False
+    HP.AddBox HP.NaturalPlacement boxSource -> do
+        case boxSource of
+            HP.FetchedRegisterBox fetchMode idx ->
+                fetchBox fetchMode idx >>= \case
+                    Nothing ->
+                        pure ()
+                    Just b ->
+                        addElem (BL.VListBaseElem $ B.ElemBox b)
+            HP.ExplicitBox spec boxType -> do
+                -- Start a new level of grouping. Enter inner mode.
+                eSpec <- texEvaluate spec
+                modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
+                b <- extractExplicitBox eSpec boxType
+                addElem (BL.VListBaseElem $ B.ElemBox b)
+        pure False
     oth ->
         panic $ show oth
 
@@ -624,7 +745,9 @@ extractExplicitBoxContents
        , AsType TFMError e
        , AsType Data.Path.PathError e
 
-       , TeXBuildCtx s st e m
+       , TeXBuildCtx st e m
+
+       , HP.MonadTeXParse (HP.TeXParseT s m)
        , HP.TeXStream s
 
        , MonadIO m
