@@ -199,7 +199,7 @@ findFilePath
     -> m (Path Abs File)
 findFilePath findPolicy extraPaths p =
     do
-    dirs <- gets $ view $ typed @Config % field @"searchDirectories" % to (<> extraPaths)
+    dirs <- use $ typed @Config % field @"searchDirectories" % to (<> extraPaths)
     getTgtPath
         >>= Path.IO.findFile dirs
         >>= note (injectTyped $ ConfigError $ "Could not find file: " <> show p)
@@ -226,8 +226,8 @@ readFontInfo
     -> m FontInfo
 readFontInfo fontPath = do
     fontMetrics <- TFM.readTFMFancy fontPath
-    hyphenChar <- gets $ lookupTeXIntParameter DefaultHyphenChar . getTyped @Config
-    skewChar <- gets $ lookupTeXIntParameter DefaultSkewChar . getTyped @Config
+    hyphenChar <- use $ typed @Config % to (lookupTeXIntParameter DefaultHyphenChar)
+    skewChar <- use $ typed @Config % to (lookupTeXIntParameter DefaultSkewChar)
     pure FontInfo { fontMetrics, hyphenChar, skewChar }
 
 lookupFontInfo
@@ -239,22 +239,22 @@ lookupFontInfo
     => TeXInt
     -> m FontInfo
 lookupFontInfo fNr = do
-    mayInfo <- gets $ view $ typed @Config % field @"fontInfos" % to (!? fNr)
+    mayInfo <- use $ typed @Config % field @"fontInfos" % to (!? fNr)
     note (injectTyped (ConfigError "No such font number")) mayInfo
 
 addFont :: (MonadState st m, HasType Config st) => FontInfo -> m TeXInt
 addFont newInfo = do
-    infos <- gets $ fontInfos . getTyped @Config
+    infos <- use $ typed @Config % field @"fontInfos"
     let newKey = case Map.lookupMax infos of
             Nothing     -> 0
             Just (i, _) -> succ i
         newInfos = Map.insert newKey newInfo infos
-    modify $ typed @Config % field @"fontInfos" .~ newInfos
+    assign' (typed @Config % field @"fontInfos") newInfos
     pure newKey
 
 modifyFont :: (MonadState st m, HasType Config st) => TeXInt -> (FontInfo -> FontInfo) -> m ()
 modifyFont fNr f =
-    modify $ typed @Config % field @"fontInfos" %~ Map.adjust f fNr
+    modifying' (typed @Config % field @"fontInfos") (Map.adjust f fNr)
 
 -- Special quantities.
 
@@ -393,7 +393,7 @@ mLookupCurrentFontNr
        )
     => m TeXInt
 mLookupCurrentFontNr = do
-    mayFNr <- gets $ lookupCurrentFontNr . getTyped @Config
+    mayFNr <- use $ typed @Config % to lookupCurrentFontNr
     note (injectTyped $ ConfigError "Font number isn't set") mayFNr
 
 selectFontNr :: TeXInt -> ScopeFlag -> Config -> Config
@@ -426,7 +426,7 @@ lookupFontFamilyMember
     => (FontRange, TeXInt)
     -> m TeXInt
 lookupFontFamilyMember k = do
-    mayMember <- gets $ view $ typed @Config % to (scopedMapLookup familyMemberFonts k)
+    mayMember <- use $ typed @Config % to (scopedMapLookup familyMemberFonts k)
     note (injectTyped $ ConfigError $ "Family member undefined: " <> show k) mayMember
 
 -- Control sequences.
@@ -485,7 +485,7 @@ updateCharCodeMap t c n scopeFlag = do
             noteConfigError $ Code.fromTeXInt n <&> insertKey (G.P.field @"spaceFactors") c
         DelimiterCodeType      ->
             noteConfigError $ Code.fromTeXInt n <&> insertKey (G.P.field @"delimiterCodes") c
-    modify $ typed @Config %~ insert scopeFlag
+    modifying' (typed @Config) (insert scopeFlag)
   where
     noteConfigError :: (MonadError e m, AsType ConfigError e) => Maybe a -> m a
     noteConfigError =

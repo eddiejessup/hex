@@ -29,8 +29,10 @@ readLigKern :: MonadError Text m => [Rational] -> LigKernCommand -> m LigKernIns
 readLigKern kerns (LigKernCommand _skipByte _nextChar _opByte _remainder) =
     do
     op <- if _opByte >= kernOp
-        then Right . KernOp <$>
-            atEith "kern" kerns (256 * (_opByte - kernOp) + _remainder)
+        then do
+            let idx = 256 * (_opByte - kernOp) + _remainder
+            k <- note ("No kern at index " <> show idx) $ atMay kerns idx
+            pure $ Right $ KernOp k
         else pure $ Left LigatureOp
             { ligatureChar      = _remainder
             , charsToPassOver   = _opByte `shift` 2

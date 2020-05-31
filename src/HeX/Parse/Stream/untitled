@@ -1,0 +1,92 @@
+{
+    "chunk":
+    [
+        {
+            "tag": "HVListElem",
+            "contents":
+            {
+                "tag": "ListGlue",
+                "contents":
+                {
+                    "shrink":
+                    {
+                        "factor":
+                        {
+                            "denominator": 1,
+                            "numerator": 72818
+                        },
+                        "order": 0
+                    },
+                    "dimen": 218454,
+                    "stretch":
+                    {
+                        "factor":
+                        {
+                            "denominator": 1,
+                            "numerator": 109227
+                        },
+                        "order": 0
+                    }
+                }
+            }
+        },
+        {
+            "tag": "HListHBaseElem",
+            "contents":
+            {
+                "charDepth": 0,
+                "charHeight": 403099,
+                "char": 116,
+                "charWidth": 254863
+            }
+        },
+        {
+            "tag": "HListHBaseElem",
+            "contents":
+            {
+                "charDepth": 0,
+                "charHeight": 455111,
+                "char": 104,
+                "charWidth": 364090
+            }
+        },
+        {
+            "tag": "HListHBaseElem",
+            "contents":
+            {
+                "charDepth": 0,
+                "charHeight": 282169,
+                "char": 101,
+                "charWidth": 291272
+            }
+        }
+    ],
+    "item":
+    {
+        "tag": "GlueBreak",
+        "contents":
+        {
+            "shrink":
+            {
+                "factor":
+                {
+                    "denominator": 1,
+                    "numerator": 72818
+                },
+                "order": 0
+            },
+            "dimen": 218454,
+            "stretch":
+            {
+                "factor":
+                {
+                    "denominator": 1,
+                    "numerator": 109227
+                },
+                "order": 0
+            }
+        }
+    },
+    "message": "Appending break-item",
+    "timestamp": "2020-05-30T17:35:40.916099Z"
+}

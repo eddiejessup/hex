@@ -11,7 +11,8 @@ data BreakItem
   | KernBreak B.Kern
   | PenaltyBreak Penalty
   | NoBreak
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
 
 breakPenalty :: BreakItem -> TeXInt
 breakPenalty (PenaltyBreak (Penalty p)) = p
@@ -20,7 +21,8 @@ breakPenalty (KernBreak _) = 0
 breakPenalty NoBreak = 0
 
 newtype Penalty = Penalty TeXInt
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass ToJSON
 
 instance Describe Penalty where
 

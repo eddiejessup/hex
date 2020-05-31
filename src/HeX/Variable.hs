@@ -44,52 +44,52 @@ instance TeXVariable HP.TeXIntVariable where
 
   setValue v scopeFlag tgt = case v of
     HP.ParamVar p ->
-      modify $ typed @Config %~ setTeXIntParameter p tgt scopeFlag
+      modifying' (typed @Config) $ setTeXIntParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setTeXIntRegister i tgt scopeFlag)
+        (\i -> modifying' (typed @Config) $ setTeXIntRegister i tgt scopeFlag)
 
 instance TeXVariable HP.LengthVariable where
 
   setValue v scopeFlag tgt = case v of
-    HP.ParamVar p -> modify $ typed @Config %~ setLengthParameter p tgt scopeFlag
+    HP.ParamVar p -> modifying' (typed @Config) $ setLengthParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setLengthRegister i tgt scopeFlag)
+        (\i -> modifying' (typed @Config) $ setLengthRegister i tgt scopeFlag)
 
 instance TeXVariable HP.GlueVariable where
 
   setValue v scopeFlag tgt = case v of
-    HP.ParamVar p -> modify $ typed @Config %~ setGlueParameter p tgt scopeFlag
+    HP.ParamVar p -> modifying' (typed @Config) $ setGlueParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setGlueRegister i tgt scopeFlag)
+        (\i -> modifying' (typed @Config) $ setGlueRegister i tgt scopeFlag)
 
 instance TeXVariable HP.MathGlueVariable where
 
   setValue v scopeFlag tgt = case v of
-    HP.ParamVar p -> modify $ typed @Config %~ setMathGlueParameter p tgt scopeFlag
+    HP.ParamVar p -> modifying' (typed @Config) $ setMathGlueParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setMathGlueRegister i tgt scopeFlag)
+        (\i -> modifying' (typed @Config) $ setMathGlueRegister i tgt scopeFlag)
 
 instance TeXVariable HP.TokenListVariable where
 
   setValue v scopeFlag tgt = case v of
-    HP.ParamVar p -> modify $ typed @Config %~ setTokenListParameter p tgt scopeFlag
+    HP.ParamVar p -> modifying' (typed @Config) $ setTokenListParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
       texEvaluate iRaw >>=
-        (\i -> modify $ typed @Config %~ setTokenListRegister i tgt scopeFlag)
+        (\i -> modifying' (typed @Config) $ setTokenListRegister i tgt scopeFlag)
 
 instance TeXVariable HP.SpecialTeXInt where
 
   setValue p _ tgt =
-    modify $ typed @Config %~ setSpecialTeXInt p tgt
+    modifying' (typed @Config) $ setSpecialTeXInt p tgt
 
 instance TeXVariable HP.SpecialLength where
 
   setValue p _ tgt =
-    modify $ typed @Config %~ setSpecialLength p tgt
+    modifying' (typed @Config) $ setSpecialLength p tgt
 
 -- Numeric variables.
 class TeXVariable a => TeXNumericVariable a where

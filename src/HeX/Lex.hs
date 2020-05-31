@@ -7,6 +7,7 @@ import qualified Hex.Categorise as Cat
 import qualified Hex.Config.Codes as Code
 import Hexlude
 import qualified Test.QuickCheck as QC
+import           Data.Aeson (Value(..))
 
 -- TODO: Fix this hashing crap.
 newtype ControlSequence = ControlSequence ByteString

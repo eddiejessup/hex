@@ -18,9 +18,12 @@ data DesiredLength = Natural | Spread Length | To Length
 
 newtype Kern = Kern {kernDimen :: Length}
   deriving stock Show
+  deriving newtype ToJSON
 
 newtype SetGlue a = SetGlue {glueDimen :: a}
-  deriving stock Show
+  deriving stock (Show, Generic)
+
+deriving anyclass instance ToJSON a => ToJSON (SetGlue a)
 
 instance Describe (SetGlue Length) where
 
@@ -28,8 +31,9 @@ instance Describe (SetGlue Length) where
     singleLine $ "Glue " <> quote (showSP glueDimen)
 
 newtype HBox = HBox (Seq HBoxElem)
-  deriving stock Show
+  deriving stock (Show, Generic)
   deriving newtype (Semigroup, Monoid)
+  deriving anyclass ToJSON
 
 instance Describe HBox where
 
@@ -67,8 +71,9 @@ condenseChary elems toMaybeChar = foldl' append mempty elems
         r :|> NonSentence e
 
 newtype VBox = VBox (Seq VBoxElem)
-  deriving stock (Show)
+  deriving stock (Show, Generic)
   deriving newtype (Semigroup, Monoid)
+  deriving anyclass ToJSON
 
 instance Describe VBox where
 
@@ -78,10 +83,13 @@ instance Describe VBox where
 data BoxContents
   = HBoxContents HBox
   | VBoxContents VBox
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
 
 data Box a = Box {contents :: a, boxWidth, boxHeight, boxDepth :: Length}
-  deriving stock (Show, Functor, Foldable)
+  deriving stock (Show, Generic, Functor, Foldable)
+
+deriving anyclass instance ToJSON a => ToJSON (Box a)
 
 instance Dimensioned (Box BoxContents) where
 
@@ -96,7 +104,8 @@ data BaseElem
   | ElemFontDefinition DVI.D.FontDefinition
   | ElemFontSelection DVI.D.FontSelection
   | ElemKern Kern
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass ToJSON
 
 spacerNaturalLength :: Axis -> BoxDim -> Length -> Length
 spacerNaturalLength ax dim d = case (ax, dim) of
@@ -113,7 +122,8 @@ axisBaseElemNaturalLength ax dim e = case e of
   ElemKern k -> spacerNaturalLength ax dim $ kernDimen k
 
 data VBoxElem = VBoxBaseElem BaseElem | BoxGlue (SetGlue Length)
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
 
 axisVBoxElemNaturalLength :: Axis -> BoxDim -> VBoxElem -> Length
 axisVBoxElemNaturalLength ax dim e = case e of
@@ -127,13 +137,15 @@ instance Dimensioned VBoxElem where
 -- TODO: Ligature, DiscretionaryBreak, Math on/off, V-adust
 newtype HBaseElem = ElemCharacter DVI.D.Character
   deriving stock Show
+  deriving newtype (ToJSON)
 
 instance Dimensioned HBaseElem where
 
   naturalLength dim (ElemCharacter c) = naturalLength dim c
 
 data HBoxElem = HVBoxElem VBoxElem | HBoxHBaseElem HBaseElem
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
 
 instance Dimensioned HBoxElem where
 

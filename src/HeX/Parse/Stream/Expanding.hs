@@ -444,7 +444,7 @@ expandSyntaxCommand = \case
   RomanNumeralTok ->
     panic "Not implemented: syntax command RomanNumeralTok"
   StringTok -> do
-    conf <- gets $ getTyped @Conf.Config
+    conf <- use $ typed @Conf.Config
     let escapeChar = (Conf.IntParamVal . Conf.lookupTeXIntParameter EscapeChar) conf
     expandString escapeChar <$> parseLexToken
   JobNameTok ->
@@ -479,7 +479,7 @@ expandSyntaxCommand = \case
     intQuant <- parseInternalQuantity
     fmap charCodeAsMadeToken <$> texEvaluate intQuant
   ChangeCaseTok direction -> do
-    conf <- gets $ getTyped @Conf.Config
+    conf <- use $ typed @Conf.Config
     expandChangeCase
       (\c -> Conf.lookupChangeCaseCode direction c conf)
       <$> parseGeneralText

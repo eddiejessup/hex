@@ -119,19 +119,19 @@ getRegisterIdx
 getRegisterIdx n f =
     do
     en <- texEvaluate n
-    gets $ view $ typed @Config % to (f en)
+    uses (typed @Config) (f en)
 
 instance TeXEvaluable AST.TeXIntVariable where
     type EvalTarget AST.TeXIntVariable = TeXInt
 
     texEvaluate = \case
-        AST.ParamVar p -> gets $ lookupTeXIntParameter p . getTyped @Config
+        AST.ParamVar p -> uses (typed @Config) $ lookupTeXIntParameter p
         AST.RegisterVar n -> getRegisterIdx n lookupTeXIntRegister
 
 instance TeXEvaluable T.SpecialTeXInt where
     type EvalTarget T.SpecialTeXInt = TeXInt
 
-    texEvaluate p = gets $ lookupSpecialTeXInt p . getTyped @Config
+    texEvaluate p = uses (typed @Config) $ lookupSpecialTeXInt p
 
 instance TeXEvaluable AST.CodeTableRef where
     type EvalTarget AST.CodeTableRef = TeXInt
@@ -141,7 +141,7 @@ instance TeXEvaluable AST.CodeTableRef where
         idxInt <- texEvaluate n
         idxChar <- note (injectTyped (EvaluationError ("Outside range: " <> show idxInt)))
             (fromTeXInt idxInt)
-        conf <- gets (getTyped @Config)
+        conf <- use (typed @Config)
         let
             lookupFrom :: TeXCode v => (Scope -> CharCodeMap v) -> Maybe TeXInt
             lookupFrom getMap = toTeXInt <$> scopedMapLookup getMap idxChar conf
@@ -227,7 +227,7 @@ instance TeXEvaluable AST.Unit where
         AST.PhysicalUnit AST.TrueFrame u -> pure $ inScaledPoint u
         AST.PhysicalUnit AST.MagnifiedFrame u ->
             do
-            _mag <- gets $ lookupTeXIntParameter T.Mag . getTyped @Config
+            _mag <- uses (typed @Config) $ lookupTeXIntParameter T.Mag
             eU <- texEvaluate $ AST.PhysicalUnit AST.TrueFrame u
             pure $ eU * 1000 / fromIntegral _mag
 
@@ -255,13 +255,13 @@ instance TeXEvaluable AST.LengthVariable where
     type EvalTarget AST.LengthVariable = Length
 
     texEvaluate = \case
-        AST.ParamVar p -> gets $ lookupLengthParameter p . getTyped @Config
+        AST.ParamVar p -> uses (typed @Config) $ lookupLengthParameter p
         AST.RegisterVar n -> getRegisterIdx n lookupLengthRegister
 
 instance TeXEvaluable T.SpecialLength where
     type EvalTarget T.SpecialLength = Length
 
-    texEvaluate p = gets $ lookupSpecialLength p . getTyped @Config
+    texEvaluate p = uses (typed @Config) $ lookupSpecialLength p
 
 instance TeXEvaluable AST.FontDimensionRef where
     type EvalTarget AST.FontDimensionRef = Length
@@ -277,7 +277,7 @@ instance TeXEvaluable AST.BoxDimensionRef where
     texEvaluate (AST.BoxDimensionRef idx boxDim) =
         do
         eIdx <- texEvaluate idx
-        mayBoxReg <- gets $ lookupBoxRegister eIdx . getTyped @Config
+        mayBoxReg <- uses (typed @Config) $ lookupBoxRegister eIdx
         pure $ maybe 0 (naturalLength boxDim) mayBoxReg
 
 instance TeXEvaluable AST.CoercedLength where
@@ -368,7 +368,7 @@ instance TeXEvaluable AST.GlueVariable where
     type EvalTarget AST.GlueVariable = BL.Glue Length
 
     texEvaluate = \case
-        AST.ParamVar p    -> gets $ lookupGlueParameter p . getTyped @Config
+        AST.ParamVar p    -> uses (typed @Config) $ lookupGlueParameter p
         AST.RegisterVar n -> getRegisterIdx n lookupGlueRegister
 
 -- Math glue.
@@ -411,7 +411,7 @@ instance TeXEvaluable AST.MathGlueVariable where
     type EvalTarget AST.MathGlueVariable = BL.Glue MathLength
 
     texEvaluate = \case
-        AST.ParamVar p    -> gets $ lookupMathGlueParameter p . getTyped @Config
+        AST.ParamVar p    -> uses (typed @Config) $ lookupMathGlueParameter p
         AST.RegisterVar n -> getRegisterIdx n lookupMathGlueRegister
 
 -- Token list.
@@ -420,7 +420,7 @@ instance TeXEvaluable AST.TokenListVariable where
     type EvalTarget AST.TokenListVariable = T.BalancedText
 
     texEvaluate = \case
-        AST.ParamVar p    -> gets $ lookupTokenListParameter p . getTyped @Config
+        AST.ParamVar p    -> uses (typed @Config) $ lookupTokenListParameter p
         AST.RegisterVar n -> getRegisterIdx n lookupTokenListRegister
 
 -- Showing internal quantities.
@@ -541,7 +541,7 @@ instance TeXEvaluable AST.IfConditionHead where
             pure $ cc1 == cc2
         AST.IfTokensEqual (Lex.ControlSequenceToken cs1) (Lex.ControlSequenceToken cs2) ->
             do
-            conf <- gets $ getTyped @Config
+            conf <- use (typed @Config)
             let lkp cs = lookupCSProper cs conf
             -- Surprisingly, two undefined control sequences are considered equal,
             -- so we may compare the Maybe types.

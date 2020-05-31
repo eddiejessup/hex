@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 module Hex.Resolve.Token where
 
+import qualified Data.Aeson as Ae
 import qualified Data.Ascii as Ascii
 import qualified Data.Map.Strict as Map
 import qualified Hex.BreakList.Elem as BL.E
@@ -336,8 +337,8 @@ data Digit
   deriving stock (Eq, Ord, Bounded, Enum, Show, Generic)
   deriving anyclass (ToJSON)
 
-instance ToJSONKey Digit where
-  toJSONKey = genericToJSONKey defaultJSONKeyOptions
+instance Ae.ToJSONKey Digit where
+  toJSONKey = Ae.genericToJSONKey Ae.defaultJSONKeyOptions
 
 digitToChar :: Digit -> CharCode
 digitToChar d =

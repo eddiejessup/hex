@@ -114,7 +114,8 @@ data VListElem
   = VListBaseElem BaseElem
   | ListGlue (Glue Length)
   | ListPenalty Penalty
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass ToJSON
 
 instance BreakableListElem VListElem where
 
@@ -156,7 +157,12 @@ instance Dimensioned VListElem where
 data HListElem
   = HVListElem VListElem
   | HListHBaseElem HBaseElem
-  deriving stock Show
+  deriving stock (Show, Generic)
+
+instance ToJSON HListElem where
+  toJSON = \case
+    HVListElem e -> toJSON e
+    HListHBaseElem e -> toJSON e
 
 instance BreakableListElem HListElem where
 

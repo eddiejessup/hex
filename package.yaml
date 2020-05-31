@@ -26,6 +26,7 @@ dependencies:
 - mono-traversable
 - mtl
 - optics-core
+- optics-extra
 - parser-combinators
 - path
 - path-io

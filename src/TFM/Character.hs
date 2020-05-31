@@ -69,7 +69,7 @@ character recipes widths heights depths italicCorrs charInfo =
             Chain      -> pure $ Just $ NextLargerChar _remainder
             Extensible ->
                 do
-                recipe <- atEith "recipe" recipes _remainder
+                recipe <- note ("No recipe at index " <> show _remainder) $ atMay recipes _remainder
                 pure $ Just $ ExtensibleRecipeSpecial recipe
     pure Character
         { width
@@ -83,7 +83,7 @@ character recipes widths heights depths italicCorrs charInfo =
     dimAtEith :: Text -> [Rational] -> Int -> m Rational
     dimAtEith str xs i
         | i == 0 = pure 0
-        | otherwise = atEith str xs i
+        | otherwise = note ("No " <> str <> " at index " <> show i) $ atMay xs i
 
 readCharacters
     :: MonadError Text m

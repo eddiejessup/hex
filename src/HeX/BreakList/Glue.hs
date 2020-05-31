@@ -5,7 +5,8 @@ import Hexlude
 
 -- Flex.
 data GlueFlex = GlueFlex {factor :: Rational, order :: Int}
-  deriving stock (Show, Eq)
+  deriving stock (Show, Generic, Eq)
+  deriving anyclass ToJSON
 
 instance Describe GlueFlex where
 
@@ -43,10 +44,13 @@ filFlex = GlueFlex 1 1
 -- Glue.
 data Glue a
   = Glue {dimen :: a, stretch :: GlueFlex, shrink :: GlueFlex}
+  deriving stock (Generic)
 
 deriving stock instance Show a => Show (Glue a)
 
 deriving stock instance Eq a => Eq (Glue a)
+
+deriving anyclass instance ToJSON a => ToJSON (Glue a)
 
 negateGlue :: Num a => Glue a -> Glue a
 negateGlue (Glue d str shr) = Glue (-d) str shr

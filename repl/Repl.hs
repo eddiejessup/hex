@@ -84,23 +84,23 @@ renderReplState = \case
 
 repl :: (MonadState (ReplState, ExpandingStream, Config) m, MonadIO m) => m ()
 repl = do
-  replState <- gets $ view $ typed @ReplState
-  s <- gets (view (typed @ExpandingStream))
-  conf <- gets (view (typed @Config))
+  replState <- use $ typed @ReplState
+  s <- use (typed @ExpandingStream)
+  conf <- use (typed @Config)
   cmd <- prompt $ "[" <> renderReplState replState <> "]"
   case cmd of
     "$cat" ->
-      modify $ typed @ReplState .~ DoCat
+      assign' (typed @ReplState) DoCat
     "$lex" ->
-      modify $ typed @ReplState .~ DoLex
+      assign' (typed @ReplState) DoLex
     "$resolve" ->
-      modify $ typed @ReplState .~ DoResolve
+      assign' (typed @ReplState) DoResolve
     "$expand" ->
-      modify $ typed @ReplState .~ DoExpand
+      assign' (typed @ReplState) DoExpand
     "$command" ->
-      modify $ typed @ReplState .~ DoCommand
+      assign' (typed @ReplState) DoCommand
     "$paralist" ->
-      modify $ typed @ReplState .~ DoParaList
+      assign' (typed @ReplState) DoParaList
     _ -> do
       let inpBSL = BS.L.fromStrict $ encodeUtf8 cmd
       case replState of

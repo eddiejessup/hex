@@ -71,11 +71,11 @@ addVListElem
 addVListElem (BL.VList accSeq) = \case
     e@(BL.VListBaseElem (B.ElemBox b)) ->
         do
-        _prevDepth <- gets $ lookupSpecialLength HP.PrevDepth . getTyped @Config
-        BL.Glue blineLength blineStretch blineShrink <- gets $ lookupGlueParameter HP.BaselineSkip . getTyped @Config
-        skipLimit <- gets $ lookupLengthParameter HP.LineSkipLimit . getTyped @Config
-        skip <- gets $ lookupGlueParameter HP.LineSkip . getTyped @Config
-        modify $ typed @Config %~ setSpecialLength HP.PrevDepth (naturalDepth e)
+        _prevDepth <- uses (typed @Config) $ lookupSpecialLength HP.PrevDepth
+        BL.Glue blineLength blineStretch blineShrink <- uses (typed @Config) $ lookupGlueParameter HP.BaselineSkip
+        skipLimit <- uses (typed @Config) $ lookupLengthParameter HP.LineSkipLimit
+        skip <- uses (typed @Config) $ lookupGlueParameter HP.LineSkip
+        modifying' (typed @Config) $ setSpecialLength HP.PrevDepth (naturalDepth e)
         pure $ BL.VList $ if _prevDepth <= -oneKPt
             then
                 accSeq :|> e
@@ -149,7 +149,7 @@ hModeStartParagraph = \case
     -- list, and the space factor is set to 1000.
     -- TODO: Space factor.
     HP.Indent ->
-        Just <$> gets (view $ typed @Config % to parIndentBox)
+        Just <$> uses (typed @Config) parIndentBox
 
 vModeRuleElem
     :: ( MonadError e m
@@ -163,7 +163,7 @@ vModeRuleElem
 vModeRuleElem rule =
     ruleToElem rule defaultWidth defaultHeight defaultDepth
   where
-    defaultWidth = gets $ view $ typed @Config % to (lookupLengthParameter HP.HSize)
+    defaultWidth = use $ typed @Config % to (lookupLengthParameter HP.HSize)
     defaultHeight = pure $ toScaledPointApprox (0.4 :: Rational) Point
     defaultDepth = pure 0
 
@@ -246,7 +246,7 @@ loadFont (HP.TeXFilePath path) fontSpec = do
                           }
 
 selectFont :: (MonadState st m, HasType Config st) => TeXInt -> HP.ScopeFlag -> m ()
-selectFont n scopeFlag = modify $ typed @Config %~ selectFontNr n scopeFlag
+selectFont n scopeFlag = modifying' (typed @Config) $ selectFontNr n scopeFlag
 
 getFileStream :: Map.Map FourBitInt Handle -> TeXInt -> Maybe Handle
 getFileStream strms (TeXInt n) = do
@@ -265,10 +265,10 @@ fetchBox
   -> m (Maybe (B.Box B.BoxContents))
 fetchBox fetchMode idx = do
   eIdx <- texEvaluate idx
-  fetchedMaybeBox <- gets $ view $ typed @Config % to (lookupBoxRegister eIdx)
+  fetchedMaybeBox <- use $ typed @Config % to (lookupBoxRegister eIdx)
   case fetchMode of
     HP.Lookup -> pure ()
-    HP.Pop -> modify $ typed @Config %~ delBoxRegister eIdx HP.Local
+    HP.Pop -> modifying' (typed @Config) $ delBoxRegister eIdx HP.Local
   pure fetchedMaybeBox
 
 -- Showing things.

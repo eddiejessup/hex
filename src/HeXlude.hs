@@ -1,6 +1,7 @@
 module Hexlude
     ( module Protolude
     , module Data.Sequence
+    , module Data.Tree
 
     , module Data.Generics.Sum
     , module Data.Generics.Product
@@ -16,17 +17,17 @@ module Hexlude
     , module Optics.Operators
     , module Optics.Getter
     , module Optics.Optic
+    , module Optics.State
+    , uses
 
     , mkRatio
 
-    , seqLookupEith
     , seqLastMay
     , seqHeadMay
     , seqMapMaybe
 
     , id
     , (>>>)
-    , atEith
     , traceText
     , flap
 
@@ -44,15 +45,17 @@ import           Protolude                 hiding ((%), group, catch, to, try, l
 
 import           Control.Arrow             ((>>>))
 import           Optics.Lens               (Lens', lens)
-import           Optics.Optic              ((%))
+import           Optics.Optic              ((%), Optic', Is)
 import           Optics.Operators          ((^.), (%~), (.~), (?~))
-import           Optics.Getter             (view, to)
-import           Data.Aeson
+import           Optics.Getter             (Getter, A_Getter, view, views, to)
+import           Optics.State              (use, assign', modifying')
+import           Data.Aeson                (ToJSON(..))
 import           Data.Sequence             (Seq (..), (<|), (|>), singleton)
 import qualified Data.Sequence             as Seq
+import           Data.Tree                 (Tree(..))
 import           Debug.Describe            as Describe
-import           Data.Generics.Product     hiding (list)
-import           Data.Generics.Sum
+import           Data.Generics.Product     (HasType, field, typed)
+import           Data.Generics.Sum         (AsType, injectTyped)
 import           Generic.Random            (genericArbitraryU)
 import           Test.QuickCheck           (Arbitrary(arbitrary), Gen)
 import qualified Data.Ratio as Ratio
@@ -61,14 +64,13 @@ import System.Log.Slog
 mkRatio :: Integral a => a -> a -> Ratio a
 mkRatio = (Ratio.%)
 
-atEith :: (MonadError Text m, Show a) => Text -> [a] -> Int -> m a
-atEith str xs i = note
-    ("No " <> str <> " at index " <> show i <> ", values are: "
-     <> show xs)
-    (atMay xs i)
-
 traceText :: Text -> a -> a
 traceText = trace
+
+-- Optics.
+
+uses :: (MonadState s m, Is k A_Getter) => Optic' k is s a -> (a -> r) -> m r
+uses g f = gets (views g f)
 
 -- Stolen from relude.
 flap :: Functor f => f (a -> b) -> a -> f b
@@ -76,12 +78,6 @@ flap ff x = (\f -> f x) <$> ff
 {-# INLINE flap #-}
 
 -- Sequence.
-
-seqLookupEith :: (MonadError Text m, Show a) => Text -> Seq a -> Int -> m a
-seqLookupEith str xs i = note
-    ("No " <> str <> " at index " <> show i <> ", values are: "
-     <> show xs)
-    (Seq.lookup i xs)
 
 seqLastMay :: Seq a -> Maybe a
 seqLastMay = \case

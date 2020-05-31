@@ -161,6 +161,7 @@ handleCommandInVBoxMode = \case
 
 appendParagraph ::
   ( MonadIO m,
+    MonadSlog m,
     MonadState st m,
     HasType Config st,
     MonadModeIndependentBuild m,
@@ -178,17 +179,18 @@ hListToParaLineBoxes ::
   ( MonadState st m, -- Read-only
     HasType Config st,
     MonadError e m,
-    AsType BuildError e
+    AsType BuildError e,
+    MonadSlog m
   ) =>
   HList ->
   m (Seq (B.Box B.HBox))
 hListToParaLineBoxes hList =
   do
-    hSize <- gets $ LenParamVal . lookupLengthParameter HP.HSize . getTyped @Config
-    lineTol <- gets $ IntParamVal . lookupTeXIntParameter HP.Tolerance . getTyped @Config
-    linePen <- gets $ IntParamVal . lookupTeXIntParameter HP.LinePenalty . getTyped @Config
-    case BL.breakAndSetParagraph hSize lineTol linePen hList of
-      Left err -> throwError $ injectTyped $ BuildError err
+    hSize <- uses (typed @Config) $ LenParamVal . lookupLengthParameter HP.HSize
+    lineTol <- uses (typed @Config) $ IntParamVal . lookupTeXIntParameter HP.Tolerance
+    linePen <- uses (typed @Config) $ IntParamVal . lookupTeXIntParameter HP.LinePenalty
+    runExceptT @(Identity BL.LineBreakError) (BL.breakAndSetParagraph hSize lineTol linePen hList) >>= \case
+      Left err -> throwError $ injectTyped $ BuildError $ show err
       Right v -> pure v
 
 handleCommandInMainVMode ::
@@ -274,7 +276,7 @@ handleModeIndependentCommand = \case
   -- construction (not after the '}'). Insert the ⟨token⟩ just before tokens
   -- inserted by \everyhbox or \everyvbox.
   HP.SetAfterAssignmentToken lt -> do
-    modify $ typed @Config % field @"afterAssignmentToken" ?~ lt
+    assign' (typed @Config % field @"afterAssignmentToken") (Just lt)
     pure False
   HP.AddPenalty n -> do
     addVElem . BL.ListPenalty . BL.Penalty =<< texEvaluate n
@@ -296,7 +298,7 @@ handleModeIndependentCommand = \case
                 pure (HR.primTok $ HP.LetCharCat tgtCC)
               HP.LetTarget (Lex.ControlSequenceToken tgtCS) ->
                 do
-                  mayCS <- gets (view $ typed @Config % to (lookupCSProper tgtCS))
+                  mayCS <- uses (typed @Config) (lookupCSProper tgtCS)
                   let resTok = fromMaybe (HP.PrimitiveToken HP.RelaxTok) mayCS
                   pure resTok
               HP.ShortDefineTarget q n ->
@@ -316,7 +318,7 @@ handleModeIndependentCommand = \case
                 ("token", toJSON newCSTok),
                 ("scope", toJSON scope)
               ]
-            modify $ typed @Config %~ setControlSequence cs newCSTok scope
+            modifying' (typed @Config) $ setControlSequence cs newCSTok scope
         HP.SetVariable ass ->
           case ass of
             HP.TeXIntVariableAssignment v tgt ->
@@ -377,7 +379,7 @@ handleModeIndependentCommand = \case
           do
             eFm <- texEvaluate fm
             fNr <- texEvaluate fontRef
-            modify $ typed @Config %~ setFamilyMemberFont eFm fNr scope
+            modifying' (typed @Config) $ setFamilyMemberFont eFm fNr scope
         -- Start a new level of grouping. Enter inner mode.
         HP.SetBoxRegister lhsIdx box ->
           do
@@ -386,16 +388,16 @@ handleModeIndependentCommand = \case
               HP.FetchedRegisterBox fetchMode rhsIdx ->
                 do
                   fetchedMaybeBox <- fetchBox fetchMode rhsIdx
-                  modify $ typed @Config %~ setBoxRegisterNullable eLhsIdx scope fetchedMaybeBox
+                  modifying' (typed @Config) $ setBoxRegisterNullable eLhsIdx scope fetchedMaybeBox
               HP.LastBox ->
                 panic "Not implemented: SetBoxRegister to LastBox"
               HP.VSplitBox _ _ ->
                 panic "Not implemented: SetBoxRegister to VSplitBox"
               HP.ExplicitBox spec boxType -> do
                 eSpec <- texEvaluate spec
-                modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
+                modifying' (typed @Config) $ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
                 extractedBox <- extractExplicitBox eSpec boxType
-                modify $ typed @Config %~ setBoxRegister eLhsIdx extractedBox scope
+                modifying' (typed @Config) $ setBoxRegister eLhsIdx extractedBox scope
         HP.SetFontChar (HP.FontCharRef fontChar fontRef) charRef ->
           do
             fNr <- texEvaluate fontRef
@@ -406,17 +408,17 @@ handleModeIndependentCommand = \case
             modifyFont fNr updateFontChar
         oth ->
           panic $ show oth
-      gets (view $ typed @Config % field @"afterAssignmentToken") >>= \case
+      use (typed @Config % field @"afterAssignmentToken") >>= \case
         Nothing ->
           pure ()
         Just lt ->
           do
             insertLexToken lt
-            modify $ typed @Config % field @"afterAssignmentToken" .~ Nothing
+            assign' (typed @Config % field @"afterAssignmentToken") Nothing
       pure False
   HP.WriteToStream n (HP.ImmediateWriteText eTxt) -> do
     en <- texEvaluate n
-    fStreams <- gets $ view $ typed @Config % field @"outFileStreams"
+    fStreams <- use $ typed @Config % field @"outFileStreams"
     let txtTxt = toS $ Codes.unsafeCodesAsChars (showExpandedBalancedText eTxt)
     -- Write to:
     -- if stream number corresponds to existing, open file:
@@ -432,26 +434,26 @@ handleModeIndependentCommand = \case
           -- Write to terminal.
           when (en >= 0) $ sLog txtTxt
           -- Write to log
-          logHandle <- gets $ view $ typed @Config % field @"logStream"
+          logHandle <- use $ typed @Config % field @"logStream"
           liftIO $ hPutStrLn logHandle txtTxt
     pure False
   -- Start a new level of grouping.
   HP.ChangeScope HP.Positive entryTrig ->
     do
-      modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope (LocalStructureGroup entryTrig))
+      modifying' (typed @Config) $ pushGroup (ScopeGroup newLocalScope (LocalStructureGroup entryTrig))
       pure False
   -- Do the appropriate finishing actions, undo the
   -- effects of non-global assignments, and leave the
   -- group. Maybe leave the current mode.
   HP.ChangeScope HP.Negative exitTrig -> do
-    prePopCurrentFontNr <- gets (view $ typed @Config % to lookupCurrentFontNr)
-    (group, poppedConfig) <- gets (view $ typed @Config % to popGroup) >>= \case
+    prePopCurrentFontNr <- uses (typed @Config) lookupCurrentFontNr
+    (group, poppedConfig) <- uses (typed @Config) popGroup >>= \case
       Nothing ->
         throwError $ injectTyped $ ConfigError "No group to leave"
       Just v ->
         pure v
-    modify $ typed @Config .~ poppedConfig
-    postPopCurrentFontNr <- gets (view $ typed @Config % to lookupCurrentFontNr)
+    assign' (typed @Config) poppedConfig
+    postPopCurrentFontNr <- uses (typed @Config) lookupCurrentFontNr
     when (prePopCurrentFontNr /= postPopCurrentFontNr) $ do
       sLogStampedJSON
         "After exiting scope, reverting changed font"
@@ -492,7 +494,7 @@ handleModeIndependentCommand = \case
       HP.ExplicitBox spec boxType -> do
         -- Start a new level of grouping. Enter inner mode.
         eSpec <- texEvaluate spec
-        modify $ typed @Config %~ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
+        modifying' (typed @Config) $ pushGroup (ScopeGroup newLocalScope ExplicitBoxGroup)
         b <- extractExplicitBox eSpec boxType
         addVElem $ BL.VListBaseElem $ B.ElemBox b
     pure False

@@ -13,7 +13,8 @@ import Path (Path)
 import qualified Path
 
 data Rule = Rule {ruleWidth, ruleHeight, ruleDepth :: Length}
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
 
 instance Dimensioned Rule where
 
@@ -24,7 +25,8 @@ instance Dimensioned Rule where
 
 data Character
   = Character {char :: CharCode, charWidth, charHeight, charDepth :: Length}
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass ToJSON
 
 instance Dimensioned Character where
 
@@ -48,7 +50,8 @@ data FontDefinition
       , fontName :: Text
       , fontNr :: TeXInt
       }
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass ToJSON
 
 instance Describe FontDefinition where
 
@@ -58,7 +61,8 @@ instance Describe FontDefinition where
     ]
 
 newtype FontSelection = FontSelection TeXInt
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
 
 instance Describe FontSelection where
 
@@ -77,7 +81,8 @@ data Instruction
   | PushStack
   | PopStack
   -- \| DoSpecial !Text
-  deriving stock Show
+  deriving stock (Show, Generic)
+  deriving anyclass (ToJSON)
 
 instance Describe Instruction where
 

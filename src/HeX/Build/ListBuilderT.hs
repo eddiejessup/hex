@@ -240,7 +240,7 @@ extractParaListImpl
 extractParaListImpl indentFlag s = do
     initList <- case indentFlag of
         HP.Indent -> do
-            indentBox <- gets (view $ typed @Config % to parIndentBox)
+            indentBox <- uses (typed @Config) parIndentBox
             pure $ Seq.singleton indentBox
         HP.DoNotIndent ->
             pure mempty
@@ -272,10 +272,10 @@ extractBreakAndSetMainVList s = do
     case finalS ^. HP.conditionBodyStateLens of
         [] -> pure ()
         condStates -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show condStates
-    join $ gets $ view $ typed @Config % to finaliseConfig
-    desiredH <- gets $ view $ typed @Config % to (LenParamVal . lookupLengthParameter HP.VSize)
+    join $ use $ typed @Config % to finaliseConfig
+    desiredH <- use $ typed @Config % to (LenParamVal . lookupLengthParameter HP.VSize)
     let pages = BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
-    mag <- gets $ view $ typed @Config % to (IntParamVal . lookupTeXIntParameter HP.Mag)
+    mag <- use $ typed @Config % to (IntParamVal . lookupTeXIntParameter HP.Mag)
     pure (finalS, pages, mag)
 
 extractMainVList

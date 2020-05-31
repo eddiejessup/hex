@@ -697,7 +697,7 @@ fetchResolvedToken
   => s
   -> m (Maybe (Lex.Token, ResolvedToken, s))
 fetchResolvedToken stream = do
-  conf <- gets $ getTyped @Config
+  conf <- use $ typed @Config
   let lkpCatCode t = lookupCatCode t conf
   let lkpCS cs = lookupCS cs conf
   extractResolvedToken stream lkpCatCode lkpCS
@@ -730,7 +730,7 @@ fetchLexToken
   => s
   -> m (Maybe (Lex.Token, s))
 fetchLexToken stream = do
-  conf <- gets (getTyped @Config)
+  conf <- use (typed @Config)
   let lkpCatCode t = lookupCatCode t conf
   pure $ extractLexToken stream lkpCatCode
 
