@@ -41,7 +41,7 @@ module Hexlude
 where
 
 import           Prelude                   (id)
-import           Protolude                 hiding ((%), group, catch, to, try, log, getField, HasField, isAscii, isHexDigit, isSpace)
+import           Protolude                 hiding ((%), group, catch, to, try, log, getField, HasField, isAscii, isHexDigit, isSpace, option)
 
 import           Control.Arrow             ((>>>))
 import           Optics.Lens               (Lens', lens)

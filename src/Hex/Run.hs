@@ -33,22 +33,6 @@ data Mode
   | DVIBytesMode
   deriving stock (Show, Eq)
 
-readMode :: (IsString s, Eq s) => s -> Maybe Mode
-readMode = \case
-  "cat" -> Just CatMode
-  "lex" -> Just LexMode
-  "resolve" -> Just ResolveMode
-  "expand" -> Just ExpandMode
-  "command" -> Just CommandMode
-  "paralist" -> Just ParaListMode
-  "paraset" -> Just ParaSetMode
-  "pagelist" -> Just PageListMode
-  "page" -> Just PageMode
-  "dvi" -> Just SemanticDVIMode
-  "rawdvi" -> Just RawDVIMode
-  "bytes" -> Just DVIBytesMode
-  _ -> Nothing
-
 loopParser
   :: forall m e a
    . ( Monad m

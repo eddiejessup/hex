@@ -106,6 +106,7 @@ library
     , mtl
     , optics-core
     , optics-extra
+    , optparse-applicative
     , parser-combinators
     , path
     , path-io
@@ -117,12 +118,12 @@ library
     , vector
   default-language: Haskell2010
 
-executable app
-  main-is: App.hs
+executable hexc
+  main-is: Hexc.hs
   other-modules:
       Paths_hex
   hs-source-dirs:
-      app
+      hexc
   default-extensions: ConstraintKinds DataKinds DeriveAnyClass DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts FlexibleInstances GeneralizedNewtypeDeriving InstanceSigs LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings ScopedTypeVariables StandaloneDeriving StrictData TupleSections TypeApplications TypeFamilies TypeOperators
   ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j -threaded -rtsopts -with-rtsopts=-N
   build-depends:
@@ -143,6 +144,7 @@ executable app
     , mtl
     , optics-core
     , optics-extra
+    , optparse-applicative
     , parser-combinators
     , path
     , path-io
@@ -154,12 +156,12 @@ executable app
     , vector
   default-language: Haskell2010
 
-executable repl
-  main-is: Repl.hs
+executable hexi
+  main-is: Hexi.hs
   other-modules:
       Paths_hex
   hs-source-dirs:
-      repl
+      hexi
   default-extensions: ConstraintKinds DataKinds DeriveAnyClass DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts FlexibleInstances GeneralizedNewtypeDeriving InstanceSigs LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings ScopedTypeVariables StandaloneDeriving StrictData TupleSections TypeApplications TypeFamilies TypeOperators
   ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j -threaded -rtsopts -with-rtsopts=-N
   build-depends:
@@ -180,6 +182,7 @@ executable repl
     , mtl
     , optics-core
     , optics-extra
+    , optparse-applicative
     , parser-combinators
     , path
     , path-io
@@ -219,6 +222,7 @@ test-suite hex-test
     , mtl
     , optics-core
     , optics-extra
+    , optparse-applicative
     , parser-combinators
     , path
     , path-io

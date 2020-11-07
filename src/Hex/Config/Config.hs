@@ -150,21 +150,16 @@ data Config =
 newtype ConfigError = ConfigError Text
     deriving stock (Show)
 
-newConfig :: (MonadIO m, MonadThrow m) => [Path Abs Dir] -> m Config
+newConfig :: (MonadIO m, MonadThrow m) => [FilePath] -> m Config
 newConfig extraSearchDirs = do
     cwdRaw <- liftIO getCurrentDirectory
-    _searchDirectories <- mapM parseAbsDir
-        [ "/usr/local/texlive/2018basic/texmf-dist/fonts/tfm/public/latex-fonts"
-        , "/usr/local/texlive/2018basic/texmf-dist/fonts/tfm/public/cm"
-        , "/usr/local/texlive/2018basic/texmf-dist/fonts/tfm/public/knuth-lib"
-        , cwdRaw
-        ]
+    searchDirectories <- mapM parseAbsDir ([cwdRaw] <> extraSearchDirs)
     logHandle <- liftIO $ openFile "hex.log" WriteMode
 
     internalLoggerSet <- liftIO $ Log.newFileLoggerSet Log.defaultBufSize "hex_internal.log"
 
     pure Config { fontInfos = Map.empty
-                , searchDirectories = _searchDirectories <> extraSearchDirs
+                , searchDirectories
                 , specialTeXInts = newSpecialTeXInts
                 , specialLengths = newSpecialLengths
                 , logStream = logHandle

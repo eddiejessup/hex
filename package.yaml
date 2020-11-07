@@ -27,6 +27,7 @@ dependencies:
 - mtl
 - optics-core
 - optics-extra
+- optparse-applicative
 - parser-combinators
 - path
 - path-io
@@ -57,9 +58,9 @@ ghc-options:
 - -j
 
 executables:
-  app:
-    main:                App.hs
-    source-dirs:         app
+  hexc:
+    main:                Hexc.hs
+    source-dirs:         hexc
     ghc-options:
     - -threaded
     - -rtsopts
@@ -67,9 +68,9 @@ executables:
     dependencies:
     - hex
 
-  repl:
-    main:                Repl.hs
-    source-dirs:         repl
+  hexi:
+    main:                Hexi.hs
+    source-dirs:         hexi
     ghc-options:
     - -threaded
     - -rtsopts
