@@ -1,0 +1,231 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           hex
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/eddiejessup/hex#readme>
+homepage:       https://github.com/eddiejessup/hex#readme
+bug-reports:    https://github.com/eddiejessup/hex/issues
+author:         Elliot Marsden
+maintainer:     elliot.marsden@gmail.com
+copyright:      Copyright (c) 2017 Elliot Marsden
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/eddiejessup/hex
+
+library
+  exposed-modules:
+      Data.Adjacent
+      Data.Ascii
+      Data.Byte
+      Data.Path
+      Debug.Describe
+      DVI.Document
+      DVI.Encode
+      DVI.Instruction
+      DVI.Operation
+      Hex.App
+      Hex.Box
+      Hex.Box.Draw
+      Hex.Box.Elem
+      Hex.BreakList
+      Hex.BreakList.BreakList
+      Hex.BreakList.Elem
+      Hex.BreakList.Glue
+      Hex.BreakList.Judge
+      Hex.BreakList.Line
+      Hex.BreakList.Page
+      Hex.BreakList.Set
+      Hex.Build.Class
+      Hex.Build.Command
+      Hex.Build.Helpers
+      Hex.Build.ListBuilderT
+      Hex.Categorise
+      Hex.Config
+      Hex.Config.Codes
+      Hex.Config.Config
+      Hex.Config.Parameters
+      Hex.Evaluate
+      Hex.Lex
+      Hex.Parse
+      Hex.Parse.Assignment
+      Hex.Parse.AST
+      Hex.Parse.Command
+      Hex.Parse.Condition
+      Hex.Parse.Quantity
+      Hex.Parse.Stream.Class
+      Hex.Parse.Stream.Expanding
+      Hex.Parse.Stream.NonExpanding
+      Hex.Parse.SyntaxCommand
+      Hex.Quantity
+      Hex.Resolve
+      Hex.Resolve.Map
+      Hex.Resolve.Token
+      Hex.Run
+      Hex.Variable
+      Hexlude
+      System.Log.Slog
+      TFM
+      TFM.Character
+      TFM.Common
+      TFM.FontParams
+      TFM.Header
+      TFM.LigKern
+      TFM.Parse
+      TFM.Recipe
+      TFM.Table
+  other-modules:
+      Paths_hex
+  hs-source-dirs:
+      src
+  default-extensions: ConstraintKinds DataKinds DeriveAnyClass DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts FlexibleInstances GeneralizedNewtypeDeriving InstanceSigs LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings ScopedTypeVariables StandaloneDeriving StrictData TupleSections TypeApplications TypeFamilies TypeOperators
+  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j
+  build-depends:
+      QuickCheck
+    , aeson
+    , base
+    , binary
+    , bytestring
+    , containers
+    , directory
+    , exceptions
+    , fast-logger
+    , generic-optics
+    , generic-random
+    , hashable
+    , mono-traversable
+    , mtl
+    , optics-core
+    , optics-extra
+    , parser-combinators
+    , path
+    , path-io
+    , protolude
+    , text
+    , time
+    , transformers
+    , unordered-containers
+    , vector
+  default-language: Haskell2010
+
+executable app
+  main-is: App.hs
+  other-modules:
+      Paths_hex
+  hs-source-dirs:
+      app
+  default-extensions: ConstraintKinds DataKinds DeriveAnyClass DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts FlexibleInstances GeneralizedNewtypeDeriving InstanceSigs LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings ScopedTypeVariables StandaloneDeriving StrictData TupleSections TypeApplications TypeFamilies TypeOperators
+  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , aeson
+    , base
+    , binary
+    , bytestring
+    , containers
+    , directory
+    , exceptions
+    , fast-logger
+    , generic-optics
+    , generic-random
+    , hashable
+    , hex
+    , mono-traversable
+    , mtl
+    , optics-core
+    , optics-extra
+    , parser-combinators
+    , path
+    , path-io
+    , protolude
+    , text
+    , time
+    , transformers
+    , unordered-containers
+    , vector
+  default-language: Haskell2010
+
+executable repl
+  main-is: Repl.hs
+  other-modules:
+      Paths_hex
+  hs-source-dirs:
+      repl
+  default-extensions: ConstraintKinds DataKinds DeriveAnyClass DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts FlexibleInstances GeneralizedNewtypeDeriving InstanceSigs LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings ScopedTypeVariables StandaloneDeriving StrictData TupleSections TypeApplications TypeFamilies TypeOperators
+  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , aeson
+    , base
+    , binary
+    , bytestring
+    , containers
+    , directory
+    , exceptions
+    , fast-logger
+    , generic-optics
+    , generic-random
+    , hashable
+    , hex
+    , mono-traversable
+    , mtl
+    , optics-core
+    , optics-extra
+    , parser-combinators
+    , path
+    , path-io
+    , protolude
+    , text
+    , time
+    , transformers
+    , unordered-containers
+    , vector
+  default-language: Haskell2010
+
+test-suite hex-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_hex
+  hs-source-dirs:
+      test
+  default-extensions: ConstraintKinds DataKinds DeriveAnyClass DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts FlexibleInstances GeneralizedNewtypeDeriving InstanceSigs LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings ScopedTypeVariables StandaloneDeriving StrictData TupleSections TypeApplications TypeFamilies TypeOperators
+  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , aeson
+    , base
+    , binary
+    , bytestring
+    , containers
+    , directory
+    , exceptions
+    , fast-logger
+    , generic-optics
+    , generic-random
+    , hashable
+    , hex
+    , hspec
+    , mono-traversable
+    , mtl
+    , optics-core
+    , optics-extra
+    , parser-combinators
+    , path
+    , path-io
+    , protolude
+    , text
+    , time
+    , transformers
+    , unordered-containers
+    , vector
+  default-language: Haskell2010

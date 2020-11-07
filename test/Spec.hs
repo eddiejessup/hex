@@ -25,5 +25,5 @@
 -- main = do
 --     inpFnames <- listDirectory "test/input"
 --     hspec $
---         describe "HeX" $
+--         describe "Hex" $
 --             mapM_ testFile $ toS <$> inpFnames

@@ -14,7 +14,7 @@ newtype ControlSequence = ControlSequence ByteString
   deriving newtype (Show, Eq, Hashable)
 
 instance ToJSON ControlSequence where
-  toJSON (ControlSequence bs) = String $ "\\" <> toS bs
+  toJSON (ControlSequence bs) = String $ "\\" <> decodeUtf8 bs
 
 mkControlSequence :: [Code.CharCode] -> ControlSequence
 mkControlSequence csChars = ControlSequence $ BS.pack $ Code.codeWord <$> csChars
@@ -22,7 +22,7 @@ mkControlSequence csChars = ControlSequence $ BS.pack $ Code.codeWord <$> csChar
 instance Describe ControlSequence where
 
   describe (ControlSequence bs) =
-    let s = "\\" <> toS bs
+    let s = "\\" <> decodeUtf8 bs
     in singleLine $ "ControlSequence " <> quote s
 
 -- Make sure code-list is non-empty.

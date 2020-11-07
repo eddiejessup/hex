@@ -1,6 +1,7 @@
 module Hex.Build.Command where
 
 import qualified Data.Path
+import qualified Data.ByteString.Char8 as BS.C8
 import qualified Hex.Box as B
 import Hex.BreakList (HList (..))
 import qualified Hex.BreakList as BL
@@ -419,7 +420,7 @@ handleModeIndependentCommand = \case
   HP.WriteToStream n (HP.ImmediateWriteText eTxt) -> do
     en <- texEvaluate n
     fStreams <- use $ typed @Config % field @"outFileStreams"
-    let txtTxt = toS $ Codes.unsafeCodesAsChars (showExpandedBalancedText eTxt)
+    let txtTxt = Codes.unsafeCodesAsChars (showExpandedBalancedText eTxt)
     -- Write to:
     -- if stream number corresponds to existing, open file:
     --     file
@@ -432,7 +433,7 @@ handleModeIndependentCommand = \case
       Nothing ->
         do
           -- Write to terminal.
-          when (en >= 0) $ sLog txtTxt
+          when (en >= 0) $ sLog (BS.C8.pack txtTxt)
           -- Write to log
           logHandle <- use $ typed @Config % field @"logStream"
           liftIO $ hPutStrLn logHandle txtTxt
