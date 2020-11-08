@@ -16,7 +16,7 @@ import Options.Applicative
 import qualified Data.Text as Tx
 import Data.Conduit
 import Data.Conduit.Combinators (sinkList, sourceFile, stdin, take)
-import Conduit (runResourceT, MonadResource)
+import Conduit (ResourceT, runResourceT, MonadResource)
 
 data Input = FileInput FilePath | StdInput
 
@@ -103,31 +103,44 @@ preamble = "\\font\\thefont=cmr10 \\thefont\n\n"
 postamble :: BS.L.ByteString
 postamble = "\n\n\\end\n"
 
+getByteSource :: MonadResource m => Input -> IO (ConduitT i ByteString m ())
+getByteSource = \case
+    StdInput ->
+      pure stdin
+    FileInput inPathStr -> do
+      path <- Path.IO.resolveFile' (toS inPathStr)
+      pure $ sourceFile (Path.toFilePath path)
+
 main :: IO ()
 main = do
   opts <- execParser appOptionsParserInfo
 
   case mode opts of
-    NonExpandingMode m -> case m of
-      CatMode -> do
-        foo <- runResourceT $ do
-          src <- case input opts of
-            StdInput ->
-              pure stdin
-            FileInput inPathStr -> do
-              path <- Path.IO.resolveFile' (toS inPathStr)
-              pure $ sourceFile (Path.toFilePath path)
+    NonExpandingMode m -> do
+      let
+      case m of
+        CatMode -> do
+          src <- getByteSource (input opts)
+          ccs <- runResourceT $ runConduit $ src .| usableExtractCharCat .| sinkList
+          putText $ Tx.intercalate "\n" $ show <$> ccs
+        LexMode -> do
+          src <- getByteSource (input opts)
+          errOrTs <- runResourceT $ do
+            let
+              cond :: ConduitT () Void (ExceptT (Identity LexError) (StateT LexState (ResourceT IO))) [Token]
+              cond = src .| usableExtractCharCat .| extractToken .| sinkList
 
-          runConduit $ src .| usableExtractCharCat .| take 10 .| sinkList
-
-        putText $ Tx.intercalate "\n" $ show <$> foo
-        -- putText $ show (length foo)
-      LexMode ->
-        undefined
-        -- putText $ Tx.intercalate "\n" $ show <$> usableCodesToLexTokens input
-      ResolveMode ->
-        undefined
-        -- putText $ Tx.intercalate "\n" $ show <$> usableCodesToResolvedTokens input
+              foo :: ExceptT (Identity LexError) (StateT LexState (ResourceT IO)) [Token]
+              foo = runConduit cond
+            evalStateT (runExceptT foo) LineBegin
+          case runIdentity `first` errOrTs of
+            Left TrailingEscape ->
+              undefined
+            Right ts ->
+              putText $ Tx.intercalate "\n" $ show <$> ts
+        ResolveMode ->
+          undefined
+          -- putText $ Tx.intercalate "\n" $ show <$> usableCodesToResolvedTokens input
     ExpandingMode m -> do
       (inputRaw, maybeInPath) <-
         case input opts of

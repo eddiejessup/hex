@@ -91,7 +91,7 @@ parToken = ControlSequenceToken $ mkControlSequence $ Code.unsafeCodeFromChar <$
 
 data LexError
   = TrailingEscape
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
 
 extractToken ::
   forall m e.

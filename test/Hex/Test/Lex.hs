@@ -17,6 +17,7 @@ tests =
       testControlWord,
       testControlSymbol,
       testControlSymbolThenLetters,
+      testTrailingEscape,
       testManySpaces,
       testComments
     ]
@@ -33,25 +34,27 @@ inCC c = RawCharCat (ccOrd c)
 outCC :: Char -> CoreCatCode -> Token
 outCC c cat = CharCatToken $ CharCat (ccOrd c) cat
 
-assertResultsEqual :: Maybe LexState -> [RawCharCat] -> [Token] -> Assertion
+run :: LexState -> [RawCharCat] -> Either LexError [Token]
+run lexState inp = runIdentity `first` evalState (runExceptT (runCond inp)) lexState
+  where
+    runCond :: [RawCharCat] -> ExceptT (Identity LexError) (StateT LexState Identity) [Token]
+    runCond s =
+      runConduit $
+        yieldMany s
+          .| extractToken
+          .| sinkList
+
+assertResultsEqual :: Maybe LexState -> [RawCharCat] -> Either LexError [Token] -> Assertion
 assertResultsEqual mayLexState inp expected = do
   let testStates = case mayLexState of
         Nothing -> [LineBegin, LineMiddle, SkippingBlanks]
         Just lexState -> [lexState]
   for_ testStates $ \lexState -> do
-    let res = evalState (runExceptT (run inp)) lexState
-    case res of
-      Left e ->
-        assertFailure $ "With initial state '" <> show lexState <> "', got unexpected error: " <> show @(Identity LexError) e
-      Right toks ->
-        assertEqual ("With initial state '" <> show lexState <> "', Results match") expected toks
-  where
-    run :: [RawCharCat] -> ExceptT (Identity LexError) (StateT LexState Identity) [Token]
-    run s =
-      runConduit $
-        yieldMany s
-          .| extractToken
-          .| sinkList
+    let res = run lexState inp
+    assertEqual
+      ("With initial state '" <> show lexState <> "', Results match")
+      expected
+      res
 
 testSimple :: TestTree
 testSimple =
@@ -60,8 +63,10 @@ testSimple =
       Nothing
       [ inCC 'a' (CoreCatCode Letter)
       ]
-      [ outCC 'a' Letter
-      ]
+
+      (Right
+        [ outCC 'a' Letter
+        ])
 
 testControlWord :: TestTree
 testControlWord =
@@ -72,8 +77,9 @@ testControlWord =
         inCC 'a' (CoreCatCode Letter),
         inCC 'a' (CoreCatCode Letter)
       ]
-      [ ControlSequenceToken $ ControlSequence "aa"
-      ]
+      (Right
+        [ ControlSequenceToken $ ControlSequence "aa"
+        ])
 
 testControlSymbol :: TestTree
 testControlSymbol =
@@ -83,8 +89,9 @@ testControlSymbol =
       [ inCC '\\' Escape,
         inCC '.' (CoreCatCode Other)
       ]
-      [ ControlSequenceToken $ ControlSequence "."
-      ]
+      (Right
+        [ ControlSequenceToken $ ControlSequence "."
+        ])
 
 testControlSymbolThenLetters :: TestTree
 testControlSymbolThenLetters =
@@ -96,10 +103,25 @@ testControlSymbolThenLetters =
         inCC 'h' (CoreCatCode Letter),
         inCC 'i' (CoreCatCode Letter)
       ]
-      [ ControlSequenceToken $ ControlSequence ".",
-        outCC 'h' Letter,
-        outCC 'i' Letter
-      ]
+      (Right
+        [ ControlSequenceToken $ ControlSequence ".",
+          outCC 'h' Letter,
+          outCC 'i' Letter
+        ])
+
+testTrailingEscape :: TestTree
+testTrailingEscape =
+  testCase "Trailing escape-character causes error" $ do
+    let inp =
+          [ inCC 'h' (CoreCatCode Letter),
+            inCC '\\' Escape
+          ]
+
+    assertResultsEqual
+      Nothing
+      inp
+      (Left TrailingEscape)
+
 
 testManySpaces :: TestTree
 testManySpaces =
@@ -110,7 +132,7 @@ testManySpaces =
         inCC ' ' (CoreCatCode Space),
         inCC ' ' (CoreCatCode Space)
       ]
-      []
+      (Right [])
 
     assertResultsEqual
       (Just SkippingBlanks)
@@ -118,7 +140,7 @@ testManySpaces =
         inCC ' ' (CoreCatCode Space),
         inCC ' ' (CoreCatCode Space)
       ]
-      []
+      (Right [])
 
     assertResultsEqual
       (Just LineMiddle)
@@ -126,8 +148,9 @@ testManySpaces =
         inCC ' ' (CoreCatCode Space),
         inCC ' ' (CoreCatCode Space)
       ]
-      [ outCC ' ' Space
-      ]
+      (Right
+        [ outCC ' ' Space
+        ])
 
 testComments :: TestTree
 testComments =
@@ -139,6 +162,7 @@ testComments =
         inCC '\n' EndOfLine,
         inCC 'b' (CoreCatCode Letter)
       ]
-      [ parToken,
-        outCC 'b' Letter
-      ]
+      (Right
+        [ parToken,
+          outCC 'b' Letter
+        ])
