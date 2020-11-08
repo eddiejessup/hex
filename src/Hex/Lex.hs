@@ -1,13 +1,15 @@
 {-# LANGUAGE StrictData #-}
 module Hex.Lex where
 
-import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.ByteString as BS
+import qualified Data.Sequence as Seq
 import qualified Hex.Categorise as Cat
 import qualified Hex.Config.Codes as Code
-import Hexlude
+import Hexlude hiding (dropWhile)
 import qualified Test.QuickCheck as QC
 import           Data.Aeson (Value(..))
+import Data.Conduit
+import Data.Conduit.Combinators (peek, sinkList, dropWhile)
 
 -- TODO: Fix this hashing crap.
 newtype ControlSequence = ControlSequence ByteString
@@ -91,107 +93,87 @@ data LexState
 spaceTok :: Token
 spaceTok = CharCatToken $ CharCat (Code.CharCode_ ' ') Code.Space
 
-chopDropWhile :: ([b] -> Maybe (a, [b])) -> (a -> Bool) -> [b] -> [b]
-chopDropWhile _ _ [] = []
-chopDropWhile getNext test cs = case getNext cs of
-  Nothing -> []
-  Just (next, rest)
-    | test next -> chopDropWhile getNext test rest
-    | otherwise -> rest
-
--- Given a function that chops one 'a' from [b], and a stopping criterion on
--- 'a', get [a] up to but not including the succeeding item, and the rest of
--- the list, including the elements that generated the stopping 'a'.
-chopBreak
-  :: (b -> Maybe (a, b))
-  -> b
-  -> (Seq a, b)
-chopBreak getNext = go Empty
-  where
-    go acc cs = case getNext cs of
-      Nothing ->
-        (acc, cs)
-      Just (c, csRest) ->
-        go (acc :|> c) csRest
-
 parToken :: Token
 parToken = ControlSequenceToken $ mkControlSequence $ Code.unsafeCodeFromChar <$> ("par" :: [Char])
 
 extractToken
-  :: (Code.CharCode -> Code.CatCode)
-  -> LexState
-  -> BS.L.ByteString
-  -> Maybe (Token, LexState, BS.L.ByteString)
-extractToken charToCat = go
+  :: forall m
+   . MonadState LexState m
+  => ConduitT Cat.RawCharCat Token m ()
+extractToken = await >>= \case
+  Nothing -> pure ()
+  Just (Cat.RawCharCat n1 cat1) -> do
+    lexState <- get
+    case (cat1, lexState) of
+      -- Control sequence: Grab it.
+      (Code.Escape, _) ->
+        -- Get the next token.
+        await >>= \case
+          -- It is an error to see a single escape character at the end of the input.
+          Nothing ->
+            undefined -- throw error.
+          Just csCC1@(Cat.RawCharCat _ ctrlSeqCat1) -> do
+            ctrlSeqCCs <- case ctrlSeqCat1 of
+              -- If the next token's category is 'Letter', keep taking tokens
+              -- while they are also of category 'Letter'. Prepend the first
+              -- letter to form our full control sequence.
+              Code.CoreCatCode Code.Letter -> do
+                ctrlWordCCsPostFirst <- takeWhileLetter .| sinkList
+                pure (csCC1 : ctrlWordCCsPostFirst)
+              -- If the next token is of a non-Letter category, the control
+              -- sequence contains that single token.
+              _ ->
+                pure (csCC1 : [])
+            put $ case ctrlSeqCat1 of
+              Code.CoreCatCode Code.Space -> SkippingBlanks
+              Code.CoreCatCode Code.Letter -> SkippingBlanks
+              _ -> LineMiddle
+            yield $ ControlSequenceToken $ mkControlSequence $ Cat.char <$> ctrlSeqCCs
+      -- Comment: Ignore rest of line and switch to line-begin.
+      (Code.Comment, _) -> do
+        dropWhile (\(Cat.RawCharCat _ cat) -> cat /= Code.EndOfLine)
+        put LineBegin
+      -- Empty line: Make a paragraph.
+      (Code.EndOfLine, LineBegin) -> do
+        yield parToken
+        put LineBegin
+      -- End of line in middle of line: Make a space token and go to line begin.
+      (Code.EndOfLine, LineMiddle) -> do
+        yield spaceTok
+        put LineBegin
+      -- Space in middle of line: Make a space token and start skipping blanks.
+      (Code.CoreCatCode Code.Space, LineMiddle) -> do
+        yield spaceTok
+        put SkippingBlanks
+      -- Space at the start of a line: Ignore.
+      (Code.CoreCatCode Code.Space, LineBegin) ->
+        pure ()
+      -- Space or end of line, while skipping blanks: Ignore.
+      (Code.CoreCatCode Code.Space, SkippingBlanks) ->
+        pure ()
+      (Code.EndOfLine, SkippingBlanks) ->
+        pure ()
+      -- Ignored: Ignore.
+      (Code.Ignored, _) ->
+        pure ()
+      -- Invalid: Print error message and ignore.
+      -- TODO: TeXbook says to print an error message in this case.
+      (Code.Invalid, _) ->
+        pure ()
+      -- Simple tokeniser cases.
+      (Code.CoreCatCode cc, _) -> do
+        yield $ CharCatToken $ CharCat n1 cc
+        put LineMiddle
+    extractToken
   where
-    go :: LexState -> BS.L.ByteString -> Maybe (Token, LexState, BS.L.ByteString)
-    go _state cs = do
-      (Cat.RawCharCat n1 cat1, rest) <- getCC cs
-      case (cat1, _state) of
-        -- Control sequence: Grab it.
-        (Code.Escape, _) -> do
-          (csCC1@(Cat.RawCharCat _ ctrlSeqCat1), restPostEscape) <- getCC rest
-          let (ctrlSeqCCs, restPostCtrlSeq) = case ctrlSeqCat1 of
-                Code.CoreCatCode Code.Letter ->
-                  let (ctrlWordCCsPostFirst, restPostCtrlWord) = chopBreak getLetterCC restPostEscape
-                  in (csCC1 :<| ctrlWordCCsPostFirst, restPostCtrlWord)
-                _ ->
-                  (singleton csCC1, restPostEscape)
-              nextState = case ctrlSeqCat1 of
-                Code.CoreCatCode Code.Space -> SkippingBlanks
-                Code.CoreCatCode Code.Letter -> SkippingBlanks
-                _ -> LineMiddle
-          pure
-            ( ControlSequenceToken $ mkControlSequence $ toList (Cat.char <$> ctrlSeqCCs)
-            , nextState
-            , restPostCtrlSeq
-            )
-        -- Comment: Ignore rest of line and switch to line-begin.
-        (Code.Comment, _) ->
-          go LineBegin $ BS.L.dropWhile (\c -> charToCat (Code.CharCode c) /= Code.EndOfLine) rest
-        -- Empty line: Make a paragraph.
-        (Code.EndOfLine, LineBegin) ->
-          pure (parToken, LineBegin, rest)
-        -- End of line in middle of line: Make a space token and go to line begin.
-        (Code.EndOfLine, LineMiddle) ->
-          pure (spaceTok, LineBegin, rest)
-        -- Space in middle of line: Make a space token and start skipping blanks.
-        (Code.CoreCatCode Code.Space, LineMiddle) ->
-          pure (spaceTok, SkippingBlanks, rest)
-        -- Space at the start of a line: Ignore.
-        (Code.CoreCatCode Code.Space, LineBegin) ->
-          go _state rest
-        -- Space or end of line, while skipping blanks: Ignore.
-        (Code.CoreCatCode Code.Space, SkippingBlanks) ->
-          go _state rest
-        (Code.EndOfLine, SkippingBlanks) ->
-          go _state rest
-        -- Ignored: Ignore.
-        (Code.Ignored, _) ->
-          go _state rest
-        -- Invalid: Print error message and ignore.
-        -- TODO: TeXbook says to print an error message in this case.
-        (Code.Invalid, _) ->
-          go _state rest
-        -- Simple tokeniser cases.
-        (Code.CoreCatCode cc, _) ->
-          pure (CharCatToken $ CharCat n1 cc, LineMiddle, rest)
-    getCC = Cat.extractCharCat charToCat
-    getLetterCC xs =
-      getCC xs >>= \case
-        r@(Cat.RawCharCat _ (Code.CoreCatCode Code.Letter), _) ->
-          pure r
-        _ ->
-          Nothing
-
-codesToLexTokens :: (Code.CharCode -> Code.CatCode) -> BS.L.ByteString -> [Hex.Lex.Token]
-codesToLexTokens charToCat = go LineBegin
-  where
-    go lexState xs = case extractToken charToCat lexState xs of
-      Just (tok, lexState1, xs1) ->
-        tok : go lexState1 xs1
-      Nothing ->
-        []
-
-usableCodesToLexTokens :: BS.L.ByteString -> [Hex.Lex.Token]
-usableCodesToLexTokens = codesToLexTokens Code.usableCatLookup
+    takeWhileLetter :: ConduitT Cat.RawCharCat Cat.RawCharCat m ()
+    takeWhileLetter = peek >>= \case
+      Nothing -> pure ()
+      Just cc@(Cat.RawCharCat _ (Code.CoreCatCode Code.Letter)) -> do
+        -- Take what we just peeked.
+        ccAgain <- await
+        when (ccAgain /= Just cc) $ panic "Impossible"
+        yield cc
+        takeWhileLetter
+      Just _ ->
+        pure ()

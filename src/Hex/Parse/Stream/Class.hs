@@ -761,6 +761,7 @@ extractLexToken stream lkpCatCode = do
         in Just (fstLexToken, curLexState, newCurTokSource)
       -- If the lex token buffer is empty, extract a token and use it.
       Empty ->
-        Lex.extractToken lkpCatCode curLexState sourceCharCodes
+        -- Lex.extractToken lkpCatCode curLexState sourceCharCodes
+        undefined lkpCatCode curLexState sourceCharCodes
           <&> \(extractedLexToken, newLexState, newCodes) ->
             (extractedLexToken, newLexState, tokSource {sourceCharCodes = newCodes})

@@ -95,6 +95,8 @@ library
     , base
     , binary
     , bytestring
+    , conduit
+    , conduit-extra
     , containers
     , directory
     , exceptions
@@ -125,13 +127,15 @@ executable hexc
   hs-source-dirs:
       hexc
   default-extensions: ConstraintKinds DataKinds DeriveAnyClass DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts FlexibleInstances GeneralizedNewtypeDeriving InstanceSigs LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings ScopedTypeVariables StandaloneDeriving StrictData TupleSections TypeApplications TypeFamilies TypeOperators
-  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j
   build-depends:
       QuickCheck
     , aeson
     , base
     , binary
     , bytestring
+    , conduit
+    , conduit-extra
     , containers
     , directory
     , exceptions
@@ -163,13 +167,15 @@ executable hexi
   hs-source-dirs:
       hexi
   default-extensions: ConstraintKinds DataKinds DeriveAnyClass DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts FlexibleInstances GeneralizedNewtypeDeriving InstanceSigs LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings ScopedTypeVariables StandaloneDeriving StrictData TupleSections TypeApplications TypeFamilies TypeOperators
-  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j
   build-depends:
       QuickCheck
     , aeson
     , base
     , binary
     , bytestring
+    , conduit
+    , conduit-extra
     , containers
     , directory
     , exceptions
@@ -194,21 +200,83 @@ executable hexi
     , vector
   default-language: Haskell2010
 
-test-suite hex-test
+test-suite test
   type: exitcode-stdio-1.0
-  main-is: Spec.hs
+  main-is: Main.hs
   other-modules:
+      Data.Adjacent
+      Data.Ascii
+      Data.Byte
+      Data.Path
+      Debug.Describe
+      DVI.Document
+      DVI.Encode
+      DVI.Instruction
+      DVI.Operation
+      Hex.App
+      Hex.Box
+      Hex.Box.Draw
+      Hex.Box.Elem
+      Hex.BreakList
+      Hex.BreakList.BreakList
+      Hex.BreakList.Elem
+      Hex.BreakList.Glue
+      Hex.BreakList.Judge
+      Hex.BreakList.Line
+      Hex.BreakList.Page
+      Hex.BreakList.Set
+      Hex.Build.Class
+      Hex.Build.Command
+      Hex.Build.Helpers
+      Hex.Build.ListBuilderT
+      Hex.Categorise
+      Hex.Config
+      Hex.Config.Codes
+      Hex.Config.Config
+      Hex.Config.Parameters
+      Hex.Evaluate
+      Hex.Lex
+      Hex.Parse
+      Hex.Parse.Assignment
+      Hex.Parse.AST
+      Hex.Parse.Command
+      Hex.Parse.Condition
+      Hex.Parse.Quantity
+      Hex.Parse.Stream.Class
+      Hex.Parse.Stream.Expanding
+      Hex.Parse.Stream.NonExpanding
+      Hex.Parse.SyntaxCommand
+      Hex.Quantity
+      Hex.Resolve
+      Hex.Resolve.Map
+      Hex.Resolve.Token
+      Hex.Run
+      Hex.Variable
+      Hexlude
+      System.Log.Slog
+      TFM
+      TFM.Character
+      TFM.Common
+      TFM.FontParams
+      TFM.Header
+      TFM.LigKern
+      TFM.Parse
+      TFM.Recipe
+      TFM.Table
       Paths_hex
   hs-source-dirs:
       test
+      src
   default-extensions: ConstraintKinds DataKinds DeriveAnyClass DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies EmptyCase FlexibleContexts FlexibleInstances GeneralizedNewtypeDeriving InstanceSigs LambdaCase MultiParamTypeClasses MultiWayIf NamedFieldPuns NoImplicitPrelude OverloadedStrings ScopedTypeVariables StandaloneDeriving StrictData TupleSections TypeApplications TypeFamilies TypeOperators
-  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -optP-Wno-nonportable-include-path -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wno-warnings-deprecations -Wno-incomplete-patterns -Wno-incomplete-uni-patterns -Wmissing-deriving-strategies -O0 +RTS -A128m -n2m -RTS -j
   build-depends:
       QuickCheck
     , aeson
     , base
     , binary
     , bytestring
+    , conduit
+    , conduit-extra
     , containers
     , directory
     , exceptions
@@ -217,7 +285,6 @@ test-suite hex-test
     , generic-random
     , hashable
     , hex
-    , hspec
     , mono-traversable
     , mtl
     , optics-core
@@ -227,6 +294,8 @@ test-suite hex-test
     , path
     , path-io
     , protolude
+    , tasty
+    , tasty-hunit
     , text
     , time
     , transformers

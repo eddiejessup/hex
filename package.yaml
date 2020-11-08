@@ -16,6 +16,8 @@ dependencies:
 - base
 - binary
 - bytestring
+- conduit
+- conduit-extra
 - containers
 - directory
 - exceptions
@@ -61,34 +63,25 @@ executables:
   hexc:
     main:                Hexc.hs
     source-dirs:         hexc
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
     dependencies:
     - hex
 
   hexi:
     main:                Hexi.hs
     source-dirs:         hexi
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
     dependencies:
     - hex
 
 tests:
-  hex-test:
-    main:                Spec.hs
-    source-dirs:         test
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+  test:
+    main:                Main.hs
+    source-dirs:
+      - test
+      - src
     dependencies:
     - hex
-    - hspec
+    - tasty
+    - tasty-hunit
 
 default-extensions:
 - ConstraintKinds

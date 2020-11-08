@@ -14,6 +14,7 @@ import qualified Data.Text            as Text
 import           Path                 (File, Path)
 import qualified Path
 import qualified Test.QuickCheck as QC
+import qualified Text.Show (Show(..))
 import           Hex.Quantity
 
 class TeXCode a where
@@ -22,7 +23,10 @@ class TeXCode a where
     fromTeXInt :: TeXInt -> Maybe a
 
 newtype CharCode = CharCode { codeWord :: Word8 }
-    deriving newtype (Show, Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits, Hashable, ToJSON)
+    deriving newtype (Eq, Ord, Enum, Bounded, Num, Real, Integral, Bits, FiniteBits, Hashable, ToJSON)
+
+instance Show CharCode where
+    show = show . chr . fromIntegral . codeWord
 
 instance Arbitrary CharCode where
     arbitrary = QC.elements [0x20..0x7e]
@@ -308,8 +312,16 @@ data CatCode
     | Comment      -- 14
     | Invalid      -- 15
     | CoreCatCode CoreCatCode
-    deriving stock (Show, Eq, Generic)
+    deriving stock (Eq, Generic)
     deriving anyclass (ToJSON)
+
+instance Show CatCode where
+    show (CoreCatCode core) = show core
+    show Escape = "Escape"
+    show EndOfLine = "EndOfLine"
+    show Ignored = "Ignored"
+    show Comment = "Comment"
+    show Invalid = "Invalid"
 
 instance Describe CatCode where
     describe = \case

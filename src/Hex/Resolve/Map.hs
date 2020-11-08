@@ -33,7 +33,8 @@ codesToResolvedTokens
   -> [(Lex.Token, Maybe ResolvedToken)]
 codesToResolvedTokens charToCat csMap = go Lex.LineBegin
   where
-    go lexState xs = case Lex.extractToken charToCat lexState xs of
+    -- go lexState xs = case Lex.extractToken charToCat lexState xs of
+    go lexState xs = case undefined charToCat lexState xs of
       Just (tok, lexState1, xs1) ->
         (tok, resolveToken lookupCS Resolving tok) : go lexState1 xs1
       Nothing ->

@@ -14,6 +14,9 @@ import qualified Path
 import qualified Path.IO
 import Options.Applicative
 import qualified Data.Text as Tx
+import Data.Conduit
+import Data.Conduit.Combinators (sinkList, sourceFile, stdin, take)
+import Conduit (runResourceT, MonadResource)
 
 data Input = FileInput FilePath | StdInput
 
@@ -37,11 +40,14 @@ stdInputParser = flag' StdInput
 inputParser :: Parser Input
 inputParser = fileInputParser <|> stdInputParser
 
+data NonExpandingMode = CatMode | LexMode | ResolveMode
+
 data RunMode
-  = CatMode
-  | LexMode
-  | ResolveMode
-  | ExpandMode
+  = NonExpandingMode NonExpandingMode
+  | ExpandingMode ExpandingMode
+
+data ExpandingMode
+  = ExpandMode
   | CommandMode
   | ParaListMode
   | ParaSetMode
@@ -64,18 +70,18 @@ data DVIWriteOptions = DVIWriteOptions
 
 runModeParser :: Parser RunMode
 runModeParser = subparser
-    ( command "cat" (info (pure CatMode) (progDesc ""))
-   <> command "lex" (info (pure LexMode) (progDesc ""))
-   <> command "resolve" (info (pure ResolveMode) (progDesc ""))
-   <> command "expand" (info (pure ExpandMode) (progDesc ""))
-   <> command "command" (info (pure CommandMode) (progDesc ""))
-   <> command "paralist" (info (pure ParaListMode) (progDesc ""))
-   <> command "parabox" (info (pure ParaSetMode) (progDesc ""))
-   <> command "pagelist" (info (pure PageListMode) (progDesc ""))
-   <> command "pagebox" (info (pure PageMode) (progDesc ""))
-   <> command "dvi-abstract" (info (pure SemanticDVIInstructionsMode) (progDesc ""))
-   <> command "dvi-str" (info (pure RawDVIInstructionsMode) (progDesc ""))
-   <> command "dvi-write" (info (DVIWriteMode <$> dviRunParser) (progDesc "Write DVI to a file"))
+    ( command "cat" (info (pure (NonExpandingMode CatMode)) (progDesc ""))
+   <> command "lex" (info (pure (NonExpandingMode LexMode)) (progDesc ""))
+   <> command "resolve" (info (pure (NonExpandingMode ResolveMode)) (progDesc ""))
+   <> command "expand" (info (pure (ExpandingMode ExpandMode)) (progDesc ""))
+   <> command "command" (info (pure (ExpandingMode CommandMode)) (progDesc ""))
+   <> command "paralist" (info (pure (ExpandingMode ParaListMode)) (progDesc ""))
+   <> command "parabox" (info (pure (ExpandingMode ParaSetMode)) (progDesc ""))
+   <> command "pagelist" (info (pure (ExpandingMode PageListMode)) (progDesc ""))
+   <> command "pagebox" (info (pure (ExpandingMode PageMode)) (progDesc ""))
+   <> command "dvi-abstract" (info (pure (ExpandingMode SemanticDVIInstructionsMode)) (progDesc ""))
+   <> command "dvi-str" (info (pure (ExpandingMode RawDVIInstructionsMode)) (progDesc ""))
+   <> command "dvi-write" (info (ExpandingMode . DVIWriteMode <$> dviRunParser) (progDesc "Write DVI to a file"))
     )
 
 appOptionsParser :: Parser AppOptions
@@ -100,95 +106,111 @@ postamble = "\n\n\\end\n"
 main :: IO ()
 main = do
   opts <- execParser appOptionsParserInfo
-  (inputRaw, maybeInPath) <-
-    case input opts of
-      StdInput -> do
-        cs <- liftIO BS.L.getContents
-        pure (cs, Nothing)
-      FileInput inPathStr -> do
-        path <- Path.IO.resolveFile' (toS inPathStr)
-        cs <- BS.L.readFile (Path.toFilePath path)
-        pure (cs, Just path)
-  let input =
-        if withAmbles opts
-          then preamble <> inputRaw <> postamble
-          else inputRaw
-
-  conf <- newConfig (maybeToList (Path.toFilePath . Path.parent <$> maybeInPath) <> (searchDirs opts))
-
-  let inputS = newExpandStream maybeInPath input
 
   case mode opts of
-    CatMode ->
-      putText $ Tx.intercalate "\n" $ show <$> usableCodesToCharCats input
-    LexMode ->
-      putText $ Tx.intercalate "\n" $ show <$> usableCodesToLexTokens input
-    ResolveMode ->
-      putText $ Tx.intercalate "\n" $ show <$> usableCodesToResolvedTokens input
-    ExpandMode -> do
-      (endS, mayErr, primToks) <- App.runErrorlessApp (Run.expandingStreamAsPrimTokens inputS) conf
-      case primToks of
-        [] ->
-          putText "Returned no results"
-        _ ->
-          putText $ resultTxt $
-            renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" primToks
+    NonExpandingMode m -> case m of
+      CatMode -> do
+        foo <- runResourceT $ do
+          src <- case input opts of
+            StdInput ->
+              pure stdin
+            FileInput inPathStr -> do
+              path <- Path.IO.resolveFile' (toS inPathStr)
+              pure $ sourceFile (Path.toFilePath path)
 
-      for_ mayErr $ \err -> putText $ errTxtWithStream err endS
-    CommandMode -> do
-      (endS, mayErr, commands) <- App.runErrorlessApp (Run.expandingStreamAsCommands inputS) conf
-      case commands of
-        [] ->
-          putText "Returned no results"
-        _ ->
-          putText $ resultTxt $
-            renderLines $ describeNamedRelFoldable 0 "Commands" commands
+          runConduit $ src .| usableExtractCharCat .| take 10 .| sinkList
 
-      for_ mayErr $ \err -> putText $ errTxtWithStream err endS
-    ParaListMode ->
-      App.runApp (Run.renderStreamParaList inputS) conf >>= \case
-        Left err ->
-          putText $ errTxt err
-        Right (_, txt) ->
-          putText $ resultTxt txt
-    ParaSetMode ->
-      App.runApp (Run.renderStreamSetPara inputS) conf >>= \case
-        Left err ->
-          putText $ errTxt err
-        Right (_, txt) ->
-          putText $ resultTxt txt
-    PageListMode ->
-      App.runApp (Run.renderStreamPageList inputS) conf >>= \case
-        Left err ->
-          putText $ errTxt err
-        Right (_, txt) ->
-          putText $ resultTxt txt
-    PageMode ->
-      App.runApp (Run.renderStreamPages inputS) conf >>= \case
-        Left err ->
-          putText $ errTxt err
-        Right (_, txt) ->
-          putText $ resultTxt txt
-    SemanticDVIInstructionsMode ->
-      App.runApp (Run.renderStreamSemanticDVI inputS) conf >>= \case
-        Left err ->
-          putText $ errTxt err
-        Right (_, txt) ->
-          putText $ resultTxt txt
-    RawDVIInstructionsMode ->
-      App.runApp (Run.renderStreamRawDVI inputS) conf >>= \case
-        Left err ->
-          putText $ errTxt err
-        Right (_, txt) ->
-          putText $ resultTxt txt
-    DVIWriteMode DVIWriteOptions { dviOutputPath } -> do
-      let s = newExpandStream maybeInPath input
-      App.runApp (Run.streamToDVIBytes s) conf >>= \case
-        Left appError ->
-          putText $ show appError
-        Right (_endS, bytes) -> do
-          putText $ "Writing to " <> toS dviOutputPath <> "..."
-          liftIO $ BS.writeFile dviOutputPath bytes
+        putText $ Tx.intercalate "\n" $ show <$> foo
+        -- putText $ show (length foo)
+      LexMode ->
+        undefined
+        -- putText $ Tx.intercalate "\n" $ show <$> usableCodesToLexTokens input
+      ResolveMode ->
+        undefined
+        -- putText $ Tx.intercalate "\n" $ show <$> usableCodesToResolvedTokens input
+    ExpandingMode m -> do
+      (inputRaw, maybeInPath) <-
+        case input opts of
+          StdInput -> do
+            cs <- liftIO BS.L.getContents
+            pure (cs, Nothing)
+          FileInput inPathStr -> do
+            path <- Path.IO.resolveFile' (toS inPathStr)
+            cs <- BS.L.readFile (Path.toFilePath path)
+            pure (cs, Just path)
+      let input =
+            if withAmbles opts
+              then preamble <> inputRaw <> postamble
+              else inputRaw
+
+
+      conf <- newConfig (maybeToList (Path.toFilePath . Path.parent <$> maybeInPath) <> (searchDirs opts))
+      let inputS = newExpandStream maybeInPath input
+      case m of
+        ExpandMode -> do
+          (endS, mayErr, primToks) <- App.runErrorlessApp (Run.expandingStreamAsPrimTokens inputS) conf
+          case primToks of
+            [] ->
+              putText "Returned no results"
+            _ ->
+              putText $ resultTxt $
+                renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" primToks
+
+          for_ mayErr $ \err -> putText $ errTxtWithStream err endS
+        CommandMode -> do
+          (endS, mayErr, commands) <- App.runErrorlessApp (Run.expandingStreamAsCommands inputS) conf
+          case commands of
+            [] ->
+              putText "Returned no results"
+            _ ->
+              putText $ resultTxt $
+                renderLines $ describeNamedRelFoldable 0 "Commands" commands
+
+          for_ mayErr $ \err -> putText $ errTxtWithStream err endS
+        ParaListMode ->
+          App.runApp (Run.renderStreamParaList inputS) conf >>= \case
+            Left err ->
+              putText $ errTxt err
+            Right (_, txt) ->
+              putText $ resultTxt txt
+        ParaSetMode ->
+          App.runApp (Run.renderStreamSetPara inputS) conf >>= \case
+            Left err ->
+              putText $ errTxt err
+            Right (_, txt) ->
+              putText $ resultTxt txt
+        PageListMode ->
+          App.runApp (Run.renderStreamPageList inputS) conf >>= \case
+            Left err ->
+              putText $ errTxt err
+            Right (_, txt) ->
+              putText $ resultTxt txt
+        PageMode ->
+          App.runApp (Run.renderStreamPages inputS) conf >>= \case
+            Left err ->
+              putText $ errTxt err
+            Right (_, txt) ->
+              putText $ resultTxt txt
+        SemanticDVIInstructionsMode ->
+          App.runApp (Run.renderStreamSemanticDVI inputS) conf >>= \case
+            Left err ->
+              putText $ errTxt err
+            Right (_, txt) ->
+              putText $ resultTxt txt
+        RawDVIInstructionsMode ->
+          App.runApp (Run.renderStreamRawDVI inputS) conf >>= \case
+            Left err ->
+              putText $ errTxt err
+            Right (_, txt) ->
+              putText $ resultTxt txt
+        DVIWriteMode DVIWriteOptions { dviOutputPath } -> do
+          let s = newExpandStream maybeInPath input
+          App.runApp (Run.streamToDVIBytes s) conf >>= \case
+            Left appError ->
+              putText $ show appError
+            Right (_endS, bytes) -> do
+              putText $ "Writing to " <> toS dviOutputPath <> "..."
+              liftIO $ BS.writeFile dviOutputPath bytes
 
 errTxtWithStream :: App.AppError -> ExpandingStream -> Text
 errTxtWithStream err s =
