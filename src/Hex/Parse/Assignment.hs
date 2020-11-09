@@ -8,7 +8,9 @@ import Hex.Evaluate
 import qualified Hex.Lex as Lex
 import Hex.Parse.AST
 import Hex.Parse.Quantity
-import Hex.Parse.Stream.Class
+import Hex.Parse.Parser.Combinators
+import Hex.Parse.Inhibited
+import Hex.Parse.Parser.Class
 import qualified Hex.Resolve.Token as T
 import qualified Hex.Quantity as Q
 import Hexlude

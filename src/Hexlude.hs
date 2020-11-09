@@ -21,7 +21,6 @@ module Hexlude
     seqMapMaybe,
     id,
     (>>>),
-    traceText,
     flap,
     HDirection (..),
     VDirection (..),
@@ -54,9 +53,6 @@ import Prelude (id)
 
 mkRatio :: Integral a => a -> a -> Ratio a
 mkRatio = (Ratio.%)
-
-traceText :: Text -> a -> a
-traceText = trace
 
 -- Optics.
 

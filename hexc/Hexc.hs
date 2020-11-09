@@ -15,7 +15,7 @@ import qualified Path.IO
 import Options.Applicative
 import qualified Data.Text as Tx
 import Data.Conduit
-import Data.Conduit.Combinators (sinkList, sourceFile, stdin, take)
+import Data.Conduit.Combinators (sinkList, sourceFile, stdin)
 import Conduit (ResourceT, runResourceT, MonadResource)
 
 data Input = FileInput FilePath | StdInput
@@ -114,10 +114,8 @@ getByteSource = \case
 main :: IO ()
 main = do
   opts <- execParser appOptionsParserInfo
-
   case mode opts of
     NonExpandingMode m -> do
-      let
       case m of
         CatMode -> do
           src <- getByteSource (input opts)
@@ -129,18 +127,24 @@ main = do
             let
               cond :: ConduitT () Void (ExceptT (Identity LexError) (StateT LexState (ResourceT IO))) [Token]
               cond = src .| usableExtractCharCat .| extractToken .| sinkList
-
-              foo :: ExceptT (Identity LexError) (StateT LexState (ResourceT IO)) [Token]
-              foo = runConduit cond
-            evalStateT (runExceptT foo) LineBegin
+            evalStateT (runExceptT (runConduit cond)) LineBegin
           case runIdentity `first` errOrTs of
             Left TrailingEscape ->
               undefined
             Right ts ->
               putText $ Tx.intercalate "\n" $ show <$> ts
-        ResolveMode ->
-          undefined
-          -- putText $ Tx.intercalate "\n" $ show <$> usableCodesToResolvedTokens input
+        ResolveMode -> do
+          src <- getByteSource (input opts)
+          errOrTs <- runResourceT $ do
+            let
+              cond :: ConduitT () Void (ExceptT (Identity LexError) (StateT LexState (ResourceT IO))) [Maybe ResolvedToken]
+              cond = src .| usableExtractCharCat .| extractToken .| resolveTokenConduit .| sinkList
+            evalStateT (runExceptT (runConduit cond)) LineBegin
+          case runIdentity `first` errOrTs of
+            Left TrailingEscape ->
+              undefined
+            Right ts ->
+              putText $ Tx.intercalate "\n" $ show <$> ts
     ExpandingMode m -> do
       (inputRaw, maybeInPath) <-
         case input opts of

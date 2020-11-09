@@ -16,16 +16,14 @@ import           Hex.Parse.Stream.Class
 
 data NonExpandingStream = NonExpandingStream
     { nesTokenSources :: L.NE.NonEmpty TokenSource
-    , nesResolutionMode  :: ResolutionMode
     , nesLexState     :: Lex.LexState
     }
     deriving stock (Generic)
 
 instance Describe NonExpandingStream where
-    describe NonExpandingStream { nesLexState, nesResolutionMode, nesTokenSources } =
+    describe NonExpandingStream { nesLexState, nesTokenSources } =
       [ (0, "NonExpandingStream")
       ,   (1, "lexState " <> quote (show nesLexState))
-      ,   (1, "resolutionMode " <> quote (show nesResolutionMode))
       ]
       <> describeNamedRelFoldable1 "tokenSources" nesTokenSources
 
@@ -34,11 +32,10 @@ newNonExpandingStream maybePath cs =
   NonExpandingStream
     { nesTokenSources = pure (newTokenSource maybePath cs)
     , nesLexState      = Lex.LineBegin
-    , nesResolutionMode = Resolving
     }
 
 instance TeXStream NonExpandingStream where
-    resolutionModeLens = G.P.typed @ResolutionMode
+    resolutionModeLens = undefined
 
     tokenSourceLens = G.P.typed @(L.NE.NonEmpty TokenSource)
 
@@ -49,6 +46,12 @@ instance TeXStream NonExpandingStream where
 newtype NonExpandingStreamError
     = SawSyntaxCommandHeadToken SyntaxCommandHeadToken
     deriving stock (Show)
+
+withJust :: Monad m => m (Maybe a) -> (a -> m (Maybe b)) -> m (Maybe b)
+withJust a k =
+  a >>= \case
+    Nothing -> pure Nothing
+    Just x -> k x
 
 nesFetchAndExpandToken
     :: ( MonadError e m
