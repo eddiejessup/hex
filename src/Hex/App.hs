@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingVia #-}
 module Hex.App where
 
 import DVI.Instruction (DVIError)
@@ -11,7 +12,7 @@ import TFM (TFMError)
 import qualified System.Log.FastLogger as Log
 import Data.Time.Clock
 import qualified Hex.Parse.Stream.Class as S
-import qualified Hex.Parse.Stream.Expanding.Parse ()
+import qualified Hex.Parse.Stream.Parse ()
 import qualified Hex.Resolve.Resolve as R
 import qualified Hex.Parse.TokenParser.Class as P
 import Hex.Parse.TokenParser.ParseT (runTeXParseTEmbedded, TeXParseT)

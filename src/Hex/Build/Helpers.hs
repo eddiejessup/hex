@@ -197,10 +197,10 @@ spaceGlue = do
 loadFont
     :: ( MonadState st m
        , HasType Config st
+       , D.Path.MonadInput m
        , MonadIO m
        , MonadError e m
        , AsType D.Path.PathError e
-       , AsType ConfigError e
        , AsType TFM.TFMError e
        , MonadEvaluate m AST.Length
        , MonadEvaluate m AST.TeXInt
@@ -210,7 +210,7 @@ loadFont
     -> m B.FontDefinition
 loadFont (AST.TeXFilePath path) fontSpec = do
     fontName <- D.Path.fileNameText path
-    info@FontInfo{ fontMetrics } <- findFilePath (WithImplicitExtension "tfm") [] path >>= readFontInfo
+    info@FontInfo{ fontMetrics } <- findFilePath (D.Path.WithImplicitExtension "tfm") [] path >>= readFontInfo
     let designSizeSP = TFM.designSizeSP fontMetrics
     scaleRatio <- evaluateFontSpecification designSizeSP fontSpec
     -- liftIO

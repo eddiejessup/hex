@@ -65,7 +65,7 @@ library
       Hex.Parse.CommandParser.SyntaxCommand
       Hex.Parse.Stream.Class
       Hex.Parse.Stream.Expanding
-      Hex.Parse.Stream.Expanding.Parse
+      Hex.Parse.Stream.Parse
       Hex.Parse.TokenParser.Class
       Hex.Parse.TokenParser.Combinators
       Hex.Parse.TokenParser.ParseT
@@ -210,6 +210,7 @@ test-suite test
   other-modules:
       Hex.Test.Categorise
       Hex.Test.Lex
+      Hex.Test.Parse
       Data.Adjacent
       Data.Ascii
       Data.Byte
@@ -251,7 +252,7 @@ test-suite test
       Hex.Parse.CommandParser.SyntaxCommand
       Hex.Parse.Stream.Class
       Hex.Parse.Stream.Expanding
-      Hex.Parse.Stream.Expanding.Parse
+      Hex.Parse.Stream.Parse
       Hex.Parse.TokenParser.Class
       Hex.Parse.TokenParser.Combinators
       Hex.Parse.TokenParser.ParseT

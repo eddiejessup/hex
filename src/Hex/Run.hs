@@ -21,7 +21,7 @@ import qualified Hex.Parse.TokenParser.Combinators as P
 import qualified Hex.Parse.CommandParser.Command as P
 import qualified Hex.Parse.TokenParser.ParseT as ParseT
 import qualified Hex.Parse.Stream.Expanding as S
-import qualified Hex.Parse.Stream.Expanding.Parse ()
+import qualified Hex.Parse.Stream.Parse ()
 import qualified Hex.Parse.Stream.Class as S
 import qualified Hex.Resolve.Resolve as R
 import qualified Hex.Parse.AST as AST

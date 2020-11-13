@@ -1,15 +1,12 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Hex.Parse.Stream.Expanding.Parse where
+module Hex.Parse.Stream.Parse where
 
-import qualified Optics.Cons.Core as O.Cons
 import qualified Data.ByteString as BS
-import qualified Data.Generics.Product as G.P
-import qualified Data.List.NonEmpty as L.NE
 import Data.Map.Strict ((!?))
 import qualified Data.Map.Strict as Map
-import qualified Data.Path
+import qualified Data.Path as Path
 import qualified Data.Sequence as Seq
 import qualified Hex.Config as Conf
 import qualified Hex.Config.Codes as Code
@@ -21,7 +18,6 @@ import Hex.Parse.CommandParser.Condition
 import Hex.Parse.CommandParser.Command
 import Hex.Parse.CommandParser.Inhibited
 import Hex.Parse.Stream.Class
-import Hex.Parse.Stream.Expanding
 import Hex.Parse.TokenParser.Class
 import Hex.Parse.TokenParser.Combinators
 import Hex.Parse.TokenParser.ParseT
@@ -30,45 +26,37 @@ import qualified Hex.Quantity as Q
 import Hex.Resolve
 import Hexlude
 import Path (Rel, File, Path)
-import qualified Path
-import qualified Path.IO
 import Hex.Config (ConfigError)
+import qualified Optics.Cons as O.Cons
 
 instance
-  ( MonadError e m
+  ( MonadError e (TeXParseT s m)
   , AsType ExpansionError e
   , AsType EvaluationError e
-  , AsType Data.Path.PathError e
+  , AsType Path.PathError e
   , AsType ResolutionError e
   , AsType Lex.LexError e
   , AsType ConfigError e
 
-  , MonadIO m
+  , Path.MonadInput m
   -- , MonadSlog m
 
   , MonadState st m -- Read-only
   , HasType Conf.Config st
+
+  , TeXStream s
   )
-  => MonadTokenParse (TeXParseT ExpandingStream m) where
+  => MonadTokenParse (TeXParseT s m) where
 
-  parseError e = TeXParseT $ \s -> pure (s, Left e)
+  parseError = pParseError
 
-  satisfyThen :: (PrimitiveToken -> Maybe a) -> TeXParseT ExpandingStream m a
-  satisfyThen f = try $ do
-    pt <- pFetchPrimitiveToken
-    case f pt of
-      Nothing ->
-        parseError $ ParseErrorWithMsg $ "Saw unexpected primitive token: " <> show pt
-      Just a ->
-        pure a
+  satisfyThen :: (PrimitiveToken -> Maybe a) -> TeXParseT s m a
+  satisfyThen = pSatisfyThen
 
-  withInhibition :: TeXParseT ExpandingStream m a -> TeXParseT ExpandingStream m a
-  withInhibition (TeXParseT parse) = TeXParseT $ \s -> do
-    let sInhibited = inhibitResolution s
-    (s', errOrA) <- parse sInhibited
-    pure (enableResolution s', errOrA)
+  withInhibition :: TeXParseT s m a -> TeXParseT s m a
+  withInhibition = pWithInhibition
 
-  takeWhileP :: (PrimitiveToken -> Bool) -> TeXParseT ExpandingStream m (Seq PrimitiveToken)
+  takeWhileP :: (PrimitiveToken -> Bool) -> TeXParseT s m (Seq PrimitiveToken)
   takeWhileP f = TeXParseT $ \s -> go mempty s
     where
       go acc s = do
@@ -80,54 +68,77 @@ instance
           _ ->
             pure (s, Right acc)
 
-  takeLexToken :: TeXParseT ExpandingStream m Lex.Token
+  takeLexToken :: TeXParseT s m Lex.Token
   takeLexToken = pTakeLexToken
 
-  takeAndResolveLexToken :: TeXParseT ExpandingStream m (Lex.Token, ResolvedToken)
+  takeAndResolveLexToken :: TeXParseT s m (Lex.Token, ResolvedToken)
   takeAndResolveLexToken = pTakeAndResolveLexToken
 
-  takeAndExpandResolvedToken :: TeXParseT ExpandingStream m (Lex.Token, ExpandedToken)
+  takeAndExpandResolvedToken :: TeXParseT s m (Lex.Token, ExpandedToken)
   takeAndExpandResolvedToken = pTakeAndExpandResolvedToken
 
-  pushSkipState :: ConditionBodyState -> TeXParseT ExpandingStream m ()
-  pushSkipState cbs = TeXParseT $ \s ->
-    pure (s & conditionBodyStateLens %~ O.Cons.cons cbs, Right ())
+  pushSkipState :: ConditionBodyState -> TeXParseT s m ()
+  pushSkipState cbs = TeXParseT $ \st -> do
+    pure (st & field @"skipState" %~ O.Cons.cons cbs, Right ())
 
-  peekSkipState :: TeXParseT ExpandingStream m (Maybe ConditionBodyState)
-  peekSkipState = TeXParseT $ \s ->
-    pure (s, Right $ s ^. conditionBodyStateLens % to headMay)
+  peekSkipState :: TeXParseT s m (Maybe ConditionBodyState)
+  peekSkipState = TeXParseT $ \st -> do
+    pure (st, Right $ st ^. field @"skipState" % to headMay)
 
-  popSkipState :: TeXParseT ExpandingStream m (Maybe ConditionBodyState)
-  popSkipState = TeXParseT $ \s ->
-    pure $ case s ^. conditionBodyStateLens % to O.Cons.uncons of
+  popSkipState :: TeXParseT s m (Maybe ConditionBodyState)
+  popSkipState = TeXParseT $ \st -> do
+    pure $ case st ^. field @"skipState" % to O.Cons.uncons of
       Nothing ->
-        (s, Right Nothing)
+        (st, Right Nothing)
       Just (x, xs) ->
-        (s & conditionBodyStateLens .~ xs, Right $ Just x)
+        (st & field @"skipState" .~ xs, Right $ Just x)
 
-  inputPath :: Path Rel File -> TeXParseT ExpandingStream m ()
-  inputPath texPath = TeXParseT $ \s -> do
-    let extraDirs = case s ^. tokenSourceLens % neHeadL % G.P.field @"sourcePath" of
-          Just p -> [Path.parent p]
-          Nothing -> []
-    absPath <- Path.IO.makeAbsolute texPath
-    path <- Conf.findFilePath (Conf.WithImplicitExtension "tex") extraDirs texPath
-    newSource <- newTokenSource (Just absPath) <$> Code.readCharCodes path
-    pure (s & tokenSourceLens %~ L.NE.cons newSource, Right ())
+  inputPath :: Path Rel File -> TeXParseT s m ()
+  inputPath texPath = TeXParseT $ \st -> do
+    searchDirs <- use (typed @Conf.Config % field @"searchDirectories")
+    absTexPath <- Path.findPath (Path.WithImplicitExtension "tex") texPath searchDirs
+    codes <- Path.readPathBytes absTexPath
+    let newSource = newTokenSource (Just absTexPath) codes
+    pure (st & field @"texStream" %~ flip addTokenSource newSource, Right ())
 
-  insertLexTokens :: Seq Lex.Token -> TeXParseT ExpandingStream m ()
+  insertLexTokens :: Seq Lex.Token -> TeXParseT s m ()
   insertLexTokens = pInsertLexTokens
 
-try :: Monad m => TeXParseT ExpandingStream m a -> TeXParseT ExpandingStream m a
-try (TeXParseT parse) = TeXParseT $ \s -> do
-  (s', errOrA) <- parse s
-  case errOrA of
-    Left err ->
-      -- If parse fails, revert to the old stream.
-      pure (s, Left err)
-    Right a ->
-      -- If parse succeeds, stick with the new stream.
-      pure (s', Right a)
+pParseError :: Applicative m => ParseError -> TeXParseT s m a
+pParseError e = TeXParseT $ \s -> pure (s, Left e)
+
+
+pSatisfyThen
+  :: ( MonadError e (TeXParseT s m)
+     , AsType Lex.LexError e
+     , AsType ExpansionError e
+     , AsType EvaluationError e
+     , AsType ResolutionError e
+     , AsType ConfigError e
+     , AsType Path.PathError e
+
+     , Path.MonadInput (TeXParseT s m)
+
+     , MonadState st m
+     , HasType Conf.Config st
+
+     , TeXStream s
+     ) => (PrimitiveToken -> Maybe a) -> TeXParseT s m a
+pSatisfyThen f = try $ do
+    pt <- pFetchPrimitiveToken
+    case f pt of
+      Nothing ->
+        pParseError $ ParseErrorWithMsg $ "Saw unexpected primitive token: " <> show pt
+      Just a ->
+        pure a
+
+try :: Functor m => TeXParseT s m a -> TeXParseT s m a
+try (TeXParseT parse) = TeXParseT $ \s ->
+  parse s <&> \case
+    -- If parse fails, revert to the old stream.
+    (_, Left err) -> (s, Left err)
+    -- If parse succeeds, stick with the new stream.
+    (s', Right a) -> (s', Right a)
 
 pFetchPrimitiveToken
   :: ( MonadError e m
@@ -135,16 +146,19 @@ pFetchPrimitiveToken
      , AsType EvaluationError e
      , AsType ResolutionError e
      , AsType ConfigError e
-     , AsType Data.Path.PathError e
+     , AsType Path.PathError e
      , AsType Lex.LexError e
 
-     , MonadIO m
     --  , MonadSlog m
+
+     , TeXStream s
+
+     , Path.MonadInput m
 
      , MonadState st m
      , HasType Conf.Config st
      )
-  => TeXParseT ExpandingStream m PrimitiveToken
+  => TeXParseT s m PrimitiveToken
 pFetchPrimitiveToken = do
   (_lt, et) <- pTakeAndExpandResolvedToken
   case et of
@@ -161,49 +175,53 @@ pFetchPrimitiveToken = do
       pFetchPrimitiveToken
 
 pInsertLexTokens :: (Applicative m, TeXStream s) => Seq Lex.Token -> TeXParseT s m ()
-pInsertLexTokens lts = TeXParseT $ \s ->
-    pure (insertLexTokensToStream s lts, Right ())
+pInsertLexTokens lts = TeXParseT $ \st -> do
+    pure (st & field @"texStream" %~ flip insertLexTokensToStream lts, Right ())
 
-pTakeLexToken :: forall st e m. (MonadState st m, HasType Conf.Config st, MonadError e m, AsType Lex.LexError e) => TeXParseT ExpandingStream m Lex.Token
+pTakeLexToken :: forall e s m. (MonadError e m, AsType Lex.LexError e, TeXStream s) => TeXParseT s m Lex.Token
 pTakeLexToken = TeXParseT takeLexTokenS
   where
-    takeLexTokenS
-      :: ExpandingStream
-      -> m (ExpandingStream, Either ParseError Lex.Token)
-    takeLexTokenS s =
-      fetchLexToken s <&> \case
+    takeLexTokenS :: TeXParseState s -> m (TeXParseState s, Either ParseError Lex.Token)
+    takeLexTokenS st = do
+      extractLexToken (st ^. field @"texStream") <&> \case
         Nothing ->
-          (s, Left EndOfInput)
+          (st, Left EndOfInput)
         Just (lt, s') ->
-          (s', Right lt)
+          (st & field @"texStream" .~ s', Right lt)
 
 pTakeAndResolveLexToken
-  :: forall st e m.
+  :: forall e s st m.
      ( MonadError e m
      , AsType ResolutionError e
      , AsType Lex.LexError e
 
-     , MonadState st m -- Read-only
-     , HasType Conf.Config st
-     )
-  => TeXParseT ExpandingStream m (Lex.Token, ResolvedToken)
-pTakeAndResolveLexToken = TeXParseT takeAndResolveLexTokenS
-  where
-    takeAndResolveLexTokenS
-      :: ExpandingStream
-      -> m (ExpandingStream, Either ParseError (Lex.Token, ResolvedToken))
-    takeAndResolveLexTokenS s =
-      fetchResolvedToken s <&> \case
-        Nothing ->
-          (s, Left EndOfInput)
-        Just (lt, rt, s') ->
-          (s', Right (lt, rt))
-
-pTakeAndExpandResolvedToken
-  :: ( MonadIO m
-
      , MonadState st m
      , HasType Conf.Config st
+
+     , TeXStream s
+     )
+  => TeXParseT s m (Lex.Token, ResolvedToken)
+pTakeAndResolveLexToken = do
+  lt <- pTakeLexToken
+  TeXParseT $ resolveLexTokenS lt
+  where
+    resolveLexTokenS :: Lex.Token -> TeXParseState s -> m (TeXParseState s, Either ParseError (Lex.Token, ResolvedToken))
+    resolveLexTokenS lt st = do
+      conf <- use (typed @Conf.Config)
+      let csLkp cs = Conf.lookupCS cs conf
+      let mayRT = resolveToken csLkp (st ^. field @"resolutionMode") lt
+      rt <-
+        note
+          (injectTyped $ ResolutionError $ "Could not resolve lex token: " <> renderDescribed lt)
+          mayRT
+      pure (st, Right (lt, rt))
+
+
+pTakeAndExpandResolvedToken
+  :: ( MonadState st m
+     , HasType Conf.Config st
+
+     , TeXStream s
 
      , MonadError e m
      , AsType Lex.LexError e
@@ -211,11 +229,13 @@ pTakeAndExpandResolvedToken
      , AsType EvaluationError e
      , AsType ConfigError e
      , AsType ResolutionError e
-     , AsType Data.Path.PathError e
+     , AsType Path.PathError e
+
+     , Path.MonadInput m
 
     --  , MonadSlog m
      )
-  => TeXParseT ExpandingStream m (Lex.Token, ExpandedToken)
+  => TeXParseT s m (Lex.Token, ExpandedToken)
 pTakeAndExpandResolvedToken = do
   (lt, rt) <- pTakeAndResolveLexToken
   et <- case rt of
@@ -418,9 +438,7 @@ expandConditionToken = \case
       void popSkipState
 
 expandSyntaxCommand
-  :: ( MonadIO m
-
-     , MonadState st m -- Read-only
+  :: ( MonadState st m -- Read-only
      , HasType Conf.Config st
 
      , MonadTokenParse m

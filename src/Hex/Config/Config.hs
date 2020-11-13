@@ -16,7 +16,6 @@ import qualified Data.Map.Strict          as Map
 import qualified Data.Path                as D.Path
 import           Path                     (Abs, Dir, File, Path, Rel,
                                            parseAbsDir)
-import qualified Path.IO
 import           System.Directory
 import           System.IO                (hClose)
 
@@ -176,34 +175,21 @@ finaliseConfig config =
 
 -- Unscoped.
 
-data FindFilePolicy
-    = NoImplicitExtension
-    | WithImplicitExtension Text
+
 
 findFilePath
     :: ( MonadState st m
        , HasType Config st
-       , MonadIO m
-       , MonadError e m
-       , AsType ConfigError e
-       , AsType D.Path.PathError e
+       , D.Path.MonadInput m
        )
-    => FindFilePolicy
+    => D.Path.FindFilePolicy
     -> [Path Abs Dir]
     -> Path Rel File
     -> m (Path Abs File)
 findFilePath findPolicy extraPaths p =
     do
     dirs <- use $ typed @Config % field @"searchDirectories" % to (<> extraPaths)
-    getTgtPath
-        >>= Path.IO.findFile dirs
-        >>= note (injectTyped $ ConfigError $ "Could not find file: " <> show p)
-  where
-    getTgtPath = case findPolicy of
-        NoImplicitExtension ->
-            pure p
-        WithImplicitExtension ext ->
-            D.Path.setFileExtension p ext
+    D.Path.findPath findPolicy p dirs
 
 -- Font info.
 

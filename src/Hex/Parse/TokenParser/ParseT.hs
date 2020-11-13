@@ -5,8 +5,14 @@ module Hex.Parse.TokenParser.ParseT where
 import Hex.Parse.TokenParser.Class
 import Hexlude hiding (many)
 import Control.Monad.Trans (MonadTrans)
+import Hex.Resolve.Resolve (ResolutionMode(..))
+import Hex.Evaluate (ConditionBodyState)
+import Data.Path (MonadInput(..))
 
-newtype TeXParseT s m a = TeXParseT {unTeXParseT :: (s -> m (s, Either ParseError a)) }
+data TeXParseState s = TeXParseState { texStream :: s, resolutionMode :: ResolutionMode, skipState :: [ConditionBodyState]}
+  deriving stock (Generic)
+
+newtype TeXParseT s m a = TeXParseT {unTeXParseT :: TeXParseState s -> m ((TeXParseState s), Either ParseError a) }
 
 instance Functor m => Functor (TeXParseT s m) where
   fmap f (TeXParseT parse) = TeXParseT $ \s -> parse s <&> \(s', errOrA) ->
@@ -47,12 +53,12 @@ instance Monad m => Monad (TeXParseT s m) where
         let (TeXParseT parseB) = aToTParseB a
         in parseB s'
 
-instance (Monad m, Describe s) => Alternative (TeXParseT s m) where
+instance Monad m => Alternative (TeXParseT s m) where
   empty = mzero
 
   (<|>) = mplus
 
-instance (Monad m, Describe s) => MonadPlus (TeXParseT s m) where
+instance Monad m => MonadPlus (TeXParseT s m) where
   mzero = TeXParseT $ \s ->
     pure (s, Left ExplicitFailure)
 
@@ -92,13 +98,27 @@ instance MonadState st m => MonadState st (TeXParseT s m) where
 instance MonadIO m => MonadIO (TeXParseT s m) where
   liftIO = lift . liftIO
 
--- instance (Monad m, Describe s, MonadTokenParse (TeXParseT s m)) => MonadTokenParse (TeXParseT s (ExceptT e m)) where
+instance MonadInput m => MonadInput (TeXParseT s m) where
+  findPath a b c = lift $ findPath a b c
+
+  readPathBytes a = lift $ readPathBytes a
+
+-- Inhibition.
+pWithInhibition :: Monad m => TeXParseT s m a -> TeXParseT s m a
+pWithInhibition (TeXParseT parseNow) = TeXParseT $ \st -> do
+  let stI = st & field @"resolutionMode" .~ NotResolving
+  (st', a) <- parseNow stI
+  let st'U = st' & field @"resolutionMode" .~ Resolving
+  pure (st'U, a)
 
 runTeXParseT
-  :: TeXParseT s m a
+  :: Monad m
+  => TeXParseT s m a
   -> s
   -> m (s, Either ParseError a)
-runTeXParseT (TeXParseT f) = f
+runTeXParseT (TeXParseT f) s = do
+  (TeXParseState {texStream}, errOrA) <- f (TeXParseState {texStream = s, resolutionMode = Resolving, skipState = []})
+  pure (texStream, errOrA)
 
 runTeXParseTEmbedded
   :: ( MonadError e m

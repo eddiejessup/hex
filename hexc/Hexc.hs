@@ -161,7 +161,7 @@ main = do
               else inputRaw
 
       conf <- newConfig (maybeToList (Path.toFilePath . Path.parent <$> maybeInPath) <> (searchDirs opts))
-      let inputS = newExpandStream maybeInPath input
+      let inputS = newExpandStream maybeInPath input (flip lookupCatCode conf)
       case m of
         ExpandMode -> do
           (endS, mayErr :: Maybe App.AppError, primToks) <- App.runErrorlessApp (Run.expandingStreamAsPrimTokens inputS) conf

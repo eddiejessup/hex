@@ -11,7 +11,7 @@ import qualified Data.Conduit.Combinators as C
 import Data.HashMap.Strict (lookup)
 
 data ResolutionMode = Resolving | NotResolving
-    deriving stock ( Show, Eq )
+    deriving stock ( Show, Eq, Generic )
 
 newtype ResolutionError = ResolutionError Text
   deriving stock Show

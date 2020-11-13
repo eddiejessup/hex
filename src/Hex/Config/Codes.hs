@@ -10,12 +10,9 @@ import qualified Data.Vector          as V
 import qualified Data.Map.Strict      as Map
 import qualified Data.HashMap.Strict  as HashMap
 import qualified Data.Text            as Text
-import           Path                 (File, Path)
-import qualified Path
 import qualified Test.QuickCheck as QC
 import qualified Text.Show (Show(..))
 import           Hex.Quantity
-import qualified Data.ByteString as BS
 
 class TeXCode a where
     toTeXInt :: a -> TeXInt
@@ -44,9 +41,6 @@ instance TeXCode CharCode where
         | n > 256 = Nothing
         | n < 0 = Nothing
         | otherwise = Just $ fromIntegral n
-
-readCharCodes :: MonadIO m => Path a File -> m BS.ByteString
-readCharCodes path = liftIO (BS.readFile (Path.toFilePath path))
 
 pattern CharCode_ :: Char -> CharCode
 pattern CharCode_ c <- (unsafeCodeAsChar -> c)
