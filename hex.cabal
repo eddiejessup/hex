@@ -56,19 +56,23 @@ library
       Hex.Config.Parameters
       Hex.Evaluate
       Hex.Lex
-      Hex.Parse
-      Hex.Parse.Assignment
       Hex.Parse.AST
-      Hex.Parse.Command
-      Hex.Parse.Condition
-      Hex.Parse.Quantity
+      Hex.Parse.CommandParser.Assignment
+      Hex.Parse.CommandParser.Command
+      Hex.Parse.CommandParser.Condition
+      Hex.Parse.CommandParser.Inhibited
+      Hex.Parse.CommandParser.Quantity
+      Hex.Parse.CommandParser.SyntaxCommand
       Hex.Parse.Stream.Class
       Hex.Parse.Stream.Expanding
-      Hex.Parse.Stream.NonExpanding
-      Hex.Parse.SyntaxCommand
+      Hex.Parse.Stream.Expanding.Parse
+      Hex.Parse.TokenParser.Class
+      Hex.Parse.TokenParser.Combinators
+      Hex.Parse.TokenParser.ParseT
       Hex.Quantity
       Hex.Resolve
       Hex.Resolve.Map
+      Hex.Resolve.Resolve
       Hex.Resolve.Token
       Hex.Run
       Hex.Variable
@@ -238,19 +242,23 @@ test-suite test
       Hex.Config.Parameters
       Hex.Evaluate
       Hex.Lex
-      Hex.Parse
-      Hex.Parse.Assignment
       Hex.Parse.AST
-      Hex.Parse.Command
-      Hex.Parse.Condition
-      Hex.Parse.Quantity
+      Hex.Parse.CommandParser.Assignment
+      Hex.Parse.CommandParser.Command
+      Hex.Parse.CommandParser.Condition
+      Hex.Parse.CommandParser.Inhibited
+      Hex.Parse.CommandParser.Quantity
+      Hex.Parse.CommandParser.SyntaxCommand
       Hex.Parse.Stream.Class
       Hex.Parse.Stream.Expanding
-      Hex.Parse.Stream.NonExpanding
-      Hex.Parse.SyntaxCommand
+      Hex.Parse.Stream.Expanding.Parse
+      Hex.Parse.TokenParser.Class
+      Hex.Parse.TokenParser.Combinators
+      Hex.Parse.TokenParser.ParseT
       Hex.Quantity
       Hex.Resolve
       Hex.Resolve.Map
+      Hex.Resolve.Resolve
       Hex.Resolve.Token
       Hex.Run
       Hex.Variable

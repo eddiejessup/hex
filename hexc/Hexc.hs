@@ -1,7 +1,6 @@
 module Main where
 
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BS.L
 import qualified Hex.App as App
 import Hex.Categorise
 import qualified Hex.Run as Run
@@ -9,6 +8,7 @@ import Hex.Config.Config
 import Hex.Lex
 import Hex.Parse.Stream.Expanding
 import Hex.Resolve hiding (Output, long)
+import qualified Hex.Resolve.Resolve as R
 import Hexlude
 import qualified Path
 import qualified Path.IO
@@ -97,10 +97,10 @@ appOptionsParserInfo = info (appOptionsParser <**> helper)
      <> progDesc "Run Hex source"
      <> header "Hex")
 
-preamble :: BS.L.ByteString
+preamble :: BS.ByteString
 preamble = "\\font\\thefont=cmr10 \\thefont\n\n"
 
-postamble :: BS.L.ByteString
+postamble :: BS.ByteString
 postamble = "\n\n\\end\n"
 
 getByteSource :: MonadResource m => Input -> IO (ConduitT i ByteString m ())
@@ -130,7 +130,7 @@ main = do
             evalStateT (runExceptT (runConduit cond)) LineBegin
           case runIdentity `first` errOrTs of
             Left TrailingEscape ->
-              undefined
+              panic "unimplemented: trailing escape in lex mode"
             Right ts ->
               putText $ Tx.intercalate "\n" $ show <$> ts
         ResolveMode -> do
@@ -138,34 +138,33 @@ main = do
           errOrTs <- runResourceT $ do
             let
               cond :: ConduitT () Void (ExceptT (Identity LexError) (StateT LexState (ResourceT IO))) [Maybe ResolvedToken]
-              cond = src .| usableExtractCharCat .| extractToken .| resolveTokenConduit .| sinkList
+              cond = src .| usableExtractCharCat .| extractToken .| R.defaultResolveTokenConduit .| sinkList
             evalStateT (runExceptT (runConduit cond)) LineBegin
           case runIdentity `first` errOrTs of
             Left TrailingEscape ->
-              undefined
+              panic "unimplemented: trailing escape in resolve mode"
             Right ts ->
               putText $ Tx.intercalate "\n" $ show <$> ts
     ExpandingMode m -> do
       (inputRaw, maybeInPath) <-
         case input opts of
           StdInput -> do
-            cs <- liftIO BS.L.getContents
+            cs <- liftIO BS.getContents
             pure (cs, Nothing)
           FileInput inPathStr -> do
             path <- Path.IO.resolveFile' (toS inPathStr)
-            cs <- BS.L.readFile (Path.toFilePath path)
+            cs <- BS.readFile (Path.toFilePath path)
             pure (cs, Just path)
       let input =
             if withAmbles opts
               then preamble <> inputRaw <> postamble
               else inputRaw
 
-
       conf <- newConfig (maybeToList (Path.toFilePath . Path.parent <$> maybeInPath) <> (searchDirs opts))
       let inputS = newExpandStream maybeInPath input
       case m of
         ExpandMode -> do
-          (endS, mayErr, primToks) <- App.runErrorlessApp (Run.expandingStreamAsPrimTokens inputS) conf
+          (endS, mayErr :: Maybe App.AppError, primToks) <- App.runErrorlessApp (Run.expandingStreamAsPrimTokens inputS) conf
           case primToks of
             [] ->
               putText "Returned no results"
@@ -174,60 +173,60 @@ main = do
                 renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" primToks
 
           for_ mayErr $ \err -> putText $ errTxtWithStream err endS
-        CommandMode -> do
-          (endS, mayErr, commands) <- App.runErrorlessApp (Run.expandingStreamAsCommands inputS) conf
-          case commands of
-            [] ->
-              putText "Returned no results"
-            _ ->
-              putText $ resultTxt $
-                renderLines $ describeNamedRelFoldable 0 "Commands" commands
+        -- CommandMode -> do
+        --   (endS, mayErr, commands) <- App.runErrorlessApp (Run.expandingStreamAsCommands inputS) conf
+        --   case commands of
+        --     [] ->
+        --       putText "Returned no results"
+        --     _ ->
+        --       putText $ resultTxt $
+        --         renderLines $ describeNamedRelFoldable 0 "Commands" commands
 
-          for_ mayErr $ \err -> putText $ errTxtWithStream err endS
-        ParaListMode ->
-          App.runApp (Run.renderStreamParaList inputS) conf >>= \case
-            Left err ->
-              putText $ errTxt err
-            Right (_, txt) ->
-              putText $ resultTxt txt
-        ParaSetMode ->
-          App.runApp (Run.renderStreamSetPara inputS) conf >>= \case
-            Left err ->
-              putText $ errTxt err
-            Right (_, txt) ->
-              putText $ resultTxt txt
-        PageListMode ->
-          App.runApp (Run.renderStreamPageList inputS) conf >>= \case
-            Left err ->
-              putText $ errTxt err
-            Right (_, txt) ->
-              putText $ resultTxt txt
-        PageMode ->
-          App.runApp (Run.renderStreamPages inputS) conf >>= \case
-            Left err ->
-              putText $ errTxt err
-            Right (_, txt) ->
-              putText $ resultTxt txt
-        SemanticDVIInstructionsMode ->
-          App.runApp (Run.renderStreamSemanticDVI inputS) conf >>= \case
-            Left err ->
-              putText $ errTxt err
-            Right (_, txt) ->
-              putText $ resultTxt txt
-        RawDVIInstructionsMode ->
-          App.runApp (Run.renderStreamRawDVI inputS) conf >>= \case
-            Left err ->
-              putText $ errTxt err
-            Right (_, txt) ->
-              putText $ resultTxt txt
-        DVIWriteMode DVIWriteOptions { dviOutputPath } -> do
-          let s = newExpandStream maybeInPath input
-          App.runApp (Run.streamToDVIBytes s) conf >>= \case
-            Left appError ->
-              putText $ show appError
-            Right (_endS, bytes) -> do
-              putText $ "Writing to " <> toS dviOutputPath <> "..."
-              liftIO $ BS.writeFile dviOutputPath bytes
+        --   for_ mayErr $ \err -> putText $ errTxtWithStream err endS
+        -- ParaListMode ->
+        --   App.runApp (Run.renderStreamParaList inputS) conf >>= \case
+        --     Left err ->
+        --       putText $ errTxt err
+        --     Right (_, txt) ->
+        --       putText $ resultTxt txt
+        -- ParaSetMode ->
+        --   App.runApp (Run.renderStreamSetPara inputS) conf >>= \case
+        --     Left err ->
+        --       putText $ errTxt err
+        --     Right (_, txt) ->
+        --       putText $ resultTxt txt
+        -- PageListMode ->
+        --   App.runApp (Run.renderStreamPageList inputS) conf >>= \case
+        --     Left err ->
+        --       putText $ errTxt err
+        --     Right (_, txt) ->
+        --       putText $ resultTxt txt
+        -- PageMode ->
+        --   App.runApp (Run.renderStreamPages inputS) conf >>= \case
+        --     Left err ->
+        --       putText $ errTxt err
+        --     Right (_, txt) ->
+        --       putText $ resultTxt txt
+        -- SemanticDVIInstructionsMode ->
+        --   App.runApp (Run.renderStreamSemanticDVI inputS) conf >>= \case
+        --     Left err ->
+        --       putText $ errTxt err
+        --     Right (_, txt) ->
+        --       putText $ resultTxt txt
+        -- RawDVIInstructionsMode ->
+        --   App.runApp (Run.renderStreamRawDVI inputS) conf >>= \case
+        --     Left err ->
+        --       putText $ errTxt err
+        --     Right (_, txt) ->
+        --       putText $ resultTxt txt
+        -- DVIWriteMode DVIWriteOptions { dviOutputPath } -> do
+        --   let s = newExpandStream maybeInPath input
+        --   App.runApp (Run.streamToDVIBytes s) conf >>= \case
+        --     Left appError ->
+        --       putText $ show appError
+        --     Right (_endS, bytes) -> do
+        --       putText $ "Writing to " <> toS dviOutputPath <> "..."
+        --       liftIO $ BS.writeFile dviOutputPath bytes
 
 errTxtWithStream :: App.AppError -> ExpandingStream -> Text
 errTxtWithStream err s =

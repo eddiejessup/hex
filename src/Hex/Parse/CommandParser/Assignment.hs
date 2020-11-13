@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
-module Hex.Parse.Assignment where
+module Hex.Parse.CommandParser.Assignment where
 
 import qualified Control.Monad.Combinators as PC
 import Hex.Config.Codes (unsafeCodesFromChars)
@@ -7,18 +7,19 @@ import qualified Hex.Config.Codes as Code
 import Hex.Evaluate
 import qualified Hex.Lex as Lex
 import Hex.Parse.AST
-import Hex.Parse.Quantity
-import Hex.Parse.Parser.Combinators
-import Hex.Parse.Inhibited
-import Hex.Parse.Parser.Class
+import Hex.Parse.CommandParser.Quantity
+import Hex.Parse.TokenParser.Combinators
+import Hex.Parse.CommandParser.Inhibited
+import Hex.Parse.TokenParser.Class
 import qualified Hex.Resolve.Token as T
 import qualified Hex.Quantity as Q
 import Hexlude
 import qualified Path
 
-headToParseAssignment :: TeXParseCtx st e m => T.PrimitiveToken -> m Assignment
+headToParseAssignment :: forall m. (MonadTokenParse m, MonadEvaluate m TeXInt) => T.PrimitiveToken -> m Assignment
 headToParseAssignment = go []
   where
+    go :: [T.AssignPrefixTok] -> T.PrimitiveToken -> m Assignment
     go prefixes = \case
       T.AssignPrefixTok prefix ->
         anySingle >>= go (prefix : prefixes)
@@ -54,8 +55,7 @@ headToParseAssignment = go []
           }
 
 headToParseNonMacroAssignmentBody
-  :: forall st e m
-   . TeXParseCtx st e m
+  :: (MonadTokenParse m, MonadEvaluate m TeXInt)
   => T.PrimitiveToken
   -> m AssignmentBody
 headToParseNonMacroAssignmentBody = \case
@@ -82,7 +82,7 @@ headToParseNonMacroAssignmentBody = \case
     -- dimensions⟩ are ⟨empty⟩ if n ≤ 0, otherwise they consist of 2n
     -- consecutive occurrences of ⟨dimen⟩
     nrPairs <- parseTeXInt
-    Q.TeXInt eNrPairsInt <- texEvaluate nrPairs
+    Q.TeXInt eNrPairsInt <- astEval nrPairs
     let parseLengthPair = (,) <$> parseLength <*> parseLength
     SetParShape <$> PC.count eNrPairsInt parseLengthPair
   T.ReadTok -> do
@@ -218,7 +218,7 @@ headToParseNonMacroAssignmentBody = \case
       SetBoxDimension var <$> parseLength
 
 -- <file name> = <optional spaces> <some explicit letter or digit characters> <space>
-parseFileName :: TeXParseCtx st e m=> m TeXFilePath
+parseFileName :: MonadTokenParse m=> m TeXFilePath
 parseFileName = do
   skipOptionalSpaces
   fileNameChars <-

@@ -1,12 +1,12 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Hex.Parse.Parser.ParseT where
+module Hex.Parse.TokenParser.ParseT where
 
-import Hex.Parse.Parser.Class
+import Hex.Parse.TokenParser.Class
 import Hexlude hiding (many)
 import Control.Monad.Trans (MonadTrans)
 
-newtype TeXParseT s m a = TeXParseT (s -> m (s, Either ParseError a))
+newtype TeXParseT s m a = TeXParseT {unTeXParseT :: (s -> m (s, Either ParseError a)) }
 
 instance Functor m => Functor (TeXParseT s m) where
   fmap f (TeXParseT parse) = TeXParseT $ \s -> parse s <&> \(s', errOrA) ->
@@ -17,7 +17,7 @@ instance Functor m => Functor (TeXParseT s m) where
 instance Monad m => Applicative (TeXParseT s m) where
   pure a = TeXParseT $ \s -> pure (s, Right a)
 
-  -- (<*>) :: m (a -> b) -> m a -> m b
+  (<*>) :: TeXParseT s m (a -> b) -> TeXParseT s m a -> TeXParseT s m b
   (TeXParseT parseAToB) <*> (TeXParseT parseA) = TeXParseT $ \s -> do
     (s', errOrAToB) <- parseAToB s
     case errOrAToB of
@@ -36,7 +36,7 @@ instance Monad m => Applicative (TeXParseT s m) where
 instance Monad m => Monad (TeXParseT s m) where
   return = pure
 
-  -- m a -> (a -> m b) -> m b
+  (>>=) :: TeXParseT s m a -> (a -> TeXParseT s m b) -> TeXParseT s m b
   (TeXParseT parseA) >>= aToTParseB = TeXParseT $ \s -> do
     (s', errOrA) <- parseA s
     case errOrA of
@@ -49,6 +49,7 @@ instance Monad m => Monad (TeXParseT s m) where
 
 instance (Monad m, Describe s) => Alternative (TeXParseT s m) where
   empty = mzero
+
   (<|>) = mplus
 
 instance (Monad m, Describe s) => MonadPlus (TeXParseT s m) where
@@ -90,6 +91,8 @@ instance MonadState st m => MonadState st (TeXParseT s m) where
 
 instance MonadIO m => MonadIO (TeXParseT s m) where
   liftIO = lift . liftIO
+
+-- instance (Monad m, Describe s, MonadTokenParse (TeXParseT s m)) => MonadTokenParse (TeXParseT s (ExceptT e m)) where
 
 runTeXParseT
   :: TeXParseT s m a

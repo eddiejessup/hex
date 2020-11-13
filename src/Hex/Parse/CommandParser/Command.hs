@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 
-module Hex.Parse.Command where
+module Hex.Parse.CommandParser.Command where
 
 import           Hexlude
 
@@ -8,14 +8,17 @@ import qualified Control.Monad.Combinators as PC
 
 import           Hex.Config.Codes          (unsafeCodesFromChars)
 import qualified Hex.Config.Codes          as Code
+import Hex.Evaluate
 import qualified Hex.Lex                   as Lex
-import           Hex.Parse.Assignment
+import           Hex.Parse.CommandParser.Assignment
+import           Hex.Parse.CommandParser.Inhibited
+import           Hex.Parse.TokenParser.Class
+import           Hex.Parse.TokenParser.Combinators
 import           Hex.Parse.AST
-import           Hex.Parse.Quantity
-import           Hex.Parse.Stream.Class
+import           Hex.Parse.CommandParser.Quantity
 import qualified Hex.Resolve.Token           as T
 
-parseInternalQuantity :: TeXParseCtx st e m => m InternalQuantity
+parseInternalQuantity :: MonadTokenParse m => m InternalQuantity
 parseInternalQuantity = PC.choice
     [ InternalTeXIntQuantity    <$> parseHeaded headToParseInternalTeXInt
     , InternalLengthQuantity    <$> parseHeaded headToParseInternalLength
@@ -26,7 +29,7 @@ parseInternalQuantity = PC.choice
     ]
 
 -- \hrule and such.
-parseRule :: TeXParseCtx st e m => m Rule
+parseRule :: MonadTokenParse m => m Rule
 parseRule = parseRuleSpecification Rule{ width  = Nothing
                                        , height = Nothing
                                        , depth  = Nothing
@@ -59,7 +62,7 @@ parseRule = parseRuleSpecification Rule{ width  = Nothing
         ln <- parseLength
         pure rule { depth = Just ln }
 
-headToParseModeIndependentCommand :: TeXParseCtx st e m => T.PrimitiveToken -> m ModeIndependentCommand
+headToParseModeIndependentCommand :: (MonadTokenParse m, MonadEvaluate m TeXInt) => T.PrimitiveToken -> m ModeIndependentCommand
 headToParseModeIndependentCommand =
     choiceFlap
         [ \case
@@ -146,7 +149,7 @@ headToParseModeIndependentCommand =
         _ ->
             empty
 
-parseCommand :: forall st e m. TeXParseCtx st e m => m Command
+parseCommand :: forall m. (MonadTokenParse m, MonadEvaluate m TeXInt) => m Command
 parseCommand =
     anySingle >>= choiceFlap
         [ \case
@@ -239,6 +242,7 @@ parseCommand =
 
     -- ⟨optional assignments⟩ stands for zero or more ⟨assignment⟩ commands
     -- other than \setbox.
+    parseNonSetBoxAssignment :: m Assignment
     parseNonSetBoxAssignment =
         parseHeaded headToParseAssignment >>= \case
             Assignment (SetBoxRegister _ _) _ ->

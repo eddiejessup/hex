@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 
-module Hex.Parse.Inhibited where
+module Hex.Parse.CommandParser.Inhibited where
 
 import           Hexlude
 
@@ -12,8 +12,8 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Hex.Lex (CharCat (..))
 import qualified Hex.Lex as Lex
-import Hex.Parse.Parser.Combinators
-import Hex.Parse.Parser.Class
+import Hex.Parse.TokenParser.Combinators
+import Hex.Parse.TokenParser.Class
 
   -- P.updateParserState (\st@P.State {P.stateInput} -> st {P.stateInput = inhibitResolution stateInput})
   -- v <- p
@@ -64,7 +64,7 @@ splitLast = \case
   xs :|> x -> Just (xs, x)
   _ -> Nothing
 
-unsafeParseMacroArgs :: forall m. MonadTeXParse m => MacroContents -> m (Map.Map Digit MacroArgument)
+unsafeParseMacroArgs :: forall m. MonadTokenParse m => MacroContents -> m (Map.Map Digit MacroArgument)
 unsafeParseMacroArgs MacroContents {preParamTokens = pre, parameters = params} = do
   skipBalancedText pre
   parseArgs params
@@ -130,7 +130,7 @@ unsafeParseMacroArgs MacroContents {preParamTokens = pre, parameters = params} =
       pure inner
 
 -- Case 4, for things like 'macroName' in '\def\macroName'.
-unsafeParseCSName :: MonadTeXParse m => m Lex.ControlSequenceLike
+unsafeParseCSName :: MonadTokenParse m => m Lex.ControlSequenceLike
 unsafeParseCSName = handleLex tokToCSLike
   where
     tokToCSLike (Lex.CharCatToken CharCat {cat = Code.Active, char = c}) =
@@ -140,12 +140,12 @@ unsafeParseCSName = handleLex tokToCSLike
     tokToCSLike _ = Nothing
 
 -- Case 5, arbitrary tokens such as for \let\foo=<token>.
-unsafeAnySingleLex :: MonadTeXParse m => m Lex.Token
+unsafeAnySingleLex :: MonadTokenParse m => m Lex.Token
 unsafeAnySingleLex = satisfyThen tokToLex
 
 -- Case 6, macro parameter text.
 -- Trivially balanced, because no braces are allowed at all.
-parseParamDelims :: MonadTeXParse m => m BalancedText
+parseParamDelims :: MonadTokenParse m => m BalancedText
 parseParamDelims = BalancedText . Seq.fromList <$> manySatisfiedThen tokToDelimTok
   where
     tokToDelimTok = \case
@@ -158,7 +158,7 @@ parseParamDelims = BalancedText . Seq.fromList <$> manySatisfiedThen tokToDelimT
         Just lt
       _ -> Nothing
 
-headToMaybeParseParametersFrom :: MonadTeXParse m => Digit -> PrimitiveToken -> m MacroParameters
+headToMaybeParseParametersFrom :: MonadTokenParse m => Digit -> PrimitiveToken -> m MacroParameters
 headToMaybeParseParametersFrom dig _t =
   headToParseEndOfParams _t <|> headToParseParamsFrom _t
   where
@@ -194,7 +194,7 @@ headToMaybeParseParametersFrom dig _t =
       | otherwise =
         empty
 
-unsafeParseParamText :: MonadTeXParse m => m (BalancedText , MacroParameters)
+unsafeParseParamText :: MonadTokenParse m => m (BalancedText , MacroParameters)
 unsafeParseParamText = do
   -- Pre-parameter text tokens.
   preParamToks <- parseParamDelims
@@ -208,7 +208,7 @@ data TerminusPolicy = Include | Discard
   deriving stock (Show, Eq)
 
 -- Nested expression with valid grouping.
-parseNestedExpr :: MonadTeXParse m => m (a, Ordering) -> TerminusPolicy -> m (Seq a)
+parseNestedExpr :: MonadTokenParse m => m (a, Ordering) -> TerminusPolicy -> m (Seq a)
 parseNestedExpr parseNext policy = go mempty (1 :: Int)
   where
     go acc = \case
@@ -239,7 +239,7 @@ tokToChange t
   | otherwise = EQ
 
 -- This assumes we just parsed the '{' that starts the balanced text.
-unsafeParseBalancedText :: MonadTeXParse m => TerminusPolicy -> m BalancedText
+unsafeParseBalancedText :: MonadTokenParse m => TerminusPolicy -> m BalancedText
 unsafeParseBalancedText policy =
   BalancedText <$> parseNestedExpr parseNext policy
   where
@@ -250,7 +250,7 @@ unsafeParseBalancedText policy =
 -- extract parameter references at definition-time.
 -- This assumes we just parsed the '{' that starts the macro text.
 -- This function is like unsafeParseBalancedText, but extracts argument calls.
-unsafeParseMacroText :: MonadTeXParse m => m MacroText
+unsafeParseMacroText :: MonadTokenParse m => m MacroText
 unsafeParseMacroText = MacroText <$> parseNestedExpr parseNext Discard
   where
     parseNext =
@@ -272,14 +272,14 @@ unsafeParseMacroText = MacroText <$> parseNestedExpr parseNext Discard
         Nothing
 
 -- Interface.
-parseBalancedText :: MonadTeXParse m => TerminusPolicy -> m BalancedText
+parseBalancedText :: MonadTokenParse m => TerminusPolicy -> m BalancedText
 parseBalancedText = withInhibition . unsafeParseBalancedText
 
-parseMacroArgs :: MonadTeXParse m => MacroContents -> m (Map.Map Digit MacroArgument)
+parseMacroArgs :: MonadTokenParse m => MacroContents -> m (Map.Map Digit MacroArgument)
 parseMacroArgs = withInhibition . unsafeParseMacroArgs
 
 -- Case 10, character constant like "`c".
-parseCharLike :: MonadTeXParse m => m Code.CharCode
+parseCharLike :: MonadTokenParse m => m Code.CharCode
 parseCharLike =
   withInhibition $ handleLex $ \case
     Lex.CharCatToken CharCat {char = c} ->
@@ -292,26 +292,26 @@ parseCharLike =
         then Just $ Code.CharCode c
         else Nothing
 
-parseCSName :: MonadTeXParse m => m Lex.ControlSequenceLike
+parseCSName :: MonadTokenParse m => m Lex.ControlSequenceLike
 parseCSName = withInhibition unsafeParseCSName
 
-parseParamText :: MonadTeXParse m => m (BalancedText, MacroParameters)
+parseParamText :: MonadTokenParse m => m (BalancedText, MacroParameters)
 parseParamText = withInhibition unsafeParseParamText
 
-parseMacroText :: MonadTeXParse m => m MacroText
+parseMacroText :: MonadTokenParse m => m MacroText
 parseMacroText = withInhibition unsafeParseMacroText
 
-parseLexToken :: MonadTeXParse m => m Lex.Token
+parseLexToken :: MonadTokenParse m => m Lex.Token
 parseLexToken = withInhibition unsafeAnySingleLex
 
-parseLetArg :: MonadTeXParse m => m Lex.Token
+parseLetArg :: MonadTokenParse m => m Lex.Token
 parseLetArg = withInhibition skipOneOptionalSpace >> parseLexToken
 
 -- Derived related parsers.
-skipFiller :: MonadTeXParse m => m ()
+skipFiller :: MonadTokenParse m => m ()
 skipFiller = void $ takeWhileP isFillerItem
 
-parseExpandedBalancedText :: MonadTeXParse m => TerminusPolicy -> m ExpandedBalancedText
+parseExpandedBalancedText :: MonadTokenParse m => TerminusPolicy -> m ExpandedBalancedText
 parseExpandedBalancedText policy =
   ExpandedBalancedText <$> parseNestedExpr parseNext policy
   where
@@ -320,14 +320,14 @@ parseExpandedBalancedText policy =
       UnresolvedTok lt -> tokToChange lt
       _ -> EQ
 
-_parseDelimitedText :: MonadTeXParse m => (TerminusPolicy -> m a) -> m a
+_parseDelimitedText :: MonadTokenParse m => (TerminusPolicy -> m a) -> m a
 _parseDelimitedText parser = do
   skipFiller
   skipLeftBrace
   parser Discard
 
-parseGeneralText :: MonadTeXParse m => m BalancedText
+parseGeneralText :: MonadTokenParse m => m BalancedText
 parseGeneralText = _parseDelimitedText parseBalancedText
 
-parseExpandedGeneralText :: MonadTeXParse m => m ExpandedBalancedText
+parseExpandedGeneralText :: MonadTokenParse m => m ExpandedBalancedText
 parseExpandedGeneralText = _parseDelimitedText parseExpandedBalancedText

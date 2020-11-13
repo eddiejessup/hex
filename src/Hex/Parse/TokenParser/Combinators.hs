@@ -1,57 +1,57 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Hex.Parse.Parser.Combinators where
+module Hex.Parse.TokenParser.Combinators where
 
 import qualified Control.Monad.Combinators as PC
 import qualified Hex.Config.Codes as Code
 import Hex.Lex (CharCat (..))
 import qualified Hex.Lex as Lex
-import Hex.Parse.Parser.Class
+import Hex.Parse.TokenParser.Class
 import Hex.Resolve
 import Hexlude hiding (many)
 
-satisfyIf :: MonadTeXParse m => (PrimitiveToken -> Bool) -> m PrimitiveToken
+satisfyIf :: MonadTokenParse m => (PrimitiveToken -> Bool) -> m PrimitiveToken
 satisfyIf f = satisfyThen (\x -> if f x then Just x else Nothing)
 
-anySingle :: MonadTeXParse m => m PrimitiveToken
+anySingle :: MonadTokenParse m => m PrimitiveToken
 anySingle = satisfyIf (const True)
 
-takeResolvedToken :: MonadTeXParse m => m ResolvedToken
+takeResolvedToken :: MonadTokenParse m => m ResolvedToken
 takeResolvedToken = do
   (_, rt) <- takeAndResolveLexToken
   pure rt
 
-manySatisfiedIf :: MonadTeXParse m => (PrimitiveToken -> Bool) -> m [PrimitiveToken]
+manySatisfiedIf :: MonadTokenParse m => (PrimitiveToken -> Bool) -> m [PrimitiveToken]
 manySatisfiedIf testTok = PC.many $ satisfyIf testTok
 
-manySatisfiedThen :: MonadTeXParse m => (PrimitiveToken -> Maybe a) -> m [a]
+manySatisfiedThen :: MonadTokenParse m => (PrimitiveToken -> Maybe a) -> m [a]
 manySatisfiedThen f = PC.many $ satisfyThen f
 
 -- Skipping.
-skipSatisfied :: MonadTeXParse m => (PrimitiveToken -> Bool) -> m ()
+skipSatisfied :: MonadTokenParse m => (PrimitiveToken -> Bool) -> m ()
 skipSatisfied f = void (satisfyIf f)
 
-satisfyEquals :: MonadTeXParse m => PrimitiveToken -> m ()
+satisfyEquals :: MonadTokenParse m => PrimitiveToken -> m ()
 satisfyEquals t = skipSatisfied (== t)
 
-skipOptional :: MonadTeXParse m => m a -> m ()
+skipOptional :: MonadTokenParse m => m a -> m ()
 skipOptional p = void (optional p)
 
-skipOneOptionalSatisfied :: MonadTeXParse m => (PrimitiveToken -> Bool) -> m ()
+skipOneOptionalSatisfied :: MonadTokenParse m => (PrimitiveToken -> Bool) -> m ()
 skipOneOptionalSatisfied = skipOptional . skipSatisfied
 
-skipManySatisfied :: MonadTeXParse m => (PrimitiveToken -> Bool) -> m ()
+skipManySatisfied :: MonadTokenParse m => (PrimitiveToken -> Bool) -> m ()
 skipManySatisfied = PC.skipMany . skipSatisfied
 
-skipSatisfiedChunk :: MonadTeXParse m => Seq PrimitiveToken -> m ()
+skipSatisfiedChunk :: MonadTokenParse m => Seq PrimitiveToken -> m ()
 skipSatisfiedChunk = foldr (satisfyEquals >>> (>>)) (pure ())
 
-choiceFlap :: MonadTeXParse m => [PrimitiveToken -> m a] -> PrimitiveToken -> m a
+choiceFlap :: MonadTokenParse m => [PrimitiveToken -> m a] -> PrimitiveToken -> m a
 choiceFlap headsToParsers t =
   PC.choice (flap headsToParsers t)
 
-parseHeaded :: MonadTeXParse m => (PrimitiveToken -> m a) -> m a
+parseHeaded :: MonadTokenParse m => (PrimitiveToken -> m a) -> m a
 parseHeaded = (anySingle >>=)
 
 -- Helpers.
@@ -104,40 +104,40 @@ tokToLex = \case
   UnresolvedTok t -> Just t
   _ -> Nothing
 
-handleLex :: MonadTeXParse m => (Lex.Token -> Maybe a) -> m a
+handleLex :: MonadTokenParse m => (Lex.Token -> Maybe a) -> m a
 handleLex f = satisfyThen $ tokToLex >=> f
 
-satisfyEqualsLex :: MonadTeXParse m => Lex.Token -> m ()
+satisfyEqualsLex :: MonadTokenParse m => Lex.Token -> m ()
 satisfyEqualsLex lt = void $ satisfyEquals (UnresolvedTok lt)
 
-skipSatisfiedLexChunk :: MonadTeXParse m => Seq Lex.Token -> m ()
+skipSatisfiedLexChunk :: MonadTokenParse m => Seq Lex.Token -> m ()
 skipSatisfiedLexChunk ts = skipSatisfiedChunk (UnresolvedTok <$> ts)
 
-skipBalancedText :: MonadTeXParse m => BalancedText -> m ()
+skipBalancedText :: MonadTokenParse m => BalancedText -> m ()
 skipBalancedText (BalancedText toks) = skipSatisfiedLexChunk toks
 
 -- Parsers.
-skipOneOptionalSpace :: MonadTeXParse m => m ()
+skipOneOptionalSpace :: MonadTokenParse m => m ()
 skipOneOptionalSpace = skipOneOptionalSatisfied isSpace
 
 -- TODO: Maybe other things can act as left braces.
-skipLeftBrace :: MonadTeXParse m => m ()
+skipLeftBrace :: MonadTokenParse m => m ()
 skipLeftBrace = skipSatisfied $ primTokHasCategory Code.BeginGroup
 
 -- <optional spaces> = <zero or more spaces>.
-skipOptionalSpaces :: MonadTeXParse m => m ()
+skipOptionalSpaces :: MonadTokenParse m => m ()
 skipOptionalSpaces = skipManySatisfied isSpace
 
-skipOptionalEquals :: MonadTeXParse m => m ()
+skipOptionalEquals :: MonadTokenParse m => m ()
 skipOptionalEquals = skipOptionalSpaces >> skipOneOptionalSatisfied (matchOtherToken '=')
 
-skipKeyword :: MonadTeXParse m => [Code.CharCode] -> m ()
+skipKeyword :: MonadTokenParse m => [Code.CharCode] -> m ()
 skipKeyword s =
   skipOptionalSpaces >>
     mapM_ (skipSatisfied . matchNonActiveCharacterUncased) s
 
-parseOptionalKeyword :: MonadTeXParse m => [Code.CharCode] -> m Bool
+parseOptionalKeyword :: MonadTokenParse m => [Code.CharCode] -> m Bool
 parseOptionalKeyword s = isJust <$> optional (skipKeyword s)
 
-parseManyChars :: MonadTeXParse m => m [Code.CharCode]
+parseManyChars :: MonadTokenParse m => m [Code.CharCode]
 parseManyChars = PC.many $ satisfyThen tokToChar

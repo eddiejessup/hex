@@ -1,14 +1,13 @@
-{-# LANGUAGE RankNTypes #-}
-
-module Hex.Parse.SyntaxCommand where
+module Hex.Parse.CommandParser.SyntaxCommand where
 
 import           Hexlude
 
 import qualified Hex.Config.Codes       as Code
-import           Hex.Parse.Stream.Class
+import           Hex.Parse.TokenParser.Class
+import           Hex.Parse.TokenParser.Combinators
 import           Hex.Resolve.Token
 
-parseCSNameArgs :: TeXParseCtx st e m => m [Code.CharCode]
+parseCSNameArgs :: MonadTokenParse m => m [Code.CharCode]
 parseCSNameArgs =
     do
     cs <- parseManyChars

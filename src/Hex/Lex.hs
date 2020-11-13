@@ -9,7 +9,6 @@ import qualified Hex.Config.Codes as Code
 import Hexlude hiding (dropWhile)
 import qualified Test.QuickCheck as QC
 
--- TODO: Fix this hashing crap.
 newtype ControlSequence = ControlSequence ByteString
   deriving newtype (Show, Eq, Hashable)
 

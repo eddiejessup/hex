@@ -5,11 +5,16 @@ import           Hexlude
 import qualified Hex.Config.Codes    as Code
 import qualified Hex.Lex             as Lex
 import           Hex.Resolve.Token
+import           Hex.Resolve.Map
 import Data.Conduit
 import qualified Data.Conduit.Combinators as C
+import Data.HashMap.Strict (lookup)
 
 data ResolutionMode = Resolving | NotResolving
     deriving stock ( Show, Eq )
+
+newtype ResolutionError = ResolutionError Text
+  deriving stock Show
 
 resolveToken :: (Lex.ControlSequenceLike -> Maybe ResolvedToken)
              -> ResolutionMode
@@ -27,3 +32,6 @@ resolveTokenConduit ::
   -> ResolutionMode
   -> ConduitT Lex.Token (Maybe ResolvedToken) m ()
 resolveTokenConduit csLookup resMode = C.map (resolveToken csLookup resMode)
+
+defaultResolveTokenConduit :: Monad m => ConduitT Lex.Token (Maybe ResolvedToken) m ()
+defaultResolveTokenConduit = resolveTokenConduit (\k -> lookup k defaultCSMap) Resolving

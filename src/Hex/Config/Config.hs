@@ -226,16 +226,14 @@ readFontInfo fontPath = do
     pure FontInfo { fontMetrics, hyphenChar, skewChar }
 
 lookupFontInfo
-    :: ( MonadState st m
-       , HasType Config st
-       , MonadError e m
+    :: ( MonadError e m
        , AsType ConfigError e
        )
-    => TeXInt
+    => Config
+    -> TeXInt
     -> m FontInfo
-lookupFontInfo fNr = do
-    mayInfo <- use $ typed @Config % field @"fontInfos" % to (!? fNr)
-    note (injectTyped (ConfigError "No such font number")) mayInfo
+lookupFontInfo c fNr =
+    note (injectTyped (ConfigError "No such font number")) (c ^. field @"fontInfos" % to (!? fNr))
 
 addFont :: (MonadState st m, HasType Config st) => FontInfo -> m TeXInt
 addFont newInfo = do
@@ -381,14 +379,13 @@ lookupCurrentFontNr :: Config -> Maybe TeXInt
 lookupCurrentFontNr = scopedLookup currentFontNr
 
 mLookupCurrentFontNr
-    :: ( MonadState st m
-       , HasType Config st
-       , MonadError e m
+    :: ( MonadError e m
        , AsType ConfigError e
        )
-    => m TeXInt
-mLookupCurrentFontNr = do
-    mayFNr <- use $ typed @Config % to lookupCurrentFontNr
+    => Config
+    -> m TeXInt
+mLookupCurrentFontNr c = do
+    let mayFNr = c ^. typed @Config % to lookupCurrentFontNr
     note (injectTyped $ ConfigError "Font number isn't set") mayFNr
 
 selectFontNr :: TeXInt -> ScopeFlag -> Config -> Config
@@ -413,15 +410,14 @@ setFamilyMemberFont
 setFamilyMemberFont = insertKey (G.P.field @"familyMemberFonts")
 
 lookupFontFamilyMember
-    :: ( MonadState st m
-       , HasType Config st
-       , MonadError e m
+    :: ( MonadError e m
        , AsType ConfigError e
        )
-    => (FontRange, TeXInt)
+    => Config
+    -> (FontRange, TeXInt)
     -> m TeXInt
-lookupFontFamilyMember k = do
-    mayMember <- use $ typed @Config % to (scopedMapLookup familyMemberFonts k)
+lookupFontFamilyMember c k = do
+    let mayMember = scopedMapLookup familyMemberFonts k c
     note (injectTyped $ ConfigError $ "Family member undefined: " <> show k) mayMember
 
 -- Control sequences.
@@ -623,19 +619,17 @@ setBoxRegisterNullable idx global = \case
 -- Scoped, but with unscoped references.
 
 currentFontInfo
-    :: ( MonadState st m
-       , HasType Config st
-       , MonadError e m
+    :: ( MonadError e m
        , AsType ConfigError e
        )
-    => m FontInfo
-currentFontInfo = mLookupCurrentFontNr >>= lookupFontInfo
+    => Config
+    -> m FontInfo
+currentFontInfo c = mLookupCurrentFontNr c >>= lookupFontInfo c
 
 currentFontMetrics
-    :: ( MonadState st m
-       , HasType Config st
-       , MonadError e m
+    :: ( MonadError e m
        , AsType ConfigError e
        )
-    => m TexFont
-currentFontMetrics = fontMetrics <$> currentFontInfo
+    => Config
+    -> m TexFont
+currentFontMetrics c = fontMetrics <$> currentFontInfo c

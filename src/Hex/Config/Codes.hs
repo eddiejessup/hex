@@ -6,7 +6,6 @@ module Hex.Config.Codes where
 import           Hexlude
 
 import qualified Data.Ascii           as Ascii
-import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.Vector          as V
 import qualified Data.Map.Strict      as Map
 import qualified Data.HashMap.Strict  as HashMap
@@ -16,6 +15,7 @@ import qualified Path
 import qualified Test.QuickCheck as QC
 import qualified Text.Show (Show(..))
 import           Hex.Quantity
+import qualified Data.ByteString as BS
 
 class TeXCode a where
     toTeXInt :: a -> TeXInt
@@ -45,8 +45,8 @@ instance TeXCode CharCode where
         | n < 0 = Nothing
         | otherwise = Just $ fromIntegral n
 
-readCharCodes :: MonadIO m => Path a File -> m BS.L.ByteString
-readCharCodes path = liftIO (BS.L.readFile (Path.toFilePath path))
+readCharCodes :: MonadIO m => Path a File -> m BS.ByteString
+readCharCodes path = liftIO (BS.readFile (Path.toFilePath path))
 
 pattern CharCode_ :: Char -> CharCode
 pattern CharCode_ c <- (unsafeCodeAsChar -> c)

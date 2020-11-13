@@ -13,10 +13,20 @@ import Hex.Build.ListBuilderT
 import qualified Hex.Config as Conf
 import qualified Hex.Config.Codes as Code
 import Hex.Evaluate (EvaluationError)
-import qualified Hex.Parse as HP
 import qualified Hex.Quantity as Quantity
 import Hexlude
 import TFM (TFMError)
+import qualified Hex.Parse.TokenParser.Class as P
+import qualified Hex.Parse.TokenParser.Combinators as P
+import qualified Hex.Parse.CommandParser.Command as P
+import qualified Hex.Parse.TokenParser.ParseT as ParseT
+import qualified Hex.Parse.Stream.Expanding as S
+import qualified Hex.Parse.Stream.Expanding.Parse ()
+import qualified Hex.Parse.Stream.Class as S
+import qualified Hex.Resolve.Resolve as R
+import qualified Hex.Parse.AST as AST
+import qualified Hex.Resolve.Token as Tok
+import qualified Hex.Lex as Lex
 
 data Mode
   = CatMode
@@ -36,310 +46,301 @@ data Mode
 loopParser
   :: forall m e a
    . ( Monad m
-     , AsType HP.ParseError e
+     , AsType P.ParseError e
      )
-  => HP.TeXParseT HP.ExpandingStream (ExceptT e m) a
-  -> HP.ExpandingStream
-  -> m (HP.ExpandingStream, Maybe e, [a])
-loopParser parser s = do
+  => S.ExpandingStream
+  -> ParseT.TeXParseT S.ExpandingStream (ExceptT e m) a
+  -> m (S.ExpandingStream, Maybe e, [a])
+loopParser s parser = do
   ((postLoopStream, mayErr), xs) <- Wr.runWriterT (go s)
   pure (postLoopStream, mayErr, xs)
   where
-    go :: HP.ExpandingStream -> Wr.WriterT [a] m (HP.ExpandingStream, Maybe e)
+    go :: S.ExpandingStream -> Wr.WriterT [a] m (S.ExpandingStream, Maybe e)
     go stream =
-      lift (runExceptT (HP.runTeXParseTEmbedded parser stream)) >>= \case
+      lift (runExceptT (ParseT.runTeXParseTEmbedded parser stream)) >>= \case
         Left err ->
           pure (stream, Just err)
         Right (postParseStream, a) -> do
           Wr.tell [a]
-          -- Try to fetch a lex token. If we can, we have more input, so try to
-          -- parse some more. This won't always work, but it's a decent heuristic.
-          case HP.extractLexToken postParseStream Code.usableCatLookup of
-            Nothing -> pure (stream, Nothing)
-            Just _ -> go postParseStream
+          go postParseStream
+          -- -- Try to fetch a lex token. If we can, we have more input, so try to
+          -- -- parse some more. This won't always work, but it's a decent heuristic.
+          -- case S.extractLexToken postParseStream Code.usableCatLookup of
+          --   Nothing -> pure (stream, Nothing)
+          --   Just _ ->
 
 expandingStreamAsPrimTokens
   :: ( MonadIO m
-     , MonadSlog m
 
      , MonadState st m
      , HasType Conf.Config st
 
      , AsType EvaluationError e
      , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
+     , AsType R.ResolutionError e
+     , AsType P.ParseError e
+     , AsType S.ExpansionError e
      , AsType Data.Path.PathError e
+     , AsType Lex.LexError e
      )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Maybe e, [HP.PrimitiveToken])
-expandingStreamAsPrimTokens = loopParser HP.anySingle
+  => S.ExpandingStream
+  -> m (S.ExpandingStream, Maybe e, [Tok.PrimitiveToken])
+expandingStreamAsPrimTokens s = loopParser s P.anySingle
 
--- Command.
-expandingStreamAsCommands
-  :: ( MonadIO m
-     , MonadSlog m
+-- -- Command.
+-- expandingStreamAsCommands
+--   :: ( MonadIO m
+--      , MonadSlog m
 
-     , MonadState st m
-     , HasType Conf.Config st
+--      , MonadState st m
+--      , HasType Conf.Config st
 
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType Data.Path.PathError e
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Maybe e, [HP.Command])
-expandingStreamAsCommands = loopParser HP.parseCommand
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType R.ResolutionError e
+--      , AsType P.ParseError e
+--      , AsType S.ExpansionError e
+--      , AsType Data.Path.PathError e
+--      )
+--   => m (Maybe e, [AST.Command])
+-- expandingStreamAsCommands = loopParser P.parseCommand
 
--- Paragraph list.
-renderStreamParaList
-  :: ( MonadState st m
-     , HasType Conf.Config st
+-- -- Paragraph list.
+-- renderStreamParaList
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Text)
-renderStreamParaList s = do
-  (endS, hList, _) <- extractParaListImpl HP.Indent s
-  pure (endS, renderDescribed hList)
+--      , P.MonadTokenParse m
 
--- Paragraph boxes.
-streamToParaBoxes
-  :: ( MonadState st m
-     , HasType Conf.Config st
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => m (Text)
+-- renderStreamParaList = do
+--   (hList, _) <- extractParaListImpl Tok.Indent
+--   pure (endS, renderDescribed hList)
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
+-- -- Paragraph boxes.
+-- streamToParaBoxes
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Seq (Box HBox))
-streamToParaBoxes s = do
-  (endS, hList, _) <- extractParaListImpl HP.Indent s
-  boxes <- hListToParaLineBoxes hList
-  pure (endS, boxes)
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
 
-renderStreamSetPara
-  :: ( MonadState st m
-     , HasType Conf.Config st
+--      , P.MonadTokenParse m
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => m (Seq (Box HBox))
+-- streamToParaBoxes = do
+--   (endS, hList, _) <- extractParaListImpl Tok.Indent
+--   boxes <- hListToParaLineBoxes hList
+--   pure (endS, boxes)
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Text)
-renderStreamSetPara s = do
-  (endS, boxes) <- streamToParaBoxes s
-  pure (endS, renderLines $ describeRelFoldable 0 boxes)
+-- renderStreamSetPara
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
 
--- Pages list.
-renderStreamPageList
-  :: ( MonadState st m
-     , HasType Conf.Config st
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
+--      , P.MonadTokenParse m
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Text)
-renderStreamPageList s = do
-  (endS, vList) <- extractMainVList s
-  pure (endS, renderDescribed vList)
 
--- Pages boxes.
-renderStreamPages
-  :: ( MonadState st m
-     , HasType Conf.Config st
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => m (Text)
+-- renderStreamSetPara = do
+--   (endS, boxes) <- streamToParaBoxes
+--   pure (endS, renderLines $ describeRelFoldable 0 boxes)
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
+-- -- Pages list.
+-- renderStreamPageList
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Text)
-renderStreamPages s = do
-  (endS, pages, _mag) <- extractBreakAndSetMainVList s
-  pure (endS, renderLines $ describeRelFoldable 0 pages)
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
 
--- DVI instructions.
-streamToSemanticDVI
-  :: ( MonadState st m
-     , HasType Conf.Config st
+--      , P.MonadTokenParse m
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => m (Text)
+-- renderStreamPageList = do
+--   (endS, vList) <- extractMainVList
+--   pure (endS, renderDescribed vList)
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Seq Instruction, Conf.IntParamVal 'HP.Mag)
-streamToSemanticDVI s = do
-  (endS, pages, _mag) <- extractBreakAndSetMainVList s
-  sLog "In streamToSemanticDVI, done extractBreakAndSetMainVList"
-  pure (endS, pagesToDVI pages, _mag)
+-- -- Pages boxes.
+-- renderStreamPages
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
 
-renderStreamSemanticDVI
-  :: ( MonadState st m
-     , HasType Conf.Config st
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
+--      , P.MonadTokenParse m
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Text)
-renderStreamSemanticDVI s = do
-  (endS, semDVI, _mag) <- streamToSemanticDVI s
-  pure (endS, renderLines $ describeRelFoldable 0 semDVI)
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => m (Text)
+-- renderStreamPages = do
+--   (endS, pages, _mag) <- extractBreakAndSetMainVList
+--   pure (endS, renderLines $ describeRelFoldable 0 pages)
 
--- Raw DVI instructions.
-streamToRawDVI
-  :: ( MonadState st m
-     , HasType Conf.Config st
+-- -- DVI instructions.
+-- streamToSemanticDVI
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
-     , AsType ByteError e
-     , AsType DVIError e
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Seq EncodableInstruction)
-streamToRawDVI s = do
-  (endS, semDVI, _mag) <- streamToSemanticDVI s
-  sLog "In streamToRawDVI, done streamToSemanticDVI"
-  rawDVI <- parseInstructions semDVI (Quantity.unInt $ Conf.unIntParam _mag)
-  pure (endS, rawDVI)
+--      , P.MonadTokenParse m
 
-renderStreamRawDVI
-  :: ( MonadState st m
-     , HasType Conf.Config st
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => m (Seq Instruction, Conf.IntParamVal 'Tok.Mag)
+-- streamToSemanticDVI = do
+--   (endS, pages, _mag) <- extractBreakAndSetMainVList
+--   sLog "In streamToSemanticDVI, done extractBreakAndSetMainVList"
+--   pure (endS, pagesToDVI pages, _mag)
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
-     , AsType ByteError e
-     , AsType DVIError e
+-- renderStreamSemanticDVI
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, Text)
-renderStreamRawDVI s = do
-  (endS, rawDVI) <- streamToRawDVI s
-  pure (endS, renderLines $ describeRelFoldable 0 rawDVI)
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
 
--- DVI byte strings.
-streamToDVIBytes
-  :: ( MonadState st m
-     , HasType Conf.Config st
+--      , P.MonadTokenParse m
 
-     , MonadError e m
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType HP.ResolutionError e
-     , AsType HP.ParseError e
-     , AsType HP.ExpansionError e
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
-     , AsType ByteError e
-     , AsType DVIError e
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => m (Text)
+-- renderStreamSemanticDVI = do
+--   (endS, semDVI, _mag) <- streamToSemanticDVI
+--   pure (endS, renderLines $ describeRelFoldable 0 semDVI)
 
-     , MonadIO m
+-- -- Raw DVI instructions.
+-- streamToRawDVI
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
 
-     , MonadSlog m
-     )
-  => HP.ExpandingStream
-  -> m (HP.ExpandingStream, ByteString)
-streamToDVIBytes s = do
-  (endS, rawDVI) <- streamToRawDVI s
-  sLog "In streamToDVIBytes, done streamToRawDVI"
-  pure (endS, dviEncode rawDVI)
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
+--      , AsType ByteError e
+--      , AsType DVIError e
+
+--      , P.MonadTokenParse m
+
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => m (Seq EncodableInstruction)
+-- streamToRawDVI = do
+--   (endS, semDVI, _mag) <- streamToSemanticDVI
+--   sLog "In streamToRawDVI, done streamToSemanticDVI"
+--   rawDVI <- parseInstructions semDVI (Quantity.unInt $ Conf.unIntParam _mag)
+--   pure (endS, rawDVI)
+
+-- renderStreamRawDVI
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
+
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
+--      , AsType ByteError e
+--      , AsType DVIError e
+
+--      , P.MonadTokenParse m
+
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => m (Text)
+-- renderStreamRawDVI = do
+--   (endS, rawDVI) <- streamToRawDVI
+--   pure (endS, renderLines $ describeRelFoldable 0 rawDVI)
+
+-- -- DVI byte strings.
+-- streamToDVIBytes
+--   :: ( MonadState st m
+--      , HasType Conf.Config st
+
+--      , MonadError e m
+--      , AsType EvaluationError e
+--      , AsType Conf.ConfigError e
+--      , AsType P.ParseError e
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
+--      , AsType ByteError e
+--      , AsType DVIError e
+
+--      , P.MonadTokenParse m
+
+--      , MonadIO m
+
+--      , MonadSlog m
+--      )
+--   => m (ByteString)
+-- streamToDVIBytes = do
+--   (endS, rawDVI) <- streamToRawDVI
+--   sLog "In streamToDVIBytes, done streamToRawDVI"
+--   pure (endS, dviEncode rawDVI)

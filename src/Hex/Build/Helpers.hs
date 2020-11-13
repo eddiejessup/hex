@@ -17,40 +17,32 @@ import qualified Hex.Config.Codes    as Code
 import           Hex.Config
 import           Hex.Evaluate
 import qualified Hex.Lex             as Lex
-import qualified Hex.Parse           as HP
 import           Hex.Quantity
+import qualified Hex.Parse.AST as AST
+import qualified Hex.Resolve as Tok
+import qualified Hex.Parse.TokenParser.Class as P
+import Hex.Parse.CommandParser.Command (parseCommand)
 
 glueToElem
-    :: ( MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
-
-       , MonadState st m -- Read-only
-       , HasType Config st
-       )
-    => HP.Glue
+    :: MonadEvaluate m AST.Glue
+    => AST.Glue
     -> m BL.VListElem
 glueToElem g =
-    BL.ListGlue <$> texEvaluate g
+    BL.ListGlue <$> astEval g
 
 ruleToElem
-    :: ( MonadState st m -- Read-only
-       , HasType Config st
-       , MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
-       )
-    => HP.Rule
+    :: MonadEvaluate m AST.Length
+    => AST.Rule
     -> m Length
     -> m Length
     -> m Length
     -> m BL.VListElem
-ruleToElem HP.Rule { HP.width, HP.height, HP.depth } defaultW defaultH defaultD =
+ruleToElem AST.Rule { AST.width, AST.height, AST.depth } defaultW defaultH defaultD =
     do
     rule <- B.Rule
-                <$> maybe defaultW texEvaluate width
-                <*> maybe defaultH texEvaluate height
-                <*> maybe defaultD texEvaluate depth
+                <$> maybe defaultW astEval width
+                <*> maybe defaultH astEval height
+                <*> maybe defaultD astEval depth
     pure $ BL.VListBaseElem $ B.ElemRule rule
 
 -- Assume we are adding a non-rule box of height h to the vertical list.
@@ -71,11 +63,11 @@ addVListElem
 addVListElem (BL.VList accSeq) = \case
     e@(BL.VListBaseElem (B.ElemBox b)) ->
         do
-        _prevDepth <- uses (typed @Config) $ lookupSpecialLength HP.PrevDepth
-        BL.Glue blineLength blineStretch blineShrink <- uses (typed @Config) $ lookupGlueParameter HP.BaselineSkip
-        skipLimit <- uses (typed @Config) $ lookupLengthParameter HP.LineSkipLimit
-        skip <- uses (typed @Config) $ lookupGlueParameter HP.LineSkip
-        modifying' (typed @Config) $ setSpecialLength HP.PrevDepth (naturalDepth e)
+        _prevDepth <- uses (typed @Config) $ lookupSpecialLength Tok.PrevDepth
+        BL.Glue blineLength blineStretch blineShrink <- uses (typed @Config) $ lookupGlueParameter Tok.BaselineSkip
+        skipLimit <- uses (typed @Config) $ lookupLengthParameter Tok.LineSkipLimit
+        skip <- uses (typed @Config) $ lookupGlueParameter Tok.LineSkip
+        modifying' (typed @Config) $ setSpecialLength Tok.PrevDepth (naturalDepth e)
         pure $ BL.VList $ if _prevDepth <= -oneKPt
             then
                 accSeq :|> e
@@ -93,16 +85,17 @@ addVListElem (BL.VList accSeq) = \case
 
 hModeCharacterElem
     :: ( MonadError e m
-       , AsType EvaluationError e
        , AsType ConfigError e
+
+       , MonadEvaluate m AST.CharCodeRef
 
        , MonadState st m -- Read-only
        , HasType Config st
        )
-    => HP.CharCodeRef
+    => AST.CharCodeRef
     -> m HListElem
 hModeCharacterElem c =
-    texEvaluate c
+    astEval c
         >>= characterBox
         <&> B.ElemCharacter
         <&> BL.HListHBaseElem
@@ -119,14 +112,8 @@ hModeSpaceElem =
     BL.HVListElem . BL.ListGlue <$> spaceGlue
 
 hModeRuleElem
-    :: ( MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
-
-       , MonadState st m -- Read-only
-       , HasType Config st
-       )
-    => HP.Rule
+    :: MonadEvaluate m AST.Length
+    => AST.Rule
     -> m HListElem
 hModeRuleElem rule =
     BL.HVListElem <$> ruleToElem rule defaultWidth defaultHeight defaultDepth
@@ -140,30 +127,28 @@ hModeStartParagraph
        , MonadState st m -- Read-only
        , HasType Config st
        )
-    => HP.IndentFlag
+    => Tok.IndentFlag
     -> m (Maybe HListElem)
 hModeStartParagraph = \case
-    HP.DoNotIndent ->
+    Tok.DoNotIndent ->
         pure Nothing
     -- \indent: An empty box of width \parindent is appended to the current
     -- list, and the space factor is set to 1000.
     -- TODO: Space factor.
-    HP.Indent ->
+    Tok.Indent ->
         Just <$> uses (typed @Config) parIndentBox
 
 vModeRuleElem
-    :: ( MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
+    :: ( MonadEvaluate m AST.Length
        , MonadState st m -- Read-only
        , HasType Config st
        )
-    => HP.Rule
+    => AST.Rule
     -> m VListElem
 vModeRuleElem rule =
     ruleToElem rule defaultWidth defaultHeight defaultDepth
   where
-    defaultWidth = use $ typed @Config % to (lookupLengthParameter HP.HSize)
+    defaultWidth = use $ typed @Config % to (lookupLengthParameter Tok.HSize)
     defaultHeight = pure $ toScaledPointApprox (0.4 :: Rational) Point
     defaultDepth = pure 0
 
@@ -179,7 +164,7 @@ characterBox
     => CharCode
     -> m B.Character
 characterBox char = do
-    fontMetrics <- currentFontMetrics
+    fontMetrics <- use (typed @Config) >>= currentFontMetrics
     let toSP = TFM.designScaleSP fontMetrics
     TFM.Character { TFM.width, TFM.height, TFM.depth } <-
         note (injectTyped $ ConfigError "No such character")
@@ -199,7 +184,7 @@ spaceGlue
        )
     => m (BL.Glue Length)
 spaceGlue = do
-    fontMetrics@TexFont { spacing, spaceStretch, spaceShrink } <- currentFontMetrics
+    fontMetrics@TexFont { spacing, spaceStretch, spaceShrink } <- use (typed @Config) >>= currentFontMetrics
     let toSP   = TFM.designScaleSP fontMetrics
         toFlex = toSP >>> fromIntegral >>> BL.finiteFlex
     pure BL.Glue { BL.dimen   = toSP spacing
@@ -217,12 +202,13 @@ loadFont
        , AsType D.Path.PathError e
        , AsType ConfigError e
        , AsType TFM.TFMError e
-       , AsType EvaluationError e
+       , MonadEvaluate m AST.Length
+       , MonadEvaluate m AST.TeXInt
        )
-    => HP.TeXFilePath
-    -> HP.FontSpecification
+    => AST.TeXFilePath
+    -> AST.FontSpecification
     -> m B.FontDefinition
-loadFont (HP.TeXFilePath path) fontSpec = do
+loadFont (AST.TeXFilePath path) fontSpec = do
     fontName <- D.Path.fileNameText path
     info@FontInfo{ fontMetrics } <- findFilePath (WithImplicitExtension "tfm") [] path >>= readFontInfo
     let designSizeSP = TFM.designSizeSP fontMetrics
@@ -245,7 +231,7 @@ loadFont (HP.TeXFilePath path) fontSpec = do
                           , B.fontName           = fontName
                           }
 
-selectFont :: (MonadState st m, HasType Config st) => TeXInt -> HP.ScopeFlag -> m ()
+selectFont :: (MonadState st m, HasType Config st) => TeXInt -> Tok.ScopeFlag -> m ()
 selectFont n scopeFlag = modifying' (typed @Config) $ selectFontNr n scopeFlag
 
 getFileStream :: Map.Map FourBitInt Handle -> TeXInt -> Maybe Handle
@@ -256,19 +242,17 @@ getFileStream strms (TeXInt n) = do
 fetchBox
   :: ( MonadState st m
      , HasType Config st
-     , MonadError e m
-     , AsType ConfigError e
-     , AsType EvaluationError e
+     , MonadEvaluate m AST.EightBitTeXInt
      )
-  => HP.BoxFetchMode
-  -> HP.EightBitTeXInt
+  => Tok.BoxFetchMode
+  -> AST.EightBitTeXInt
   -> m (Maybe (B.Box B.BoxContents))
 fetchBox fetchMode idx = do
-  eIdx <- texEvaluate idx
+  eIdx <- astEval idx
   fetchedMaybeBox <- use $ typed @Config % to (lookupBoxRegister eIdx)
   case fetchMode of
-    HP.Lookup -> pure ()
-    HP.Pop -> modifying' (typed @Config) $ delBoxRegister eIdx HP.Local
+    Tok.Lookup -> pure ()
+    Tok.Pop -> modifying' (typed @Config) $ delBoxRegister eIdx Tok.Local
   pure fetchedMaybeBox
 
 -- Showing things.
@@ -280,53 +264,51 @@ showLexTok = \case
     Lex.ControlSequenceToken (Lex.ControlSequence bs) ->
         Code.CharCode_ '\\' : (Code.CharCode <$> BS.unpack bs)
 
-showPrimTok :: HP.PrimitiveToken -> [CharCode]
+showPrimTok :: Tok.PrimitiveToken -> [CharCode]
 showPrimTok = \case
-    HP.UnresolvedTok t -> showLexTok t
+    Tok.UnresolvedTok t -> showLexTok t
     pt                 -> unsafeCodesFromChars (show pt)
 
-showBalancedText :: HP.BalancedText -> [CharCode]
-showBalancedText (HP.BalancedText lexToks) =
+showBalancedText :: Tok.BalancedText -> [CharCode]
+showBalancedText (Tok.BalancedText lexToks) =
     concat $ toList . showLexTok <$> lexToks
 
-showExpandedBalancedText :: HP.ExpandedBalancedText -> [CharCode]
-showExpandedBalancedText (HP.ExpandedBalancedText primToks) =
+showExpandedBalancedText :: Tok.ExpandedBalancedText -> [CharCode]
+showExpandedBalancedText (Tok.ExpandedBalancedText primToks) =
     concat $ toList . showPrimTok <$> primToks
 
 -- Looping.
 
-runLoop :: Monad m => (s -> a -> m (s, a, Maybe b)) -> s -> a -> m (s, a, b)
+runLoop :: Monad m => (m (Maybe b)) -> m b
 runLoop f = go
   where
-    go s state_ = do
-      (newS, newState, recRes) <- f s state_
-      case recRes of
+    go = f >>= \case
         Nothing ->
-          go newS newState
+          go
         Just b ->
-          pure (newS, newState, b)
+          pure b
 
 runCommandLoop
   :: ( MonadState st m
      , HasType Config st
 
-     , HP.MonadTeXParse (HP.TeXParseT s m)
+     , P.MonadTokenParse m
 
      , MonadError e m
-     , HP.AsTeXParseErrors e
-     , AsType HP.ParseError e
+     , AsType ConfigError e
+     , AsType EvaluationError e
 
      , MonadSlog m
      )
-  => (s -> s -> a -> HP.Command -> m (s, a, Maybe b))
-  -> s
-  -> a
-  -> m (s, a, b)
+  => (AST.Command -> m (Maybe b))
+  -> m b
 runCommandLoop runCommand = runLoop parseAndRunCommand
   where
-    parseAndRunCommand oldS elemList = do
-      (newS, command) <- HP.runTeXParseTEmbedded HP.parseCommand oldS
+    parseAndRunCommand = do
+      command <- parseCommand
       sLogStampedJSON "Parsed command"
         [ ("command", toJSON command)
         ]
-      runCommand oldS newS elemList command
+      undefined -- checkPointStream
+      runCommand command
+      undefined -- commitStream

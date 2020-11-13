@@ -7,7 +7,8 @@ import           Hex.BreakList               (HList(..))
 import qualified Hex.BreakList               as BL
 import           Hex.Config
 import qualified Hex.Lex                     as Lex
-import qualified Hex.Parse                   as HP
+import qualified Hex.Parse.TokenParser.Class as HP
+import qualified Hex.Resolve.Token as Tok
 
 data EndParaReason
     = EndParaSawEndParaCommand
@@ -22,13 +23,12 @@ type TeXBuildCtx st e m
     , HasType Config st
 
     , MonadError e m
-    , HP.AsTeXParseErrors e
     , AsType HP.ParseError e
     )
 
 class MonadModeIndependentBuild m where
 
-    extractExplicitBox :: B.DesiredLength -> HP.ExplicitBox -> m (B.Box B.BoxContents)
+    extractExplicitBox :: B.DesiredLength -> Tok.ExplicitBox -> m (B.Box B.BoxContents)
 
     insertLexToken :: Lex.Token -> m ()
 
@@ -42,4 +42,4 @@ class MonadHModeBuild m where
 
 class MonadVModeBuild m where
 
-  extractParaList :: HP.IndentFlag -> m (HList, EndParaReason)
+  extractParaList :: Tok.IndentFlag -> m (HList, EndParaReason)

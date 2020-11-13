@@ -18,286 +18,273 @@ import           Hex.Build.Class
 import           Hex.Build.Command
 import           Hex.Build.Helpers
 import           Hex.Config
+import           Hex.Evaluate
 import qualified Hex.Lex                     as Lex
-import qualified Hex.Parse                   as HP
+import qualified Hex.Parse.TokenParser.Class as P
+import qualified Hex.Parse.Stream.Class as S
+import qualified Hex.Resolve.Token as Tok
 
-newtype ListBuilderT s l m a
-  = ListBuilderT {unListBuilderT :: s -> s -> l -> m (s, s, l, a)}
+newtype ListBuilderT l m a
+  = ListBuilderT {unListBuilderT :: StateT l m a}
+  deriving newtype (Functor, Applicative, Monad)
 
-instance Functor m => Functor (ListBuilderT s l m) where
-    fmap g (ListBuilderT f) = ListBuilderT $ \s0 s1 l ->
-        f s0 s1 l <&> (\(s0_, s1_, l_, a_) -> (s0_, s1_, l_, g a_))
+runListBuilderT = runStateT . unListBuilderT
 
-instance Monad m => Applicative (ListBuilderT s l m) where
-  pure a = ListBuilderT $ \s0 s1 l -> pure (s0, s1, l, a)
+-- instance (MonadError e m) => MonadError e (ListBuilderT s l m) where
+--   throwError = lift . throwError
 
-  -- (<*>) :: m (a -> b) -> m a -> m b
-  (ListBuilderT fAToB) <*> (ListBuilderT fA) = ListBuilderT $ \s0 s1 l -> do
-    (s0_, s1_, l_, aToB) <- fAToB s0 s1 l
-    (s0__, s1__, l__, a) <- fA s0_ s1_ l_
-    pure (s0__, s1__, l__, aToB a)
+--   catchError (ListBuilderT f) errToHandle = ListBuilderT $ \s0 s1 l ->
+--     catchError (f s0 s1 l) $ \e -> do
+--       let (ListBuilderT fRecover) = errToHandle e
+--       fRecover s0 s1 l
 
-instance Monad m => Monad (ListBuilderT s l m) where
-  return = pure
+-- instance MonadState st m => MonadState st (ListBuilderT s l m) where
+--   get = lift get
+--   put = lift . put
 
-  -- m a -> (a -> m b) -> m b
-  (ListBuilderT fA) >>= aToTFB = ListBuilderT $ \s0 s1 l -> do
-    (s0_, s1_, l_, a) <- fA s0 s1 l
-    let (ListBuilderT fB) = aToTFB a
-    fB s0_ s1_ l_
+-- instance MonadIO m => MonadIO (ListBuilderT s l m) where
+--   liftIO = lift . liftIO
 
-instance MonadTrans (ListBuilderT s l) where
-  lift m = ListBuilderT $ \s0 s1 l -> do
-    a <- m
-    pure (s0, s1, l, a)
+-- instance MonadSlog m => MonadSlog (ListBuilderT s l m) where
+--   sLog = lift . sLog
 
-instance (MonadError e m) => MonadError e (ListBuilderT s l m) where
-  throwError = lift . throwError
+--   sTime = lift sTime
 
-  catchError (ListBuilderT f) errToHandle = ListBuilderT $ \s0 s1 l ->
-    catchError (f s0 s1 l) $ \e -> do
-      let (ListBuilderT fRecover) = errToHandle e
-      fRecover s0 s1 l
+-- instance
+--   ( MonadError e m
+--   , AsType BuildError e
+--   , AsType TFMError e
+--   , AsType Data.Path.PathError e
 
-instance MonadState st m => MonadState st (ListBuilderT s l m) where
-  get = lift get
-  put = lift . put
+--   , TeXBuildCtx st e m
 
-instance MonadIO m => MonadIO (ListBuilderT s l m) where
-  liftIO = lift . liftIO
+--   , MonadEvaluateCtx e st m
 
-instance MonadSlog m => MonadSlog (ListBuilderT s l m) where
-  sLog = lift . sLog
+--   , P.MonadTokenParse m
 
-  sTime = lift sTime
+--   , MonadIO m
+--   , MonadSlog m
+--   ) => MonadModeIndependentBuild (ListBuilderT HList m) where
+--     addVElem e = addHElem (BL.HVListElem e)
 
-instance
-  ( MonadError e m
-  , AsType BuildError e
-  , AsType TFMError e
-  , AsType Data.Path.PathError e
+--     insertLexToken = insertLexTokenImpl
 
-  , TeXBuildCtx st e m
+--     extractExplicitBox = extractExplicitBoxImpl
 
-  , HP.MonadTeXParse (HP.TeXParseT s m)
-  , HP.TeXStream s
+--     revertStream = revertStreamImpl
 
-  , MonadIO m
-  , MonadSlog m
-  ) => MonadModeIndependentBuild (ListBuilderT s HList m) where
-    addVElem e = addHElem (BL.HVListElem e)
+-- instance
+--   ( MonadError e m
+--   , TeXBuildCtx st e m
+--   , MonadIO m
+--   ) => MonadHModeBuild (ListBuilderT HList m) where
+--     addHElem e =
+--       ListBuilderT $ do
+--         modify (\(HList hElemSeq) -> HList $ hElemSeq :|> e)
 
-    insertLexToken = insertLexTokenImpl
+-- instance
+--   ( MonadError e m
+--   , AsType BuildError e
+--   , AsType TFMError e
+--   , AsType Data.Path.PathError e
 
-    extractExplicitBox = extractExplicitBoxImpl
+--   , TeXBuildCtx st e m
 
-    revertStream = revertStreamImpl
+--   , MonadEvaluateCtx e st m
 
-instance
-  ( MonadError e m
-  , TeXBuildCtx st e m
-  , MonadIO m
-  ) => MonadHModeBuild (ListBuilderT s HList m) where
-    addHElem e =
-      ListBuilderT $ \s0 s1 (HList hElemSeq) ->
-        let newLst = HList $ hElemSeq :|> e
-        in pure (s0, s1, newLst, ())
+--   , P.MonadTokenParse m
+--   , S.TeXStream s
 
-instance
-  ( MonadError e m
-  , AsType BuildError e
-  , AsType TFMError e
-  , AsType Data.Path.PathError e
+--   , MonadIO m
+--   , MonadSlog m
+--   ) => MonadModeIndependentBuild (ListBuilderT VList m) where
+--     addVElem e =
+--       ListBuilderT $ do
+--         list_ <- get
+--         list__ lift $ addVListElem list_ e
+--         put list__
 
-  , TeXBuildCtx st e m
+--     insertLexToken = insertLexTokenImpl
 
-  , HP.MonadTeXParse (HP.TeXParseT s m)
-  , HP.TeXStream s
+--     extractExplicitBox = extractExplicitBoxImpl
 
-  , MonadIO m
-  , MonadSlog m
-  ) => MonadModeIndependentBuild (ListBuilderT s VList m) where
-    addVElem e =
-      ListBuilderT $ \s0 s1 list_ -> do
-        list__ <- addVListElem list_ e
-        pure (s0, s1, list__, ())
+--     revertStream = revertStreamImpl
 
-    insertLexToken = insertLexTokenImpl
+-- instance
+--   ( MonadError e m
+--   , AsType BuildError e
+--   , AsType TFMError e
+--   , AsType Data.Path.PathError e
 
-    extractExplicitBox = extractExplicitBoxImpl
+--   , TeXBuildCtx st e m
 
-    revertStream = revertStreamImpl
+--   , MonadEvaluateCtx e st m
 
-instance
-  ( MonadError e m
-  , AsType BuildError e
-  , AsType TFMError e
-  , AsType Data.Path.PathError e
 
-  , TeXBuildCtx st e m
+--   , P.MonadTokenParse m
+--   , S.TeXStream s
 
-  , HP.MonadTeXParse (HP.TeXParseT s m)
-  , HP.TeXStream s
+--   , MonadIO m
+--   , MonadSlog m
+--   ) => MonadVModeBuild (ListBuilderT s VList m) where
+--     extractParaList indentFlag =
+--         ListBuilderT $ \s0 s1 list_ -> do
+--           (s1_, hList, endReason) <- extractParaListImpl indentFlag s1
+--           pure (s0, s1_, list_, (hList, endReason))
 
-  , MonadIO m
-  , MonadSlog m
-  ) => MonadVModeBuild (ListBuilderT s VList m) where
-    extractParaList indentFlag =
-        ListBuilderT $ \s0 s1 list_ -> do
-          (s1_, hList, endReason) <- extractParaListImpl indentFlag s1
-          pure (s0, s1_, list_, (hList, endReason))
+-- insertLexTokenImpl
+--   :: ( P.MonadTokenParse m
+--      )
+--   => Lex.Token
+--   -> ListBuilderT s l m ()
+-- insertLexTokenImpl lt =
+--   ListBuilderT $ do
+--     lift $ P.insertLexTokens (singleton lt)
 
-insertLexTokenImpl
-  :: ( Applicative m
-     , HP.TeXStream s
-     )
-  => Lex.Token
-  -> ListBuilderT s l m ()
-insertLexTokenImpl lt =
-  ListBuilderT $ \s0 s1 list_ ->
-    pure (s0, HP.insertLexToken s1 lt, list_, ())
+-- extractExplicitBoxImpl
+--   :: ( MonadError e m
+--      , AsType BuildError e
+--      , AsType TFMError e
+--      , AsType Data.Path.PathError e
 
-extractExplicitBoxImpl
-  :: ( MonadError e m
-     , AsType BuildError e
-     , AsType TFMError e
-     , AsType Data.Path.PathError e
+--      , MonadEvaluateCtx e st m
 
-     , TeXBuildCtx st e m
+--      , TeXBuildCtx st e m
 
-     , HP.MonadTeXParse (HP.TeXParseT s m)
-     , HP.TeXStream s
+--      , P.MonadTokenParse m
+--      , S.TeXStream s
 
-     , MonadIO m
-     , MonadSlog m
-     )
-  => B.DesiredLength
-  -> HP.ExplicitBox
-  -> ListBuilderT s l m (B.Box B.BoxContents)
-extractExplicitBoxImpl desiredLength boxType =
-  ListBuilderT $ \s0 s1 list_ -> do
-    (s1_, box) <- extractExplicitBoxContentsImpl s1 desiredLength boxType
-    pure (s0, s1_, list_, box)
+--      , MonadIO m
+--      , MonadSlog m
+--      )
+--   => B.DesiredLength
+--   -> Tok.ExplicitBox
+--   -> ListBuilderT s l m (B.Box B.BoxContents)
+-- extractExplicitBoxImpl desiredLength boxType =
+--   ListBuilderT $ \s0 s1 list_ -> do
+--     (s1_, box) <- extractExplicitBoxContentsImpl s1 desiredLength boxType
+--     pure (s0, s1_, list_, box)
 
-extractExplicitBoxContentsImpl
-    :: ( MonadError e m
-       , AsType BuildError e
-       , AsType TFMError e
-       , AsType Data.Path.PathError e
+-- extractExplicitBoxContentsImpl
+--     :: ( MonadError e m
+--        , AsType BuildError e
+--        , AsType TFMError e
+--        , AsType Data.Path.PathError e
 
-       , TeXBuildCtx st e m
+--        , MonadEvaluateCtx e st m
 
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
+--        , TeXBuildCtx st e m
 
-       , MonadIO m
-       , MonadSlog m
-       )
-    => s
-    -> B.DesiredLength
-    -> HP.ExplicitBox
-    -> m (s, B.Box B.BoxContents)
-extractExplicitBoxContentsImpl s desiredLength = \case
-    HP.ExplicitHBox ->
-        do
-        let handleCommand oldS newS hList cmd = do
-              (_, doneS, doneList, mayEndUnit) <- unListBuilderT (handleCommandInHBoxMode cmd) oldS newS hList
-              pure (doneS, doneList, mayEndUnit)
-        (doneS, finalHList, ()) <- runCommandLoop handleCommand s mempty
-        pure (doneS, B.HBoxContents <$> BL.setHList finalHList (BL.UncomputedTargetLength desiredLength))
-    HP.ExplicitVBox vAlignType ->
-        do
-        let handleCommand oldS newS vList cmd = do
-              (_, doneS, doneList, mayEndUnit) <- unListBuilderT (handleCommandInVBoxMode cmd) oldS newS vList
-              pure (doneS, doneList, mayEndUnit)
-        (doneS, finalVList, ()) <- runCommandLoop handleCommand s mempty
-        pure (doneS, B.VBoxContents <$> BL.setVList finalVList desiredLength vAlignType)
+--        , P.MonadTokenParse m
+--        , S.TeXStream s
 
-revertStreamImpl
-  :: (Applicative m)
-  => ListBuilderT s l m ()
-revertStreamImpl =
-  ListBuilderT $ \s0 _s1 list_ ->
-    pure (s0, s0, list_, ())
+--        , MonadIO m
+--        , MonadSlog m
+--        )
+--     => s
+--     -> B.DesiredLength
+--     -> Tok.ExplicitBox
+--     -> m (s, B.Box B.BoxContents)
+-- extractExplicitBoxContentsImpl s desiredLength = \case
+--     Tok.ExplicitHBox ->
+--         do
+--         let handleCommand oldS newS hList cmd = do
+--               (_, doneS, doneList, mayEndUnit) <- handleCommandInHBoxMode cmd hList
+--               pure (doneS, doneList, mayEndUnit)
+--         (doneS, finalHList, ()) <- runCommandLoop handleCommand s mempty
+--         pure (doneS, B.HBoxContents <$> BL.setHList finalHList (BL.UncomputedTargetLength desiredLength))
+--     Tok.ExplicitVBox vAlignType ->
+--         do
+--         let handleCommand oldS newS vList cmd = do
+--               (_, doneS, doneList, mayEndUnit) <- unListBuilderT (handleCommandInVBoxMode cmd) oldS newS vList
+--               pure (doneS, doneList, mayEndUnit)
+--         (doneS, finalVList, ()) <- runCommandLoop handleCommand s mempty
+--         pure (doneS, B.VBoxContents <$> BL.setVList finalVList desiredLength vAlignType)
 
-extractParaListImpl
-    :: ( MonadError e m
-       , AsType BuildError e
-       , AsType TFMError e
-       , AsType Data.Path.PathError e
+-- revertStreamImpl
+--   :: P.MonadTokenParse m
+--   => ListBuilderT s l m ()
+-- revertStreamImpl =
+--   ListBuilderT $ undefined
 
-       , TeXBuildCtx st e m
+-- extractParaListImpl
+--     :: ( MonadError e m
+--        , AsType BuildError e
+--        , AsType TFMError e
+--        , AsType Data.Path.PathError e
 
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
+--        , MonadEvaluateCtx e st m
 
-       , MonadIO m
-       , MonadSlog m
-       )
-    => HP.IndentFlag
-    -> s
-    -> m (s, HList, EndParaReason)
-extractParaListImpl indentFlag s = do
-    initList <- case indentFlag of
-        HP.Indent -> do
-            indentBox <- uses (typed @Config) parIndentBox
-            pure $ Seq.singleton indentBox
-        HP.DoNotIndent ->
-            pure mempty
-    let handleCommand oldS newS hList cmd = do
-          (_, doneS, doneList, mayEndParaReason) <- unListBuilderT (handleCommandInParaMode cmd) oldS newS hList
-          pure (doneS, doneList, mayEndParaReason)
+--        , TeXBuildCtx st e m
 
-    runCommandLoop handleCommand s (HList initList)
+--        , P.MonadTokenParse m
 
-extractBreakAndSetMainVList
-    :: ( MonadError e m
-       , AsType BuildError e
-       , AsType TFMError e
-       , AsType Data.Path.PathError e
+--        , MonadIO m
+--        , MonadSlog m
+--        )
+--     => Tok.IndentFlag
+--     -> m (HList, EndParaReason)
+-- extractParaListImpl indentFlag = do
+--     initList <- case indentFlag of
+--         Tok.Indent -> do
+--             indentBox <- uses (typed @Config) parIndentBox
+--             pure $ Seq.singleton indentBox
+--         Tok.DoNotIndent ->
+--             pure mempty
 
-       , TeXBuildCtx st e m
+--     (_, doneS, hList, endReason) <- unListBuilderT (runCommandLoop handleCommandInParaMode) (HList initList) oldS oldS initList
+--     pure ()
 
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
+-- extractBreakAndSetMainVList
+--     :: ( MonadError e m
+--        , AsType BuildError e
+--        , AsType TFMError e
+--        , AsType Data.Path.PathError e
 
-       , MonadIO m
-       , MonadSlog m
-       )
-    => s
-    -> m (s, Seq B.Page, IntParamVal 'HP.Mag)
-extractBreakAndSetMainVList s = do
-    (finalS, finalMainVList) <- extractMainVList s
-    sLog "In extractBreakAndSetMainVList, done extractMainVList"
-    case finalS ^. HP.conditionBodyStateLens of
-        [] -> pure ()
-        condStates -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show condStates
-    join $ use $ typed @Config % to finaliseConfig
-    desiredH <- use $ typed @Config % to (LenParamVal . lookupLengthParameter HP.VSize)
-    let pages = BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
-    mag <- use $ typed @Config % to (IntParamVal . lookupTeXIntParameter HP.Mag)
-    pure (finalS, pages, mag)
+--        , TeXBuildCtx st e m
 
-extractMainVList
-    :: ( MonadError e m
-       , AsType BuildError e
-       , AsType TFMError e
-       , AsType Data.Path.PathError e
+--        , MonadEvaluateCtx e st m
 
-       , TeXBuildCtx st e m
+--        , P.MonadTokenParse m
+--        , S.TeXStream s
 
-       , HP.MonadTeXParse (HP.TeXParseT s m)
-       , HP.TeXStream s
+--        , MonadIO m
+--        , MonadSlog m
+--        )
+--     => s
+--     -> m (s, Seq B.Page, IntParamVal 'Tok.Mag)
+-- extractBreakAndSetMainVList s = do
+--     (finalS, finalMainVList) <- extractMainVList s
+--     sLog "In extractBreakAndSetMainVList, done extractMainVList"
+--     case finalS ^. S.conditionBodyStateLens of
+--         [] -> pure ()
+--         condStates -> throwError $ injectTyped $ BuildError $ "Cannot end: in condition block: " <> show condStates
+--     join $ use $ typed @Config % to finaliseConfig
+--     desiredH <- use $ typed @Config % to (LenParamVal . lookupLengthParameter Tok.VSize)
+--     let pages = BL.runPageBuilder desiredH BL.newCurrentPage finalMainVList
+--     mag <- use $ typed @Config % to (IntParamVal . lookupTeXIntParameter Tok.Mag)
+--     pure (finalS, pages, mag)
 
-       , MonadIO m
-       , MonadSlog m
-       )
-    => s
-    -> m (s, VList)
-extractMainVList s = do
-    let handleCommand oldS newS hList cmd = do
-          (_, doneS, doneList, mayEndUnit) <- unListBuilderT (handleCommandInMainVMode cmd) oldS newS hList
-          pure (doneS, doneList, mayEndUnit)
-    (doneS, vList, _) <- runCommandLoop handleCommand s mempty
-    sLog "In extractMainVList, done runCommandLoop handleCommandInMainVMode"
-    pure (doneS, vList)
+-- extractMainVList
+--     :: ( MonadError e m
+--        , AsType BuildError e
+--        , AsType TFMError e
+--        , AsType Data.Path.PathError e
+
+--        , TeXBuildCtx st e m
+
+--        , MonadEvaluateCtx e st m
+
+--        , P.MonadTokenParse m
+
+--        , MonadIO m
+--        , MonadSlog m
+--        )
+--     => m VList
+-- extractMainVList = do
+--     let handleCommand oldS hList cmd = do
+--           (_, doneS, doneList, mayEndUnit) <- unListBuilderT (handleCommandInMainVMode cmd) oldS hList
+--           pure (doneS, doneList, mayEndUnit)
+--     (vList, _) <- runCommandLoop handleCommand mempty
+--     sLog "In extractMainVList, done runCommandLoop handleCommandInMainVMode"
+--     pure vList

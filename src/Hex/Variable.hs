@@ -5,9 +5,10 @@ module Hex.Variable where
 import qualified Hex.BreakList as BL
 import Hex.Config
 import Hex.Evaluate
-import qualified Hex.Parse as HP
 import Hex.Quantity
 import Hexlude
+import qualified Hex.Resolve as HP
+import qualified Hex.Parse.AST as HP
 
 class TeXVariable a where
 
@@ -15,8 +16,8 @@ class TeXVariable a where
     :: ( MonadState st m
        , HasType Config st
        , MonadError e m
-       , AsType EvaluationError e
        , AsType ConfigError e
+       , MonadEvaluate m HP.EightBitTeXInt
        )
     => a
     -> HP.ScopeFlag
@@ -27,10 +28,10 @@ setValueFromAST
   :: ( MonadState st m
      , HasType Config st
      , MonadError e m
-     , AsType EvaluationError e
+     , MonadEvaluate m b
+     , MonadEvaluate m HP.EightBitTeXInt
      , AsType ConfigError e
      , TeXVariable a
-     , TeXEvaluable b
      , EvalTarget a ~ EvalTarget b
      )
   => a
@@ -38,7 +39,7 @@ setValueFromAST
   -> b
   -> m ()
 setValueFromAST var scopeFlag astVal =
-  texEvaluate astVal >>= setValue var scopeFlag
+  astEval astVal >>= setValue var scopeFlag
 
 instance TeXVariable HP.TeXIntVariable where
 
@@ -46,7 +47,7 @@ instance TeXVariable HP.TeXIntVariable where
     HP.ParamVar p ->
       modifying' (typed @Config) $ setTeXIntParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
-      texEvaluate iRaw >>=
+      astEval iRaw >>=
         (\i -> modifying' (typed @Config) $ setTeXIntRegister i tgt scopeFlag)
 
 instance TeXVariable HP.LengthVariable where
@@ -54,7 +55,7 @@ instance TeXVariable HP.LengthVariable where
   setValue v scopeFlag tgt = case v of
     HP.ParamVar p -> modifying' (typed @Config) $ setLengthParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
-      texEvaluate iRaw >>=
+      astEval iRaw >>=
         (\i -> modifying' (typed @Config) $ setLengthRegister i tgt scopeFlag)
 
 instance TeXVariable HP.GlueVariable where
@@ -62,7 +63,7 @@ instance TeXVariable HP.GlueVariable where
   setValue v scopeFlag tgt = case v of
     HP.ParamVar p -> modifying' (typed @Config) $ setGlueParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
-      texEvaluate iRaw >>=
+      astEval iRaw >>=
         (\i -> modifying' (typed @Config) $ setGlueRegister i tgt scopeFlag)
 
 instance TeXVariable HP.MathGlueVariable where
@@ -70,7 +71,7 @@ instance TeXVariable HP.MathGlueVariable where
   setValue v scopeFlag tgt = case v of
     HP.ParamVar p -> modifying' (typed @Config) $ setMathGlueParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
-      texEvaluate iRaw >>=
+      astEval iRaw >>=
         (\i -> modifying' (typed @Config) $ setMathGlueRegister i tgt scopeFlag)
 
 instance TeXVariable HP.TokenListVariable where
@@ -78,7 +79,7 @@ instance TeXVariable HP.TokenListVariable where
   setValue v scopeFlag tgt = case v of
     HP.ParamVar p -> modifying' (typed @Config) $ setTokenListParameter p tgt scopeFlag
     HP.RegisterVar iRaw ->
-      texEvaluate iRaw >>=
+      astEval iRaw >>=
         (\i -> modifying' (typed @Config) $ setTokenListRegister i tgt scopeFlag)
 
 instance TeXVariable HP.SpecialTeXInt where
@@ -104,10 +105,10 @@ class TeXVariable a => TeXNumericVariable a where
     :: ( MonadState st m
        , HasType Config st
        , MonadError e m
-       , AsType EvaluationError e
        , AsType ConfigError e
-       , TeXEvaluable a
-       , TeXEvaluable b
+       , MonadEvaluate m a
+       , MonadEvaluate m b
+       , MonadEvaluate m HP.EightBitTeXInt
        , EvalTarget b ~ EvalTarget a
        )
     => a
@@ -115,16 +116,17 @@ class TeXVariable a => TeXNumericVariable a where
     -> b
     -> m ()
   advanceValueFromAST var scopeFlag astPlusVal =
-    (advanceOp (Proxy @a) <$> texEvaluate var <*> texEvaluate astPlusVal) >>=
+    (advanceOp (Proxy @a) <$> astEval var <*> astEval astPlusVal) >>=
       setValue var scopeFlag
 
   scaleValueFromAST
     :: ( MonadState st m
        , HasType Config st
        , MonadError e m
-       , AsType EvaluationError e
        , AsType ConfigError e
-       , TeXEvaluable a
+       , MonadEvaluate m a
+       , MonadEvaluate m HP.TeXInt
+       , MonadEvaluate m HP.EightBitTeXInt
        )
     => a
     -> HP.ScopeFlag
@@ -135,8 +137,8 @@ class TeXVariable a => TeXNumericVariable a where
     let op = case vDir of
           Upward -> scaleUpOp
           Downward -> scaleDownOp
-    (op (Proxy @a) <$> texEvaluate var <*> texEvaluate scaleVal) >>=
-      setValue var scopeFlag
+    val <- op (Proxy @a) <$> astEval var <*> astEval scaleVal
+    setValue var scopeFlag val
 
 instance TeXNumericVariable HP.TeXIntVariable where
 

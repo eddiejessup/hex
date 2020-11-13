@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module Hex.Evaluate where
 
 import           Hexlude
@@ -16,132 +18,112 @@ import qualified Hex.Parse.AST        as AST
 import qualified Hex.Resolve.Token      as T
 import           Hex.Quantity
 
-
-class TeXEvaluable a where
-    type EvalTarget a
-
-    texEvaluate
-        :: ( MonadState st m -- Read-only
-           , HasType Config st
-           , MonadError e m
-           , AsType EvaluationError e
-           , AsType ConfigError e
-           )
-        => a
-        -> m (EvalTarget a)
+type MonadEvaluateCtx e st m =
+    ( Monad m
+    , MonadError e m
+    , AsType EvaluationError e
+    , AsType ConfigError e
+    , MonadState st m
+    , HasType Config st
+    )
 
 newtype EvaluationError
     = EvaluationError Text
     deriving stock (Show)
 
+class Monad m => MonadEvaluate m a where
+    type EvalTarget a
 
-instance TeXEvaluable AST.TokenListAssignmentTarget where
+    astEval :: a -> m (EvalTarget a)
+
+instance (Monad m, MonadEvaluate m AST.TokenListVariable) => MonadEvaluate m AST.TokenListAssignmentTarget where
     type EvalTarget AST.TokenListAssignmentTarget = T.BalancedText
 
-    texEvaluate = \case
+    astEval = \case
         AST.TokenListAssignmentVar tgtVar ->
-            texEvaluate tgtVar
+            astEval tgtVar
         AST.TokenListAssignmentText tgtText ->
             pure tgtText
 
--- TeXInt.
-
 signedTeXEval
-    :: (TeXEvaluable a
-       , MonadState st m -- Read-only
-       , HasType Config st
-       , MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
+    :: ( Monad m,
+         MonadEvaluate m a
        , Num (EvalTarget a)
        )
     => T.Signed a
     -> m (EvalTarget a)
 signedTeXEval (T.Signed sign u) =
     do
-    eu <- texEvaluate u
+    eu <- astEval u
     pure $ T.evalSigned (T.Signed sign eu)
 
-instance TeXEvaluable AST.TeXInt where
+instance MonadEvaluate m AST.UnsignedTeXInt => MonadEvaluate m AST.TeXInt where
     type EvalTarget AST.TeXInt = TeXInt
 
-    texEvaluate = signedTeXEval
+    astEval = signedTeXEval
 
-instance TeXEvaluable AST.UnsignedTeXInt where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.UnsignedTeXInt where
     type EvalTarget AST.UnsignedTeXInt = TeXInt
 
-    texEvaluate = \case
-        AST.NormalTeXIntAsUTeXInt v -> texEvaluate v
-        AST.CoercedTeXInt v -> texEvaluate v
+    astEval = \case
+        AST.NormalTeXIntAsUTeXInt v -> astEval v
+        AST.CoercedTeXInt v -> astEval v
 
-instance TeXEvaluable AST.NormalTeXInt where
+instance (Monad m, MonadEvaluate m AST.InternalTeXInt) => MonadEvaluate m AST.NormalTeXInt where
     type EvalTarget AST.NormalTeXInt = TeXInt
 
-    texEvaluate = \case
+    astEval = \case
         AST.TeXIntConstant n -> pure n
-        AST.InternalTeXInt v -> texEvaluate v
+        AST.InternalTeXInt v -> astEval v
 
-instance TeXEvaluable AST.InternalTeXInt where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.InternalTeXInt where
     type EvalTarget AST.InternalTeXInt = TeXInt
 
-    texEvaluate = \case
-        AST.InternalTeXIntVariable v -> texEvaluate v
-        AST.InternalSpecialTeXInt v  -> texEvaluate v
-        AST.InternalCodeTableRef v    -> texEvaluate v
+    astEval = \case
+        AST.InternalTeXIntVariable v -> astEval v
+        AST.InternalSpecialTeXInt v  -> astEval v
+        AST.InternalCodeTableRef v    -> astEval v
         AST.InternalCharToken n       -> pure n
         AST.InternalMathCharToken n   -> pure n
-        AST.InternalFontCharRef v     -> texEvaluate v
+        AST.InternalFontCharRef v     -> astEval v
         AST.LastPenalty               -> panic "Not implemented: evaluate LastPenalty"
         AST.ParShape                  -> panic "Not implemented: evaluate ParShape"
         AST.InputLineNr               -> panic "Not implemented: evaluate InputLineNr"
         AST.Badness                   -> panic "Not implemented: evaluate Badness"
 
-instance TeXEvaluable AST.EightBitTeXInt where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.EightBitTeXInt where
     type EvalTarget AST.EightBitTeXInt = EightBitInt
 
-    texEvaluate (AST.EightBitTeXInt n) =
-        texEvaluate n >>= toEightBit
+    astEval (AST.EightBitTeXInt n) =
+        astEval n >>= toEightBit
       where
         toEightBit tn@(TeXInt i) =
-            note (injectTyped (EvaluationError ("TeXInt not in range: " <> show tn)))
-            (newEightBitInt i)
+            note
+                (injectTyped (EvaluationError ("TeXInt not in range: " <> show tn)))
+                (newEightBitInt i)
 
-getRegisterIdx
-    :: ( MonadState st m -- Read-only
-       , HasType Config st
-       , MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
-       )
-    => AST.EightBitTeXInt
-    -> (EightBitInt -> Config -> a)
-    -> m a
-getRegisterIdx n f =
-    do
-    en <- texEvaluate n
-    uses (typed @Config) (f en)
-
-instance TeXEvaluable AST.TeXIntVariable where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.TeXIntVariable where
     type EvalTarget AST.TeXIntVariable = TeXInt
 
-    texEvaluate = \case
+    astEval = \case
         AST.ParamVar p -> uses (typed @Config) $ lookupTeXIntParameter p
-        AST.RegisterVar n -> getRegisterIdx n lookupTeXIntRegister
+        AST.RegisterVar n -> astEval n >>= (\i -> uses (typed @Config) (lookupTeXIntRegister i))
 
-instance TeXEvaluable T.SpecialTeXInt where
+instance (Monad m, MonadError e m, MonadState st m, HasType Config st) => MonadEvaluate m T.SpecialTeXInt where
     type EvalTarget T.SpecialTeXInt = TeXInt
 
-    texEvaluate p = uses (typed @Config) $ lookupSpecialTeXInt p
+    astEval p = uses (typed @Config) (lookupSpecialTeXInt p)
 
-instance TeXEvaluable AST.CodeTableRef where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.CodeTableRef where
     type EvalTarget AST.CodeTableRef = TeXInt
 
-    texEvaluate (AST.CodeTableRef q n) =
+    astEval (AST.CodeTableRef q n) =
         do
-        idxInt <- texEvaluate n
-        idxChar <- note (injectTyped (EvaluationError ("Outside range: " <> show idxInt)))
-            (fromTeXInt idxInt)
         conf <- use (typed @Config)
+        idxInt <- astEval n
+        idxChar <- note
+            (injectTyped (EvaluationError ("Outside range: " <> show idxInt)))
+            (fromTeXInt idxInt)
         let
             lookupFrom :: TeXCode v => (Scope -> CharCodeMap v) -> Maybe TeXInt
             lookupFrom getMap = toTeXInt <$> scopedMapLookup getMap idxChar conf
@@ -156,310 +138,314 @@ instance TeXEvaluable AST.CodeTableRef where
             T.SpaceFactorCodeType         -> lookupFrom spaceFactors
             T.DelimiterCodeType           -> lookupFrom delimiterCodes
 
-instance TeXEvaluable AST.FontCharRef where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.FontCharRef where
     type EvalTarget AST.FontCharRef = TeXInt
 
-    texEvaluate (AST.FontCharRef fChar fontRef) =
+    astEval (AST.FontCharRef fChar fontRef) =
         do
-        eFontRef <- texEvaluate fontRef
-        fontInfo <- lookupFontInfo eFontRef
+        eFontRef <- astEval fontRef
+        fontInfo <- use (typed @Config) >>= \c -> lookupFontInfo c eFontRef
         pure $ case fChar of
             T.HyphenChar -> hyphenChar fontInfo
             T.SkewChar   -> skewChar fontInfo
 
-instance TeXEvaluable AST.FontRef where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.FontRef where
     type EvalTarget AST.FontRef = TeXInt
 
-    texEvaluate = \case
+    astEval = \case
         AST.FontTokenRef fNr -> pure fNr
-        AST.CurrentFontRef -> mLookupCurrentFontNr
-        AST.FamilyMemberFontRef v -> texEvaluate v >>= lookupFontFamilyMember
+        AST.CurrentFontRef ->
+            uses (typed @Config) lookupCurrentFontNr
+                >>= note (injectTyped $ ConfigError "Font number isn't set")
+        AST.FamilyMemberFontRef v -> do
+            foo <- astEval v
+            use (typed @Config) >>= \c -> lookupFontFamilyMember c foo
 
-instance TeXEvaluable AST.FamilyMember where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.FamilyMember where
     type EvalTarget AST.FamilyMember = (T.FontRange, TeXInt)
-    texEvaluate (AST.FamilyMember rng n) = (rng,) <$> texEvaluate n
+    astEval (AST.FamilyMember rng n) = (rng,) <$> astEval n
 
-instance TeXEvaluable AST.CoercedTeXInt where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.CoercedTeXInt where
     type EvalTarget AST.CoercedTeXInt = TeXInt
 
-    texEvaluate = \case
-        AST.InternalLengthAsInt ln -> lengthToInt <$> texEvaluate ln
-        AST.InternalGlueAsInt g -> lengthToInt . BL.dimen <$> texEvaluate g
+    astEval = \case
+        AST.InternalLengthAsInt ln -> lengthToInt <$> astEval ln
+        AST.InternalGlueAsInt g -> lengthToInt . BL.dimen <$> astEval g
 
 -- Length.
 
-instance TeXEvaluable AST.Length where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.Length where
     type EvalTarget AST.Length = Length
 
-    texEvaluate = signedTeXEval
+    astEval = signedTeXEval
 
-instance TeXEvaluable AST.UnsignedLength where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.UnsignedLength where
     type EvalTarget AST.UnsignedLength = Length
 
-    texEvaluate = \case
-        AST.NormalLengthAsULength v -> texEvaluate v
-        AST.CoercedLength v -> texEvaluate v
+    astEval = \case
+        AST.NormalLengthAsULength v -> astEval v
+        AST.CoercedLength v -> astEval v
 
-instance TeXEvaluable AST.NormalLength where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.NormalLength where
     type EvalTarget AST.NormalLength = Length
 
-    texEvaluate = \case
+    astEval = \case
         AST.LengthSemiConstant f u ->
             do
-            ef <- texEvaluate f
-            eu <- texEvaluate u
+            ef <- astEval f
+            eu <- astEval u
             pure $ round $ ef * eu
         AST.InternalLength v ->
-            texEvaluate v
+            astEval v
 
-instance TeXEvaluable AST.Factor where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.Factor where
     type EvalTarget AST.Factor = Rational
 
-    texEvaluate = \case
-        AST.NormalTeXIntFactor n -> fromIntegral <$> texEvaluate n
+    astEval = \case
+        AST.NormalTeXIntFactor n -> fromIntegral <$> astEval n
         AST.RationalConstant r -> pure r
 
-instance TeXEvaluable AST.Unit where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.Unit where
     type EvalTarget AST.Unit = Rational
 
-    texEvaluate = \case
-        AST.InternalUnit u -> texEvaluate u
+    astEval = \case
+        AST.InternalUnit u -> astEval u
         AST.PhysicalUnit AST.TrueFrame u -> pure $ inScaledPoint u
         AST.PhysicalUnit AST.MagnifiedFrame u ->
             do
-            _mag <- uses (typed @Config) $ lookupTeXIntParameter T.Mag
-            eU <- texEvaluate $ AST.PhysicalUnit AST.TrueFrame u
-            pure $ eU * 1000 / fromIntegral _mag
+            mag_ <- uses (typed @Config) (lookupTeXIntParameter T.Mag)
+            eU <- astEval $ AST.PhysicalUnit AST.TrueFrame u
+            pure $ eU * 1000 / fromIntegral mag_
 
-instance TeXEvaluable AST.InternalUnit where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.InternalUnit where
     type EvalTarget AST.InternalUnit = Rational
 
-    texEvaluate = \case
-        AST.Em -> TFM.quad . fontMetrics <$> currentFontInfo
-        AST.Ex -> TFM.xHeight . fontMetrics <$> currentFontInfo
-        AST.InternalTeXIntUnit v -> fromIntegral <$> texEvaluate v
-        AST.InternalLengthUnit v -> fromIntegral <$> texEvaluate v
-        AST.InternalGlueUnit v -> fromIntegral . BL.dimen <$> texEvaluate v
+    astEval = \case
+        AST.Em -> use (typed @Config) >>= currentFontInfo <&> (fontMetrics >>> TFM.quad)
+        AST.Ex -> use (typed @Config) >>= currentFontInfo <&> (fontMetrics >>> TFM.xHeight)
+        AST.InternalTeXIntUnit v -> fromIntegral <$> astEval v
+        AST.InternalLengthUnit v -> fromIntegral <$> astEval v
+        AST.InternalGlueUnit v -> fromIntegral . BL.dimen <$> astEval v
 
-instance TeXEvaluable AST.InternalLength where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.InternalLength where
     type EvalTarget AST.InternalLength = Length
 
-    texEvaluate = \case
-        AST.InternalLengthVariable v -> texEvaluate v
-        AST.InternalSpecialLength v -> texEvaluate v
-        AST.InternalFontDimensionRef v -> texEvaluate v
-        AST.InternalBoxDimensionRef v -> texEvaluate v
+    astEval = \case
+        AST.InternalLengthVariable v -> astEval v
+        AST.InternalSpecialLength v -> astEval v
+        AST.InternalFontDimensionRef v -> astEval v
+        AST.InternalBoxDimensionRef v -> astEval v
         AST.LastKern -> panic "Not implemented: evaluate LastKern"
 
-instance TeXEvaluable AST.LengthVariable where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.LengthVariable where
     type EvalTarget AST.LengthVariable = Length
 
-    texEvaluate = \case
-        AST.ParamVar p -> uses (typed @Config) $ lookupLengthParameter p
-        AST.RegisterVar n -> getRegisterIdx n lookupLengthRegister
+    astEval = \case
+        AST.ParamVar p -> uses (typed @Config) (lookupLengthParameter p)
+        AST.RegisterVar n -> astEval n >>= (\i -> uses (typed @Config ) (lookupLengthRegister i))
 
-instance TeXEvaluable T.SpecialLength where
+instance (Monad m, MonadState st m, HasType Config st) => MonadEvaluate m T.SpecialLength where
     type EvalTarget T.SpecialLength = Length
 
-    texEvaluate p = uses (typed @Config) $ lookupSpecialLength p
+    astEval p = uses (typed @Config) (lookupSpecialLength p)
 
-instance TeXEvaluable AST.FontDimensionRef where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.FontDimensionRef where
     type EvalTarget AST.FontDimensionRef = Length
 
-    texEvaluate (AST.FontDimensionRef n _) =
+    astEval (AST.FontDimensionRef n _) =
         do
-        _ <- texEvaluate n
+        _ <- astEval n
         panic "Not implemented: evaluate FontDimensionRef"
 
-instance TeXEvaluable AST.BoxDimensionRef where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.BoxDimensionRef where
     type EvalTarget AST.BoxDimensionRef = Length
 
-    texEvaluate (AST.BoxDimensionRef idx boxDim) =
+    astEval (AST.BoxDimensionRef idx boxDim) =
         do
-        eIdx <- texEvaluate idx
-        mayBoxReg <- uses (typed @Config) $ lookupBoxRegister eIdx
+        eIdx <- astEval idx
+        mayBoxReg <- uses (typed @Config) (lookupBoxRegister eIdx)
         pure $ maybe 0 (naturalLength boxDim) mayBoxReg
 
-instance TeXEvaluable AST.CoercedLength where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.CoercedLength where
     type EvalTarget AST.CoercedLength = Length
-    texEvaluate (AST.InternalGlueAsLength g) = BL.dimen <$> texEvaluate g
+    astEval (AST.InternalGlueAsLength g) = BL.dimen <$> astEval g
 
 -- Math length.
 
-instance TeXEvaluable AST.MathLength where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.MathLength where
     type EvalTarget AST.MathLength = MathLength
 
-    texEvaluate = signedTeXEval
+    astEval = signedTeXEval
 
-instance TeXEvaluable AST.UnsignedMathLength where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.UnsignedMathLength where
     type EvalTarget AST.UnsignedMathLength = MathLength
 
-    texEvaluate = \case
-        AST.NormalMathLengthAsUMathLength v -> texEvaluate v
-        AST.CoercedMathLength v -> texEvaluate v
+    astEval = \case
+        AST.NormalMathLengthAsUMathLength v -> astEval v
+        AST.CoercedMathLength v -> astEval v
 
-instance TeXEvaluable AST.NormalMathLength where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.NormalMathLength where
     type EvalTarget AST.NormalMathLength = MathLength
 
-    texEvaluate (AST.MathLengthSemiConstant f mathU) =
+    astEval (AST.MathLengthSemiConstant f mathU) =
         do
-        ef <- texEvaluate f
-        eu <- texEvaluate mathU
+        ef <- astEval f
+        eu <- astEval mathU
         pure $ round $ ef * fromIntegral eu
 
-instance TeXEvaluable AST.MathUnit where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.MathUnit where
     type EvalTarget AST.MathUnit = MathLength
 
-    texEvaluate = \case
+    astEval = \case
         AST.Mu ->
             pure 1
         AST.InternalMathGlueAsUnit mg ->
-            BL.dimen <$> texEvaluate mg
+            BL.dimen <$> astEval mg
 
-instance TeXEvaluable AST.CoercedMathLength where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.CoercedMathLength where
     type EvalTarget AST.CoercedMathLength = MathLength
-    texEvaluate (AST.InternalMathGlueAsMathLength mg) = BL.dimen <$> texEvaluate mg
+    astEval (AST.InternalMathGlueAsMathLength mg) = BL.dimen <$> astEval mg
 
 -- Glue.
 
-instance TeXEvaluable AST.Glue where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.Glue where
     type EvalTarget AST.Glue = BL.Glue Length
 
-    texEvaluate = \case
+    astEval = \case
         AST.ExplicitGlue dim str shr ->
-            BL.Glue <$> texEvaluate dim <*> evalFlex str <*> evalFlex shr
+            BL.Glue <$> astEval dim <*> evalFlex str <*> evalFlex shr
         AST.InternalGlue (T.Signed sign v) ->
             do
-            ev <- texEvaluate v
+            ev <- astEval v
             pure $ case sign of
                 T.Positive -> ev
                 T.Negative -> BL.negateGlue ev
       where
         evalFlex = \case
-            Just f -> texEvaluate f
+            Just f -> astEval f
             Nothing -> pure BL.noFlex
 
-instance TeXEvaluable AST.Flex where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.Flex where
     type EvalTarget AST.Flex = BL.GlueFlex
 
-    texEvaluate = \case
+    astEval = \case
         AST.FiniteFlex ln ->
             do
-            eLn <- texEvaluate ln
+            eLn <- astEval ln
             pure BL.GlueFlex { BL.factor = fromIntegral eLn, BL.order = 0 }
-        AST.FilFlex ln -> texEvaluate ln
+        AST.FilFlex ln -> astEval ln
 
-instance TeXEvaluable AST.FilLength where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.FilLength where
     type EvalTarget AST.FilLength = BL.GlueFlex
 
-    texEvaluate (AST.FilLength fl filOrder) =
+    astEval (AST.FilLength fl filOrder) =
         do
         efl <- signedTeXEval fl
         pure BL.GlueFlex { BL.factor = efl, BL.order = filOrder }
 
-instance TeXEvaluable AST.InternalGlue where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.InternalGlue where
     type EvalTarget AST.InternalGlue = BL.Glue Length
 
-    texEvaluate = \case
-        AST.InternalGlueVariable v -> texEvaluate v
+    astEval = \case
+        AST.InternalGlueVariable v -> astEval v
         AST.LastGlue -> panic "Not implemented: evaluate LastGlue"
 
-instance TeXEvaluable AST.GlueVariable where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.GlueVariable where
     type EvalTarget AST.GlueVariable = BL.Glue Length
 
-    texEvaluate = \case
-        AST.ParamVar p    -> uses (typed @Config) $ lookupGlueParameter p
-        AST.RegisterVar n -> getRegisterIdx n lookupGlueRegister
+    astEval = \case
+        AST.ParamVar p    -> uses (typed @Config) (lookupGlueParameter p)
+        AST.RegisterVar n -> astEval n >>= (\i -> uses (typed @Config ) (lookupGlueRegister i))
 
 -- Math glue.
 
-instance TeXEvaluable AST.MathGlue where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.MathGlue where
     type EvalTarget AST.MathGlue = BL.Glue MathLength
 
-    texEvaluate = \case
+    astEval = \case
         AST.ExplicitMathGlue mDim mStr mShr ->
-            BL.Glue <$> texEvaluate mDim <*> evalMathFlex mStr <*> evalMathFlex mShr
+            BL.Glue <$> astEval mDim <*> evalMathFlex mStr <*> evalMathFlex mShr
         AST.InternalMathGlue sign v ->
             do
-            ev <- texEvaluate v
+            ev <- astEval v
             pure $ case sign of
                 T.Positive -> ev
                 T.Negative -> BL.negateGlue ev
       where
         evalMathFlex = \case
-            Just f -> texEvaluate f
+            Just f -> astEval f
             Nothing -> pure BL.noFlex
 
-instance TeXEvaluable AST.MathFlex where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.MathFlex where
     type EvalTarget AST.MathFlex = BL.GlueFlex
 
-    texEvaluate = \case
+    astEval = \case
         AST.FiniteMathFlex ln ->
             do
-            eLn <- texEvaluate ln
+            eLn <- astEval ln
             pure BL.GlueFlex { BL.factor = fromIntegral eLn, BL.order = 0 }
-        AST.FilMathFlex ln -> texEvaluate ln
+        AST.FilMathFlex ln -> astEval ln
 
-instance TeXEvaluable AST.InternalMathGlue where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.InternalMathGlue where
     type EvalTarget AST.InternalMathGlue = BL.Glue MathLength
 
-    texEvaluate = \case
-        AST.InternalMathGlueVariable v -> texEvaluate v
+    astEval = \case
+        AST.InternalMathGlueVariable v -> astEval v
         AST.LastMathGlue -> panic "Not implemented: evaluate LastMathGlue"
 
-instance TeXEvaluable AST.MathGlueVariable where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.MathGlueVariable where
     type EvalTarget AST.MathGlueVariable = BL.Glue MathLength
 
-    texEvaluate = \case
-        AST.ParamVar p    -> uses (typed @Config) $ lookupMathGlueParameter p
-        AST.RegisterVar n -> getRegisterIdx n lookupMathGlueRegister
+    astEval = \case
+        AST.ParamVar p    -> uses (typed @Config) (lookupMathGlueParameter p)
+        AST.RegisterVar n -> astEval n >>= (\i -> uses (typed @Config) (lookupMathGlueRegister i))
 
 -- Token list.
 
-instance TeXEvaluable AST.TokenListVariable where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.TokenListVariable where
     type EvalTarget AST.TokenListVariable = T.BalancedText
 
-    texEvaluate = \case
-        AST.ParamVar p    -> uses (typed @Config) $ lookupTokenListParameter p
-        AST.RegisterVar n -> getRegisterIdx n lookupTokenListRegister
+    astEval = \case
+        AST.ParamVar p    -> uses (typed @Config) (lookupTokenListParameter p)
+        AST.RegisterVar n -> astEval n >>= (\i -> uses (typed @Config) (lookupTokenListRegister i))
 
 -- Showing internal quantities.
 
 -- For \number, \romannumeral, \string. \meaning, \jobname, and \fontname: Each
 -- character code gets category "other" , except that 32 gets "space".
 charCodeAsMadeToken :: CharCode -> Lex.Token
-charCodeAsMadeToken c =
-    Lex.CharCatToken $ Lex.CharCat c $ case c of
+charCodeAsMadeToken ch =
+    Lex.CharCatToken $ Lex.CharCat ch $ case ch of
         Code.CharCode_ ' ' -> Code.Space
         _                  -> Code.Other
 
-instance TeXEvaluable AST.InternalQuantity where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.InternalQuantity where
     type EvalTarget AST.InternalQuantity = Seq CharCode
 
-    texEvaluate = \case
+    astEval = \case
         AST.InternalTeXIntQuantity n ->
             do
-            en <- texEvaluate n
+            en <- astEval n
             pure $ Seq.fromList $ unsafeCodeFromChar <$> show (unInt en)
         AST.InternalLengthQuantity d ->
             do
-            _ <- texEvaluate d
+            _ <- astEval d
             panic "Not implemented: evaluate InternalLengthQuantity"
         AST.InternalGlueQuantity g ->
             do
-            _ <- texEvaluate g
+            _ <- astEval g
             panic "Not implemented: evaluate InternalGlueQuantity"
         AST.InternalMathGlueQuantity mg ->
             do
-            _ <- texEvaluate mg
+            _ <- astEval mg
             panic "Not implemented: evaluate InternalMathGlueQuantity"
         AST.FontQuantity f ->
             do
-            _ <- texEvaluate f
+            _ <- astEval f
             panic "Not implemented: evaluate FontQuantity"
         AST.TokenListVariableQuantity tl ->
             do
-            _ <- texEvaluate tl
+            _ <- astEval tl
             panic "Not implemented: evaluate TokenListVariableQuantity"
 
 -- Condition
@@ -484,38 +470,38 @@ data ConditionBodyState
     | CaseBodyState CaseBodyState
     deriving stock (Show)
 
-instance TeXEvaluable AST.ConditionHead where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.ConditionHead where
     type EvalTarget AST.ConditionHead = ConditionBlockTarget
 
-    texEvaluate = \case
+    astEval = \case
         AST.CaseConditionHead n ->
             do
-            en <- texEvaluate n
+            en <- astEval n
             pure $ CaseBlockTarget en
         AST.IfConditionHead ifH ->
             do
-            ifResult <- texEvaluate ifH
+            ifResult <- astEval ifH
             pure $ IfBlockTarget $ if ifResult
                 then IfPreElse
                 else IfPostElse
 
-instance TeXEvaluable AST.IfConditionHead where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.IfConditionHead where
     type EvalTarget AST.IfConditionHead = Bool
 
-    texEvaluate = \case
+    astEval = \case
         AST.IfTeXIntPairTest n1 ordering n2 ->
             do
-            en1 <- texEvaluate n1
-            en2 <- texEvaluate n2
+            en1 <- astEval n1
+            en2 <- astEval n2
             pure $ ordToComp ordering en1 en2
         AST.IfLengthPairTest d1 ordering d2 ->
             do
-            ed1 <- texEvaluate d1
-            ed2 <- texEvaluate d2
+            ed1 <- astEval d1
+            ed2 <- astEval d2
             pure $ ordToComp ordering ed1 ed2
         AST.IfTeXIntOdd n ->
             do
-            en <- texEvaluate n
+            en <- astEval n
             pure $ en `mod` 2 == 1
         AST.IfInMode _ ->
             panic "Not implemented: IfInMode"
@@ -552,7 +538,7 @@ instance TeXEvaluable AST.IfConditionHead where
             pure False
         AST.IfBoxRegisterIs attr n ->
             do
-            _ <- texEvaluate n
+            _ <- astEval n
             case attr of
                 T.HasVerticalBox ->
                     panic "Not implemented: evaluate IfBoxRegister HasVerticalBox"
@@ -562,7 +548,7 @@ instance TeXEvaluable AST.IfConditionHead where
                     panic "Not implemented: evaluate IfBoxRegister IsVoid"
         AST.IfInputEnded n ->
             do
-            _ <- texEvaluate n
+            _ <- astEval n
             panic "Not implemented: evaluate IfInputEnded"
         AST.IfConst b -> pure b
       where
@@ -582,32 +568,28 @@ instance TeXEvaluable AST.IfConditionHead where
 
 -- Other.
 
-instance TeXEvaluable AST.CharCodeRef where
+instance MonadEvaluateCtx e st m => MonadEvaluate m AST.CharCodeRef where
     type EvalTarget AST.CharCodeRef = CharCode
 
-    texEvaluate ref = case ref of
-        AST.CharRef c -> pure c
-        AST.CharTokenRef c  -> noteRange c
-        AST.CharCodeNrRef n -> texEvaluate n >>= noteRange
+    astEval = \case
+        AST.CharRef ch -> pure ch
+        AST.CharTokenRef ct  -> noteRange ct
+        AST.CharCodeNrRef n -> astEval n >>= noteRange
       where
         noteRange x =
             note (injectTyped (EvaluationError ("TeXInt not in range: " <> show x)))
             (fromTeXInt x)
-instance TeXEvaluable AST.BoxSpecification where
+
+instance (Monad m, MonadEvaluate m AST.Length)  => MonadEvaluate m AST.BoxSpecification where
     type EvalTarget AST.BoxSpecification = B.DesiredLength
 
-    texEvaluate = \case
+    astEval = \case
         AST.Natural -> pure B.Natural
-        AST.To ln -> B.To <$> texEvaluate ln
-        AST.Spread ln -> B.Spread <$> texEvaluate ln
+        AST.To ln -> B.To <$> astEval ln
+        AST.Spread ln -> B.Spread <$> astEval ln
 
 evaluateFontSpecification
-    :: ( MonadState st m -- Read-only
-       , HasType Config st
-       , MonadError e m
-       , AsType EvaluationError e
-       , AsType ConfigError e
-       )
+    :: (MonadEvaluate m AST.Length, MonadEvaluate m AST.TeXInt)
     => Length
     -> AST.FontSpecification
     -> m Rational
@@ -616,9 +598,9 @@ evaluateFontSpecification designSizeSP = \case
         pure 1
     AST.FontAt ln ->
         do
-        eLn <- texEvaluate ln
+        eLn <- astEval ln
         pure $ fromIntegral eLn `mkRatio` fromIntegral designSizeSP
     AST.FontScaled n ->
         do
-        en <- texEvaluate n
+        en <- astEval n
         pure $ fromIntegral en `mkRatio` 1000

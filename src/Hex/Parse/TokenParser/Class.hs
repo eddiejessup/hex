@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Hex.Parse.Parser.Class where
+module Hex.Parse.TokenParser.Class where
 
 import Hex.Evaluate
 import qualified Hex.Lex as Lex
@@ -19,7 +19,7 @@ data ExpandedToken
   = ExpandedPrimitiveToken PrimitiveToken
   | ExpandedSyntaxCommand SyntaxCommandHeadToken (Seq Lex.Token)
 
-class MonadPlus m => MonadTeXParse m where
+class MonadPlus m => MonadTokenParse m where
 
   parseError :: ParseError -> m a
 

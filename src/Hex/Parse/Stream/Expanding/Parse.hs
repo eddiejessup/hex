@@ -1,9 +1,9 @@
-{-# LANGUAGE StrictData #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE UndecidableInstances #-}
+
 module Hex.Parse.Stream.Expanding.Parse where
 
 import qualified Optics.Cons.Core as O.Cons
-import qualified Data.ByteString.Lazy as BS.L
 import qualified Data.ByteString as BS
 import qualified Data.Generics.Product as G.P
 import qualified Data.List.NonEmpty as L.NE
@@ -16,31 +16,40 @@ import qualified Hex.Config.Codes as Code
 import Hex.Evaluate
 import qualified Hex.Lex as Lex
 import Hex.Parse.AST
-import Hex.Parse.Assignment
-import Hex.Parse.Command
-import Hex.Parse.Condition
+import Hex.Parse.CommandParser.Assignment
+import Hex.Parse.CommandParser.Condition
+import Hex.Parse.CommandParser.Command
+import Hex.Parse.CommandParser.Inhibited
 import Hex.Parse.Stream.Class
-import Hex.Parse.SyntaxCommand
+import Hex.Parse.Stream.Expanding
+import Hex.Parse.TokenParser.Class
+import Hex.Parse.TokenParser.Combinators
+import Hex.Parse.TokenParser.ParseT
+import Hex.Parse.CommandParser.SyntaxCommand
 import qualified Hex.Quantity as Q
 import Hex.Resolve
 import Hexlude
-import Path (Rel, Abs, File, Path)
+import Path (Rel, File, Path)
 import qualified Path
 import qualified Path.IO
+import Hex.Config (ConfigError)
 
 instance
   ( MonadError e m
-  , AsTeXParseErrors e
   , AsType ExpansionError e
+  , AsType EvaluationError e
   , AsType Data.Path.PathError e
+  , AsType ResolutionError e
+  , AsType Lex.LexError e
+  , AsType ConfigError e
 
   , MonadIO m
-  , MonadSlog m
+  -- , MonadSlog m
 
   , MonadState st m -- Read-only
   , HasType Conf.Config st
   )
-  => MonadTeXParse (TeXParseT ExpandingStream m) where
+  => MonadTokenParse (TeXParseT ExpandingStream m) where
 
   parseError e = TeXParseT $ \s -> pure (s, Left e)
 
@@ -122,12 +131,15 @@ try (TeXParseT parse) = TeXParseT $ \s -> do
 
 pFetchPrimitiveToken
   :: ( MonadError e m
-     , AsTeXParseErrors e
      , AsType ExpansionError e
+     , AsType EvaluationError e
+     , AsType ResolutionError e
+     , AsType ConfigError e
      , AsType Data.Path.PathError e
+     , AsType Lex.LexError e
 
      , MonadIO m
-     , MonadSlog m
+    --  , MonadSlog m
 
      , MonadState st m
      , HasType Conf.Config st
@@ -140,11 +152,11 @@ pFetchPrimitiveToken = do
       pure pt
     -- If we just saw a syntax command, insert the resulting expanded lex-tokens
     -- into the input, and try again.
-    ExpandedSyntaxCommand c lts -> do
-      lift $ sLogStampedJSON "Inserting lex tokens and reading again"
-        [ ("lexTokens", toJSON lts)
-        , ("SyntaxCommandHeadToken", toJSON c)
-        ]
+    ExpandedSyntaxCommand _c lts -> do
+      -- lift $ sLogStampedJSON "Inserting lex tokens and reading again"
+      --   [ ("lexTokens", toJSON lts)
+      --   , ("SyntaxCommandHeadToken", toJSON c)
+      --   ]
       pInsertLexTokens lts
       pFetchPrimitiveToken
 
@@ -152,14 +164,11 @@ pInsertLexTokens :: (Applicative m, TeXStream s) => Seq Lex.Token -> TeXParseT s
 pInsertLexTokens lts = TeXParseT $ \s ->
     pure (insertLexTokensToStream s lts, Right ())
 
-pTakeLexToken :: (MonadState st m, HasType Conf.Config st) => TeXParseT ExpandingStream m Lex.Token
+pTakeLexToken :: forall st e m. (MonadState st m, HasType Conf.Config st, MonadError e m, AsType Lex.LexError e) => TeXParseT ExpandingStream m Lex.Token
 pTakeLexToken = TeXParseT takeLexTokenS
   where
     takeLexTokenS
-      :: ( MonadState st m
-         , HasType Conf.Config st
-         )
-      => ExpandingStream
+      :: ExpandingStream
       -> m (ExpandingStream, Either ParseError Lex.Token)
     takeLexTokenS s =
       fetchLexToken s <&> \case
@@ -169,8 +178,10 @@ pTakeLexToken = TeXParseT takeLexTokenS
           (s', Right lt)
 
 pTakeAndResolveLexToken
-  :: ( MonadError e m
+  :: forall st e m.
+     ( MonadError e m
      , AsType ResolutionError e
+     , AsType Lex.LexError e
 
      , MonadState st m -- Read-only
      , HasType Conf.Config st
@@ -179,13 +190,7 @@ pTakeAndResolveLexToken
 pTakeAndResolveLexToken = TeXParseT takeAndResolveLexTokenS
   where
     takeAndResolveLexTokenS
-      :: ( MonadError e m
-        , AsType ResolutionError e
-
-        , MonadState st m -- Read-only
-        , HasType Conf.Config st
-        )
-      => ExpandingStream
+      :: ExpandingStream
       -> m (ExpandingStream, Either ParseError (Lex.Token, ResolvedToken))
     takeAndResolveLexTokenS s =
       fetchResolvedToken s <&> \case
@@ -200,15 +205,19 @@ pTakeAndExpandResolvedToken
      , MonadState st m
      , HasType Conf.Config st
 
-     , MonadTeXParse m
-
      , MonadError e m
-     , AsTeXParseErrors e
+     , AsType Lex.LexError e
      , AsType ExpansionError e
+     , AsType EvaluationError e
+     , AsType ConfigError e
+     , AsType ResolutionError e
+     , AsType Data.Path.PathError e
+
+    --  , MonadSlog m
      )
-  => m (Lex.Token, ExpandedToken)
+  => TeXParseT ExpandingStream m (Lex.Token, ExpandedToken)
 pTakeAndExpandResolvedToken = do
-  (lt, rt) <- takeAndResolveLexToken
+  (lt, rt) <- pTakeAndResolveLexToken
   et <- case rt of
     -- If it's a primitive token, provide that.
     PrimitiveToken pt ->
@@ -220,7 +229,7 @@ pTakeAndExpandResolvedToken = do
       pure $ ExpandedSyntaxCommand c lts
   pure (lt, et)
 
--- Expanding syntax commands.
+-- -- Expanding syntax commands.
 expandCSName :: Applicative t => [Code.CharCode] -> t Lex.Token
 expandCSName charToks =
   -- TODO: if control sequence doesn't exist, define one that holds
@@ -286,7 +295,7 @@ expandChangeCase lookupChangeCaseCode (BalancedText caseToks) =
       Conf.NoCaseChange -> char
       Conf.ChangeToCode char' -> char'
 
-skipToIfDelim :: forall m. MonadTeXParse m => IfBodyState -> m ()
+skipToIfDelim :: forall m. MonadTokenParse m => IfBodyState -> m ()
 skipToIfDelim blk = go 1
   where
     go :: Int -> m ()
@@ -319,7 +328,7 @@ skipToIfDelim blk = go 1
 
 skipUpToCaseBlock
   :: forall m
-   . MonadTeXParse m
+   . MonadTokenParse m
   => Q.TeXInt
   -> m ()
 skipUpToCaseBlock tgt = go 0 1
@@ -349,14 +358,11 @@ skipUpToCaseBlock tgt = go 0 1
               go cur n
 
 expandConditionToken
-  :: forall st e m
-   . ( MonadState st m -- Read-only
-     , HasType Conf.Config st
+  :: ( MonadTokenParse m
 
-     , MonadTeXParse m
+     , MonadEvaluate m ConditionHead
 
      , MonadError e m
-     , AsTeXParseErrors e
      , AsType ExpansionError e
      )
   => ConditionTok
@@ -364,7 +370,7 @@ expandConditionToken
 expandConditionToken = \case
   ConditionHeadTok ifTok -> do
     condHead <- conditionHeadParser ifTok
-    texEvaluate condHead >>= \case
+    astEval condHead >>= \case
       IfBlockTarget IfPreElse ->
         pushSkipState (IfBodyState IfPreElse)
       IfBlockTarget IfPostElse ->
@@ -417,10 +423,12 @@ expandSyntaxCommand
      , MonadState st m -- Read-only
      , HasType Conf.Config st
 
-     , MonadTeXParse m
+     , MonadTokenParse m
+
+     , MonadEvaluate m ConditionHead
+     , MonadEvaluate m InternalQuantity
 
      , MonadError e m
-     , AsTeXParseErrors e
      , AsType ExpansionError e
      )
   => SyntaxCommandHeadToken
@@ -476,7 +484,7 @@ expandSyntaxCommand = \case
     panic "Not implemented: syntax command EndInputTok"
   TheTok -> do
     intQuant <- parseInternalQuantity
-    fmap charCodeAsMadeToken <$> texEvaluate intQuant
+    fmap charCodeAsMadeToken <$> astEval intQuant
   ChangeCaseTok direction -> do
     conf <- use $ typed @Conf.Config
     expandChangeCase
