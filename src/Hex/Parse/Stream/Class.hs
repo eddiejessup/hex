@@ -13,9 +13,9 @@ class TeXStream s where
 
   insertLexToken :: s -> Lex.Token -> s
 
-  addTokenSource :: s -> TokenSource -> s
-
   extractLexToken :: (MonadError e m, AsType Lex.LexError e) => s -> m (Maybe (Lex.Token, s))
+
+  addTokenSource :: s -> TokenSource -> s
 
 data TokenSource
   = TokenSource

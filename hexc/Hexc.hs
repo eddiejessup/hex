@@ -164,15 +164,20 @@ main = do
       let inputS = newExpandStream maybeInPath input (flip lookupCatCode conf)
       case m of
         ExpandMode -> do
-          (endS, mayErr :: Maybe App.AppError, primToks) <- App.runErrorlessApp (Run.expandingStreamAsPrimTokens inputS) conf
-          case primToks of
-            [] ->
-              putText "Returned no results"
-            _ ->
-              putText $ resultTxt $
-                renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" primToks
-
-          for_ mayErr $ \err -> putText $ errTxtWithStream err endS
+          -- (Either AppError (ExpandingStream, Either P.ParseError a))
+          App.runInputTApp (Run.expandingStreamAsPrimTokens inputS) conf >>= \case
+            Left appErr -> putText $ "App error: " <> show appErr
+            Right (endS, toks, mayParseErr) -> do
+              case toks of
+                [] -> putText "Returned no results"
+                _ -> putText $ resultTxt $
+                    renderLines $ describeNamedRelFoldable 0 "PrimitiveTokens" toks
+              case mayParseErr of
+                Nothing ->
+                  putText $ "No parse error"
+                Just parseErr -> do
+                  putText $ "Parse error: " <> show parseErr
+                  putText $ endStreamTxt endS
         -- CommandMode -> do
         --   (endS, mayErr, commands) <- App.runErrorlessApp (Run.expandingStreamAsCommands inputS) conf
         --   case commands of
@@ -228,11 +233,15 @@ main = do
         --       putText $ "Writing to " <> toS dviOutputPath <> "..."
         --       liftIO $ BS.writeFile dviOutputPath bytes
 
+endStreamTxt :: ExpandingStream -> Text
+endStreamTxt s =
+  "\nStream ended in state:\n"
+  <> renderDescribed s
+
 errTxtWithStream :: App.AppError -> ExpandingStream -> Text
 errTxtWithStream err s =
   errTxt err
-  <> "\nStream ended in state:\n"
-  <> renderDescribed s
+  <> endStreamTxt s
 
 errTxt :: App.AppError -> Text
 errTxt err = "Ended with error:\n" <> show err

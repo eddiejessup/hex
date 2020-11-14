@@ -16,6 +16,9 @@ import qualified Hex.Quantity as Q
 import Hexlude
 import qualified Path
 
+parseAssignment :: forall m. (MonadTokenParse m, MonadEvaluate m TeXInt) => m Assignment
+parseAssignment = anySingle >>= headToParseAssignment
+
 headToParseAssignment :: forall m. (MonadTokenParse m, MonadEvaluate m TeXInt) => T.PrimitiveToken -> m Assignment
 headToParseAssignment = go []
   where
@@ -24,8 +27,10 @@ headToParseAssignment = go []
       T.AssignPrefixTok prefix ->
         anySingle >>= go (prefix : prefixes)
       T.DefineMacroTok defGlobalType defExpandType -> do
+        traceM "Saw define-macro token, parsing macro name"
         -- Macro's name.
         cs <- parseCSName
+        traceM $ "Parsed macro name: " <> show cs
         -- Parameter text.
         (preParamTokens, parameters) <- parseParamText
         when (defExpandType == T.ExpandDef) $ panic "Not implemented: ExpandDef"
@@ -38,7 +43,7 @@ headToParseAssignment = go []
               , T.long = T.LongTok `elem` prefixes
               , T.outer = T.OuterTok `elem` prefixes
               }
-        let body = DefineControlSequence cs (MacroTarget tgt)
+        let body = DefineControlSequence (ControlSequenceDefinition cs (MacroTarget tgt))
         pure $ Assignment
           { body
           , scope = if defGlobalType == T.Global || T.GlobalTok `elem` prefixes
@@ -67,15 +72,17 @@ headToParseNonMacroAssignmentBody = \case
   T.LetTok -> do
     cs <- parseCSName
     skipOptionalEquals
-    DefineControlSequence cs <$> (LetTarget <$> parseLetArg)
-  T.FutureLetTok ->
-    DefineControlSequence <$>
+    DefineControlSequence . ControlSequenceDefinition cs <$> (LetTarget <$> parseLetArg)
+  T.FutureLetTok -> do
+    csDefn <- ControlSequenceDefinition <$>
       parseCSName <*>
       (FutureLetTarget <$> parseLexToken <*> parseLexToken)
+    pure $ DefineControlSequence csDefn
   T.ShortDefHeadTok quant -> do
     cs <- parseCSName
     skipOptionalEquals
-    DefineControlSequence cs <$> (ShortDefineTarget quant <$> parseTeXInt)
+    csDefn <- ControlSequenceDefinition cs <$> (ShortDefineTarget quant <$> parseTeXInt)
+    pure $ DefineControlSequence csDefn
   T.ParagraphShapeTok -> do
     skipOptionalEquals
     -- In a ⟨shape assignment⟩ for which the ⟨number⟩ is n, the ⟨shape
@@ -90,7 +97,7 @@ headToParseNonMacroAssignmentBody = \case
     skipKeyword (unsafeCodesFromChars "to")
     skipOptionalSpaces
     cs <- parseCSName
-    pure $ DefineControlSequence cs (ReadTarget nr)
+    pure $ DefineControlSequence $ ControlSequenceDefinition cs (ReadTarget nr)
   T.SetBoxRegisterTok -> do
     var <- parseEightBitTeXInt
     skipOptionalEquals
@@ -107,7 +114,7 @@ headToParseNonMacroAssignmentBody = \case
         , skipKeyword (unsafeCodesFromChars "scaled") >> (FontScaled <$> parseTeXInt)
         , skipOptionalSpaces $> NaturalFont
         ]
-    pure $ DefineControlSequence cs (FontTarget fontSpec fname)
+    pure $ DefineControlSequence $ ControlSequenceDefinition cs (FontTarget fontSpec fname)
   t ->
     choiceFlap
       [ headToParseCodeAssignment

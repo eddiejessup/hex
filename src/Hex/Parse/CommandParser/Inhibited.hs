@@ -293,7 +293,11 @@ parseCharLike =
         else Nothing
 
 parseCSName :: MonadTokenParse m => m Lex.ControlSequenceLike
-parseCSName = withInhibition unsafeParseCSName
+parseCSName = do
+  traceM "parsing CS name"
+  a <- withInhibition unsafeParseCSName
+  traceM "parsed CS name"
+  pure a
 
 parseParamText :: MonadTokenParse m => m (BalancedText, MacroParameters)
 parseParamText = withInhibition unsafeParseParamText

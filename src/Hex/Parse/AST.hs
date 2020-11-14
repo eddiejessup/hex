@@ -12,7 +12,7 @@ import qualified Path
 type TeXInt = T.Signed UnsignedTeXInt
 
 newtype EightBitTeXInt = EightBitTeXInt TeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 constTeXInt :: Q.TeXInt -> TeXInt
@@ -21,7 +21,7 @@ constTeXInt n = T.Signed T.Positive $ constUTeXInt n
 data UnsignedTeXInt
   = NormalTeXIntAsUTeXInt NormalTeXInt
   | CoercedTeXInt CoercedTeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 constUTeXInt :: Q.TeXInt -> UnsignedTeXInt
@@ -29,7 +29,7 @@ constUTeXInt n = NormalTeXIntAsUTeXInt $ TeXIntConstant n
 
 -- Think: 'un-coerced integer'.
 data NormalTeXInt = TeXIntConstant Q.TeXInt | InternalTeXInt InternalTeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 zeroTeXInt :: NormalTeXInt
@@ -41,7 +41,7 @@ oneTeXInt = TeXIntConstant 1
 data CoercedTeXInt
   = InternalLengthAsInt InternalLength
   | InternalGlueAsInt InternalGlue
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 -- Length.
@@ -56,7 +56,7 @@ zeroLength =
 data UnsignedLength
   = NormalLengthAsULength NormalLength
   | CoercedLength CoercedLength
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe UnsignedLength where
@@ -71,7 +71,7 @@ data NormalLength
   = -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
     LengthSemiConstant Factor Unit
   | InternalLength InternalLength
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe NormalLength where
@@ -90,7 +90,7 @@ data Factor
     -- with decimal digits, but its main feature is that it can represent
     -- non-integers.
     RationalConstant Rational
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 zeroFactor, oneFactor :: Factor
@@ -100,7 +100,7 @@ oneFactor = NormalTeXIntFactor oneTeXInt
 data Unit
   = PhysicalUnit PhysicalUnitFrame Q.PhysicalUnit
   | InternalUnit InternalUnit
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe Unit where
@@ -121,7 +121,7 @@ data InternalUnit
   | InternalTeXIntUnit InternalTeXInt
   | InternalLengthUnit InternalLength
   | InternalGlueUnit InternalGlue
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe InternalUnit where
@@ -131,11 +131,11 @@ instance Describe InternalUnit where
     v -> singleLine $ show v
 
 data PhysicalUnitFrame = MagnifiedFrame | TrueFrame
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 newtype CoercedLength = InternalGlueAsLength InternalGlue
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe CoercedLength where
@@ -148,29 +148,29 @@ type MathLength = T.Signed UnsignedMathLength
 data UnsignedMathLength
   = NormalMathLengthAsUMathLength NormalMathLength
   | CoercedMathLength CoercedMathLength
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 -- Think: 'un-coerced length'.
 data NormalMathLength
   = -- 'semi-constant' because Factor and Unit can be quite un-constant-like.
     MathLengthSemiConstant Factor MathUnit
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data MathUnit = Mu | InternalMathGlueAsUnit InternalMathGlue
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 newtype CoercedMathLength = InternalMathGlueAsMathLength InternalMathGlue
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 -- Glue.
 data Glue
   = ExplicitGlue Length (Maybe Flex) (Maybe Flex)
   | InternalGlue (T.Signed InternalGlue)
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe Glue where
@@ -193,7 +193,7 @@ instance Describe Glue where
       ]
 
 data Flex = FiniteFlex Length | FilFlex FilLength
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe Flex where
@@ -205,7 +205,7 @@ minusOneFilFlex = FilFlex minusOneFil
 oneFillFlex = FilFlex oneFill
 
 data FilLength = FilLength (T.Signed Factor) Int
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 oneFil, minusOneFil, oneFill :: FilLength
@@ -217,16 +217,16 @@ oneFill = FilLength (T.Signed T.Positive oneFactor) 2
 data MathGlue
   = ExplicitMathGlue MathLength (Maybe MathFlex) (Maybe MathFlex)
   | InternalMathGlue T.Sign InternalMathGlue
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data MathFlex = FiniteMathFlex MathLength | FilMathFlex FilLength
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 -- Internal quantities.
 data QuantVariable a = ParamVar a | RegisterVar EightBitTeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 type TeXIntVariable = QuantVariable T.TeXIntParameter
@@ -250,34 +250,34 @@ data InternalTeXInt
   | ParShape
   | InputLineNr
   | Badness
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data CodeTableRef = CodeTableRef T.CodeType TeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data FontCharRef = FontCharRef T.FontChar FontRef
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data FontRef
   = FontTokenRef Q.TeXInt
   | CurrentFontRef
   | FamilyMemberFontRef FamilyMember
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data FamilyMember = FamilyMember T.FontRange TeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data BoxDimensionRef = BoxDimensionRef EightBitTeXInt BoxDim
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data FontDimensionRef = FontDimensionRef TeXInt FontRef
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data InternalLength
@@ -286,29 +286,29 @@ data InternalLength
   | InternalFontDimensionRef FontDimensionRef
   | InternalBoxDimensionRef BoxDimensionRef
   | LastKern
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe InternalLength where
   describe = singleLine . show
 
 data InternalGlue = InternalGlueVariable GlueVariable | LastGlue
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data InternalMathGlue
   = InternalMathGlueVariable MathGlueVariable
   | LastMathGlue
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 -- Assignments.
 data Assignment = Assignment {body :: AssignmentBody, scope :: T.ScopeFlag}
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 newtype TeXFilePath = TeXFilePath (Path.Path Path.Rel Path.File)
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data ControlSequenceTarget
@@ -318,11 +318,11 @@ data ControlSequenceTarget
   | ShortDefineTarget T.QuantityType TeXInt
   | ReadTarget TeXInt
   | FontTarget FontSpecification TeXFilePath
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data AssignmentBody
-  = DefineControlSequence Lex.ControlSequenceLike ControlSequenceTarget
+  = DefineControlSequence ControlSequenceDefinition
   | SetVariable VariableAssignment
   | ModifyVariable VariableModification
   | AssignCode CodeAssignment
@@ -337,13 +337,21 @@ data AssignmentBody
   | SetHyphenationPatterns T.BalancedText
   | SetBoxDimension BoxDimensionRef Length
   | SetInteractionMode T.InteractionMode
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON)
+
+data ControlSequenceDefinition
+  = ControlSequenceDefinition
+      { csName :: Lex.ControlSequenceLike
+      , csTarget :: ControlSequenceTarget
+      }
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data TokenListAssignmentTarget
   = TokenListAssignmentVar TokenListVariable
   | TokenListAssignmentText T.BalancedText
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data VariableAssignment
@@ -354,7 +362,7 @@ data VariableAssignment
   | TokenListVariableAssignment TokenListVariable TokenListAssignmentTarget
   | SpecialTeXIntVariableAssignment T.SpecialTeXInt TeXInt
   | SpecialLengthVariableAssignment T.SpecialLength Length
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data VariableModification
@@ -363,7 +371,7 @@ data VariableModification
   | AdvanceGlueVariable GlueVariable Glue
   | AdvanceMathGlueVariable MathGlueVariable MathGlue
   | ScaleVariable VDirection NumericVariable TeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data NumericVariable
@@ -371,15 +379,15 @@ data NumericVariable
   | LengthNumericVariable LengthVariable
   | GlueNumericVariable GlueVariable
   | MathGlueNumericVariable MathGlueVariable
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data CodeAssignment = CodeAssignment CodeTableRef TeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data FontSpecification = NaturalFont | FontAt Length | FontScaled TeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 -- Box specification.
@@ -388,15 +396,15 @@ data Box
   | LastBox
   | VSplitBox TeXInt Length
   | ExplicitBox BoxSpecification T.ExplicitBox
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data BoxSpecification = Natural | To Length | Spread Length
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data BoxOrRule = BoxOrRuleBox Box | BoxOrRuleRule Axis Rule
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 -- Commands.
@@ -417,7 +425,7 @@ data ModeIndependentCommand
   | DoSpecial T.ExpandedBalancedText
   | AddBox BoxPlacement Box
   | ChangeScope T.Sign CommandTrigger
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe ModeIndependentCommand where
@@ -441,7 +449,7 @@ data Command
     HModeCommand HModeCommand
   | VModeCommand VModeCommand
   | ModeIndependentCommand ModeIndependentCommand
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
 
 instance ToJSON Command
 
@@ -464,7 +472,7 @@ data VModeCommand
   | AddVLeaders LeadersSpec
   | AddVRule Rule
   | AddUnwrappedFetchedVBox FetchedBoxRef -- \unv{box,copy}
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe VModeCommand where
@@ -482,7 +490,7 @@ data HModeCommand
   | AddHLeaders LeadersSpec
   | AddHRule Rule
   | AddUnwrappedFetchedHBox FetchedBoxRef -- \unh{box,copy}
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe HModeCommand where
@@ -495,11 +503,11 @@ instance Describe HModeCommand where
       singleLine $ "HModeCommand/" <> show c
 
 data FetchedBoxRef = FetchedBoxRef TeXInt T.BoxFetchMode
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data LeadersSpec = LeadersSpec T.LeadersType BoxOrRule Glue
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data CommandTrigger = CharCommandTrigger | CSCommandTrigger
@@ -513,40 +521,40 @@ data InternalQuantity
   | InternalMathGlueQuantity InternalMathGlue
   | FontQuantity FontRef
   | TokenListVariableQuantity TokenListVariable
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data WriteText
   = ImmediateWriteText T.ExpandedBalancedText
   | DeferredWriteText T.BalancedText
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data WritePolicy = Immediate | Deferred
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data Rule = Rule {width, height, depth :: Maybe Length}
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data FileStreamAction = Open TeXFilePath | Close
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data FileStreamType = FileInput | FileOutput WritePolicy
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data BoxPlacement = NaturalPlacement | ShiftedPlacement Axis Direction Length
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data CharCodeRef
   = CharRef Code.CharCode
   | CharTokenRef Q.TeXInt
   | CharCodeNrRef TeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 instance Describe CharCodeRef where
@@ -567,9 +575,9 @@ data IfConditionHead
   | IfBoxRegisterIs T.BoxRegisterAttribute TeXInt -- \ifvoid, \ifhbox, \ifvbox
   | IfInputEnded TeXInt -- \ifeof
   | IfConst Bool -- \iftrue, \iffalse
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)
 
 data ConditionHead = IfConditionHead IfConditionHead | CaseConditionHead TeXInt
-  deriving stock (Show, Generic)
+  deriving stock (Show, Eq, Generic)
   deriving anyclass (ToJSON)

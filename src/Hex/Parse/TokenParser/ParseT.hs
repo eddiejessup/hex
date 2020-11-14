@@ -12,7 +12,7 @@ import Data.Path (MonadInput(..))
 data TeXParseState s = TeXParseState { texStream :: s, resolutionMode :: ResolutionMode, skipState :: [ConditionBodyState]}
   deriving stock (Generic)
 
-newtype TeXParseT s m a = TeXParseT {unTeXParseT :: TeXParseState s -> m ((TeXParseState s), Either ParseError a) }
+newtype TeXParseT s m a = TeXParseT {unTeXParseT :: TeXParseState s -> m (TeXParseState s, Either ParseError a) }
 
 instance Functor m => Functor (TeXParseT s m) where
   fmap f (TeXParseT parse) = TeXParseT $ \s -> parse s <&> \(s', errOrA) ->
@@ -102,14 +102,6 @@ instance MonadInput m => MonadInput (TeXParseT s m) where
   findPath a b c = lift $ findPath a b c
 
   readPathBytes a = lift $ readPathBytes a
-
--- Inhibition.
-pWithInhibition :: Monad m => TeXParseT s m a -> TeXParseT s m a
-pWithInhibition (TeXParseT parseNow) = TeXParseT $ \st -> do
-  let stI = st & field @"resolutionMode" .~ NotResolving
-  (st', a) <- parseNow stI
-  let st'U = st' & field @"resolutionMode" .~ Resolving
-  pure (st'U, a)
 
 runTeXParseT
   :: Monad m

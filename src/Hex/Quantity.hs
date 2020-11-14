@@ -61,7 +61,7 @@ data PhysicalUnit
     | Didot -- 'dd'
     | Cicero -- 'cc'
     | ScaledPoint -- 'sp'
-    deriving stock (Show, Generic)
+    deriving stock (Show, Eq, Generic)
     deriving anyclass (ToJSON)
 
 instance Describe PhysicalUnit where

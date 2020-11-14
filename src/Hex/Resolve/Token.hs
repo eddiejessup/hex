@@ -36,6 +36,7 @@ data Signed a = Signed Sign a
   deriving stock (Functor, Generic)
 
 deriving stock instance Show a => Show (Signed a)
+deriving stock instance Eq a => Eq (Signed a)
 
 instance ToJSON a => ToJSON (Signed a)
 

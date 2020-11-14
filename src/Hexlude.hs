@@ -43,7 +43,7 @@ import Debug.Describe as Describe
 import Generic.Random (genericArbitraryU)
 import Optics.Getter (A_Getter, Getter, to, view, views)
 import Optics.Lens (Lens', lens)
-import Optics.Operators ((%~), (.~), (?~), (^.))
+import Optics.Operators ((%~), (.~), (?~), (^.), (^?))
 import Optics.Optic (Is, Optic', (%))
 import Optics.State (assign', modifying', use)
 import Protolude hiding (HasField, catch, getField, group, isAscii, isHexDigit, isSpace, log, option, stdin, take, to, try, yield, (%))

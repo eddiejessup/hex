@@ -3,25 +3,19 @@ module Hex.App where
 
 import DVI.Instruction (DVIError)
 import Data.Byte (ByteError)
-import Data.Path (PathError)
+import Data.Path (IOInputT(..), PathError)
 import Hex.Build.Class (BuildError)
 import qualified Hex.Config as Conf
-import Hex.Evaluate (ConditionBodyState, EvaluationError)
+import Hex.Evaluate (EvaluationError)
 import Hexlude
 import TFM (TFMError)
-import qualified System.Log.FastLogger as Log
-import Data.Time.Clock
 import qualified Hex.Parse.Stream.Class as S
 import qualified Hex.Parse.Stream.Parse ()
 import qualified Hex.Resolve.Resolve as R
 import qualified Hex.Parse.TokenParser.Class as P
-import Hex.Parse.TokenParser.ParseT (runTeXParseTEmbedded, TeXParseT)
+import Hex.Parse.TokenParser.ParseT (runTeXParseT, TeXParseT)
 import Hex.Parse.Stream.Expanding (ExpandingStream)
-import Hex.Parse.TokenParser.Class (ExpandedToken, MonadTokenParse(..))
 import Hex.Lex (LexError)
-import qualified Hex.Lex as Lex
-import Path (File, Rel, Path)
-import Hex.Resolve (PrimitiveToken, ResolvedToken)
 
 data AppError
   = BuildAppError BuildError
@@ -38,7 +32,7 @@ data AppError
   deriving stock (Show, Generic)
 
 newtype App a
-  = App {unApp :: TeXParseT ExpandingStream (ExceptT AppError (StateT Conf.Config IO)) a}
+  = App {unApp :: TeXParseT ExpandingStream (IOInputT (ExceptT AppError (StateT Conf.Config IO))) a}
   deriving newtype
     ( Functor
     , Applicative
@@ -50,86 +44,39 @@ newtype App a
     , MonadPlus
     )
 
-instance MonadTokenParse App where
+-- instance MonadSlog App where
+--   sLog msg = do
+--     loggerSet <- gets Conf.internalLoggerSet
+--     liftIO $ Log.pushLogStrLn loggerSet (Log.toLogStr msg)
 
-  parseError :: P.ParseError -> App a
-  parseError = App . parseError
-
-  satisfyThen :: (PrimitiveToken -> Maybe a) -> App a
-  satisfyThen = App . satisfyThen
-
-  withInhibition :: App a -> App a
-  withInhibition = App . withInhibition . unApp
-
-  takeWhileP :: (PrimitiveToken -> Bool) -> App (Seq PrimitiveToken)
-  takeWhileP = App . takeWhileP
-
-  takeLexToken :: App Lex.Token
-  takeLexToken = App takeLexToken
-
-  takeAndResolveLexToken :: App (Lex.Token, ResolvedToken)
-  takeAndResolveLexToken = App takeAndResolveLexToken
-
-  takeAndExpandResolvedToken :: App (Lex.Token, ExpandedToken)
-  takeAndExpandResolvedToken = App takeAndExpandResolvedToken
-
-  pushSkipState :: ConditionBodyState -> App ()
-  pushSkipState = App . pushSkipState
-
-  peekSkipState :: App (Maybe ConditionBodyState)
-  peekSkipState = App peekSkipState
-
-  popSkipState :: App (Maybe ConditionBodyState)
-  popSkipState = App popSkipState
-
-  inputPath :: Path Rel File -> App ()
-  inputPath = App . inputPath
-
-  insertLexTokens :: Seq Lex.Token -> App ()
-  insertLexTokens = App . insertLexTokens
-
-instance MonadSlog App where
-  sLog msg = do
-    loggerSet <- gets Conf.internalLoggerSet
-    liftIO $ Log.pushLogStrLn loggerSet (Log.toLogStr msg)
-
-  sTime = liftIO getCurrentTime
+--   sTime = liftIO getCurrentTime
 
 runApp
   :: MonadIO m
   => App a
   -> Conf.Config
   -> ExpandingStream
-  -> m (Either AppError (ExpandingStream, a))
+  -> m (Either AppError (ExpandingStream, Either P.ParseError a))
 runApp a c s =
-  let texParseT = unApp a
-      exceptT = runTeXParseTEmbedded texParseT s
+  runTexParseTApp (unApp a) c s
+
+runTexParseTApp
+  :: MonadIO m
+  => TeXParseT ExpandingStream (IOInputT (ExceptT AppError (StateT Conf.Config IO))) a
+  -> Conf.Config
+  -> ExpandingStream
+  -> m (Either AppError (ExpandingStream, Either P.ParseError a))
+runTexParseTApp texParseT c s =
+  let inputT = runTeXParseT texParseT s
+  in runInputTApp inputT c
+
+runInputTApp
+  :: MonadIO m
+  => IOInputT (ExceptT AppError (StateT Conf.Config IO)) a
+  -> Conf.Config
+  -> m (Either AppError a)
+runInputTApp inputT c =
+  let exceptT = unIOInputT inputT
       stateT = runExceptT exceptT
       io = liftIO $ evalStateT stateT c
   in io
-
-
-newtype ErrorlessApp a
-  = ErrorlessApp {unErrorlessApp :: StateT Conf.Config IO a}
-  deriving newtype
-    ( Functor
-    , Applicative
-    , Monad
-    , MonadState Conf.Config
-    , MonadIO
-    )
-
-instance MonadSlog ErrorlessApp where
-  sLog msg = do
-    loggerSet <- gets Conf.internalLoggerSet
-    liftIO $ Log.pushLogStrLn loggerSet (Log.toLogStr msg)
-
-  sTime = liftIO getCurrentTime
-
-runErrorlessApp
-  :: MonadIO m
-  => ErrorlessApp a
-  -> Conf.Config
-  -> m a
-runErrorlessApp f c =
-  liftIO (evalStateT (unErrorlessApp f) c)

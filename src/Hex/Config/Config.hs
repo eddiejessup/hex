@@ -169,6 +169,21 @@ newConfig extraSearchDirs = do
                 , internalLoggerSet
                 }
 
+pureConfig :: Log.LoggerSet -> Config
+pureConfig internalLoggerSet =
+    Config
+        { fontInfos = Map.empty
+        , searchDirectories = []
+        , specialTeXInts = newSpecialTeXInts
+        , specialLengths = newSpecialLengths
+        , logStream = stdout
+        , outFileStreams = mempty
+        , afterAssignmentToken = Nothing
+        , globalScope = newGlobalScope
+        , groups = []
+        , internalLoggerSet
+        }
+
 finaliseConfig :: MonadIO m => Config -> m ()
 finaliseConfig config =
     liftIO $ hClose $ logStream config

@@ -5,7 +5,7 @@ import DVI.Document (Instruction, parseInstructions)
 import DVI.Encode (dviEncode)
 import DVI.Instruction (DVIError, EncodableInstruction)
 import Data.Byte (ByteError)
-import Data.Path (PathError)
+import Data.Path (MonadInput, PathError)
 import Hex.Box
 import Hex.Build.Class
 import Hex.Build.Command
@@ -27,6 +27,8 @@ import qualified Hex.Resolve.Resolve as R
 import qualified Hex.Parse.AST as AST
 import qualified Hex.Resolve.Token as Tok
 import qualified Hex.Lex as Lex
+import qualified Control.Monad.Combinators as PC
+import qualified Data.Path as Path
 
 data Mode
   = CatMode
@@ -43,49 +45,57 @@ data Mode
   | DVIBytesMode
   deriving stock (Show, Eq)
 
-loopParser
-  :: forall m e a
-   . ( Monad m
-     , AsType P.ParseError e
-     )
-  => S.ExpandingStream
-  -> ParseT.TeXParseT S.ExpandingStream (ExceptT e m) a
-  -> m (S.ExpandingStream, Maybe e, [a])
-loopParser s parser = do
-  ((postLoopStream, mayErr), xs) <- Wr.runWriterT (go s)
-  pure (postLoopStream, mayErr, xs)
-  where
-    go :: S.ExpandingStream -> Wr.WriterT [a] m (S.ExpandingStream, Maybe e)
-    go stream =
-      lift (runExceptT (ParseT.runTeXParseTEmbedded parser stream)) >>= \case
-        Left err ->
-          pure (stream, Just err)
-        Right (postParseStream, a) -> do
-          Wr.tell [a]
-          go postParseStream
-          -- -- Try to fetch a lex token. If we can, we have more input, so try to
-          -- -- parse some more. This won't always work, but it's a decent heuristic.
-          -- case S.extractLexToken postParseStream Code.usableCatLookup of
-          --   Nothing -> pure (stream, Nothing)
-          --   Just _ ->
+-- loopParser
+--   :: forall m e a
+--    . ( Monad m
+--      , AsType P.ParseError e
+--      )
+--   => S.ExpandingStream
+--   -> ParseT.TeXParseT S.ExpandingStream (ExceptT e m) a
+--   -> m (S.ExpandingStream, Maybe e, [a])
+-- loopParser s parser = do
+--   ((postLoopStream, mayErr), xs) <- Wr.runWriterT (go s)
+--   pure (postLoopStream, mayErr, xs)
+--   where
+--     go :: S.ExpandingStream -> Wr.WriterT [a] m (S.ExpandingStream, Maybe e)
+--     go stream =
+--       lift (runExceptT (ParseT.runTeXParseTEmbedded parser stream)) >>= \case
+--         Left err ->
+--           pure (stream, Just err)
+--         Right (postParseStream, a) -> do
+--           Wr.tell [a]
+--           go postParseStream
+--           -- -- Try to fetch a lex token. If we can, we have more input, so try to
+--           -- -- parse some more. This won't always work, but it's a decent heuristic.
+--           -- case S.extractLexToken postParseStream Code.usableCatLookup of
+--           --   Nothing -> pure (stream, Nothing)
+--           --   Just _ ->
 
 expandingStreamAsPrimTokens
-  :: ( MonadIO m
-
+  :: ( MonadError e m
+     , AsType S.ExpansionError e
+     , AsType EvaluationError e
+     , AsType R.ResolutionError e
+     , AsType Conf.ConfigError e
+     , AsType Path.PathError e
+     , AsType Lex.LexError e
+     , MonadInput m
      , MonadState st m
      , HasType Conf.Config st
-
-     , AsType EvaluationError e
-     , AsType Conf.ConfigError e
-     , AsType R.ResolutionError e
-     , AsType P.ParseError e
-     , AsType S.ExpansionError e
-     , AsType Data.Path.PathError e
-     , AsType Lex.LexError e
      )
   => S.ExpandingStream
-  -> m (S.ExpandingStream, Maybe e, [Tok.PrimitiveToken])
-expandingStreamAsPrimTokens s = loopParser s P.anySingle
+  -> m (S.ExpandingStream, [Tok.PrimitiveToken], Maybe P.ParseError)
+expandingStreamAsPrimTokens s = do
+  (doneS1, errOrToks1) <- ParseT.runTeXParseT (PC.many P.anySingle) s
+  toks <- case errOrToks1 of
+    Left _err -> panic "impossible"
+    Right toks -> pure toks
+  (doneS2, errOrToks2) <- ParseT.runTeXParseT (P.anySingle) doneS1
+  let mayErr = case errOrToks2 of
+        Left P.EndOfInput -> Nothing
+        Left err -> Just err
+        Right _ -> Nothing
+  pure (doneS2, toks, mayErr)
 
 -- -- Command.
 -- expandingStreamAsCommands

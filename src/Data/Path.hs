@@ -55,11 +55,14 @@ class Monad m => MonadInput m where
 
     readPathBytes :: Path Abs File -> m ByteString
 
--- instance (Monad m, MonadIO m, MonadError e m, AsType PathError e) => MonadInput m where
+newtype IOInputT m a = IOInputT { unIOInputT :: m a}
+  deriving newtype (Functor, Applicative, Monad, MonadState s, MonadIO, MonadError e)
 
---     findPath policy tgt searchDirs =
---         normaliseFileName policy tgt
---           >>= Path.IO.findFile searchDirs
---           >>= note (injectTyped $ PathError $ "Could not find file: " <> show tgt)
+instance (Monad m, MonadIO m, MonadError e m, AsType PathError e) => MonadInput (IOInputT m) where
 
---     readPathBytes = readBytes
+    findPath policy tgt searchDirs = IOInputT $
+        normaliseFileName policy tgt
+          >>= Path.IO.findFile searchDirs
+          >>= note (injectTyped $ PathError $ "Could not find file: " <> show tgt)
+
+    readPathBytes = IOInputT . readBytes

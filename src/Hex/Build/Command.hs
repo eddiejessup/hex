@@ -40,6 +40,7 @@ handleCommandInParaMode ::
     MonadModeIndependentBuild m,
     MonadHModeBuild m,
     MonadIO m,
+    Data.Path.MonadInput m,
     MonadSlog m
   ) =>
   AST.Command ->
@@ -105,6 +106,7 @@ handleCommandInHBoxMode ::
     MonadModeIndependentBuild m,
     MonadHModeBuild m,
     MonadIO m,
+    Data.Path.MonadInput m,
     MonadSlog m
   ) =>
   AST.Command ->
@@ -163,7 +165,8 @@ handleCommandInVBoxMode ::
     MonadEvaluate m AST.FontRef,
     MonadEvaluate m AST.BoxSpecification,
     MonadSlog m,
-    MonadIO m
+    MonadIO m,
+    Data.Path.MonadInput m
   ) =>
   AST.Command ->
   m (Maybe ())
@@ -261,6 +264,7 @@ handleCommandInMainVMode ::
     MonadModeIndependentBuild m,
     MonadVModeBuild m,
     MonadIO m,
+    Data.Path.MonadInput m,
     MonadSlog m
   ) =>
   AST.Command ->
@@ -309,6 +313,7 @@ handleCommandInMainVMode = \case
 
 handleModeIndependentCommand ::
   ( MonadIO m,
+    Data.Path.MonadInput m,
     MonadSlog m,
     AsType Data.Path.PathError e,
     AsType TFMError e,
@@ -360,7 +365,7 @@ handleModeIndependentCommand = \case
   AST.Assign AST.Assignment {AST.scope, AST.body} ->
     do
       case body of
-        AST.DefineControlSequence cs tgt ->
+        AST.DefineControlSequence (AST.ControlSequenceDefinition cs tgt) ->
           do
             newCSTok <- case tgt of
               AST.MacroTarget macro ->
